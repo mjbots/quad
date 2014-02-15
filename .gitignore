@@ -1,2 +1,6 @@
 *.pyc
 *~
+core
+*.so
+*.os
+.scons*
