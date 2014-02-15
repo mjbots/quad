@@ -4,3 +4,4 @@ core
 *.so
 *.os
 .scons*
+work_plan.pdf
