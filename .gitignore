@@ -5,3 +5,4 @@ core
 *.os
 .scons*
 work_plan.pdf
+mtool_main_window.py
