@@ -1,0 +1,4 @@
+ui_legtool_main_window.py
+*~
+.scons*
+*.pyc
