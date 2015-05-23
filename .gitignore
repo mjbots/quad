@@ -9,3 +9,4 @@ mtool_main_window.py
 *.fcstd?
 *.blend?
 build
+mjmech-data
