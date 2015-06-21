@@ -10,3 +10,6 @@ mtool_main_window.py
 *.blend?
 build
 mjmech-data
+*.l#?
+*.s#?
+*.b#?
