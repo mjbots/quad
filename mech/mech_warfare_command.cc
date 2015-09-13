@@ -19,11 +19,12 @@
 #include <boost/program_options.hpp>
 #include <boost/property_tree/json_parser.hpp>
 
-#include "fail.h"
+#include "base/fail.h"
+#include "base/linux_input.h"
+#include "base/program_options_archive.h"
+#include "base/property_tree_archive.h"
+
 #include "gait.h"
-#include "linux_input.h"
-#include "program_options_archive.h"
-#include "property_tree_archive.h"
 
 namespace {
 using namespace legtool;

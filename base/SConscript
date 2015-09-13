@@ -1,0 +1,70 @@
+# Copyright 2014-2015 Josh Pieper, jjp@pobox.com.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+Import('canonenv')
+env = canonenv.Clone()
+
+env.Append(CPPPATH=['.'])
+
+SOURCES = [
+    'comm_factory.cc',
+    'error_code.cc',
+    'fail.cc',
+    'linux_input.cc',
+    'telemetry_log.cc',
+    'telemetry_remote_debug_server.cc',
+    ]
+
+libbase = env.StaticLibrary('base', SOURCES)
+libbase_so = env.SharedLibrary('base', SOURCES)
+
+Export('libbase')
+Export('libbase_so')
+
+TESTS = ['test/' + x for x in [
+        'comm_test.cc',
+        'json_archive_test.cc',
+        'test_main.cc',
+        'property_tree_archive_test.cc',
+        'quaternion_test.cc',
+        'signal_result_test.cc',
+        'telemetry_archive_test.cc',
+        'telemetry_log_test.cc',
+        'telemetry_log_registrar_test.cc',
+        'telemetry_registry_test.cc',
+        'tf_test.cc',
+        ]]
+
+crenv = env.Clone()
+crenv.Append(LIBS=['boost_coroutine',
+                   'boost_context',
+                   ])
+
+testenv = crenv.Clone()
+testenv.Append(LIBS=['boost_unit_test_framework'])
+
+test_base = testenv.Program('test_base', TESTS + libbase)
+testenv.Command('test_base.passed', test_base,
+                '$SOURCE && touch $TARGET')
+
+comm_manual_test = crenv.Program('comm_manual_test',
+                                 ['test/comm_manual_test.cc'] + libbase)
+telemetry_log_test = crenv.Program(
+    'telemetry_log_manual_test',
+    ['test/telemetry_log_manual_test.cc'] + libbase)
+
+linux_input_manual_test = crenv.Program(
+    'linux_input_manual_test',
+    ['test/linux_input_manual_test.cc'] + libbase)
+

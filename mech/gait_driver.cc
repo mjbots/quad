@@ -16,7 +16,8 @@
 
 #include <boost/asio/deadline_timer.hpp>
 
-#include "fail.h"
+#include "base/fail.h"
+
 #include "ripple.h"
 #include "servo_interface.h"
 

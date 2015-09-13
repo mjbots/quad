@@ -14,7 +14,8 @@
 
 #pragma once
 
-#include "component_archives.h"
+#include "base/component_archives.h"
+
 #include "mech_defines.h"
 #include "servo_monitor.h"
 

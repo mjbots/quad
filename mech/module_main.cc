@@ -17,14 +17,14 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/program_options.hpp>
 
-#include "fail.h"
-#include "handler_util.h"
-#include "program_options_archive.h"
-#include "telemetry_log.h"
-#include "telemetry_log_registrar.h"
-#include "telemetry_registry.h"
-#include "telemetry_remote_debug_registrar.h"
-#include "telemetry_remote_debug_server.h"
+#include "base/fail.h"
+#include "base/handler_util.h"
+#include "base/program_options_archive.h"
+#include "base/telemetry_log.h"
+#include "base/telemetry_log_registrar.h"
+#include "base/telemetry_registry.h"
+#include "base/telemetry_remote_debug_registrar.h"
+#include "base/telemetry_remote_debug_server.h"
 
 using namespace legtool;
 

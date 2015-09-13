@@ -16,7 +16,7 @@
 
 #include <boost/test/auto_unit_test.hpp>
 
-#include "comm_factory.h"
+#include "base/comm_factory.h"
 
 using namespace legtool;
 

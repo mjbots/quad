@@ -14,10 +14,10 @@
 
 #pragma once
 
-#include "common.h"
-#include "error_code.h"
-#include "tf.h"
-#include "visitor.h"
+#include "base/common.h"
+#include "base/error_code.h"
+#include "base/tf.h"
+#include "base/visitor.h"
 
 namespace legtool {
 struct JointAngles {

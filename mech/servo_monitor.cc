@@ -18,8 +18,9 @@
 #include <boost/algorithm/string/split.hpp>
 #include <boost/asio/deadline_timer.hpp>
 
-#include "common.h"
-#include "fail.h"
+#include "base/common.h"
+#include "base/fail.h"
+
 #include "servo_interface.h"
 
 namespace legtool {

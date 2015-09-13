@@ -18,7 +18,7 @@
 #include <cstddef>
 #include <initializer_list>
 #include <type_traits>
-#include <meta/meta_fwd.hpp>
+#include "meta_fwd.hpp"
 
 #if defined(__clang__)
 #pragma GCC diagnostic push
@@ -2910,7 +2910,7 @@ namespace meta
         /// Makes the integer sequence [from, to).
         /// \ingroup integral
         template <class T, T from, T to>
-        using integer_range = meta::_t< 
+        using integer_range = meta::_t<
             detail::offset_integer_sequence_<T, from, meta::make_integer_sequence<T, to - from>>>;
         /// \cond
     } // namespace v1

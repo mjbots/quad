@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import datetime
+import os
 import sys
 import time
 
@@ -29,7 +30,9 @@ from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 import PySide.QtCore as QtCore
 import PySide.QtGui as QtGui
 
-sys.path.append('build')
+SCRIPT_PATH=os.path.dirname(os.path.realpath(__file__))
+sys.path.append(os.path.join(SCRIPT_PATH, '../python'))
+sys.path.append(os.path.join(SCRIPT_PATH, 'build'))
 import ui_tplot_main_window
 
 import telemetry_log

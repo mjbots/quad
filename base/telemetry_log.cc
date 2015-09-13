@@ -31,7 +31,6 @@
 
 #include "circular_buffer.h"
 #include "fail.h"
-#include "move_wrapper.h"
 
 namespace legtool {
 

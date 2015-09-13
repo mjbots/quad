@@ -17,7 +17,8 @@
 #include <boost/asio/ip/udp.hpp>
 #include <boost/property_tree/ptree.hpp>
 
-#include "component_archives.h"
+#include "base/component_archives.h"
+
 #include "gait_driver.h"
 #include "mech_defines.h"
 #include "mjmech_imu_driver.h"

@@ -18,9 +18,9 @@
 
 #include <thread>
 
-#include "common.h"
-#include "fail.h"
-#include "quaternion.h"
+#include "base/common.h"
+#include "base/fail.h"
+#include "base/quaternion.h"
 
 namespace legtool {
 

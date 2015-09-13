@@ -18,9 +18,10 @@
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/signals2/signal.hpp>
 
+#include "base/tf.h"
+#include "base/visitor.h"
+
 #include "gait.h"
-#include "tf.h"
-#include "visitor.h"
 
 namespace legtool {
 class RippleGait;

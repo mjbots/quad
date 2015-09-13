@@ -14,7 +14,8 @@
 
 #pragma once
 
-#include "fail.h"
+#include "base/fail.h"
+
 #include "servo_interface.h"
 
 namespace legtool {

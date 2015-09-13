@@ -14,10 +14,11 @@
 
 #pragma once
 
-#include "common.h"
+#include "base/common.h"
+#include "base/tf.h"
+#include "base/visitor.h"
+
 #include "leg_ik.h"
-#include "tf.h"
-#include "visitor.h"
 
 namespace legtool {
 struct Leg {

@@ -18,8 +18,8 @@
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/signals2/signal.hpp>
 
-#include "comm.h"
-#include "visitor.h"
+#include "base/comm.h"
+#include "base/visitor.h"
 
 namespace legtool {
 class ServoInterface;

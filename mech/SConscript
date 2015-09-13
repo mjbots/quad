@@ -1,0 +1,73 @@
+# Copyright 2014-2015 Josh Pieper, jjp@pobox.com.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+Import('canonenv')
+Import('libbase')
+env = canonenv.Clone()
+
+env.Append(CPPPATH=['.'])
+
+crenv = env.Clone()
+crenv.Append(LIBS=['boost_coroutine',
+                   'boost_context',
+                   ])
+
+SOURCES = [
+    'gait_driver.cc',
+    'herkulex.cc',
+    'mech_warfare.cc',
+    'mjmech_imu_driver.cc',
+    'servo_monitor.cc',
+    ]
+
+libmech = env.StaticLibrary('mech', SOURCES)
+libmech_so = env.SharedLibrary('mech', SOURCES)
+
+Export('libmech')
+Export('libmech_so')
+
+herkulex_tool = crenv.Program('herkulex_tool',
+                              ['herkulex_tool.cc'] + libmech + libbase)
+
+TESTS = ['test/' + x for x in [
+        'herkulex_test.cc',
+        'leg_ik_test.cc',
+        'test_main.cc',
+        'ripple_test.cc',
+        ]]
+
+testenv = crenv.Clone()
+testenv.Append(LIBS=['boost_unit_test_framework'])
+
+test_mech = testenv.Program('test_mech', TESTS + libmech + libbase)
+testenv.Command('test_mech.passed', test_mech,
+                '$SOURCE && touch $TARGET')
+
+mech_warfare_command = crenv.Program(
+    'mw_command',
+    ['mech_warfare_command.cc'] + libmech + libbase)
+
+def ModuleMain(root, cname):
+    mjmech_main = crenv.Object(
+        root + '_main.o', 'module_main.cc',
+        CPPDEFINES={'MODULE_HEADER_FILE': '\\"' + root + '.h\\"',
+                    'MODULE_CLASS_NAME': cname})
+    crenv.Depends(mjmech_main, root + '.h')
+    crenv.Depends(mjmech_main, libmech)
+    crenv.Depends(mjmech_main, libbase)
+    crenv.Program(root, mjmech_main + libmech + libbase)
+
+ModuleMain('mjmech_imu_driver', 'MjmechImuDriver')
+ModuleMain('mech_warfare', 'MechWarfare')
+ModuleMain('servo_monitor_app', 'ServoMonitorApp')

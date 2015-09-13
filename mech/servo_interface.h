@@ -17,8 +17,8 @@
 #include <set>
 #include <vector>
 
-#include "comm.h"
-#include "error_code.h"
+#include "base/comm.h"
+#include "base/error_code.h"
 
 namespace legtool {
 class ServoInterface : boost::noncopyable {

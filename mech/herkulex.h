@@ -21,12 +21,12 @@
 #include <boost/asio/write.hpp>
 #include <boost/signals2/signal.hpp>
 
-#include "comm.h"
-#include "command_sequencer.h"
-#include "common.h"
-#include "fail.h"
-#include "signal_result.h"
-#include "visitor.h"
+#include "base/comm.h"
+#include "base/command_sequencer.h"
+#include "base/common.h"
+#include "base/fail.h"
+#include "base/signal_result.h"
+#include "base/visitor.h"
 
 namespace legtool {
 

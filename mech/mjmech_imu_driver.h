@@ -18,9 +18,9 @@
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/signals2/signal.hpp>
 
-#include "comm.h"
-#include "point3d.h"
-#include "visitor.h"
+#include "base/comm.h"
+#include "base/point3d.h"
+#include "base/visitor.h"
 
 namespace legtool {
 /// Driver for the MAX21000 MMA8451Q driver on the mjmech

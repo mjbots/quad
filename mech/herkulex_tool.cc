@@ -18,11 +18,12 @@
 #include <boost/algorithm/string/split.hpp>
 #include <boost/program_options.hpp>
 
-#include "comm_factory.h"
-#include "common.h"
+#include "base/comm_factory.h"
+#include "base/common.h"
+#include "base/program_options_archive.h"
+
 #include "herkulex.h"
 #include "herkulex_servo_interface.h"
-#include "program_options_archive.h"
 
 using namespace legtool;
 namespace po = boost::program_options;
