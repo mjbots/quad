@@ -14,7 +14,8 @@
 
 #pragma once
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 /// A helper base class for classes which want to model the Archive
 /// concept and differentiate between visited elements which are
 /// themselves serializable or not.
@@ -45,4 +46,5 @@ struct VisitArchive {
   }
 };
 
+}
 }

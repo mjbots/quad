@@ -22,7 +22,8 @@
 #include "fast_stream.h"
 #include "telemetry_format.h"
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 
 /// Write log files with a format as described in telemetry_format.h.
 class TelemetryLog : boost::noncopyable {
@@ -140,4 +141,5 @@ class TelemetryLog : boost::noncopyable {
   class Impl;
   std::unique_ptr<Impl> impl_;
 };
+}
 }

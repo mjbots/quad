@@ -17,7 +17,7 @@
 #include <boost/test/auto_unit_test.hpp>
 
 namespace {
-using namespace legtool;
+using namespace mjmech::base;
 
 struct SubStruct {
   bool predicate = true;

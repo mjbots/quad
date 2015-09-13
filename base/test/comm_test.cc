@@ -23,7 +23,7 @@
 #include <boost/test/auto_unit_test.hpp>
 
 namespace pl = std::placeholders;
-using namespace legtool;
+using namespace mjmech::base;
 namespace pt = boost::property_tree;
 
 BOOST_AUTO_TEST_CASE(StreamFactoryTest) {

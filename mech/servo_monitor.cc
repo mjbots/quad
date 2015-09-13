@@ -23,7 +23,8 @@
 
 #include "servo_interface.h"
 
-namespace legtool {
+namespace mjmech {
+namespace mech {
 
 class ServoMonitor::Impl : boost::noncopyable {
  public:
@@ -51,7 +52,7 @@ class ServoMonitor::Impl : boost::noncopyable {
         int end = std::stoi(field.substr(pos + 1));
         if (start < 0 || start > 254 ||
             end < 0 || end > 254) {
-          throw SystemError::einval("invalid servo spec");
+          throw base::SystemError::einval("invalid servo spec");
         }
         for (int i = start; i <= end; i++) { ids.push_back(i); }
       }
@@ -61,12 +62,13 @@ class ServoMonitor::Impl : boost::noncopyable {
   }
 
   void Start() {
-    timer_.expires_from_now(ConvertSecondsToDuration(parameters_.period_s));
+    timer_.expires_from_now(
+        base::ConvertSecondsToDuration(parameters_.period_s));
     timer_.async_wait(std::bind(&Impl::HandleTimeout, this,
                                 std::placeholders::_1));
   }
 
-  void HandleTimeout(ErrorCode ec) {
+  void HandleTimeout(base::ErrorCode ec) {
     FailIf(ec);
     Start();
 
@@ -117,7 +119,7 @@ class ServoMonitor::Impl : boost::noncopyable {
   }
 
   void HandleVoltage(int requested_servo,
-                     ErrorCode ec,
+                     base::ErrorCode ec,
                      std::vector<ServoInterface::Voltage> voltages) {
     FailIf(ec);
     BOOST_ASSERT(outstanding_);
@@ -142,7 +144,7 @@ class ServoMonitor::Impl : boost::noncopyable {
 
   void HandleTemperature(
       int requested_servo,
-      ErrorCode ec,
+      base::ErrorCode ec,
       std::vector<ServoInterface::Temperature> temperatures) {
     FailIf(ec);
 
@@ -181,7 +183,7 @@ class ServoMonitor::Impl : boost::noncopyable {
                                      servo.parole_time_s * 2);
     }
 
-    servo.next_update += ConvertSecondsToDuration(servo.parole_time_s);
+    servo.next_update += base::ConvertSecondsToDuration(servo.parole_time_s);
 
     // Skip on to the next servo.
     state_.mode = State::kIdle;
@@ -277,13 +279,14 @@ ServoMonitor::ServoMonitor(boost::asio::io_service& service,
 
 ServoMonitor::~ServoMonitor() {}
 
-void ServoMonitor::AsyncStart(ErrorHandler handler) {
+void ServoMonitor::AsyncStart(base::ErrorHandler handler) {
   impl_->SetupInitialServos();
   impl_->Start();
-  impl_->service_.post(std::bind(handler, ErrorCode()));
+  impl_->service_.post(std::bind(handler, base::ErrorCode()));
 }
 
 ServoMonitor::Parameters* ServoMonitor::parameters() {
   return &impl_->parameters_;
+}
 }
 }

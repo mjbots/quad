@@ -20,14 +20,15 @@
 #include "base/comm.h"
 #include "base/error_code.h"
 
-namespace legtool {
+namespace mjmech {
+namespace mech {
 class ServoInterface : boost::noncopyable {
  public:
   struct Joint {
     int address;
     double angle_deg;
   };
-  virtual void SetPose(const std::vector<Joint>&, ErrorHandler) = 0;
+  virtual void SetPose(const std::vector<Joint>&, base::ErrorHandler) = 0;
 
   enum PowerState {
     kPowerFree,
@@ -35,10 +36,10 @@ class ServoInterface : boost::noncopyable {
     kPowerEnable,
   };
   virtual void EnablePower(PowerState power_state, const std::vector<int>&,
-                           ErrorHandler) = 0;
+                           base::ErrorHandler) = 0;
 
   typedef std::function<
-    void (ErrorCode, std::vector<Joint>)> PoseHandler;
+    void (base::ErrorCode, std::vector<Joint>)> PoseHandler;
 
   virtual void GetPose(const std::vector<int>&, PoseHandler) = 0;
 
@@ -48,7 +49,7 @@ class ServoInterface : boost::noncopyable {
   };
 
   typedef std::function<
-    void (ErrorCode, std::vector<Temperature>)> TemperatureHandler;
+    void (base::ErrorCode, std::vector<Temperature>)> TemperatureHandler;
   virtual void GetTemperature(const std::vector<int>&, TemperatureHandler) = 0;
 
   struct Voltage {
@@ -57,7 +58,7 @@ class ServoInterface : boost::noncopyable {
   };
 
   typedef std::function<void (
-      ErrorCode, std::vector<Voltage>)> VoltageHandler;
+      base::ErrorCode, std::vector<Voltage>)> VoltageHandler;
 
   virtual void GetVoltage(const std::vector<int>&, VoltageHandler) = 0;
 
@@ -66,4 +67,5 @@ class ServoInterface : boost::noncopyable {
   virtual const std::set<int>& GetUsedAddresses() const = 0;
 };
 
+}
 }

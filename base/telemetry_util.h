@@ -20,7 +20,8 @@
 #include "recording_stream.h"
 #include "telemetry_format.h"
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 
 /// Produce a textual representation of a telemetry schema and
 /// optionally a data image.
@@ -332,4 +333,5 @@ class TelemetrySchemaReader {
   std::ostream& out_;
 };
 
+}
 }

@@ -18,7 +18,8 @@
 
 #include <boost/asio/io_service.hpp>
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 /// Ensure that a given resource is operated on by at most one command
 /// at a time.
 class CommandSequencer : boost::noncopyable {
@@ -95,4 +96,5 @@ class CommandSequencer : boost::noncopyable {
   std::shared_ptr<Base> waiting_;
   std::list<std::shared_ptr<Base>> queued_;
 };
+}
 }

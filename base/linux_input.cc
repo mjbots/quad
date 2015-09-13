@@ -19,7 +19,8 @@
 #include <boost/asio/posix/stream_descriptor.hpp>
 #include <boost/format.hpp>
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 class LinuxInput::Impl : boost::noncopyable {
  public:
   Impl(boost::asio::io_service& service) : service_(service) {}
@@ -302,4 +303,5 @@ std::ostream& operator<<(std::ostream& ostr, const LinuxInput::Event& rhs) {
   return ostr;
 }
 
+}
 }

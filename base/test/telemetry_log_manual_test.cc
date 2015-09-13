@@ -20,7 +20,7 @@
 #include <boost/program_options.hpp>
 
 namespace {
-using namespace legtool;
+using namespace mjmech::base;
 
 struct SampleStruct {
   boost::posix_time::ptime timestamp;

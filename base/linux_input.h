@@ -21,7 +21,8 @@
 
 #include "comm.h"
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 /// Support reading events from a linux input device.
 class LinuxInput : boost::noncopyable {
  public:
@@ -99,4 +100,5 @@ std::ostream& operator<<(std::ostream&, const LinuxInput&);
 std::ostream& operator<<(std::ostream&, const LinuxInput::AbsInfo&);
 std::ostream& operator<<(std::ostream&, const LinuxInput::Features&);
 std::ostream& operator<<(std::ostream&, const LinuxInput::Event&);
+}
 }

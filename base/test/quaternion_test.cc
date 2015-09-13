@@ -17,8 +17,8 @@
 #include "quaternion.h"
 
 namespace {
-typedef legtool::Quaternion Quaternion;
-typedef legtool::Point3D Point3D;
+typedef mjmech::base::Quaternion Quaternion;
+typedef mjmech::base::Point3D Point3D;
 typedef Quaternion::Euler Euler;
 
 void CheckVectorClose(const Point3D& lhs,

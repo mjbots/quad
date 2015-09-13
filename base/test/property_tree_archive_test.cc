@@ -18,6 +18,8 @@
 #include <boost/test/auto_unit_test.hpp>
 
 namespace {
+using namespace mjmech::base;
+
 struct TestData {
   int intval = 3;
   double doubleval = 9.1;
@@ -48,7 +50,7 @@ BOOST_AUTO_TEST_CASE(BasicPropertyTreeTest) {
     TestData data;
     std::ostringstream ostr;
     pt::write_json(ostr,
-                   legtool::PropertyTreeWriteArchive().Accept(&data).tree());
+                   PropertyTreeWriteArchive().Accept(&data).tree());
     std::string expected =
         "{\n"
         "    \"intval\": \"3\",\n"
@@ -61,7 +63,7 @@ BOOST_AUTO_TEST_CASE(BasicPropertyTreeTest) {
     Container container;
     std::ostringstream ostr;
     pt::write_json(ostr,
-                   legtool::PropertyTreeWriteArchive().Accept(&container).tree());
+                   PropertyTreeWriteArchive().Accept(&container).tree());
     BOOST_CHECK_EQUAL(ostr.str(),
                       "{\n"
                       "    \"child\":\n"
@@ -92,7 +94,7 @@ BOOST_AUTO_TEST_CASE(VectorPropertyTreeTest) {
     VectorTest foo;
     std::ostringstream ostr;
     pt::write_json(ostr,
-                   legtool::PropertyTreeWriteArchive().Accept(&foo).tree());
+                   PropertyTreeWriteArchive().Accept(&foo).tree());
     std::string expected =
         "{\n"
         "    \"intvector\": \"\",\n"
@@ -107,7 +109,7 @@ BOOST_AUTO_TEST_CASE(VectorPropertyTreeTest) {
 
     std::ostringstream ostr;
     pt::write_json(ostr,
-                   legtool::PropertyTreeWriteArchive().Accept(&foo).tree());
+                   PropertyTreeWriteArchive().Accept(&foo).tree());
     std::string expected =
         "{\n"
         "    \"intvector\":\n"

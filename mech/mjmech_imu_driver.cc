@@ -22,12 +22,13 @@
 #include "base/fail.h"
 #include "base/quaternion.h"
 
-namespace legtool {
+namespace mjmech {
+namespace mech {
 
 namespace {
 int ErrWrap(int value) {
   if (value < 0) {
-    throw SystemError(errno, boost::system::generic_category());
+    throw base::SystemError(errno, boost::system::generic_category());
   }
   return value;
 }
@@ -46,7 +47,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
     if (child_.joinable()) { child_.join(); }
   }
 
-  void AsyncStart(ErrorHandler handler) {
+  void AsyncStart(base::ErrorHandler handler) {
     BOOST_ASSERT(std::this_thread::get_id() == parent_id_);
 
     // Capture our parent's parameters before starting our thread.
@@ -56,27 +57,28 @@ class MjmechImuDriver::Impl : boost::noncopyable {
   }
 
  private:
-  void Run(ErrorHandler handler) {
+  void Run(base::ErrorHandler handler) {
     BOOST_ASSERT(std::this_thread::get_id() == child_.get_id());
 
-    transform_ = Quaternion::FromEuler(
-        Radians(parameters_.roll_deg),
-        Radians(parameters_.pitch_deg),
-        Radians(parameters_.yaw_deg));
+    transform_ = base::Quaternion::FromEuler(
+        base::Radians(parameters_.roll_deg),
+        base::Radians(parameters_.pitch_deg),
+        base::Radians(parameters_.yaw_deg));
 
     try {
       // Open the I2C device and configure it.
       fd_ = ::open(parameters_.i2c_device.c_str(), O_RDWR);
       if (fd_ < 0) {
-        throw SystemError(errno, boost::system::generic_category(),
-                          "error opening '" + parameters_.i2c_device + "'");
+        throw base::SystemError(
+            errno, boost::system::generic_category(),
+            "error opening '" + parameters_.i2c_device + "'");
       }
 
       // Verify we can talk to the gyro.
       uint8_t whoami[1] = {};
       ReadGyro(0x20, 1, whoami, sizeof(whoami));
       if (whoami[0] != 0xb1) {
-        throw SystemError::einval(
+        throw base::SystemError::einval(
             (boost::format("Incorrect whoami got 0x%02X expected 0xb1") %
              static_cast<int>(whoami[0])).str());
       }
@@ -95,7 +97,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
         else if (scale <= 500) { return 2; }
         else if (scale <= 1000) { return 1; }
         else if (scale <= 2000) { return 0; }
-        throw SystemError::einval("scale too large");
+        throw base::SystemError::einval("scale too large");
       }();
 
       imu_config_.rotation_deg_s = [fs]() {
@@ -105,7 +107,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
           case 2: { return 500.0; }
           case 3: { return 250.0; }
         }
-        throw SystemError::einval("invalid state");
+        throw base::SystemError::einval("invalid state");
       }();
 
       // FS=XX PWR=Normal XYZ=EN
@@ -151,7 +153,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
           case 14: { return 300.0; }
           case 15: { return 400.0; }
         }
-        throw SystemError::einval("invalid state");
+        throw base::SystemError::einval("invalid state");
       }();
 
       WriteGyro(0x01, {static_cast<uint8_t>(0x00 | (bw << 2))}); // BW=X
@@ -165,7 +167,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
       const uint8_t odr = limit([this]() {
           const double rate = parameters_.rate_hz;
           if (rate < 4.95) {
-            throw SystemError::einval("IMU rate too small");
+            throw base::SystemError::einval("IMU rate too small");
           } else if (rate < 20) {
             return (154 * rate + 500) / rate;
           } else if (rate < 100) {
@@ -173,7 +175,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
           } else if (rate < 10000) {
             return (10000 - rate) / rate;
           } else {
-            throw SystemError::einval("IMU rate too large");
+            throw base::SystemError::einval("IMU rate too large");
           }
         }());
       WriteGyro(0x02, {odr}); // ODR=100Hz
@@ -182,7 +184,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
         if (odr <= 99) { return 10000.0 / (odr + 1); }
         else if (odr <= 179) { return 10000.0 / (100 + 5 * (odr - 99)); }
         else if (odr <= 255) { return 10000.0 / (500 + 20 * (odr - 179)); }
-        throw SystemError::einval("invalid state");
+        throw base::SystemError::einval("invalid state");
       }();
 
       // Configure the accelerometer.
@@ -193,7 +195,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
         if (scale <= 2.0) { return 0; }
         else if (scale <= 4.0) { return 1; }
         else if (scale <= 8.0) { return 2; }
-        throw SystemError::einval("accel scale too large");
+        throw base::SystemError::einval("accel scale too large");
       }();
 
       imu_config_.accel_g = [fsg]() {
@@ -202,7 +204,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
           case 1: { return 4.0; }
           case 2: { return 8.0; }
         }
-        throw SystemError::einval("invalid state");
+        throw base::SystemError::einval("invalid state");
       }();
 
       WriteAccel(0x0e, {fsg}); // FS=2G
@@ -217,7 +219,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
         else if (rate <= 200) { return 2; }
         else if (rate <= 400) { return 1; }
         else if (rate <= 800) { return 0; }
-        throw SystemError::einval("accel rate too large");
+        throw base::SystemError::einval("accel rate too large");
       }();
       const uint8_t lnoise = [this]() {
         if (parameters_.accel_g <= 4) { return 1; }
@@ -241,17 +243,17 @@ class MjmechImuDriver::Impl : boost::noncopyable {
 
       service_.post(std::bind(&Impl::SendConfig, this, imu_config_));
 
-    } catch (SystemError& e) {
+    } catch (base::SystemError& e) {
       e.error_code().Append("when initializing IMU");
       service_.post(std::bind(handler, e.error_code()));
       return;
     }
 
-    service_.post(std::bind(handler, ErrorCode()));
+    service_.post(std::bind(handler, base::ErrorCode()));
 
     try {
       DataLoop();
-    } catch (SystemError& e) {
+    } catch (base::SystemError& e) {
       // TODO jpieper: We should somehow log this or do something
       // useful.  For now, just re-raise.
       throw;
@@ -272,7 +274,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
       if (fs == 2.0) { return 1.0 / 4096 / 4; }
       else if (fs == 4.0) { return 1.0 / 2048 / 4; }
       else if (fs == 8.0) { return 1.0 / 1024 / 4; }
-      throw SystemError::einval("invalid configured accel range");
+      throw base::SystemError::einval("invalid configured accel range");
     }();
 
     const double kGyroSensitivity = [this]() {
@@ -281,7 +283,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
       else if (fs == 500.0) { return 1.0 / 60.0; }
       else if (fs == 1000.0) { return 1.0 / 30.0; }
       else if (fs == 2000.0) { return 1.0 / 15.0; }
-      throw SystemError::einval("invalid configured gyro rate");
+      throw base::SystemError::einval("invalid configured gyro rate");
     }();
 
     // Loop reading things and emitting data.
@@ -305,7 +307,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
 
       const double kGravity = 9.80665;
 
-      Point3D accel_mps2;
+      base::Point3D accel_mps2;
 
       accel_mps2.x =
           to_int16(adata[1], adata[2]) * kAccelSensitivity * kGravity *
@@ -319,7 +321,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
 
       imu_data.accel_mps2 = transform_.Rotate(accel_mps2);
 
-      Point3D body_rate_deg_s;
+      base::Point3D body_rate_deg_s;
       body_rate_deg_s.x =
           to_int16(gdata[1], gdata[2]) * kGyroSensitivity *
           parameters_.gyro_scale.x;
@@ -383,7 +385,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
       }
       ErrWrap(::i2c_smbus_access(fd_, I2C_SMBUS_WRITE, reg,
                                  I2C_SMBUS_I2C_BLOCK_BROKEN, &i2c_data));
-    } catch (SystemError& se) {
+    } catch (base::SystemError& se) {
       se.error_code().Append(boost::format("WriteData(0x%02x, 0x%02x, ...)") %
                              static_cast<int>(address) %
                              static_cast<int>(reg));
@@ -399,7 +401,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
     try {
       try {
         ErrWrap(::ioctl(fd_, I2C_SLAVE, static_cast<int>(address)));
-      } catch (SystemError& se) {
+      } catch (base::SystemError& se) {
         se.error_code().Append("when setting address");
         throw;
       }
@@ -410,19 +412,19 @@ class MjmechImuDriver::Impl : boost::noncopyable {
       try {
         ErrWrap(::i2c_smbus_access(fd_, I2C_SMBUS_READ, reg,
                                    I2C_SMBUS_I2C_BLOCK_DATA, &data));
-      } catch (SystemError& se) {
+      } catch (base::SystemError& se) {
         se.error_code().Append("during transfer");
         throw;
       }
 
       if (data.block[0] != length) {
-        throw SystemError(
+        throw base::SystemError(
             EINVAL, boost::system::generic_category(),
             (boost::format("asked for length %d got %d") %
              length % static_cast<int>(data.block[0])).str());
       }
       std::memcpy(buffer, &data.block[1], length);
-    } catch (SystemError& se) {
+    } catch (base::SystemError& se) {
       se.error_code().Append(boost::format("ReadData(0x%02x, 0x%02x, %d)") %
                              static_cast<int>(address) %
                              static_cast<int>(reg) %
@@ -445,15 +447,16 @@ class MjmechImuDriver::Impl : boost::noncopyable {
   // From child only.
   int fd_ = -1;
   ImuConfig imu_config_;
-  Quaternion transform_;
+  base::Quaternion transform_;
 };
 
 MjmechImuDriver::MjmechImuDriver(boost::asio::io_service& service)
     : impl_(new Impl(this, service)) {}
 MjmechImuDriver::~MjmechImuDriver() {}
 
-void MjmechImuDriver::AsyncStart(ErrorHandler handler) {
+void MjmechImuDriver::AsyncStart(base::ErrorHandler handler) {
   impl_->AsyncStart(handler);
 }
 
+}
 }

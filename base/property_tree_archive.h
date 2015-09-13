@@ -22,7 +22,8 @@
 #include "visit_archive.h"
 #include "visitor.h"
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 class PropertyTreeWriteArchive
     : public VisitArchive<PropertyTreeWriteArchive> {
  public:
@@ -150,4 +151,5 @@ class PropertyTreeReadArchive
   const boost::property_tree::ptree tree_;
   const int flags_;
 };
+}
 }

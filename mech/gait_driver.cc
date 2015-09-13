@@ -21,11 +21,12 @@
 #include "ripple.h"
 #include "servo_interface.h"
 
-namespace legtool {
+namespace mjmech {
+namespace mech {
 namespace {
 class FailHandler {
  public:
-  void operator()(ErrorCode ec) const {
+  void operator()(base::ErrorCode ec) const {
     FailIf(ec);
   }
 };
@@ -62,7 +63,7 @@ class GaitDriver::Impl : boost::noncopyable {
     // If our timer isn't started yet, then start it now.
     if (!timer_started_) {
       timer_started_ = true;
-      timer_.expires_from_now(ConvertSecondsToDuration(0.0));
+      timer_.expires_from_now(base::ConvertSecondsToDuration(0.0));
       StartTimer();
     }
 
@@ -78,7 +79,7 @@ class GaitDriver::Impl : boost::noncopyable {
   void StartTimer() {
     timer_.expires_at(
         timer_.expires_at() +
-        ConvertSecondsToDuration(parent_->parameters_.period_s));
+        base::ConvertSecondsToDuration(parent_->parameters_.period_s));
     timer_.async_wait(std::bind(&Impl::HandleTimer, this,
                                 std::placeholders::_1));
   }
@@ -88,7 +89,7 @@ class GaitDriver::Impl : boost::noncopyable {
 
     auto now = boost::posix_time::microsec_clock::universal_time();
     auto elapsed = now - last_command_timestamp_;
-    if (elapsed > ConvertSecondsToDuration(
+    if (elapsed > base::ConvertSecondsToDuration(
             parent_->parameters_.command_timeout_s)) {
       timer_started_ = false;
       SetFree();
@@ -97,7 +98,7 @@ class GaitDriver::Impl : boost::noncopyable {
 
     StartTimer();
 
-    if (elapsed > (ConvertSecondsToDuration(
+    if (elapsed > (base::ConvertSecondsToDuration(
                        parent_->parameters_.command_timeout_s -
                        parent_->parameters_.idle_time_s))) {
       Command idle_command;
@@ -164,4 +165,5 @@ void GaitDriver::SetFree() {
   impl_->SetFree();
 }
 
+}
 }

@@ -20,7 +20,8 @@
 
 #include "common.h"
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 class TimeoutError : public std::runtime_error, public boost::exception {
  public:
   TimeoutError() : std::runtime_error("timeout") {}
@@ -94,4 +95,5 @@ class SignalResult : boost::noncopyable {
     }
   }
 };
+}
 }

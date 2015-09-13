@@ -26,7 +26,8 @@
 #include <boost/enable_shared_from_this.hpp>
 #include <boost/format.hpp>
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 namespace {
 using namespace std::placeholders;
 
@@ -457,4 +458,5 @@ SharedStream MakeStdioDebugStream(SharedStream stream) {
   return SharedStream(new StdioDebugStream(stream));
 }
 
+}
 }

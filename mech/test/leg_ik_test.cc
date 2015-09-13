@@ -17,7 +17,8 @@
 #include <boost/test/auto_unit_test.hpp>
 
 namespace {
-using namespace legtool;
+using namespace mjmech::base;
+using namespace mjmech::mech;
 
 const int kCoxaIdent = 0;
 const int kFemurIdent = 1;

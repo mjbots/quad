@@ -19,7 +19,8 @@
 #include "telemetry_archive.h"
 #include "telemetry_log.h"
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 /// A registrar which emits every instance of every record to a
 /// TelemetryLog instance using the TelemetryArchive for
 /// serialization.
@@ -59,4 +60,5 @@ class TelemetryLogRegistrar {
 
   TelemetryLog* const telemetry_log_;
 };
+}
 }

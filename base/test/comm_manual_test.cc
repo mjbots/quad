@@ -27,7 +27,7 @@
 #include "program_options_archive.h"
 
 using namespace std::placeholders;
-using namespace legtool;
+using namespace mjmech::base;
 namespace po = boost::program_options;
 
 namespace {

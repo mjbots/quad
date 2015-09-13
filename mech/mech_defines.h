@@ -19,13 +19,16 @@
 #include "herkulex.h"
 #include "herkulex_servo_interface.h"
 
-namespace legtool {
+namespace mjmech {
+namespace mech {
 struct Mech {
-  typedef StreamFactory<StdioGenerator,
-                        SerialPortGenerator,
-                        TcpClientGenerator,
-                        PipeGenerator> Factory;
+  typedef base::StreamFactory<
+    base::StdioGenerator,
+    base::SerialPortGenerator,
+    base::TcpClientGenerator,
+    base::PipeGenerator> Factory;
   typedef HerkuleX<Factory> ServoBase;
   typedef HerkuleXServoInterface<ServoBase> Servo;
 };
+}
 }

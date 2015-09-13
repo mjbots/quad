@@ -19,7 +19,8 @@
 
 #include "error_code.h"
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 
 /// Terminate the program and display a backtrace.
 void Fail(const std::string& message);
@@ -34,6 +35,5 @@ void FailIf(const ErrorCode&);
 /// current errno as part of the message.
 void FailIfErrno(bool terminate);
 
-
-
+}
 }

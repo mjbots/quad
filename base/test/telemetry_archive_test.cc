@@ -21,7 +21,7 @@
 #include "telemetry_util.h"
 #include "visitor.h"
 
-using namespace legtool;
+using namespace mjmech::base;
 
 namespace {
 struct SubTest1 {

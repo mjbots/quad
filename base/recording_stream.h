@@ -17,7 +17,8 @@
 #include <boost/iostreams/categories.hpp>
 #include <boost/iostreams/operations.hpp>
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 struct RecordingInputSource {
   typedef char char_type;
   typedef boost::iostreams::source_tag category;
@@ -39,4 +40,5 @@ struct RecordingInputSource {
   };
   std::shared_ptr<Context> context;
 };
+}
 }

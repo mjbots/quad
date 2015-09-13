@@ -21,7 +21,7 @@
 #include <boost/asio/streambuf.hpp>
 #include <boost/test/auto_unit_test.hpp>
 
-using namespace legtool;
+using namespace mjmech::base;
 
 BOOST_AUTO_TEST_CASE(TelemetryLogBasicTest) {
   boost::asio::io_service service;

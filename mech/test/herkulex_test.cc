@@ -18,7 +18,8 @@
 
 #include "base/comm_factory.h"
 
-using namespace legtool;
+using namespace mjmech::base;
+using namespace mjmech::mech;
 
 namespace {
 class Fixture {

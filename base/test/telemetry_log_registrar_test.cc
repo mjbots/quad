@@ -29,7 +29,7 @@ struct TestData {
   }
 };
 
-using namespace legtool;
+using namespace mjmech::base;
 }
 
 BOOST_AUTO_TEST_CASE(TelemetryLogRegistrarTest) {

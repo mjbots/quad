@@ -20,7 +20,8 @@
 
 #include <boost/format.hpp>
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 
 namespace {
 std::string FormatFrame(const std::string& frame) {
@@ -85,4 +86,5 @@ void FailIfErrno(bool terminate) {
   if (terminate) { Fail(strerror(errno)); }
 }
 
+}
 }

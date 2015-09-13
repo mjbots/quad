@@ -22,7 +22,8 @@
 #include "visit_archive.h"
 #include "visitor.h"
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 class JsonWriteArchive : public VisitArchive<JsonWriteArchive> {
  public:
   typedef VisitArchive<JsonWriteArchive> Base;
@@ -120,4 +121,5 @@ class JsonWriteArchive : public VisitArchive<JsonWriteArchive> {
   const int indent_;
   bool previous_ = false;
 };
+}
 }

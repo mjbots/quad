@@ -29,7 +29,8 @@
 ///  +y - forward
 ///  +z - up
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 
 struct Frame;
 
@@ -164,4 +165,5 @@ struct Frame : boost::noncopyable {
     std::vector<const Frame*> destination_parents_list_;
   };
 };
+}
 }

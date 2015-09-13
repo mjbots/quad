@@ -23,7 +23,8 @@
 
 #include "point3d.h"
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 class Quaternion;
 inline Quaternion operator*(const Quaternion& lhs,
                             const Quaternion& rhs);
@@ -183,5 +184,6 @@ inline Quaternion operator*(const Quaternion& lhs,
                     b * e + a * f + c * h - d * g,
                     a * g - b * h + c * e + d * f,
                     a * h + b * g - c * f + d * e);
+}
 }
 }

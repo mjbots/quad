@@ -16,7 +16,7 @@
 
 #include <boost/test/auto_unit_test.hpp>
 
-using namespace legtool;
+using namespace mjmech::base;
 
 BOOST_AUTO_TEST_CASE(TestSignalResultCoroutine1) {
   boost::asio::io_service service;

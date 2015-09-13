@@ -21,7 +21,8 @@
 #include "base/comm.h"
 #include "base/visitor.h"
 
-namespace legtool {
+namespace mjmech {
+namespace mech {
 class ServoInterface;
 
 class ServoMonitor : boost::noncopyable {
@@ -41,7 +42,7 @@ class ServoMonitor : boost::noncopyable {
 
   ~ServoMonitor();
 
-  void AsyncStart(ErrorHandler handler);
+  void AsyncStart(base::ErrorHandler handler);
 
   struct Parameters {
     /// Query individual servos at this rate.
@@ -105,4 +106,5 @@ class ServoMonitor : boost::noncopyable {
   class Impl;
   std::unique_ptr<Impl> impl_;
 };
+}
 }

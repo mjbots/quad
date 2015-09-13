@@ -20,7 +20,8 @@
 
 #include "meta/meta.hpp"
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 /// Maintain a local publish-subscribe model used for data objects.
 template <typename... Registrars>
 class TelemetryRegistry : boost::noncopyable {
@@ -111,4 +112,5 @@ class TelemetryRegistry : boost::noncopyable {
   std::tuple<Registrars...> registrars_;
 };
 
+}
 }

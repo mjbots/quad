@@ -18,7 +18,8 @@
 
 #include "base/property_tree_archive.h"
 
-namespace legtool {
+namespace mjmech {
+namespace mech {
 
 MechWarfare::MechWarfare(boost::asio::io_service& service)
     : service_(service),
@@ -26,7 +27,7 @@ MechWarfare::MechWarfare(boost::asio::io_service& service)
       server_(service) {
 }
 
-void MechWarfare::AsyncStart(ErrorHandler handler) {
+void MechWarfare::AsyncStart(base::ErrorHandler handler) {
   try {
     RippleConfig ripple_config;
     ripple_config = LoadRippleConfig();
@@ -35,7 +36,7 @@ void MechWarfare::AsyncStart(ErrorHandler handler) {
                                 new RippleGait(ripple_config)));
 
     NetworkListen();
-  } catch (SystemError& se) {
+  } catch (base::SystemError& se) {
     service_.post(std::bind(handler, se.error_code()));
     return;
   }
@@ -48,19 +49,19 @@ RippleConfig MechWarfare::LoadRippleConfig() {
   try {
     std::ifstream inf(parameters_.gait_config);
     if (!inf.is_open()) {
-      throw SystemError::syserrno("error opening config");
+      throw base::SystemError::syserrno("error opening config");
     }
 
     boost::property_tree::ptree tree;
     boost::property_tree::read_json(inf, tree);
     auto optional_child = tree.get_child_optional("gaitconfig.ripple");
     if (!optional_child) {
-      throw SystemError::einval("could not find ripple config in file");
+      throw base::SystemError::einval("could not find ripple config in file");
     }
 
-    PropertyTreeReadArchive(
+    base::PropertyTreeReadArchive(
         *optional_child,
-        PropertyTreeReadArchive::kErrorOnMissing).Accept(&ripple_config);
+        base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&ripple_config);
 
     std::string type = tree.get<std::string>("ikconfig.iktype");
     auto& leg_configs = ripple_config.mechanical.leg_config;
@@ -71,19 +72,19 @@ RippleConfig MechWarfare::LoadRippleConfig() {
         std::string field = (boost::format("ikconfig.leg.%d") % i).str();
         auto optional_child = tree.get_child_optional(field);
         if (!optional_child) {
-          throw SystemError::einval("could not locate field: " + field);
+          throw base::SystemError::einval("could not locate field: " + field);
         }
 
-        PropertyTreeReadArchive(
+        base::PropertyTreeReadArchive(
             *optional_child,
-            PropertyTreeReadArchive::kErrorOnMissing).Accept(&config);
+            base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&config);
         leg_configs[i].leg_ik =
             boost::shared_ptr<IKSolver>(new MammalIK(config));
       } else {
-        throw SystemError::einval("unknown iktype: " + type);
+        throw base::SystemError::einval("unknown iktype: " + type);
       }
     }
-  } catch (SystemError& se) {
+  } catch (base::SystemError& se) {
     se.error_code().Append(
         "while opening config: '" + parameters_.gait_config + "'");
     throw;
@@ -109,7 +110,7 @@ void MechWarfare::StartRead() {
                 std::placeholders::_2));
 }
 
-void MechWarfare::HandleRead(ErrorCode ec, std::size_t size) {
+void MechWarfare::HandleRead(base::ErrorCode ec, std::size_t size) {
   FailIf(ec);
 
   std::string data(receive_buffer_, size);
@@ -134,9 +135,10 @@ void MechWarfare::HandleMessage(const boost::property_tree::ptree& tree) {
 
 void MechWarfare::HandleMessageGait(const boost::property_tree::ptree& tree) {
   Command command;
-  PropertyTreeReadArchive(
-      tree, PropertyTreeReadArchive::kErrorOnMissing).Accept(&command);
+  base::PropertyTreeReadArchive(
+      tree, base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&command);
   m_.gait_driver->SetCommand(command);
 }
 
+}
 }

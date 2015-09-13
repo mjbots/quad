@@ -24,7 +24,8 @@
 #include "comm.h"
 #include "visitor.h"
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 
 SharedStream MakeStdioDebugStream(SharedStream);
 
@@ -295,4 +296,5 @@ class PipeGenerator : boost::noncopyable {
   std::unique_ptr<Impl> impl_;
 };
 
+}
 }

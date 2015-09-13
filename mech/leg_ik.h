@@ -19,7 +19,8 @@
 #include "base/tf.h"
 #include "base/visitor.h"
 
-namespace legtool {
+namespace mjmech {
+namespace mech {
 struct JointAngles {
   struct Joint {
     int ident = 0;
@@ -61,7 +62,7 @@ class IKSolver : boost::noncopyable {
   ///  +z is up
   ///
   /// If no solution is possible, return an object with NaN values.
-  virtual JointAngles Solve(const Point3D&) const = 0;
+  virtual JointAngles Solve(const base::Point3D&) const = 0;
 };
 
 /// Inverse kinematics solver for lizard style 3-dof legs.
@@ -107,15 +108,16 @@ class LizardIK : public IKSolver {
     if (config_.coxa.length_mm == 0.0 ||
         config_.femur.length_mm == 0.0 ||
         config_.tibia.length_mm == 0.0) {
-      throw SystemError::einval("invalid lizard leg config");
+      throw base::SystemError::einval("invalid lizard leg config");
     }
   }
 
-  virtual JointAngles Solve(const Point3D& point_mm) const {
+  virtual JointAngles Solve(const base::Point3D& point_mm) const {
     // Solve for the coxa first, as it has only a single solution.
-    const double coxa_deg = (config_.coxa.sign *
-                             Degrees(std::atan2(point_mm.x, point_mm.y)) +
-                             config_.coxa.idle_deg);
+    const double coxa_deg = (
+        config_.coxa.sign *
+        base::Degrees(std::atan2(point_mm.x, point_mm.y)) +
+        config_.coxa.idle_deg);
 
     if (coxa_deg < config_.coxa.min_deg ||
                    coxa_deg > config_.coxa.max_deg) {
@@ -167,7 +169,7 @@ class LizardIK : public IKSolver {
     // with the femur, so subtract off 90 degrees.
     const double tibia_deg =
         (config_.tibia.sign *
-         Degrees(0.5 * M_PI - std::acos(tibia_cos)) +
+         base::Degrees(0.5 * M_PI - std::acos(tibia_cos)) +
          config_.tibia.idle_deg);
 
     if (tibia_deg < config_.tibia.min_deg ||
@@ -177,7 +179,7 @@ class LizardIK : public IKSolver {
 
     // To solve for the femur angle, we first get the angle opposite
     // true_x, then the angle opposite the tibia.
-    const double true_x_deg = Degrees(std::atan2(true_x, -point_mm.z));
+    const double true_x_deg = base::Degrees(std::atan2(true_x, -point_mm.z));
 
     // Then the angle opposite the tibia is also found the via the law
     // of cosines.
@@ -195,7 +197,7 @@ class LizardIK : public IKSolver {
       return JointAngles::Invalid();
     }
 
-    const double femur_im_deg = Degrees(std::acos(femur_im_cos));
+    const double femur_im_deg = base::Degrees(std::acos(femur_im_cos));
 
     const double femur_deg =
         (config_.femur.sign * ((femur_im_deg + true_x_deg) - 90.0) +
@@ -231,7 +233,7 @@ class MammalIK : public IKSolver {
     /// relative to the shoulder center of rotation.  Since the leg
     /// plane must be vertical, the shoulder leg plane separation is
     /// purely the y component.
-    Point3D femur_attachment_mm;
+    base::Point3D femur_attachment_mm;
 
     struct Joint {
       double min_deg = 0;
@@ -275,11 +277,11 @@ class MammalIK : public IKSolver {
     // Make some basic sanity checks.
     if (config_.femur.length_mm == 0.0 ||
         config_.tibia.length_mm == 0.0) {
-      throw SystemError::einval("invalid mammal leg config");
+      throw base::SystemError::einval("invalid mammal leg config");
     }
   }
 
-  virtual JointAngles Solve(const Point3D& point_mm) const {
+  virtual JointAngles Solve(const base::Point3D& point_mm) const {
     // Find the angle of the shoulder joint.  This will be tangent
     // angle between the point and the circle with radius
     // femur_attachment_mm.y.
@@ -320,10 +322,10 @@ class MammalIK : public IKSolver {
     const double ry = point_mm.z;
     // TODO jpieper: I don't think this sign calculation is correct
     // when abs(y) < radius.
-    const double sign = GetSign(-rx * ry);
+    const double sign = base::GetSign(-rx * ry);
     const double logical_shoulder_rad = sign * t0;
     const double shoulder_deg =
-        config_.shoulder.sign * Degrees(logical_shoulder_rad) +
+        config_.shoulder.sign * base::Degrees(logical_shoulder_rad) +
         config_.shoulder.idle_deg;
 
     if (shoulder_deg < config_.shoulder.min_deg ||
@@ -350,7 +352,7 @@ class MammalIK : public IKSolver {
     const double point_y =
         std::sqrt(std::pow(point_mm.y - leg_frame_y, 2) +
                   std::pow(point_mm.z - leg_frame_z, 2)) *
-        GetSign(point_mm.z - leg_frame_z);
+        base::GetSign(point_mm.z - leg_frame_z);
 
     const double prx = -(point_x - femur_x);
     const double pry = point_y - femur_y;
@@ -389,7 +391,7 @@ class MammalIK : public IKSolver {
     const double logical_tibia_rad = tibia_sign * (M_PI - tibiainv_rad);
 
     const double tibia_deg =
-        config_.tibia.sign * Degrees(logical_tibia_rad) +
+        config_.tibia.sign * base::Degrees(logical_tibia_rad) +
         config_.tibia.idle_deg;
     if (tibia_deg < config_.tibia.min_deg ||
         tibia_deg > config_.tibia.max_deg) {
@@ -409,7 +411,7 @@ class MammalIK : public IKSolver {
     const double femur_rad =
         (std::atan2(pry, prx) + femur_sign * femur_1_rad) + 0.5 * M_PI;
 
-    const double femur_deg = config_.femur.sign * Degrees(femur_rad) +
+    const double femur_deg = config_.femur.sign * base::Degrees(femur_rad) +
         config_.femur.idle_deg;
     if (femur_deg < config_.femur.min_deg ||
         femur_deg > config_.femur.max_deg) {
@@ -425,15 +427,17 @@ class MammalIK : public IKSolver {
   }
 
   struct ForwardResult {
-    Frame shoulder_frame;
-    Frame shoulder_joint{Point3D(), Quaternion(), &shoulder_frame};
-    Point3D shoulder;
-    Frame femur_joint{Point3D(), Quaternion(), &shoulder_joint};
-    Point3D femur;
-    Frame tibia_joint{Point3D(), Quaternion(), &femur_joint};
-    Point3D tibia;
-    Frame end_frame{Point3D(), Quaternion(), &tibia_joint};
-    Point3D end;
+    base::Frame shoulder_frame;
+    base::Frame shoulder_joint{
+      base::Point3D(), base::Quaternion(), &shoulder_frame};
+    base::Point3D shoulder;
+    base::Frame femur_joint{
+      base::Point3D(), base::Quaternion(), &shoulder_joint};
+    base::Point3D femur;
+    base::Frame tibia_joint{base::Point3D(), base::Quaternion(), &femur_joint};
+    base::Point3D tibia;
+    base::Frame end_frame{base::Point3D(), base::Quaternion(), &tibia_joint};
+    base::Point3D end;
 
     ForwardResult() {}
 
@@ -472,27 +476,27 @@ class MammalIK : public IKSolver {
     const double shoulder_deg =
         config_.shoulder.sign * (GetAngle(joints, config_.shoulder.ident) -
                                  config_.shoulder.idle_deg);
-    result.shoulder_joint.transform.rotation = Quaternion::FromEuler(
-        0, Radians(shoulder_deg), 0);
+    result.shoulder_joint.transform.rotation = base::Quaternion::FromEuler(
+        0, base::Radians(shoulder_deg), 0);
 
     const double femur_deg =
         config_.femur.sign * (GetAngle(joints, config_.femur.ident) -
                               config_.femur.idle_deg);
-    result.femur_joint.transform.rotation = Quaternion::FromEuler(
-        Radians(femur_deg), 0, 0);
+    result.femur_joint.transform.rotation = base::Quaternion::FromEuler(
+        base::Radians(femur_deg), 0, 0);
 
     const double tibia_deg =
         config_.tibia.sign * (GetAngle(joints, config_.tibia.ident) -
                               config_.tibia.idle_deg);
-    result.tibia_joint.transform.rotation = Quaternion::FromEuler(
-        Radians(tibia_deg), 0, 0);
+    result.tibia_joint.transform.rotation = base::Quaternion::FromEuler(
+        base::Radians(tibia_deg), 0, 0);
 
     result.shoulder = result.shoulder_frame.MapFromFrame(
-        &result.femur_joint, Point3D());
+        &result.femur_joint, base::Point3D());
     result.femur = result.shoulder_frame.MapFromFrame(
-        &result.tibia_joint, Point3D());
+        &result.tibia_joint, base::Point3D());
     result.end = result.shoulder_frame.MapFromFrame(
-        &result.end_frame, Point3D());
+        &result.end_frame, base::Point3D());
     result.tibia = result.end;
 
     return result;
@@ -503,4 +507,5 @@ class MammalIK : public IKSolver {
  private:
   Config config_;
 };
+}
 }

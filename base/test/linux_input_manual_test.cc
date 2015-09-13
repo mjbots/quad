@@ -21,7 +21,7 @@
 #include "fail.h"
 
 namespace {
-using namespace legtool;
+using namespace mjmech::base;
 
 class Reader {
  public:

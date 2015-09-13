@@ -27,7 +27,8 @@
 #include "gait.h"
 
 namespace {
-using namespace legtool;
+using namespace mjmech::base;
+using namespace mjmech::mech;
 namespace pt = boost::property_tree;
 typedef boost::asio::ip::udp udp;
 

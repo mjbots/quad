@@ -161,7 +161,8 @@
 ///  * enum
 ///    * uint32_t - value
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 
 struct TelemetryFormat {
   static constexpr const char* kHeader = "TLOG0002";
@@ -359,4 +360,5 @@ class TelemetryReadStream {
 
   Stream& istr_;
 };
+}
 }

@@ -21,7 +21,8 @@
 #include "comm.h"
 #include "json_archive.h"
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 
 class TelemetryRemoteDebugServer : boost::noncopyable {
  public:
@@ -136,4 +137,5 @@ class TelemetryRemoteDebugServer : boost::noncopyable {
   class Impl;
   std::unique_ptr<Impl> impl_;
 };
+}
 }

@@ -23,7 +23,8 @@
 
 #include "error_code.h"
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 typedef std::function<void (ErrorCode)> ErrorHandler;
 typedef std::function<void (ErrorCode, std::size_t)> SizeHandler;
 typedef SizeHandler ReadHandler;
@@ -115,4 +116,5 @@ class AsyncStream : boost::noncopyable {
 typedef std::shared_ptr<AsyncStream> SharedStream;
 typedef std::function<void (ErrorCode, SharedStream)> StreamHandler;
 
+}
 }

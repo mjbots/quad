@@ -19,7 +19,8 @@
 #include "telemetry_archive.h"
 #include "telemetry_remote_debug_server.h"
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 class TelemetryRemoteDebugServer;
 
 /// A registrar which supports emitting data over the network in a
@@ -41,4 +42,5 @@ class TelemetryRemoteDebugRegistrar {
 
   TelemetryRemoteDebugServer* const server_;
 };
+}
 }

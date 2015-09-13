@@ -18,7 +18,8 @@
 
 #include "visitor.h"
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 struct Point3D {
   double x;
   double y;
@@ -71,4 +72,5 @@ struct Point3D {
     a->Visit(LT_NVP(z));
   }
 };
+}
 }

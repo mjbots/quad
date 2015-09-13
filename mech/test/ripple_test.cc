@@ -18,7 +18,8 @@
 #include <boost/test/auto_unit_test.hpp>
 
 namespace {
-using namespace legtool;
+using namespace mjmech::base;
+using namespace mjmech::mech;
 
 void CheckPoints(const Point3D& lhs, const Point3D& rhs) {
   BOOST_CHECK_SMALL(lhs.x - rhs.x, 1e-2);

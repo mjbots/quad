@@ -26,7 +26,8 @@
 #include "base/telemetry_remote_debug_registrar.h"
 #include "base/telemetry_remote_debug_server.h"
 
-using namespace legtool;
+using namespace mjmech::base;
+using namespace mjmech::mech;
 
 namespace {
 struct Context {

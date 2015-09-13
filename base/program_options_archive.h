@@ -17,7 +17,8 @@
 #include "visitor.h"
 #include "visit_archive.h"
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 class ProgramOptionsArchive : public VisitArchive<ProgramOptionsArchive> {
  public:
   ProgramOptionsArchive(
@@ -42,4 +43,5 @@ class ProgramOptionsArchive : public VisitArchive<ProgramOptionsArchive> {
   boost::program_options::options_description* const description_;
   const std::string prefix_;
 };
+}
 }

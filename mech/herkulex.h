@@ -28,7 +28,8 @@
 #include "base/signal_result.h"
 #include "base/visitor.h"
 
-namespace legtool {
+namespace mjmech {
+namespace mech {
 
 template <class Factory>
 class HerkuleXProtocol : boost::noncopyable {
@@ -137,7 +138,7 @@ class HerkuleXProtocol : boost::noncopyable {
   BOOST_ASIO_INITFN_RESULT_TYPE(Handler,
                                 void(boost::system::error_code, Packet))
   ReceivePacket(Handler handler) {
-    return SignalResult::Wait(
+    return base::SignalResult::Wait(
         service_, &read_signal_,
         parameters_.packet_timeout_s, handler);
   }
@@ -157,13 +158,13 @@ class HerkuleXProtocol : boost::noncopyable {
         [=](PacketHandler packet_handler) {
           RawSendPacket(
               to_send,
-              [=](ErrorCode ec) {
+              [=](base::ErrorCode ec) {
                 if (ec) {
                   packet_handler(ec, Packet());
                   return;
                 }
 
-                SignalResult::Wait(
+                base::SignalResult::Wait(
                     service_, &read_signal_,
                     parameters_.packet_timeout_s, packet_handler);
               });
@@ -174,9 +175,9 @@ class HerkuleXProtocol : boost::noncopyable {
   }
 
  private:
-  void RawSendPacket(const Packet& packet, ErrorHandler handler) {
+  void RawSendPacket(const Packet& packet, base::ErrorHandler handler) {
     if (!stream_) {
-      service_.post(std::bind(handler, ErrorCode()));
+      service_.post(std::bind(handler, base::ErrorCode()));
       return;
     }
 
@@ -207,9 +208,9 @@ class HerkuleXProtocol : boost::noncopyable {
         });
   }
 
-  void HandleStart(ErrorHandler handler,
-                   ErrorCode ec,
-                   SharedStream stream) {
+  void HandleStart(base::ErrorHandler handler,
+                   base::ErrorCode ec,
+                   base::SharedStream stream) {
     if (ec) {
       service_.post(std::bind(handler, ec));
       return;
@@ -220,7 +221,7 @@ class HerkuleXProtocol : boost::noncopyable {
 
     ReadLoop1();
 
-    service_.post(std::bind(handler, ErrorCode()));
+    service_.post(std::bind(handler, base::ErrorCode()));
   }
 
   void ReadLoop1() {
@@ -232,7 +233,7 @@ class HerkuleXProtocol : boost::noncopyable {
                   std::placeholders::_2));
   }
 
-  void ReadLoop2(ErrorCode ec, std::size_t) {
+  void ReadLoop2(base::ErrorCode ec, std::size_t) {
     if (ec == boost::asio::error::not_found) {
       // We're just seeing junk.  It would be nice to log, but for
       // now, just go back and read some more.
@@ -266,18 +267,18 @@ class HerkuleXProtocol : boost::noncopyable {
                     std::placeholders::_1,
                     std::placeholders::_2));
     } else {
-      ReadLoop3(ErrorCode(), 0);
+      ReadLoop3(base::ErrorCode(), 0);
     }
   }
 
-  void ReadLoop3(ErrorCode ec, std::size_t) {
+  void ReadLoop3(base::ErrorCode ec, std::size_t) {
     FailIf(ec);
 
     std::array<char, 5> header = {};
     std::istream istr(&rx_streambuf_);
     istr.read(&header[0], 5);
     if (istr.gcount() != 5) {
-      Fail("inconsistent header");
+      base::Fail("inconsistent header");
     }
 
     const uint8_t size = header[0];
@@ -301,11 +302,11 @@ class HerkuleXProtocol : boost::noncopyable {
                     std::placeholders::_1,
                     std::placeholders::_2, header));
     } else {
-      ReadLoop4(ErrorCode(), 0, header);
+      ReadLoop4(base::ErrorCode(), 0, header);
     }
   }
 
-  void ReadLoop4(ErrorCode ec, std::size_t,
+  void ReadLoop4(base::ErrorCode ec, std::size_t,
                  std::array<char, 5> header) {
     FailIf(ec);
 
@@ -345,8 +346,8 @@ class HerkuleXProtocol : boost::noncopyable {
   boost::asio::io_service& service_;
   Factory& factory_;
   Parameters parameters_;
-  CommandSequencer sequencer_;
-  SharedStream stream_;
+  base::CommandSequencer sequencer_;
+  base::SharedStream stream_;
   boost::signals2::signal<void (const Packet*)> read_signal_;
   char buffer_[256] = {};
   boost::asio::streambuf rx_streambuf_{512};
@@ -457,22 +458,22 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
     return init.result.get();
   }
 
-  void MemReadHandler(ErrorCode ec,
+  void MemReadHandler(base::ErrorCode ec,
                       typename Base::Packet result,
                       uint8_t reg,
                       uint8_t length,
                       typename Base::Packet to_send,
-                      std::function<void (ErrorCode,
+                      std::function<void (base::ErrorCode,
                                           MemReadResponse)> handler) {
     try {
       if (ec) {
         ec.Append(boost::format("when reading register %d") %
                   static_cast<int>(reg));
-        throw SystemError(ec);
+        throw base::SystemError(ec);
       }
 
       if (result.servo != to_send.servo && to_send.servo != BROADCAST) {
-        throw SystemError::einval(
+        throw base::SystemError::einval(
             (boost::format("Synchronization error, sent request for servo "
                            "0x%02x, response from 0x%02x") %
              static_cast<int>(to_send.servo) %
@@ -480,7 +481,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
       }
 
       if (result.command != (0x40 | to_send.command)) {
-        throw SystemError::einval(
+        throw base::SystemError::einval(
             (boost::format(
                 "Expected response command 0x%02x, received 0x%02x") %
              static_cast<int>(0x40 | to_send.command) %
@@ -488,7 +489,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
       }
 
       if (result.data.size() != length + 4) {
-        throw SystemError::einval(
+        throw base::SystemError::einval(
             (boost::format("Expected length response %d, received %d") %
              static_cast<int>(length + 4) %
              result.data.size()).str());
@@ -497,20 +498,20 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
       MemReadResponse response = result;
 
       if (response.register_start != reg) {
-        throw SystemError::einval(
+        throw base::SystemError::einval(
             (boost::format("Expected register 0x%02x, received 0x%02x") %
              static_cast<int>(reg) %
              static_cast<int>(response.register_start)).str());
       }
 
       if (response.length != length) {
-        throw SystemError::einval(
+        throw base::SystemError::einval(
             (boost::format("Expected length %d, received %d") %
              static_cast<int>(length) %
              static_cast<int>(response.length)).str());
       }
-      handler(ErrorCode(), response);
-    } catch (SystemError& se) {
+      handler(base::ErrorCode(), response);
+    } catch (base::SystemError& se) {
       handler(se.error_code(), MemReadResponse());
     }
   }
@@ -541,15 +542,15 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
   }
 
   void HandleStatusResponse(
-      ErrorCode ec,
+      base::ErrorCode ec,
       typename Base::StatusResponse result,
       typename Base::Packet to_send,
       StatusHandler handler) {
     try {
-      if (ec) { throw SystemError(ec); }
+      if (ec) { throw base::SystemError(ec); }
 
       if (result.servo != to_send.servo && to_send.servo != BROADCAST) {
-        throw SystemError::einval(
+        throw base::SystemError::einval(
             (boost::format(
                 "Synchronization error, send status to servo 0x%02x, "
                 "response from 0x%02x") %
@@ -558,7 +559,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
       }
 
       if (result.command != ACK_STAT) {
-        throw SystemError::einval(
+        throw base::SystemError::einval(
             (boost::format(
                 "Expected response command 0x%02x, received 0x%02x") %
              static_cast<int>(ACK_STAT) %
@@ -566,13 +567,13 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
       }
 
       if (result.data.size() != 2) {
-        throw SystemError::einval(
+        throw base::SystemError::einval(
             (boost::format("Received status of incorrect size, expected 2, "
                            "got %d") %
              result.data.size()).str());
       }
-      handler(ErrorCode(), typename Base::StatusResponse(result));
-    } catch (SystemError& se) {
+      handler(base::ErrorCode(), typename Base::StatusResponse(result));
+    } catch (base::SystemError& se) {
       handler(se.error_code(), typename Base::StatusResponse());
     }
   }
@@ -590,7 +591,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
     to_send.servo = servo;
     to_send.command = REBOOT;
 
-    this->SendPacket(to_send, ErrorHandler(init.handler));
+    this->SendPacket(to_send, base::ErrorHandler(init.handler));
 
     return init.result.get();
   }
@@ -619,7 +620,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
 
     to_send.data = ostr.str();
 
-    this->SendPacket(to_send, ErrorHandler(init.handler));
+    this->SendPacket(to_send, base::ErrorHandler(init.handler));
 
     return init.result.get();
   }
@@ -644,7 +645,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
     }
 
     MemWrite(command, servo, field.position, ostr.str(),
-             ErrorHandler(init.handler));
+             base::ErrorHandler(init.handler));
 
     return init.result.get();
   }
@@ -659,7 +660,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
     MemWriteValue(EEP_WRITE, servo, field, value, handler);
   }
 
-  typedef std::function<void (ErrorCode, int)> IntHandler;
+  typedef std::function<void (base::ErrorCode, int)> IntHandler;
 
   template <typename T, typename Handler>
   BOOST_ASIO_INITFN_RESULT_TYPE(
@@ -673,7 +674,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
 
     MemRead(
         command, servo, field.position, field.length,
-        [=](ErrorCode ec, MemReadResponse response) mutable {
+        [=](base::ErrorCode ec, MemReadResponse response) mutable {
           if (ec) {
             init.handler(ec, 0);
             return;
@@ -686,7 +687,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
                            response.register_data[i]) << (i * 8));
           }
 
-          init.handler(ErrorCode(), result);
+          init.handler(base::ErrorCode(), result);
         });
 
     return init.result.get();
@@ -738,9 +739,10 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
     to_send.data = data.str();
     to_send.command = S_JOG;
 
-    this->SendPacket(to_send, ErrorHandler(init.handler));
+    this->SendPacket(to_send, base::ErrorHandler(init.handler));
 
     return init.result.get();
   }
 };
+}
 }

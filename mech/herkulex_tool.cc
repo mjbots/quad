@@ -25,7 +25,8 @@
 #include "herkulex.h"
 #include "herkulex_servo_interface.h"
 
-using namespace legtool;
+using namespace mjmech::base;
+using namespace mjmech::mech;
 namespace po = boost::program_options;
 
 namespace {

@@ -25,7 +25,8 @@
 #include "ripple.h"
 #include "servo_monitor.h"
 
-namespace legtool {
+namespace mjmech {
+namespace mech {
 /// Accepts json formatted commands over the network and uses that to
 /// sequence gaits and firing actions.
 ///
@@ -47,7 +48,7 @@ class MechWarfare : boost::noncopyable {
   MechWarfare(boost::asio::io_service&);
   ~MechWarfare() {}
 
-  void AsyncStart(ErrorHandler handler);
+  void AsyncStart(base::ErrorHandler handler);
 
   struct Members {
     std::unique_ptr<Mech::ServoBase> servo_base;
@@ -70,7 +71,7 @@ class MechWarfare : boost::noncopyable {
     int port = 13356;
     std::string gait_config;
 
-    ComponentParameters<Members> children;
+    base::ComponentParameters<Members> children;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -88,7 +89,7 @@ class MechWarfare : boost::noncopyable {
   RippleConfig LoadRippleConfig();
   void NetworkListen();
   void StartRead();
-  void HandleRead(ErrorCode, std::size_t);
+  void HandleRead(base::ErrorCode, std::size_t);
   void HandleMessage(const boost::property_tree::ptree&);
   void HandleMessageGait(const boost::property_tree::ptree&);
 
@@ -102,4 +103,5 @@ class MechWarfare : boost::noncopyable {
   char receive_buffer_[3000] = {};
   boost::asio::ip::udp::endpoint receive_endpoint_;
 };
+}
 }

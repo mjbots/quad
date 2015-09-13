@@ -18,7 +18,8 @@
 
 #include "fail.h"
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 class TelemetryRemoteDebugServer::Impl : boost::noncopyable {
  public:
   Impl(boost::asio::io_service& service)
@@ -157,5 +158,6 @@ void TelemetryRemoteDebugServer::SendResponse(
     const std::string& data,
     const udp::endpoint& endpoint) {
   impl_->SendData(data, endpoint);
+}
 }
 }

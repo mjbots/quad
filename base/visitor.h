@@ -16,7 +16,8 @@
 
 #include <tuple>
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 
 template <typename T>
 struct NameValuePair : public std::tuple<T*, const char*> {
@@ -32,5 +33,6 @@ NameValuePair<T> MakeNameValuePair(T* value, const char* name) {
   return NameValuePair<T>(value, name);
 }
 }
+}
 
-#define LT_NVP(x) legtool::MakeNameValuePair(&x, #x)
+#define LT_NVP(x) mjmech::base::MakeNameValuePair(&x, #x)

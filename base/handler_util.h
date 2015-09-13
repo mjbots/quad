@@ -20,7 +20,8 @@
 #include "comm.h"
 #include "error_code.h"
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 /// Join one or more ErrorHandler callbacks into a single callback.
 /// The first failure will cause the target to be emitted, and it will
 /// be called with success after all registered handlers are called.
@@ -55,4 +56,5 @@ class ErrorHandlerJoiner
   ErrorHandler handler_;
   std::list<bool> outstanding_;
 };
+}
 }

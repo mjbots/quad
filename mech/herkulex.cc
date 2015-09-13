@@ -14,7 +14,8 @@
 
 #include "herkulex.h"
 
-namespace legtool {
+namespace mjmech {
+namespace mech {
 HerkuleXConstants::HerkuleXConstants()
     : ram_registers{
   { "temperature_c", temperature_c() },
@@ -43,5 +44,6 @@ HerkuleXConstants::HerkuleXConstants()
   { "torque_control", torque_control() },
       }
 {
+}
 }
 }

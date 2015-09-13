@@ -22,7 +22,8 @@
 #include <boost/format.hpp>
 #include <boost/system/system_error.hpp>
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 const double kNaN = std::numeric_limits<double>::signaling_NaN();
 
 inline double Degrees(double radians) {
@@ -101,5 +102,6 @@ ConvertMicrosecondsToPtime(int64_t value) {
       0, 0, 0,
       value *
       boost::posix_time::time_duration::ticks_per_second() / 1000000);
+}
 }
 }

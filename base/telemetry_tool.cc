@@ -21,7 +21,7 @@
 
 namespace {
 namespace po = boost::program_options;
-using namespace legtool;
+using namespace mjmech::base;
 
 struct Options {
   bool schema = false;

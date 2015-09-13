@@ -17,7 +17,7 @@
 #include "tf.h"
 
 namespace {
-using namespace legtool;
+using namespace mjmech::base;
 
 void CheckVectorsClose(const Point3D& p1,
                        const Point3D& p2) {

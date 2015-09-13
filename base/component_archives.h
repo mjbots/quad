@@ -19,7 +19,8 @@
 #include "handler_util.h"
 #include "parameters_archive.h"
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 struct EnableArchive {
   EnableArchive(std::map<std::string, bool>& enabled): enabled(enabled) {}
 
@@ -103,4 +104,5 @@ struct ComponentParameters {
   Members* const members_;
 };
 
+}
 }

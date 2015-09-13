@@ -20,7 +20,8 @@
 #include "telemetry_format.h"
 #include "visit_archive.h"
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 /// Generate schema and binary records according to the structure
 /// defined in telemetry_format.h.
 template <typename RootSerializable>
@@ -262,4 +263,5 @@ class TelemetryWriteArchive {
     return TF::FieldType::kPtime;
   }
 };
+}
 }

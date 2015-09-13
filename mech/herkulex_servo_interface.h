@@ -18,7 +18,8 @@
 
 #include "servo_interface.h"
 
-namespace legtool {
+namespace mjmech {
+namespace mech {
 template <typename Servo>
 class HerkuleXServoInterface : public ServoInterface {
  public:
@@ -40,7 +41,7 @@ class HerkuleXServoInterface : public ServoInterface {
   Parameters* parameters() { return &parameters_; }
 
   virtual void SetPose(const std::vector<Joint>& joints,
-                       ErrorHandler handler) override {
+                       base::ErrorHandler handler) override {
     struct Target {
       uint8_t address;
       uint16_t position;
@@ -57,7 +58,7 @@ class HerkuleXServoInterface : public ServoInterface {
 
   virtual void EnablePower(PowerState power_state,
                            const std::vector<int>& ids_in,
-                           ErrorHandler handler) override {
+                           base::ErrorHandler handler) override {
     UpdateAddresses(ids_in);
 
     uint8_t value = [power_state]() {
@@ -72,17 +73,17 @@ class HerkuleXServoInterface : public ServoInterface {
     std::vector<int> ids(ids_in);
     if (ids.empty()) { ids.push_back(Servo::BROADCAST); }
 
-    HandlePowerAck(ErrorCode(), ids, value, handler);
+    HandlePowerAck(base::ErrorCode(), ids, value, handler);
   }
 
-  void HandlePowerAck(ErrorCode ec,
+  void HandlePowerAck(base::ErrorCode ec,
                       const std::vector<int>& ids,
                       uint8_t value,
-                      ErrorHandler handler) {
+                      base::ErrorHandler handler) {
     if (ec) { handler(ec); return; }
 
     if (ids.empty()) {
-      handler(ErrorCode());
+      handler(base::ErrorCode());
       return;
     }
 
@@ -99,12 +100,12 @@ class HerkuleXServoInterface : public ServoInterface {
   virtual void GetPose(
       const std::vector<int>& ids, PoseHandler handler) override {
     UpdateAddresses(ids);
-    DoGetPose(ErrorCode(), 0,
+    DoGetPose(base::ErrorCode(), 0,
               boost::none,
               ids, std::vector<Joint>{}, handler);
   }
 
-  void DoGetPose(ErrorCode ec,
+  void DoGetPose(base::ErrorCode ec,
                  int value,
                  boost::optional<int> address,
                  const std::vector<int>& ids,
@@ -122,7 +123,7 @@ class HerkuleXServoInterface : public ServoInterface {
     if (!ec && address) {
       result.emplace_back(Joint{*address, CountsToAngleDeg(value)});
     }
-    if (ids.empty()) { handler(ErrorCode(), result); return; }
+    if (ids.empty()) { handler(base::ErrorCode(), result); return; }
 
     int to_send = ids.back();
     std::vector<int> new_ids = ids;
@@ -138,12 +139,12 @@ class HerkuleXServoInterface : public ServoInterface {
   virtual void GetTemperature(
       const std::vector<int>& ids, TemperatureHandler handler) override {
     UpdateAddresses(ids);
-    DoGetTemperature(ErrorCode(), 0,
+    DoGetTemperature(base::ErrorCode(), 0,
                      boost::none,
                      ids, std::vector<Temperature>{}, handler);
   }
 
-  void DoGetTemperature(ErrorCode ec,
+  void DoGetTemperature(base::ErrorCode ec,
                         int value,
                         boost::optional<int> address,
                         const std::vector<int>& ids,
@@ -161,7 +162,7 @@ class HerkuleXServoInterface : public ServoInterface {
     if (!ec && address) {
       result.emplace_back(Temperature{*address, CountsToTemperatureC(value)});
     }
-    if (ids.empty()) { handler(ErrorCode(), result); return; }
+    if (ids.empty()) { handler(base::ErrorCode(), result); return; }
 
     int to_send = ids.back();
     std::vector<int> new_ids = ids;
@@ -177,7 +178,7 @@ class HerkuleXServoInterface : public ServoInterface {
   virtual void GetVoltage(
       const std::vector<int>& ids, VoltageHandler handler) override {
     UpdateAddresses(ids);
-    DoGetVoltage(ErrorCode(), 0,
+    DoGetVoltage(base::ErrorCode(), 0,
                  boost::none,
                  ids, std::vector<Voltage>{}, handler);
   }
@@ -190,7 +191,7 @@ class HerkuleXServoInterface : public ServoInterface {
     return result;
   }
 
-  void DoGetVoltage(ErrorCode ec,
+  void DoGetVoltage(base::ErrorCode ec,
                     int value,
                     boost::optional<int> address,
                     const std::vector<int>& ids,
@@ -210,7 +211,7 @@ class HerkuleXServoInterface : public ServoInterface {
       result.emplace_back(Voltage{*address, CountsToVoltage(value)});
     }
 
-    if (ids.empty()) { handler(ErrorCode(), result); return; }
+    if (ids.empty()) { handler(base::ErrorCode(), result); return; }
 
     int to_send = ids.back();
     std::vector<int> new_ids = ids;
@@ -249,7 +250,7 @@ class HerkuleXServoInterface : public ServoInterface {
  private:
   static uint8_t MapAddress(int address) {
     if (address < 0 || address > 0xfe) {
-      Fail("invalid address");
+      base::Fail("invalid address");
     }
     return static_cast<uint8_t>(address);
   }
@@ -265,4 +266,5 @@ class HerkuleXServoInterface : public ServoInterface {
   Servo* const servo_;
   std::set<int> used_addresses_;
 };
+}
 }

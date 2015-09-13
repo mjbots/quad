@@ -22,7 +22,8 @@
 #include "base/point3d.h"
 #include "base/visitor.h"
 
-namespace legtool {
+namespace mjmech {
+namespace mech {
 /// Driver for the MAX21000 MMA8451Q driver on the mjmech
 /// daughterboards.
 class MjmechImuDriver : boost::noncopyable {
@@ -43,7 +44,7 @@ class MjmechImuDriver : boost::noncopyable {
   MjmechImuDriver(boost::asio::io_service&);
   ~MjmechImuDriver();
 
-  void AsyncStart(ErrorHandler handler);
+  void AsyncStart(base::ErrorHandler handler);
 
   struct Parameters {
     std::string i2c_device;
@@ -57,8 +58,8 @@ class MjmechImuDriver : boost::noncopyable {
     double roll_deg = 0;
     double pitch_deg = 0;
     double yaw_deg = 0;
-    Point3D gyro_scale = Point3D(1, 1, 1);
-    Point3D accel_scale = Point3D(1, 1, 1);
+    base::Point3D gyro_scale = base::Point3D(1, 1, 1);
+    base::Point3D accel_scale = base::Point3D(1, 1, 1);
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -88,8 +89,8 @@ class MjmechImuDriver : boost::noncopyable {
   ///  relevant axis.
   struct ImuData {
     boost::posix_time::ptime timestamp;
-    Point3D accel_mps2;
-    Point3D body_rate_deg_s;
+    base::Point3D accel_mps2;
+    base::Point3D body_rate_deg_s;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -110,8 +111,8 @@ class MjmechImuDriver : boost::noncopyable {
     double pitch_deg = 0;
     double yaw_deg = 0;
 
-    Point3D gyro_scale = Point3D(1, 1, 1);
-    Point3D accel_scale = Point3D(1, 1, 1);
+    base::Point3D gyro_scale = base::Point3D(1, 1, 1);
+    base::Point3D accel_scale = base::Point3D(1, 1, 1);
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -136,4 +137,5 @@ class MjmechImuDriver : boost::noncopyable {
   class Impl;
   std::unique_ptr<Impl> impl_;
 };
+}
 }

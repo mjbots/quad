@@ -17,7 +17,8 @@
 #include <cstring>
 #include <vector>
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 /// A very simple std::ostringstream replacement for binary data only.
 class FastOStringStream {
  public:
@@ -81,4 +82,5 @@ class FastIStringStream {
   size_t offset_ = 0;
   size_t last_read_ = 0;
 };
+}
 }

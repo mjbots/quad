@@ -20,7 +20,8 @@
 
 #include "leg_ik.h"
 
-namespace legtool {
+namespace mjmech {
+namespace mech {
 struct Leg {
   enum class Mode {
     kStance,
@@ -29,8 +30,8 @@ struct Leg {
   };
 
   struct Config {
-    Point3D mount_mm;
-    Point3D idle_mm;
+    base::Point3D mount_mm;
+    base::Point3D idle_mm;
     boost::shared_ptr<IKSolver> leg_ik;
 
     template <typename Archive>
@@ -43,21 +44,21 @@ struct Leg {
   };
 
   struct Result {
-    Point3D point;
+    base::Point3D point;
     Mode mode = Mode::kUnknown;
   };
 
   struct State {
-    Point3D point;
+    base::Point3D point;
     Mode mode = Mode::kUnknown;
     boost::shared_ptr<IKSolver> leg_ik;
-    Frame* frame = nullptr;
+    base::Frame* frame = nullptr;
   };
 };
 
 struct MechanicalConfig {
   std::vector<Leg::Config> leg_config;
-  Point3D body_cog_mm;
+  base::Point3D body_cog_mm;
 
   template <typename Archive>
   void Serialize(Archive* a) {
@@ -94,10 +95,10 @@ struct Command {
 };
 
 struct CommonState {
-  Frame world_frame;
-  Frame robot_frame;
-  Frame body_frame;
-  Frame cog_frame;
+  base::Frame world_frame;
+  base::Frame robot_frame;
+  base::Frame body_frame;
+  base::Frame cog_frame;
 
   CommonState() :
       world_frame(),
@@ -118,14 +119,14 @@ struct CommonState {
   };
 
   void MakeShoulder(const Leg::Config& leg_config,
-                    Frame* frame) const {
+                    base::Frame* frame) const {
     // For now, we are assuming that shoulders face away from the y
     // axis.
     const double rotation_rad = (leg_config.mount_mm.x > 0.0) ?
         (0.5 * M_PI) : (-0.5 * M_PI);
-    frame->transform = Transform(
+    frame->transform = base::Transform(
         leg_config.mount_mm,
-        Quaternion::FromEuler(0, 0, rotation_rad));
+        base::Quaternion::FromEuler(0, 0, rotation_rad));
     frame->parent = &body_frame;
   }
 
@@ -171,4 +172,5 @@ class Gait : boost::noncopyable {
   };
   virtual Result SetCommand(const Command&) = 0;
 };
+}
 }

@@ -14,7 +14,8 @@
 
 #pragma once
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 /// A dumb circular buffer which is based on a std::vector.  Thus it
 /// has the property that in steady state no allocations are required,
 /// unlike std::list, but actually works with move-only objects,
@@ -66,4 +67,5 @@ class circular_buffer {
   size_t remove_ = 0;
   size_t size_ = 0;
 };
+}
 }

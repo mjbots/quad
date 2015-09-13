@@ -20,7 +20,8 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/system/error_code.hpp>
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 /// Similar to a boost::system::error_code, but provides a facility
 /// for attaching additional context rather than just the error code.
 class ErrorCode {
@@ -115,4 +116,5 @@ class SystemError : public std::runtime_error {
  private:
   ErrorCode ec_;
 };
+}
 }

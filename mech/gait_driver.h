@@ -23,7 +23,8 @@
 
 #include "gait.h"
 
-namespace legtool {
+namespace mjmech {
+namespace mech {
 class RippleGait;
 class ServoInterface;
 
@@ -87,12 +88,12 @@ class GaitDriver : boost::noncopyable {
     boost::posix_time::ptime timestamp;
 
     State state;
-    Transform body_robot;
-    Transform cog_robot;
-    Transform body_world;
-    Transform robot_world;
+    base::Transform body_robot;
+    base::Transform cog_robot;
+    base::Transform body_world;
+    base::Transform robot_world;
 
-    std::array<Point3D, 4> legs;
+    std::array<base::Point3D, 4> legs;
     JointCommand command;
 
     template <typename Archive>
@@ -128,4 +129,5 @@ class GaitDriver : boost::noncopyable {
   class Impl;
   std::unique_ptr<Impl> impl_;
 };
+}
 }

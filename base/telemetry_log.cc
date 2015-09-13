@@ -32,7 +32,8 @@
 #include "circular_buffer.h"
 #include "fail.h"
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 
 namespace {
 const int64_t kBlockSize = (1 << 20);
@@ -716,4 +717,5 @@ void TelemetryLog::WriteBlock(TelemetryFormat::BlockType block_type,
   impl_->Write(std::move(buffer));
 }
 
+}
 }

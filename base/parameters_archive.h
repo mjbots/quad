@@ -19,7 +19,8 @@
 
 #include "visitor.h"
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 
 template <typename BaseArchive>
 class ParametersArchive {
@@ -40,4 +41,5 @@ class ParametersArchive {
 
   BaseArchive* const base_;
 };
+}
 }

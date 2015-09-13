@@ -16,8 +16,10 @@
 
 #include <boost/format.hpp>
 
-namespace legtool {
+namespace mjmech {
+namespace base {
 void ErrorCode::Append(const boost::format& fmt) {
   Append(fmt.str());
+}
 }
 }

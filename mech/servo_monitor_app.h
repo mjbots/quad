@@ -19,7 +19,8 @@
 #include "mech_defines.h"
 #include "servo_monitor.h"
 
-namespace legtool {
+namespace mjmech {
+namespace mech {
 class ServoMonitorApp : boost::noncopyable {
  public:
   template <typename Context>
@@ -31,7 +32,7 @@ class ServoMonitorApp : boost::noncopyable {
     m_.servo_monitor.reset(new ServoMonitor(context, m_.servo.get()));
   }
 
-  void AsyncStart(ErrorHandler handler) {
+  void AsyncStart(base::ErrorHandler handler) {
     parameters_.children.Start(handler);
   }
 
@@ -49,7 +50,7 @@ class ServoMonitorApp : boost::noncopyable {
   };
 
   struct Parameters {
-    ComponentParameters<Members> children;
+    base::ComponentParameters<Members> children;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -68,4 +69,5 @@ class ServoMonitorApp : boost::noncopyable {
   Members m_;
   Parameters parameters_{&m_};
 };
+}
 }
