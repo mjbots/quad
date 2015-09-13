@@ -34,7 +34,7 @@ class HerkuleXServoInterface : public ServoInterface {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(LT_NVP(pose_time_s));
+      a->Visit(MJ_NVP(pose_time_s));
     }
   };
 

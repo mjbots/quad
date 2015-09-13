@@ -37,17 +37,17 @@ struct SampleStruct {
 
   template <typename Archive>
   void Serialize(Archive* a) {
-    a->Visit(LT_NVP(timestamp));
-    a->Visit(LT_NVP(value1));
-    a->Visit(LT_NVP(value2));
-    a->Visit(LT_NVP(value3));
-    a->Visit(LT_NVP(array));
-    a->Visit(LT_NVP(value4));
-    a->Visit(LT_NVP(value5));
-    a->Visit(LT_NVP(value6));
-    a->Visit(LT_NVP(value7));
-    a->Visit(LT_NVP(value8));
-    a->Visit(LT_NVP(value9));
+    a->Visit(MJ_NVP(timestamp));
+    a->Visit(MJ_NVP(value1));
+    a->Visit(MJ_NVP(value2));
+    a->Visit(MJ_NVP(value3));
+    a->Visit(MJ_NVP(array));
+    a->Visit(MJ_NVP(value4));
+    a->Visit(MJ_NVP(value5));
+    a->Visit(MJ_NVP(value6));
+    a->Visit(MJ_NVP(value7));
+    a->Visit(MJ_NVP(value8));
+    a->Visit(MJ_NVP(value9));
   }
 };
 

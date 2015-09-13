@@ -70,8 +70,8 @@ struct Transform {
 
   template <typename Archive>
   void Serialize(Archive* a) {
-    a->Visit(LT_NVP(translation));
-    a->Visit(LT_NVP(rotation));
+    a->Visit(MJ_NVP(translation));
+    a->Visit(MJ_NVP(rotation));
   }
 };
 

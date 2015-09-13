@@ -24,7 +24,7 @@ struct SubStruct {
 
   template <typename Archive>
   void Serialize(Archive* a) {
-    a->Visit(LT_NVP(predicate));
+    a->Visit(MJ_NVP(predicate));
   }
 };
 
@@ -38,12 +38,12 @@ struct TestStruct {
 
   template <typename Archive>
   void Serialize(Archive* a) {
-    a->Visit(LT_NVP(v));
-    a->Visit(LT_NVP(b));
-    a->Visit(LT_NVP(c));
-    a->Visit(LT_NVP(sub));
-    a->Visit(LT_NVP(vecint));
-    a->Visit(LT_NVP(arraysub));
+    a->Visit(MJ_NVP(v));
+    a->Visit(MJ_NVP(b));
+    a->Visit(MJ_NVP(c));
+    a->Visit(MJ_NVP(sub));
+    a->Visit(MJ_NVP(vecint));
+    a->Visit(MJ_NVP(arraysub));
   }
 };
 }

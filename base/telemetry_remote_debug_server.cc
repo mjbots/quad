@@ -78,8 +78,8 @@ class TelemetryRemoteDebugServer::Impl : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(LT_NVP(type));
-      a->Visit(LT_NVP(names));
+      a->Visit(MJ_NVP(type));
+      a->Visit(MJ_NVP(names));
     }
   };
 

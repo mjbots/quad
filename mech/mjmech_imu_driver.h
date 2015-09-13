@@ -63,17 +63,17 @@ class MjmechImuDriver : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(LT_NVP(i2c_device));
-      a->Visit(LT_NVP(gyro_address));
-      a->Visit(LT_NVP(accel_address));
-      a->Visit(LT_NVP(accel_g));
-      a->Visit(LT_NVP(rotation_deg_s));
-      a->Visit(LT_NVP(rate_hz));
-      a->Visit(LT_NVP(roll_deg));
-      a->Visit(LT_NVP(pitch_deg));
-      a->Visit(LT_NVP(yaw_deg));
-      a->Visit(LT_NVP(gyro_scale));
-      a->Visit(LT_NVP(accel_scale));
+      a->Visit(MJ_NVP(i2c_device));
+      a->Visit(MJ_NVP(gyro_address));
+      a->Visit(MJ_NVP(accel_address));
+      a->Visit(MJ_NVP(accel_g));
+      a->Visit(MJ_NVP(rotation_deg_s));
+      a->Visit(MJ_NVP(rate_hz));
+      a->Visit(MJ_NVP(roll_deg));
+      a->Visit(MJ_NVP(pitch_deg));
+      a->Visit(MJ_NVP(yaw_deg));
+      a->Visit(MJ_NVP(gyro_scale));
+      a->Visit(MJ_NVP(accel_scale));
     }
   };
 
@@ -94,9 +94,9 @@ class MjmechImuDriver : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(LT_NVP(timestamp));
-      a->Visit(LT_NVP(accel_mps2));
-      a->Visit(LT_NVP(body_rate_deg_s));
+      a->Visit(MJ_NVP(timestamp));
+      a->Visit(MJ_NVP(accel_mps2));
+      a->Visit(MJ_NVP(body_rate_deg_s));
     }
   };
 
@@ -116,16 +116,16 @@ class MjmechImuDriver : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(LT_NVP(timestamp));
-      a->Visit(LT_NVP(rate_hz));
-      a->Visit(LT_NVP(gyro_bw_hz));
-      a->Visit(LT_NVP(accel_g));
-      a->Visit(LT_NVP(rotation_deg_s));
-      a->Visit(LT_NVP(roll_deg));
-      a->Visit(LT_NVP(pitch_deg));
-      a->Visit(LT_NVP(yaw_deg));
-      a->Visit(LT_NVP(gyro_scale));
-      a->Visit(LT_NVP(accel_scale));
+      a->Visit(MJ_NVP(timestamp));
+      a->Visit(MJ_NVP(rate_hz));
+      a->Visit(MJ_NVP(gyro_bw_hz));
+      a->Visit(MJ_NVP(accel_g));
+      a->Visit(MJ_NVP(rotation_deg_s));
+      a->Visit(MJ_NVP(roll_deg));
+      a->Visit(MJ_NVP(pitch_deg));
+      a->Visit(MJ_NVP(yaw_deg));
+      a->Visit(MJ_NVP(gyro_scale));
+      a->Visit(MJ_NVP(accel_scale));
     }
   };
 

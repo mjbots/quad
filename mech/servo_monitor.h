@@ -61,10 +61,10 @@ class ServoMonitor : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(LT_NVP(period_s));
-      a->Visit(LT_NVP(parole_min_time_s));
-      a->Visit(LT_NVP(parole_max_time_s));
-      a->Visit(LT_NVP(servos));
+      a->Visit(MJ_NVP(period_s));
+      a->Visit(MJ_NVP(parole_min_time_s));
+      a->Visit(MJ_NVP(parole_max_time_s));
+      a->Visit(MJ_NVP(servos));
     }
   };
 
@@ -85,10 +85,10 @@ class ServoMonitor : boost::noncopyable {
 
       template <typename Archive>
       void Serialize(Archive* a) {
-        a->Visit(LT_NVP(last_update));
-        a->Visit(LT_NVP(address));
-        a->Visit(LT_NVP(voltage_V));
-        a->Visit(LT_NVP(temperature_C));
+        a->Visit(MJ_NVP(last_update));
+        a->Visit(MJ_NVP(address));
+        a->Visit(MJ_NVP(voltage_V));
+        a->Visit(MJ_NVP(temperature_C));
       }
     };
 
@@ -96,8 +96,8 @@ class ServoMonitor : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(LT_NVP(timestamp));
-      a->Visit(LT_NVP(servos));
+      a->Visit(MJ_NVP(timestamp));
+      a->Visit(MJ_NVP(servos));
     }
   };
 

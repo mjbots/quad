@@ -43,9 +43,9 @@ class ServoMonitorApp : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(LT_NVP(servo_base));
-      a->Visit(LT_NVP(servo));
-      a->Visit(LT_NVP(servo_monitor));
+      a->Visit(MJ_NVP(servo_base));
+      a->Visit(MJ_NVP(servo));
+      a->Visit(MJ_NVP(servo_monitor));
     }
   };
 

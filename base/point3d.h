@@ -67,9 +67,9 @@ struct Point3D {
 
   template <typename Archive>
   void Serialize(Archive* a) {
-    a->Visit(LT_NVP(x));
-    a->Visit(LT_NVP(y));
-    a->Visit(LT_NVP(z));
+    a->Visit(MJ_NVP(x));
+    a->Visit(MJ_NVP(y));
+    a->Visit(MJ_NVP(z));
   }
 };
 }

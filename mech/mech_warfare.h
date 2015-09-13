@@ -59,11 +59,11 @@ class MechWarfare : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(LT_NVP(servo_base));
-      a->Visit(LT_NVP(servo));
-      a->Visit(LT_NVP(gait_driver));
-      a->Visit(LT_NVP(imu));
-      a->Visit(LT_NVP(servo_monitor));
+      a->Visit(MJ_NVP(servo_base));
+      a->Visit(MJ_NVP(servo));
+      a->Visit(MJ_NVP(gait_driver));
+      a->Visit(MJ_NVP(imu));
+      a->Visit(MJ_NVP(servo_monitor));
     }
   };
 
@@ -75,8 +75,8 @@ class MechWarfare : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(LT_NVP(port));
-      a->Visit(LT_NVP(gait_config));
+      a->Visit(MJ_NVP(port));
+      a->Visit(MJ_NVP(gait_config));
       children.Serialize(a);
     }
 

@@ -29,7 +29,7 @@ struct SubTest1 {
 
   template <typename Archive>
   void Serialize(Archive* a) {
-    a->Visit(LT_NVP(value_u32));
+    a->Visit(MJ_NVP(value_u32));
   }
 };
 
@@ -53,22 +53,22 @@ struct Test1 {
 
   template <typename Archive>
   void Serialize(Archive* a ) {
-    a->Visit(LT_NVP(value_u8));
-    a->Visit(LT_NVP(value_i8));
-    a->Visit(LT_NVP(value_pair));
-    a->Visit(LT_NVP(value_array));
-    a->Visit(LT_NVP(value_vector));
-    a->Visit(LT_NVP(value_sub));
-    a->Visit(LT_NVP(value_optional));
-    a->Visit(LT_NVP(value_i32));
-    a->Visit(LT_NVP(value_u64));
-    a->Visit(LT_NVP(value_i64));
-    a->Visit(LT_NVP(value_f32));
-    a->Visit(LT_NVP(value_f64));
-    a->Visit(LT_NVP(value_str));
-    a->Visit(LT_NVP(value_time));
-    a->Visit(LT_NVP(value_vecvec));
-    a->Visit(LT_NVP(value_vecobj));
+    a->Visit(MJ_NVP(value_u8));
+    a->Visit(MJ_NVP(value_i8));
+    a->Visit(MJ_NVP(value_pair));
+    a->Visit(MJ_NVP(value_array));
+    a->Visit(MJ_NVP(value_vector));
+    a->Visit(MJ_NVP(value_sub));
+    a->Visit(MJ_NVP(value_optional));
+    a->Visit(MJ_NVP(value_i32));
+    a->Visit(MJ_NVP(value_u64));
+    a->Visit(MJ_NVP(value_i64));
+    a->Visit(MJ_NVP(value_f32));
+    a->Visit(MJ_NVP(value_f64));
+    a->Visit(MJ_NVP(value_str));
+    a->Visit(MJ_NVP(value_time));
+    a->Visit(MJ_NVP(value_vecvec));
+    a->Visit(MJ_NVP(value_vecobj));
   }
 };
 }

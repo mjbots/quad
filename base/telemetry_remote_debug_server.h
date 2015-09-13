@@ -36,7 +36,7 @@ class TelemetryRemoteDebugServer : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(LT_NVP(port));
+      a->Visit(MJ_NVP(port));
     }
   };
 
@@ -78,8 +78,8 @@ class TelemetryRemoteDebugServer : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(LT_NVP(type));
-      a->Visit(LT_NVP(reply));
+      a->Visit(MJ_NVP(type));
+      a->Visit(MJ_NVP(reply));
     }
 
     Response(T* value, const std::string& name) {

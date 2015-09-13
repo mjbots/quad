@@ -90,8 +90,8 @@ class StreamFactory : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(LT_NVP(type));
-      a->Visit(LT_NVP(stdio_debug));
+      a->Visit(MJ_NVP(type));
+      a->Visit(MJ_NVP(stdio_debug));
 
       VisitGenerator<Archive> visit_generator(a, this);
       meta::for_each(
@@ -198,8 +198,8 @@ class StdioGenerator : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(LT_NVP(in));
-      a->Visit(LT_NVP(out));
+      a->Visit(MJ_NVP(in));
+      a->Visit(MJ_NVP(out));
     }
   };
 
@@ -222,10 +222,10 @@ class SerialPortGenerator : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(LT_NVP(serial_port));
-      a->Visit(LT_NVP(baud_rate));
-      a->Visit(LT_NVP(parity));
-      a->Visit(LT_NVP(data_bits));
+      a->Visit(MJ_NVP(serial_port));
+      a->Visit(MJ_NVP(baud_rate));
+      a->Visit(MJ_NVP(parity));
+      a->Visit(MJ_NVP(data_bits));
     }
   };
 
@@ -246,8 +246,8 @@ class TcpClientGenerator : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(LT_NVP(host));
-      a->Visit(LT_NVP(port));
+      a->Visit(MJ_NVP(host));
+      a->Visit(MJ_NVP(port));
     }
   };
 
@@ -269,7 +269,7 @@ class PipeGenerator : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(LT_NVP(key));
+      a->Visit(MJ_NVP(key));
     }
   };
 

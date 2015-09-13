@@ -25,7 +25,7 @@ struct TestData {
 
   template <typename Archive>
   void Serialize(Archive* a) {
-    a->Visit(LT_NVP(value));
+    a->Visit(MJ_NVP(value));
   }
 };
 

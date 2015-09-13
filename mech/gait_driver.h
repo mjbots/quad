@@ -67,9 +67,9 @@ class GaitDriver : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(LT_NVP(period_s));
-      a->Visit(LT_NVP(command_timeout_s));
-      a->Visit(LT_NVP(idle_time_s));
+      a->Visit(MJ_NVP(period_s));
+      a->Visit(MJ_NVP(command_timeout_s));
+      a->Visit(MJ_NVP(idle_time_s));
     }
   };
 
@@ -98,14 +98,14 @@ class GaitDriver : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(LT_NVP(timestamp));
-      //a->Visit(LT_NVP(state));
-      a->Visit(LT_NVP(body_robot));
-      a->Visit(LT_NVP(cog_robot));
-      a->Visit(LT_NVP(body_world));
-      a->Visit(LT_NVP(robot_world));
-      a->Visit(LT_NVP(legs));
-      a->Visit(LT_NVP(command));
+      a->Visit(MJ_NVP(timestamp));
+      //a->Visit(MJ_NVP(state));
+      a->Visit(MJ_NVP(body_robot));
+      a->Visit(MJ_NVP(cog_robot));
+      a->Visit(MJ_NVP(body_world));
+      a->Visit(MJ_NVP(robot_world));
+      a->Visit(MJ_NVP(legs));
+      a->Visit(MJ_NVP(command));
     }
   };
 
@@ -116,8 +116,8 @@ class GaitDriver : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(LT_NVP(timestamp));
-      a->Visit(LT_NVP(command));
+      a->Visit(MJ_NVP(timestamp));
+      a->Visit(MJ_NVP(command));
     }
   };
 

@@ -26,8 +26,8 @@ struct TestData {
 
   template <typename Archive>
   void Serialize(Archive* a) {
-    a->Visit(LT_NVP(intval));
-    a->Visit(LT_NVP(doubleval));
+    a->Visit(MJ_NVP(intval));
+    a->Visit(MJ_NVP(doubleval));
   }
 };
 
@@ -37,8 +37,8 @@ struct Container {
 
   template <typename Archive>
   void Serialize(Archive* a) {
-    a->Visit(LT_NVP(child));
-    a->Visit(LT_NVP(stuff));
+    a->Visit(MJ_NVP(child));
+    a->Visit(MJ_NVP(stuff));
   }
 };
 
@@ -83,8 +83,8 @@ struct VectorTest {
 
   template <typename Archive>
   void Serialize(Archive* a) {
-    a->Visit(LT_NVP(intvector));
-    a->Visit(LT_NVP(structvector));
+    a->Visit(MJ_NVP(intvector));
+    a->Visit(MJ_NVP(structvector));
   }
 };
 }

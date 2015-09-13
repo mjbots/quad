@@ -36,8 +36,8 @@ struct Leg {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(LT_NVP(mount_mm));
-      a->Visit(LT_NVP(idle_mm));
+      a->Visit(MJ_NVP(mount_mm));
+      a->Visit(MJ_NVP(idle_mm));
     }
 
     bool operator==(const Config& rhs) const { return true; }
@@ -62,8 +62,8 @@ struct MechanicalConfig {
 
   template <typename Archive>
   void Serialize(Archive* a) {
-    a->Visit(LT_NVP(leg_config));
-    a->Visit(LT_NVP(body_cog_mm));
+    a->Visit(MJ_NVP(leg_config));
+    a->Visit(MJ_NVP(body_cog_mm));
   }
 };
 
@@ -81,16 +81,16 @@ struct Command {
 
   template <typename Archive>
   void Serialize(Archive* a) {
-    a->Visit(LT_NVP(translate_x_mm_s));
-    a->Visit(LT_NVP(translate_y_mm_s));
-    a->Visit(LT_NVP(rotate_deg_s));
-    a->Visit(LT_NVP(body_x_mm));
-    a->Visit(LT_NVP(body_y_mm));
-    a->Visit(LT_NVP(body_z_mm));
-    a->Visit(LT_NVP(body_pitch_deg));
-    a->Visit(LT_NVP(body_roll_deg));
-    a->Visit(LT_NVP(body_yaw_deg));
-    a->Visit(LT_NVP(lift_height_percent));
+    a->Visit(MJ_NVP(translate_x_mm_s));
+    a->Visit(MJ_NVP(translate_y_mm_s));
+    a->Visit(MJ_NVP(rotate_deg_s));
+    a->Visit(MJ_NVP(body_x_mm));
+    a->Visit(MJ_NVP(body_y_mm));
+    a->Visit(MJ_NVP(body_z_mm));
+    a->Visit(MJ_NVP(body_pitch_deg));
+    a->Visit(MJ_NVP(body_roll_deg));
+    a->Visit(MJ_NVP(body_yaw_deg));
+    a->Visit(MJ_NVP(lift_height_percent));
   }
 };
 
@@ -139,8 +139,8 @@ struct JointCommand {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(LT_NVP(servo_number));
-      a->Visit(LT_NVP(angle_deg));
+      a->Visit(MJ_NVP(servo_number));
+      a->Visit(MJ_NVP(angle_deg));
     }
 
     Joint() {}
@@ -157,7 +157,7 @@ struct JointCommand {
 
   template <typename Archive>
   void Serialize(Archive* a) {
-    a->Visit(LT_NVP(joints));
+    a->Visit(MJ_NVP(joints));
   }
 };
 

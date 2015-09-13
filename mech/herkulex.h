@@ -87,8 +87,8 @@ class HerkuleXProtocol : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(LT_NVP(stream));
-      a->Visit(LT_NVP(packet_timeout_s));
+      a->Visit(MJ_NVP(stream));
+      a->Visit(MJ_NVP(packet_timeout_s));
     }
   };
 

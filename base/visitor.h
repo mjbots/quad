@@ -35,4 +35,4 @@ NameValuePair<T> MakeNameValuePair(T* value, const char* name) {
 }
 }
 
-#define LT_NVP(x) mjmech::base::MakeNameValuePair(&x, #x)
+#define MJ_NVP(x) mjmech::base::MakeNameValuePair(&x, #x)

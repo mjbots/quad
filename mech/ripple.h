@@ -60,20 +60,20 @@ struct RippleConfig {
 
   template <typename Archive>
   void Serialize(Archive* a) {
-    a->Visit(LT_NVP(mechanical));
-    a->Visit(LT_NVP(max_cycle_time_s));
-    a->Visit(LT_NVP(lift_height_mm));
-    a->Visit(LT_NVP(lift_percent));
-    a->Visit(LT_NVP(swing_percent));
-    a->Visit(LT_NVP(position_margin_percent));
-    a->Visit(LT_NVP(leg_order));
-    a->Visit(LT_NVP(body_z_offset_mm));
-    a->Visit(LT_NVP(servo_speed_margin_percent));
-    a->Visit(LT_NVP(statically_stable));
-    a->Visit(LT_NVP(static_center_factor));
-    a->Visit(LT_NVP(static_stable_factor));
-    a->Visit(LT_NVP(static_margin_mm));
-    a->Visit(LT_NVP(servo_speed_dps));
+    a->Visit(MJ_NVP(mechanical));
+    a->Visit(MJ_NVP(max_cycle_time_s));
+    a->Visit(MJ_NVP(lift_height_mm));
+    a->Visit(MJ_NVP(lift_percent));
+    a->Visit(MJ_NVP(swing_percent));
+    a->Visit(MJ_NVP(position_margin_percent));
+    a->Visit(MJ_NVP(leg_order));
+    a->Visit(MJ_NVP(body_z_offset_mm));
+    a->Visit(MJ_NVP(servo_speed_margin_percent));
+    a->Visit(MJ_NVP(statically_stable));
+    a->Visit(MJ_NVP(static_center_factor));
+    a->Visit(MJ_NVP(static_stable_factor));
+    a->Visit(MJ_NVP(static_margin_mm));
+    a->Visit(MJ_NVP(servo_speed_dps));
   }
 };
 

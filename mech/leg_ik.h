@@ -79,12 +79,12 @@ class LizardIK : public IKSolver {
 
       template <typename Archive>
       void Serialize(Archive* a) {
-        a->Visit(LT_NVP(min_deg));
-        a->Visit(LT_NVP(idle_deg));
-        a->Visit(LT_NVP(max_deg));
-        a->Visit(LT_NVP(length_mm));
-        a->Visit(LT_NVP(sign));
-        a->Visit(LT_NVP(ident));
+        a->Visit(MJ_NVP(min_deg));
+        a->Visit(MJ_NVP(idle_deg));
+        a->Visit(MJ_NVP(max_deg));
+        a->Visit(MJ_NVP(length_mm));
+        a->Visit(MJ_NVP(sign));
+        a->Visit(MJ_NVP(ident));
       }
     };
 
@@ -96,10 +96,10 @@ class LizardIK : public IKSolver {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(LT_NVP(coxa));
-      a->Visit(LT_NVP(femur));
-      a->Visit(LT_NVP(tibia));
-      a->Visit(LT_NVP(servo_speed_dps));
+      a->Visit(MJ_NVP(coxa));
+      a->Visit(MJ_NVP(femur));
+      a->Visit(MJ_NVP(tibia));
+      a->Visit(MJ_NVP(servo_speed_dps));
     }
   };
 
@@ -245,12 +245,12 @@ class MammalIK : public IKSolver {
 
       template <typename Archive>
       void Serialize(Archive* a) {
-        a->Visit(LT_NVP(min_deg));
-        a->Visit(LT_NVP(idle_deg));
-        a->Visit(LT_NVP(max_deg));
-        a->Visit(LT_NVP(sign));
-        a->Visit(LT_NVP(length_mm));
-        a->Visit(LT_NVP(ident));
+        a->Visit(MJ_NVP(min_deg));
+        a->Visit(MJ_NVP(idle_deg));
+        a->Visit(MJ_NVP(max_deg));
+        a->Visit(MJ_NVP(sign));
+        a->Visit(MJ_NVP(length_mm));
+        a->Visit(MJ_NVP(ident));
       }
     };
 
@@ -263,12 +263,12 @@ class MammalIK : public IKSolver {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(LT_NVP(femur_attachment_mm));
-      a->Visit(LT_NVP(shoulder));
-      a->Visit(LT_NVP(femur));
-      a->Visit(LT_NVP(tibia));
-      a->Visit(LT_NVP(invert));
-      a->Visit(LT_NVP(servo_speed_dps));
+      a->Visit(MJ_NVP(femur_attachment_mm));
+      a->Visit(MJ_NVP(shoulder));
+      a->Visit(MJ_NVP(femur));
+      a->Visit(MJ_NVP(tibia));
+      a->Visit(MJ_NVP(invert));
+      a->Visit(MJ_NVP(servo_speed_dps));
     }
   };
 

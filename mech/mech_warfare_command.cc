@@ -84,17 +84,17 @@ struct Options {
 
   template <typename Archive>
   void Serialize(Archive* a) {
-    a->Visit(LT_NVP(period_s));
-    a->Visit(LT_NVP(deadband));
-    a->Visit(LT_NVP(max_translate_x_mm_s));
-    a->Visit(LT_NVP(max_translate_y_mm_s));
-    a->Visit(LT_NVP(max_rotate_deg_s));
-    a->Visit(LT_NVP(max_body_z_mm));
-    a->Visit(LT_NVP(min_body_z_mm));
-    a->Visit(LT_NVP(idle_body_y_mm));
-    a->Visit(LT_NVP(forward_body_y_mm));
-    a->Visit(LT_NVP(reverse_body_y_mm));
-    a->Visit(LT_NVP(verbose));
+    a->Visit(MJ_NVP(period_s));
+    a->Visit(MJ_NVP(deadband));
+    a->Visit(MJ_NVP(max_translate_x_mm_s));
+    a->Visit(MJ_NVP(max_translate_y_mm_s));
+    a->Visit(MJ_NVP(max_rotate_deg_s));
+    a->Visit(MJ_NVP(max_body_z_mm));
+    a->Visit(MJ_NVP(min_body_z_mm));
+    a->Visit(MJ_NVP(idle_body_y_mm));
+    a->Visit(MJ_NVP(forward_body_y_mm));
+    a->Visit(MJ_NVP(reverse_body_y_mm));
+    a->Visit(MJ_NVP(verbose));
   }
 };
 
