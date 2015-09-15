@@ -71,6 +71,11 @@ ConvertSecondsToDuration(double time_s) {
       boost::posix_time::time_duration(0, 0, 0, counts);
 }
 
+inline double ConvertDurationToSeconds(
+    boost::posix_time::time_duration duration) {
+  return duration.total_microseconds() / 1e6;
+}
+
 inline int64_t
 ConvertPtimeToMicroseconds(boost::posix_time::ptime time) {
   if (time.is_pos_infinity()) {
