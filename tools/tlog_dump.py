@@ -15,7 +15,11 @@
 # limitations under the License.
 
 import optparse
+import os
 import sys
+
+SCRIPT_PATH=os.path.dirname(os.path.realpath(__file__))
+sys.path.append(os.path.join(SCRIPT_PATH, '../python'))
 
 import telemetry_log
 
