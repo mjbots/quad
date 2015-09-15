@@ -374,6 +374,8 @@ class Tplot(QtGui.QMainWindow):
                 continue
 
             these_times = [x.timestamp for x in self.log.all[record]]
+            if len(these_times) == 0:
+                continue
             this_min = min(these_times)
             this_max = max(these_times)
 
