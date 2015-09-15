@@ -241,7 +241,11 @@ class Tplot(QtGui.QMainWindow):
                     item.setText(0, name)
 
                     if 'nelements' in field:
-                        child = field['children'][0]['children'][0]
+                        child = field['children'][0]
+                        # If this is a type with only one child, just
+                        # fall down to it.
+                        if 'children' in child and len(child['children'] == 1):
+                            child = ['children'][0]
                         for i in range(field['nelements']):
                             subitem = QtGui.QTreeWidgetItem(item)
                             subitem.setText(0, str(i))
@@ -271,7 +275,9 @@ class Tplot(QtGui.QMainWindow):
                 this_name += name
 
                 if 'nelements' in field:
-                    child = field['children'][0]['children'][0]
+                    child = field['children'][0]
+                    if 'children' in child and len(child['children']) == 1:
+                        child = ['children'][0]
                     for i in range(field['nelements']):
                         add_item(index, this_name + "." + str(i), child)
                 elif 'children' in field:
