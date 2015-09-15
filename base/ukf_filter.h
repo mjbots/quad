@@ -20,6 +20,8 @@
 #include <Eigen/Cholesky>
 #include <Eigen/Dense>
 
+#include <boost/assert.hpp>
+
 namespace mjmech {
 namespace base {
 
@@ -69,6 +71,10 @@ class UkfFilter {
     }
     Pminus *= (1.0 / N);
     Pminus += dt_s * process_noise_;
+
+    for (size_t i = 0; i < _NumStates; i++) {
+      BOOST_ASSERT(std::isfinite(xhatminus[i]));
+    }
 
     state_ = xhatminus;
     covariance_ = ConditionCovariance(Pminus);
@@ -138,6 +144,10 @@ class UkfFilter {
     KMatrix K = Pxy * Py.inverse();
     State xplus = state_ + K * (measurement - yhat);
     Covariance Pplus = covariance_ - ((K * Py) * K.transpose());
+
+    for (size_t i = 0; i < _NumStates; i++) {
+      BOOST_ASSERT(std::isfinite(xplus[i]));
+    }
 
     state_ = xplus;
     covariance_ = ConditionCovariance(Pplus);

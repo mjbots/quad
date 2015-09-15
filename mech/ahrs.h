@@ -44,12 +44,12 @@ class Ahrs : boost::noncopyable {
   void AsyncStart(base::ErrorHandler);
 
   struct Parameters {
-    double process_noise_attitude_dps = 0.0;
-    double process_noise_bias_dps = 0.0;
-    double measurement_noise_accel_mps2 = 0.0;
-    double measurement_noise_stationary_mps2 = 0.0;
-    double initial_noise_attitude_deg = 0.0;
-    double initial_noise_bias_dps = 0.0;
+    double process_noise_attitude_dps = 0.01;
+    double process_noise_bias_dps = 0.0256;
+    double measurement_noise_accel_mps2 = 0.5;
+    double measurement_noise_stationary_mps2 = 0.5;
+    double initial_noise_attitude_deg = 2.0;
+    double initial_noise_bias_dps = 0.2;
     double init_time_s = 1.0;
 
     template <typename Archive>
