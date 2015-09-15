@@ -35,6 +35,7 @@ class Ahrs : boost::noncopyable {
        boost::signals2::signal<void (const ImuData*)>* imu_signal)
       : Ahrs(context.service) {
     context.telemetry_registry.Register("ahrs", &ahrs_data_signal_);
+    context.telemetry_registry.Register("ahrs_debug", &ahrs_debug_signal_);
     imu_signal->connect(std::bind(&Ahrs::HandleImuData<ImuData>, this,
                                   std::placeholders::_1));
   }
@@ -76,69 +77,61 @@ class Ahrs : boost::noncopyable {
   struct AhrsData {
     boost::posix_time::ptime timestamp;
 
-    enum {
-      kFilterSize = 7
-    };
+    State state = kUninitialized;
+    base::Quaternion attitude;
+    double yaw_deg = 0.0;
+    double pitch_deg = 0.0;
+    double roll_deg = 0.0;
 
-    struct Output {
-      State state = kUninitialized;
-      base::Quaternion attitude;
-      double yaw_deg = 0.0;
-      double pitch_deg = 0.0;
-      double roll_deg = 0.0;
-
-      base::Point3D body_rate_deg_s;
-      base::Point3D body_accel_mps2;
-      base::Point3D world_accel_mps2;
-
-      template <typename Archive>
-      void Serialize(Archive* a) {
-        // a->Visit(MJ_NVP(state));
-        a->Visit(MJ_NVP(attitude));
-        a->Visit(MJ_NVP(yaw_deg));
-        a->Visit(MJ_NVP(pitch_deg));
-        a->Visit(MJ_NVP(roll_deg));
-        a->Visit(MJ_NVP(body_rate_deg_s));
-        a->Visit(MJ_NVP(body_accel_mps2));
-        a->Visit(MJ_NVP(world_accel_mps2));
-      }
-    };
-
-    Output output;
-
-    struct Debug {
-      std::array<double, kFilterSize> state = {};
-      std::array<double, kFilterSize * kFilterSize> covariance = {};
-      base::Point3D bias_body_deg_s;
-      base::Point3D init_accel_mps2;
-      int init_count = 0;
-      boost::posix_time::ptime init_start;
-      boost::posix_time::ptime last_measurement;
-
-      template <typename Archive>
-      void Serialize(Archive* a) {
-        a->Visit(MJ_NVP(state));
-        a->Visit(MJ_NVP(covariance));
-        a->Visit(MJ_NVP(bias_body_deg_s));
-        a->Visit(MJ_NVP(init_accel_mps2));
-        a->Visit(MJ_NVP(init_count));
-        a->Visit(MJ_NVP(init_start));
-        a->Visit(MJ_NVP(last_measurement));
-      }
-    };
-
-    Debug debug;
+    base::Point3D body_rate_deg_s;
+    base::Point3D body_accel_mps2;
+    base::Point3D world_accel_mps2;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(timestamp));
-      a->Visit(MJ_NVP(output));
-      a->Visit(MJ_NVP(debug));
+      // a->Visit(MJ_NVP(state));
+      a->Visit(MJ_NVP(attitude));
+      a->Visit(MJ_NVP(yaw_deg));
+      a->Visit(MJ_NVP(pitch_deg));
+      a->Visit(MJ_NVP(roll_deg));
+      a->Visit(MJ_NVP(body_rate_deg_s));
+      a->Visit(MJ_NVP(body_accel_mps2));
+      a->Visit(MJ_NVP(world_accel_mps2));
+    }
+  };
+
+  struct AhrsDebugData {
+    enum {
+      kFilterSize = 7
+    };
+
+    boost::posix_time::ptime timestamp;
+
+    std::array<double, kFilterSize> state = {};
+    std::array<double, kFilterSize * kFilterSize> covariance = {};
+    base::Point3D bias_body_deg_s;
+    base::Point3D init_accel_mps2;
+    int init_count = 0;
+    boost::posix_time::ptime init_start;
+    boost::posix_time::ptime last_measurement;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(timestamp));
+      a->Visit(MJ_NVP(state));
+      a->Visit(MJ_NVP(covariance));
+      a->Visit(MJ_NVP(bias_body_deg_s));
+      a->Visit(MJ_NVP(init_accel_mps2));
+      a->Visit(MJ_NVP(init_count));
+      a->Visit(MJ_NVP(init_start));
+      a->Visit(MJ_NVP(last_measurement));
     }
   };
 
  private:
   boost::signals2::signal<void (const AhrsData*)> ahrs_data_signal_;
+  boost::signals2::signal<void (const AhrsDebugData*)> ahrs_debug_signal_;
 
   Ahrs(boost::asio::io_service&);
 

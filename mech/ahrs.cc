@@ -46,7 +46,7 @@ class Ahrs::Impl : boost::noncopyable {
   void ProcessImu(boost::posix_time::ptime timestamp,
                   const base::Point3D& accel_mps2,
                   const base::Point3D& body_rate_deg_s) {
-    switch (data_.output.state) {
+    switch (data_.state) {
       case kUninitialized: // fall-through
       case kInitializing: {
         DoInitializing(accel_mps2, body_rate_deg_s);
@@ -61,7 +61,7 @@ class Ahrs::Impl : boost::noncopyable {
       }
     }
 
-    data_.debug.last_measurement = timestamp;
+    data_debug_.last_measurement = timestamp;
 
     Emit(accel_mps2, body_rate_deg_s);
   }
@@ -73,47 +73,47 @@ class Ahrs::Impl : boost::noncopyable {
       return;
     }
 
-    data_.output.state = kInitializing;
-    if (data_.debug.init_start.is_not_a_date_time()) {
-      data_.debug.init_start =
+    data_.state = kInitializing;
+    if (data_debug_.init_start.is_not_a_date_time()) {
+      data_debug_.init_start =
           boost::posix_time::microsec_clock::universal_time();
     }
 
     Point3D body_total_deg_s =
-        data_.debug.bias_body_deg_s.scaled(data_.debug.init_count);
+        data_debug_.bias_body_deg_s.scaled(data_debug_.init_count);
     body_total_deg_s = body_total_deg_s + body_rate_deg_s;
 
     Point3D total_accel_mps2 =
-        data_.debug.init_accel_mps2.scaled(data_.debug.init_count);
+        data_debug_.init_accel_mps2.scaled(data_debug_.init_count);
     total_accel_mps2 = total_accel_mps2 + accel_mps2;
 
-    data_.debug.init_count++;
-    data_.debug.bias_body_deg_s =
-        body_total_deg_s.scaled(1.0 / data_.debug.init_count);
-    data_.debug.init_accel_mps2 =
-        total_accel_mps2.scaled(1.0 / data_.debug.init_count);
+    data_debug_.init_count++;
+    data_debug_.bias_body_deg_s =
+        body_total_deg_s.scaled(1.0 / data_debug_.init_count);
+    data_debug_.init_accel_mps2 =
+        total_accel_mps2.scaled(1.0 / data_debug_.init_count);
 
     // Make an initial guess of pitch and roll, use that to populate
     // attitude while we are initializing.
-    const auto a_g = data_.debug.init_accel_mps2.scaled(1.0 / kGravity);
-    data_.output.attitude =
+    const auto a_g = data_debug_.init_accel_mps2.scaled(1.0 / kGravity);
+    data_.attitude =
         base::AttitudeEstimator::AccelToOrientation(a_g.x, a_g.y, a_g.z);
 
     const auto now = boost::posix_time::microsec_clock::universal_time();
-    auto elapsed = (now - data_.debug.init_start);
+    auto elapsed = (now - data_debug_.init_start);
 
     if (elapsed >
         base::ConvertSecondsToDuration(parameters_.init_time_s)) {
       // We have sufficient bias.
-      data_.output.state = kOperational;
+      data_.state = kOperational;
 
       // TODO jpieper: Tell the estimator our initial stuff.
       estimator_->SetInitialGyroBias(
-          -data_.debug.bias_body_deg_s.z,
-          data_.debug.bias_body_deg_s.x,
-          data_.debug.bias_body_deg_s.y);
+          -data_debug_.bias_body_deg_s.z,
+          data_debug_.bias_body_deg_s.x,
+          data_debug_.bias_body_deg_s.y);
 
-      Point3D accel_g = data_.debug.init_accel_mps2.scaled(1.0 / kGravity);
+      Point3D accel_g = data_debug_.init_accel_mps2.scaled(1.0 / kGravity);
       estimator_->SetInitialAccel(accel_g.x, accel_g.y, accel_g.z);
     }
   }
@@ -123,7 +123,7 @@ class Ahrs::Impl : boost::noncopyable {
                      const Point3D& body_rate_deg_s) {
     const double delta_t_s =
         base::ConvertDurationToSeconds(
-            timestamp - data_.debug.last_measurement);
+            timestamp - data_debug_.last_measurement);
     estimator_->ProcessMeasurement(
         delta_t_s,
         -body_rate_deg_s.z,
@@ -134,47 +134,49 @@ class Ahrs::Impl : boost::noncopyable {
         accel_mps2.z);
 
     // Update our output attitude and bias.
-    data_.output.attitude = estimator_->attitude();
-    data_.debug.bias_body_deg_s =
+    data_.attitude = estimator_->attitude();
+    data_debug_.bias_body_deg_s =
         estimator_->gyro_bias_rps().scaled(Degrees(1));
   }
 
   void Emit(const Point3D& accel_mps2,
             const Point3D& body_rate_deg_s) {
     data_.timestamp = boost::posix_time::microsec_clock::universal_time();
+    data_debug_.timestamp = data_.timestamp;
 
-    auto euler = data_.output.attitude.euler();
+    auto euler = data_.attitude.euler();
 
-    data_.output.yaw_deg = base::Degrees(euler.yaw_rad);
-    data_.output.pitch_deg = base::Degrees(euler.pitch_rad);
-    data_.output.roll_deg = base::Degrees(euler.roll_rad);
+    data_.yaw_deg = base::Degrees(euler.yaw_rad);
+    data_.pitch_deg = base::Degrees(euler.pitch_rad);
+    data_.roll_deg = base::Degrees(euler.roll_rad);
 
-    data_.output.body_rate_deg_s =
-        body_rate_deg_s - data_.debug.bias_body_deg_s;
+    data_.body_rate_deg_s =
+        body_rate_deg_s - data_debug_.bias_body_deg_s;
 
     // Find our nominal accel given our current attitude.
     auto body_gravity_g =
-        base::AttitudeEstimator::OrientationToAccel(data_.output.attitude);
+        base::AttitudeEstimator::OrientationToAccel(data_.attitude);
     Point3D body_gravity_mps2 = Point3D(body_gravity_g[0],
                                         body_gravity_g[1],
                                         body_gravity_g[2]).scaled(kGravity);
-    data_.output.body_accel_mps2 =
+    data_.body_accel_mps2 =
         accel_mps2 - body_gravity_mps2;
-    data_.output.world_accel_mps2 =
-        data_.output.attitude.Rotate(data_.output.body_accel_mps2);
+    data_.world_accel_mps2 =
+        data_.attitude.Rotate(data_.body_accel_mps2);
 
     const auto& state = estimator_->state();
     const auto& covariance = estimator_->covariance();
 
     for (size_t i = 0; i < base::AttitudeEstimator::kNumStates; i++) {
-      data_.debug.state[i] = state[i];
+      data_debug_.state[i] = state[i];
       for (size_t j = 0; j < base::AttitudeEstimator::kNumStates; j++) {
-        data_.debug.covariance[
+        data_debug_.covariance[
             i * base::AttitudeEstimator::kNumStates + j] = covariance(i, j);
       }
     }
 
     parent_->ahrs_data_signal_(&data_);
+    parent_->ahrs_debug_signal_(&data_debug_);
   }
 
   Ahrs* const parent_;
@@ -184,6 +186,7 @@ class Ahrs::Impl : boost::noncopyable {
   std::unique_ptr<base::AttitudeEstimator> estimator_;
 
   AhrsData data_;
+  AhrsDebugData data_debug_;
 
   boost::posix_time::ptime start_init_timestamp_;
 };
