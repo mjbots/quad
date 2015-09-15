@@ -25,8 +25,7 @@ class ServoMonitorApp : boost::noncopyable {
  public:
   template <typename Context>
   ServoMonitorApp(Context& context)
-    : service_(context.service),
-      factory_(context.service) {
+    : factory_(context.service) {
     m_.servo_base.reset(new Mech::ServoBase(context.service, factory_));
     m_.servo.reset(new Mech::Servo(m_.servo_base.get()));
     m_.servo_monitor.reset(new ServoMonitor(context, m_.servo.get()));
@@ -63,7 +62,6 @@ class ServoMonitorApp : boost::noncopyable {
   Parameters* parameters() { return &parameters_; }
 
  private:
-  boost::asio::io_service& service_;
   Mech::Factory factory_;
 
   Members m_;
