@@ -129,6 +129,10 @@ class MjmechImuDriver : boost::noncopyable {
     }
   };
 
+  boost::signals2::signal<void (const ImuData*)>* imu_data_signal() {
+    return &imu_data_signal_;
+  }
+
  private:
   boost::signals2::signal<void (const ImuData*)> imu_data_signal_;
   boost::signals2::signal<void (const ImuConfig*)> imu_config_signal_;

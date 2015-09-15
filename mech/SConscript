@@ -24,6 +24,7 @@ crenv.Append(LIBS=['boost_coroutine',
                    ])
 
 SOURCES = [
+    'ahrs.cc',
     'gait_driver.cc',
     'herkulex.cc',
     'mech_warfare.cc',
@@ -71,3 +72,4 @@ def ModuleMain(root, cname):
 ModuleMain('mjmech_imu_driver', 'MjmechImuDriver')
 ModuleMain('mech_warfare', 'MechWarfare')
 ModuleMain('servo_monitor_app', 'ServoMonitorApp')
+ModuleMain('ahrs_app', 'AhrsApp')
