@@ -33,6 +33,7 @@ Export('libbase')
 Export('libbase_so')
 
 TESTS = ['test/' + x for x in [
+        'attitude_estimator_test.cc',
         'comm_test.cc',
         'json_archive_test.cc',
         'test_main.cc',
@@ -44,6 +45,7 @@ TESTS = ['test/' + x for x in [
         'telemetry_log_registrar_test.cc',
         'telemetry_registry_test.cc',
         'tf_test.cc',
+        'ukf_filter_test.cc',
         ]]
 
 crenv = env.Clone()
