@@ -81,7 +81,7 @@ class Ahrs::Impl : boost::noncopyable {
 
     Point3D body_total_deg_s =
         data_debug_.bias_body_deg_s.scaled(data_debug_.init_count);
-    body_total_deg_s = body_total_deg_s + body_rate_deg_s;
+    body_total_deg_s = body_total_deg_s - body_rate_deg_s;
 
     Point3D total_accel_mps2 =
         data_debug_.init_accel_mps2.scaled(data_debug_.init_count);
@@ -108,10 +108,11 @@ class Ahrs::Impl : boost::noncopyable {
       data_.state = kOperational;
 
       // TODO jpieper: Tell the estimator our initial stuff.
+      Point3D filter_bias_rps = data_debug_.bias_body_deg_s.scaled(Radians(1));
       estimator_->SetInitialGyroBias(
-          -data_debug_.bias_body_deg_s.z,
-          data_debug_.bias_body_deg_s.x,
-          data_debug_.bias_body_deg_s.y);
+          -filter_bias_rps.z,
+          filter_bias_rps.x,
+          filter_bias_rps.y);
 
       Point3D accel_g = data_debug_.init_accel_mps2.scaled(1.0 / kGravity);
       estimator_->SetInitialAccel(accel_g.x, accel_g.y, accel_g.z);
@@ -124,14 +125,16 @@ class Ahrs::Impl : boost::noncopyable {
     const double delta_t_s =
         base::ConvertDurationToSeconds(
             timestamp - data_debug_.last_measurement);
+    const Point3D filter_rate_rps = body_rate_deg_s.scaled(Radians(1));
+    const Point3D filter_accel_g = accel_mps2.scaled(1.0 / kGravity);
     estimator_->ProcessMeasurement(
         delta_t_s,
-        -body_rate_deg_s.z,
-        body_rate_deg_s.x,
-        body_rate_deg_s.y,
-        accel_mps2.x,
-        accel_mps2.y,
-        accel_mps2.z);
+        -filter_rate_rps.z,
+        filter_rate_rps.x,
+        filter_rate_rps.y,
+        filter_accel_g.x,
+        filter_accel_g.y,
+        filter_accel_g.z);
 
     // Update our output attitude and bias.
     data_.attitude = estimator_->attitude();
@@ -151,7 +154,7 @@ class Ahrs::Impl : boost::noncopyable {
     data_.roll_deg = base::Degrees(euler.roll_rad);
 
     data_.body_rate_deg_s =
-        body_rate_deg_s - data_debug_.bias_body_deg_s;
+        body_rate_deg_s + data_debug_.bias_body_deg_s;
 
     // Find our nominal accel given our current attitude.
     auto body_gravity_g =
