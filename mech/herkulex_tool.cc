@@ -16,6 +16,7 @@
 
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
+#include <boost/asio/posix/stream_descriptor.hpp>
 #include <boost/program_options.hpp>
 
 #include "base/comm_factory.h"
@@ -41,6 +42,7 @@ typedef HerkuleX<Factory> Servo;
 typedef HerkuleXConstants HC;
 
 struct CommandContext {
+  boost::asio::io_service& service;
   const Options& options;
   Servo& servo;
   ServoInterface& servo_interface;
@@ -69,12 +71,25 @@ HC::Register ParseRegister(const std::string& args) {
   int reg_address = 0;
   int reg_size = 1;
   try {
-    reg_address = boost::lexical_cast<int>(args);
+    size_t pos = args.find(':');
+    std::string address_str;
+    std::string size_str;
+    if (pos == std::string::npos) {
+      address_str = args;
+    } else {
+      address_str = args.substr(0, pos);
+      size_str = args.substr(pos + 1);
+    }
+
+    reg_address = std::stoi(address_str, 0, 0);
     if (reg_address < 0 || reg_address > 0xfe) {
       throw std::runtime_error(
           (boost::format("Address out of range: %d") % reg_address).str());
     }
-  } catch (boost::bad_lexical_cast&) {
+    if (!size_str.empty()) {
+      reg_size = std::stoi(size_str, 0, 0);
+    }
+  } catch (std::invalid_argument&) {
     // OK, try a named one.
     HC constants;
     auto it = constants.ram_registers.find(args);
@@ -92,7 +107,16 @@ HC::Register ParseRegister(const std::string& args) {
         static_cast<uint8_t>(reg_size)};
 }
 
+void DoStdio(CommandContext&);
+
 const std::map<std::string, Command> g_commands = {
+  { "stdio", { kNoArgs, DoStdio } },
+  { "sleep", { kArg, [](CommandContext& ctx) {
+        boost::asio::deadline_timer timer(ctx.service);
+        double delay_s = std::stod(ctx.args);
+        timer.expires_from_now(ConvertSecondsToDuration(delay_s));
+        timer.async_wait(ctx.yield);
+      } } },
   { "reboot", { kNoArgs, [](CommandContext& ctx) {
         ctx.servo.Reboot(ctx.options.address, ctx.yield);
       } } },
@@ -256,11 +280,15 @@ int work(int argc, char** argv) {
 
         for (const auto& command: command_sequence) {
           CommandContext ctx{
-            options, servo, servo_interface,
+            service, options, servo, servo_interface,
                 command.args, yield};
           auto it = g_commands.find(command.name);
           BOOST_ASSERT(it != g_commands.end());
-          it->second.function(ctx);
+          try {
+            it->second.function(ctx);
+          } catch (boost::system::system_error& se) {
+            std::cerr << "error: " << se.what() << "\n";
+          }
         }
 
         service.stop();
@@ -268,6 +296,52 @@ int work(int argc, char** argv) {
 
   service.run();
   return 0;
+}
+
+void DoStdio(CommandContext& ctx) {
+  boost::asio::posix::stream_descriptor descriptor(ctx.service, ::dup(0));
+  std::string last_line;
+  while (true) {
+    boost::asio::streambuf stream;
+    boost::asio::async_read_until(descriptor, stream, '\n', ctx.yield);
+    std::ostringstream ostr;
+    ostr << &stream;
+
+    std::string line = ostr.str();
+    BOOST_ASSERT(!line.empty());
+    BOOST_ASSERT(line[line.size() - 1] == '\n');
+    line = line.substr(0, line.size() - 1); // strip newline
+
+    if (line.empty()) {
+      line = last_line;
+    }
+
+    last_line = line;
+
+    std::size_t pos = line.find_first_of(' ');
+    std::string command_name;
+    std::string args;
+    if (pos == std::string::npos) {
+      command_name = line;
+    } else {
+      command_name = line.substr(0, pos);
+      args = line.substr(pos + 1);
+    }
+
+    CommandContext sub_context{
+      ctx.service, ctx.options, ctx.servo, ctx.servo_interface,
+          args, ctx.yield};
+    auto it = g_commands.find(command_name);
+    if (it == g_commands.end()) {
+      std::cerr << "Unknown command: '" + command_name + "'\n";
+    } else {
+      try {
+        it->second.function(sub_context);
+      } catch (boost::system::system_error& se) {
+        std::cerr << "error: " << se.what() << "\n";
+      }
+    }
+  }
 }
 }
 
