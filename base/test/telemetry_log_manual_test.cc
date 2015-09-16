@@ -22,6 +22,20 @@
 namespace {
 using namespace mjmech::base;
 
+enum TestEnum : int {
+  kValue = 9,
+  kBigger = 23,
+  kStuff = 99,
+};
+
+std::map<TestEnum, const char*> TestEnumMapper() {
+  return std::map<TestEnum, const char*>{
+    { kValue, "kValue" },
+    { kBigger, "kBigger" },
+    { kStuff, "kStuff" },
+  };
+}
+
 struct SampleStruct {
   boost::posix_time::ptime timestamp;
   double value1 = 1;
@@ -34,6 +48,7 @@ struct SampleStruct {
   uint64_t value7 = 7;
   uint64_t value8 = 8;
   std::array<double, 6> value9 = {};
+  TestEnum value_enum = kValue;
 
   template <typename Archive>
   void Serialize(Archive* a) {
@@ -48,6 +63,7 @@ struct SampleStruct {
     a->Visit(MJ_NVP(value7));
     a->Visit(MJ_NVP(value8));
     a->Visit(MJ_NVP(value9));
+    a->Visit(MJ_ENUM(value_enum, TestEnumMapper));
   }
 };
 

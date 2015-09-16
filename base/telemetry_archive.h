@@ -110,6 +110,29 @@ class TelemetryWriteArchive {
     }
 
     template <typename NameValuePair>
+    void VisitEnumeration(const NameValuePair& pair) {
+      stream_.Write(static_cast<uint32_t>(TF::FieldType::kEnum));
+
+      FastOStringStream enum_ostr;
+      TelemetryWriteStream<FastOStringStream> enum_stream(enum_ostr);
+
+      const auto items = pair.enumeration_mapper();
+      uint32_t nvalues = items.size();
+      enum_stream.Write(nvalues);
+
+      for (const auto& pair: items) {
+        uint32_t key = pair.first;
+        std::string value = pair.second;
+        enum_stream.Write(key);
+        enum_stream.Write(value);
+      }
+
+      stream_.Write(static_cast<uint32_t>(enum_ostr.data()->size()));
+      stream_.RawWrite(enum_ostr.data()->data(),
+                       enum_ostr.data()->size());
+    }
+
+    template <typename NameValuePair>
     void VisitScalar(const NameValuePair& pair) {
       VisitHelper(pair, pair.value(), 0);
     }

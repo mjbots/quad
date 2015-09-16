@@ -132,6 +132,7 @@
 ///         * type-specified data
 ///  19 - enum
 ///     * field specific data
+///       * uint32_t size
 ///       * uint32_t nvalues
 ///       * nvalues copies of
 ///         * uint32_t value
@@ -309,6 +310,13 @@ class TelemetryReadStream {
 
   TelemetryReadStream(Stream& istr) : istr_(istr) {}
   Stream& stream() { return istr_; }
+
+  void Ignore(size_t size) {
+    istr_.ignore(size);
+    if (static_cast<std::size_t>(istr_.gcount()) != size) {
+      throw SystemError(boost::system::error_code(boost::asio::error::eof));
+    }
+  }
 
   template <typename T>
   inline T Read() {

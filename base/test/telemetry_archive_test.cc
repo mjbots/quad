@@ -24,6 +24,20 @@
 using namespace mjmech::base;
 
 namespace {
+enum TestEnumeration : int {
+  kValue1,
+  kNextValue = 5,
+  kAnotherValue = 20,
+};
+
+auto TestEnumMapper = []() {
+  return std::map<TestEnumeration, const char*>{
+    {kValue1, "kValue1"},
+    {kNextValue, "kNextValue"},
+    {kAnotherValue, "kAnotherValue"},
+  };
+};
+
 struct SubTest1 {
   uint32_t value_u32 = 3;
 
@@ -50,6 +64,7 @@ struct Test1 {
   boost::posix_time::ptime value_time;
   std::vector<std::vector<int32_t> > value_vecvec = { { 1, 2 }, { 3} };
   std::vector<SubTest1> value_vecobj = { SubTest1(), SubTest1() };
+  TestEnumeration value_enum = kNextValue;
 
   template <typename Archive>
   void Serialize(Archive* a ) {
@@ -69,6 +84,7 @@ struct Test1 {
     a->Visit(MJ_NVP(value_time));
     a->Visit(MJ_NVP(value_vecvec));
     a->Visit(MJ_NVP(value_vecobj));
+    a->Visit(MJ_ENUM(value_enum, TestEnumMapper));
   }
 };
 }
@@ -116,6 +132,7 @@ BOOST_AUTO_TEST_CASE(TelemetryArchiveSchemaTest) {
       {
         value_u32: kUInt32;
       };
+  value_enum: kEnum;
 }
 )XX";
   BOOST_CHECK_EQUAL(repr.str(), expected);
@@ -171,6 +188,7 @@ BOOST_AUTO_TEST_CASE(TelemetryArchiveDataTest) {
       } = [
       {3},
       {3}];
+  value_enum: kEnum = kNextValue (5);
 }
 )XX";
   BOOST_CHECK_EQUAL(repr.str(), expected);

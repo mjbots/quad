@@ -259,6 +259,30 @@ class TelemetrySchemaReader {
         RenderVariableSize(indent, present, data_policy);
         break;
       }
+      case TF::FieldType::kEnum: {
+        stream_.Read<uint32_t>(); // size (ignored)
+        uint32_t nvalues = stream_.Read<uint32_t>();
+        std::map<int, std::string> items;
+        for (uint32_t i = 0; i < nvalues; i++) {
+          uint32_t key = stream_.Read<uint32_t>();
+          std::string value = stream_.ReadString();
+          items.insert(std::make_pair(key, value));
+        }
+        if (data_) {
+          uint32_t value = data_->Read<uint32_t>();
+          if (DisplayNames(data_policy)) {
+            out_ << " = ";
+          }
+          if (DisplayData(data_policy)) {
+            if (items.count(value)) {
+              out_ << boost::format("%s (%d)") % items[value] % value;
+            } else {
+              out_ << value;
+            }
+          }
+        }
+        break;
+      }
       default: {
         BOOST_ASSERT(false);
       }
@@ -322,10 +346,10 @@ class TelemetrySchemaReader {
       case TF::FieldType::kVector: { return "kVector"; }
       case TF::FieldType::kObject: { return "kObject"; }
       case TF::FieldType::kOptional: { return "kOptional"; }
-      default: {
-        BOOST_ASSERT(false);
-      }
+      case TF::FieldType::kEnum: { return "kEnum"; }
     }
+    BOOST_ASSERT(false);
+    return "";
   }
 
   TelemetryReadStream<>& stream_;

@@ -15,6 +15,7 @@
 #pragma once
 
 #include <tuple>
+#include <type_traits>
 
 namespace mjmech {
 namespace base {
@@ -32,7 +33,35 @@ template <typename T>
 NameValuePair<T> MakeNameValuePair(T* value, const char* name) {
   return NameValuePair<T>(value, name);
 }
+
+template <typename RawEnumeration, typename NameMapGetter>
+class EnumerationNameValuePair : public NameValuePair<int> {
+ public:
+  EnumerationNameValuePair(RawEnumeration* value,
+                           const char* name,
+                           NameMapGetter mapper)
+      : NameValuePair<int>(reinterpret_cast<int*>(value), name),
+        enumeration_mapper(mapper) {}
+
+  static_assert(
+      std::is_same<
+        typename std::underlying_type<RawEnumeration>::type,
+        int>::value,
+      "enumerations must be int");
+
+  const NameMapGetter enumeration_mapper;
+};
+
+template <typename RawEnumeration, typename NameMapGetter>
+EnumerationNameValuePair<RawEnumeration, NameMapGetter>
+MakeEnumerationNameValuePair(RawEnumeration* raw_enumeration,
+                             const char* name,
+                             NameMapGetter getter) {
+  return EnumerationNameValuePair<RawEnumeration, NameMapGetter>(
+      raw_enumeration, name, getter);
+}
 }
 }
 
 #define MJ_NVP(x) mjmech::base::MakeNameValuePair(&x, #x)
+#define MJ_ENUM(x, getter) mjmech::base::MakeEnumerationNameValuePair(&x, #x, getter)

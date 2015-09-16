@@ -32,12 +32,24 @@ struct VisitArchive {
     VisitHelper(pair, 0);
   }
 
+  template <typename NameValuePair>
+  void VisitEnumeration(const NameValuePair& pair) {
+    static_cast<Derived*>(this)->VisitScalar(pair);
+  }
+
  private:
   template <typename NameValuePair>
   auto VisitHelper(const NameValuePair& pair, int) ->
       decltype(pair.value()->Serialize(
                    static_cast<Derived*>(nullptr))) {
     static_cast<Derived*>(this)->VisitSerializable(pair);
+  }
+
+  template <typename NameValuePair>
+  auto VisitHelper(const NameValuePair& pair, int) ->
+      decltype(pair.enumeration_mapper) {
+    static_cast<Derived*>(this)->VisitEnumeration(pair);
+    return pair.enumeration_mapper;
   }
 
   template <typename NameValuePair>

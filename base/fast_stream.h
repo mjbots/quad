@@ -70,6 +70,11 @@ class FastIStringStream {
  public:
   FastIStringStream(const std::string& data) : data_(data) {}
 
+  void ignore(size_t length) {
+    last_read_ = std::min(data_.size() - offset_, length);
+    offset_ += last_read_;
+  }
+
   void read(char* buffer, size_t length) {
     last_read_ = std::min(data_.size() - offset_, length);
     std::memcpy(buffer, &data_[offset_], last_read_);
