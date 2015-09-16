@@ -168,9 +168,9 @@ class Ahrs::Impl : boost::noncopyable {
     const auto& covariance = estimator_->covariance();
 
     for (size_t i = 0; i < base::AttitudeEstimator::kNumStates; i++) {
-      data_debug_.state[i] = state[i];
+      data_debug_.ukf_state[i] = state[i];
       for (size_t j = 0; j < base::AttitudeEstimator::kNumStates; j++) {
-        data_debug_.covariance[
+        data_debug_.ukf_covariance[
             i * base::AttitudeEstimator::kNumStates + j] = covariance(i, j);
       }
     }

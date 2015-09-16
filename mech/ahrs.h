@@ -67,11 +67,20 @@ class Ahrs : boost::noncopyable {
 
   Parameters* parameters();
 
-  enum State {
+  enum State : int {
     kUninitialized,
     kInitializing,
     kOperational,
     kFault,
+  };
+
+  static std::map<State, const char*> StateMapper() {
+    return std::map<State, const char*>{
+      { kUninitialized, "kUninitialized" },
+      { kInitializing, "kInitializing" },
+      { kOperational, "kOperational" },
+      { kFault, "kFault" },
+    };
   };
 
   struct AhrsData {
@@ -90,7 +99,7 @@ class Ahrs : boost::noncopyable {
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(timestamp));
-      // a->Visit(MJ_NVP(state));
+      a->Visit(MJ_ENUM(state, StateMapper));
       a->Visit(MJ_NVP(attitude));
       a->Visit(MJ_NVP(yaw_deg));
       a->Visit(MJ_NVP(pitch_deg));
@@ -108,8 +117,8 @@ class Ahrs : boost::noncopyable {
 
     boost::posix_time::ptime timestamp;
 
-    std::array<double, kFilterSize> state = {};
-    std::array<double, kFilterSize * kFilterSize> covariance = {};
+    std::array<double, kFilterSize> ukf_state = {};
+    std::array<double, kFilterSize * kFilterSize> ukf_covariance = {};
     base::Point3D bias_body_deg_s;
     base::Point3D init_accel_mps2;
     int init_count = 0;
@@ -119,8 +128,8 @@ class Ahrs : boost::noncopyable {
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(timestamp));
-      a->Visit(MJ_NVP(state));
-      a->Visit(MJ_NVP(covariance));
+      a->Visit(MJ_NVP(ukf_state));
+      a->Visit(MJ_NVP(ukf_covariance));
       a->Visit(MJ_NVP(bias_body_deg_s));
       a->Visit(MJ_NVP(init_accel_mps2));
       a->Visit(MJ_NVP(init_count));
