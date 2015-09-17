@@ -32,11 +32,16 @@ class ServoInterface;
 /// commands out to some servos.
 class GaitDriver : boost::noncopyable {
  public:
-  template <typename TelemetryRegistry>
+  template <typename TelemetryRegistry,
+            typename AhrsData>
   GaitDriver(boost::asio::io_service& service,
              TelemetryRegistry* telemetry_registry,
-             ServoInterface* servo)
+             ServoInterface* servo,
+             boost::signals2::signal<void (const AhrsData*)>* body_ahrs_signal)
       : GaitDriver(service, servo) {
+    body_ahrs_signal->connect(
+        std::bind(&GaitDriver::HandleBodyAhrs<AhrsData>,
+                  this, std::placeholders::_1));
     telemetry_registry->Register("gait", &gait_data_signal_);
     telemetry_registry->Register("gait_command", &command_data_signal_);
   }
@@ -79,10 +84,29 @@ class GaitDriver : boost::noncopyable {
   GaitDriver(boost::asio::io_service& service,
              ServoInterface* servo);
 
-  enum State {
+  template <typename AhrsData>
+  void HandleBodyAhrs(const AhrsData* data) {
+    ProcessBodyAhrs(
+        data->timestamp, data->valid,
+        data->attitude, data->body_rate_deg_s);
+  }
+
+  void ProcessBodyAhrs(boost::posix_time::ptime timestamp,
+                       bool valid,
+                       const base::Quaternion& attitude,
+                       const base::Point3D& body_rate_deg_s);
+
+  enum State : int {
     kUnpowered,
     kActive,
   };
+
+  static std::map<State, const char*> StateMapper() {
+    return std::map<State, const char*>{
+      { kUnpowered, "kUnpowered" },
+      { kActive, "kActive" },
+    };
+  }
 
   struct GaitData {
     boost::posix_time::ptime timestamp;
@@ -93,17 +117,22 @@ class GaitDriver : boost::noncopyable {
     base::Transform body_world;
     base::Transform robot_world;
 
+    base::Quaternion attitude;
+    base::Point3D body_rate_deg_s;
+
     std::array<base::Point3D, 4> legs;
     JointCommand command;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(timestamp));
-      //a->Visit(MJ_NVP(state));
+      a->Visit(MJ_ENUM(state, StateMapper));
       a->Visit(MJ_NVP(body_robot));
       a->Visit(MJ_NVP(cog_robot));
       a->Visit(MJ_NVP(body_world));
       a->Visit(MJ_NVP(robot_world));
+      a->Visit(MJ_NVP(attitude));
+      a->Visit(MJ_NVP(body_rate_deg_s));
       a->Visit(MJ_NVP(legs));
       a->Visit(MJ_NVP(command));
     }

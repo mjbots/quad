@@ -78,6 +78,7 @@ struct Command {
   double body_roll_deg = 0;
   double body_yaw_deg = 0;
   double lift_height_percent = 100;
+  double time_rate_percent = 100;
 
   template <typename Archive>
   void Serialize(Archive* a) {
@@ -91,6 +92,7 @@ struct Command {
     a->Visit(MJ_NVP(body_roll_deg));
     a->Visit(MJ_NVP(body_yaw_deg));
     a->Visit(MJ_NVP(lift_height_percent));
+    a->Visit(MJ_NVP(time_rate_percent));
   }
 };
 

@@ -58,6 +58,11 @@ struct RippleConfig {
   double static_margin_mm = 20.0;
   double servo_speed_dps = 360.0;
 
+  double attitude_p_mm_deg = 0.0;
+  double attitude_i_mm_dps = 0.0;
+  double rate_p_mm_dps = 0.0;
+  double rate_i_mm_dps2 = 0.0;
+
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(mechanical));
@@ -74,6 +79,10 @@ struct RippleConfig {
     a->Visit(MJ_NVP(static_stable_factor));
     a->Visit(MJ_NVP(static_margin_mm));
     a->Visit(MJ_NVP(servo_speed_dps));
+    a->Visit(MJ_NVP(attitude_p_mm_deg));
+    a->Visit(MJ_NVP(attitude_i_mm_dps));
+    a->Visit(MJ_NVP(rate_p_mm_dps));
+    a->Visit(MJ_NVP(rate_i_mm_dps2));
   }
 };
 
@@ -205,7 +214,9 @@ class RippleGait : public Gait {
   }
 
   virtual JointCommand AdvanceTime(double delta_s) override {
-    return AdvancePhase(delta_s / phase_time_s());
+    return AdvancePhase(
+        (command_.time_rate_percent / 100.0) *
+        delta_s / phase_time_s());
   }
 
   const RippleState& state() const { return state_; }
@@ -279,7 +290,8 @@ class RippleGait : public Gait {
   struct Action;
 
   boost::optional<Options> SelectCommandOptions(Command* command) const {
-    if (config_.leg_order.empty()) { return Options(); }
+    if (config_.leg_order.empty()) { return boost::none; }
+    if (command->time_rate_percent > 100.0) { return boost::none; }
 
     // First, iterate, solving IK for all legs in time until we
     // find the point at which the first leg is unsolvable.

@@ -147,6 +147,8 @@ class Ahrs::Impl : boost::noncopyable {
     data_.timestamp = boost::posix_time::microsec_clock::universal_time();
     data_debug_.timestamp = data_.timestamp;
 
+    data_.valid = (data_.state == kOperational);
+
     auto euler = data_.attitude.euler();
 
     data_.yaw_deg = base::Degrees(euler.yaw_rad);

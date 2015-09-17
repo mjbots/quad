@@ -19,6 +19,7 @@
 
 #include "base/component_archives.h"
 
+#include "ahrs.h"
 #include "gait_driver.h"
 #include "mech_defines.h"
 #include "mjmech_imu_driver.h"
@@ -39,9 +40,11 @@ class MechWarfare : boost::noncopyable {
     m_.servo_base.reset(new Mech::ServoBase(service_, factory_));
     m_.servo.reset(new Mech::Servo(m_.servo_base.get()));
     m_.imu.reset(new MjmechImuDriver(context));
+    m_.ahrs.reset(new Ahrs(context, m_.imu->imu_data_signal()));
     m_.gait_driver.reset(new GaitDriver(service_,
                                         &context.telemetry_registry,
-                                        m_.servo.get()));
+                                        m_.servo.get(),
+                                        m_.ahrs->ahrs_data_signal()));
     m_.servo_monitor.reset(new ServoMonitor(context, m_.servo.get()));
   }
 
@@ -53,16 +56,18 @@ class MechWarfare : boost::noncopyable {
   struct Members {
     std::unique_ptr<Mech::ServoBase> servo_base;
     std::unique_ptr<Mech::Servo> servo;
-    std::unique_ptr<GaitDriver> gait_driver;
     std::unique_ptr<MjmechImuDriver> imu;
+    std::unique_ptr<Ahrs> ahrs;
+    std::unique_ptr<GaitDriver> gait_driver;
     std::unique_ptr<ServoMonitor> servo_monitor;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(servo_base));
       a->Visit(MJ_NVP(servo));
-      a->Visit(MJ_NVP(gait_driver));
       a->Visit(MJ_NVP(imu));
+      a->Visit(MJ_NVP(ahrs));
+      a->Visit(MJ_NVP(gait_driver));
       a->Visit(MJ_NVP(servo_monitor));
     }
   };

@@ -87,6 +87,7 @@ class Ahrs : boost::noncopyable {
     boost::posix_time::ptime timestamp;
 
     State state = kUninitialized;
+    bool valid = false;
     base::Quaternion attitude;
     double yaw_deg = 0.0;
     double pitch_deg = 0.0;
@@ -100,6 +101,7 @@ class Ahrs : boost::noncopyable {
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(timestamp));
       a->Visit(MJ_ENUM(state, StateMapper));
+      a->Visit(MJ_NVP(valid));
       a->Visit(MJ_NVP(attitude));
       a->Visit(MJ_NVP(yaw_deg));
       a->Visit(MJ_NVP(pitch_deg));
@@ -137,6 +139,10 @@ class Ahrs : boost::noncopyable {
       a->Visit(MJ_NVP(last_measurement));
     }
   };
+
+  boost::signals2::signal<void (const AhrsData*)>* ahrs_data_signal() {
+    return &ahrs_data_signal_;
+  }
 
  private:
   boost::signals2::signal<void (const AhrsData*)> ahrs_data_signal_;
