@@ -41,6 +41,26 @@ struct AxisMapping {
   int sign_rotate = 1;
   int body_z = -1;
   int sign_body_z = 1;
+
+  int body_pitch = -1;
+  int sign_body_pitch = 1;
+  int body_roll = -1;
+  int sign_body_roll = 1;
+
+  int body_x = -1;
+  int sign_body_x = 1;
+  int body_y = -1;
+  int sign_body_y = 1;
+
+  int turret_x = -1;
+  int sign_turret_x = 1;
+
+  int turret_y = -1;
+  int sign_turret_y = 1;
+
+  int crouch = -1;
+  int body = -1;
+  int turret = -1;
 };
 
 AxisMapping GetAxisMapping(const LinuxInput* input) {
@@ -53,19 +73,44 @@ AxisMapping GetAxisMapping(const LinuxInput* input) {
   if (features.capabilities.test(ABS_X)) {
     result.translate_x = ABS_X;
     result.sign_translate_x = 1;
+
+    result.body_x = ABS_X;
+    result.sign_body_x = 1;
   }
   if (features.capabilities.test(ABS_Y)) {
     result.translate_y = ABS_Y;
     result.sign_translate_y = -1;
+
+    result.body_y = ABS_Y;
+    result.sign_body_y = -1;
   }
+
   if (features.capabilities.test(ABS_RX)) {
     result.rotate = ABS_RX;
     result.sign_rotate = 1;
+
+    result.body_roll = ABS_RX;
+    result.sign_body_roll = 1;
+
+    result.turret_x = ABS_RX;
+    result.sign_turret_x = 1;
   }
   if (features.capabilities.test(ABS_RY)) {
     result.body_z = ABS_RY;
     result.sign_body_z = -1;
+
+    result.body_pitch = ABS_RY;
+    result.sign_body_pitch = 1;
+
+    result.turret_y = ABS_RY;
+    result.sign_turret_y = -1;
   }
+
+  result.crouch = BTN_A;
+  result.body = BTN_TR;
+  result.turret = BTN_TL;
+
+
   return result;
 }
 
@@ -80,6 +125,11 @@ struct Options {
   double idle_body_y_mm = 5.0;
   double forward_body_y_mm = 15.0;
   double reverse_body_y_mm = -5.0;
+  double max_body_x_mm = 30;
+  double max_body_y_mm = 30;
+  double max_body_pitch_deg = 20;
+  double max_body_roll_deg = 20;
+  double max_turret_rate_deg_s = 20;
   bool verbose = false;
 
   template <typename Archive>
@@ -94,16 +144,40 @@ struct Options {
     a->Visit(MJ_NVP(idle_body_y_mm));
     a->Visit(MJ_NVP(forward_body_y_mm));
     a->Visit(MJ_NVP(reverse_body_y_mm));
+    a->Visit(MJ_NVP(max_body_x_mm));
+    a->Visit(MJ_NVP(max_body_y_mm));
+    a->Visit(MJ_NVP(max_body_pitch_deg));
+    a->Visit(MJ_NVP(max_body_roll_deg));
+    a->Visit(MJ_NVP(max_turret_rate_deg_s));
     a->Visit(MJ_NVP(verbose));
   }
 };
 
-std::string SerializeCommand(const Command& command_in) {
-  Command command = command_in;
+struct MechMessage {
+  Command gait;
+
+  struct Turret {
+    boost::optional<double> move_x_deg_s;
+    boost::optional<double> move_y_deg_s;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(move_x_deg_s));
+      a->Visit(MJ_NVP(move_y_deg_s));
+    }
+  } turret;
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(MJ_NVP(gait));
+    a->Visit(MJ_NVP(turret));
+  }
+};
+
+std::string SerializeCommand(const MechMessage& message_in) {
+  MechMessage message = message_in;
   std::ostringstream ostr;
-  pt::ptree tree;
-  tree.add_child("gait", PropertyTreeWriteArchive().Accept(&command).tree());
-  pt::write_json(ostr, tree);
+  pt::write_json(ostr, PropertyTreeWriteArchive().Accept(&message).tree());
   return ostr.str();
 }
 
@@ -144,9 +218,8 @@ class Commander {
     FailIf(ec);
     StartRead();
 
-    if (event_.ev_type == EV_KEY &&
-        event_.code == BTN_A) {
-      btn_a_ = (event_.value != 0);
+    if (event_.ev_type == EV_KEY) {
+      key_map_[event_.code] = event_.value;
     }
   }
 
@@ -154,7 +227,9 @@ class Commander {
     FailIf(ec);
     StartTimer();
 
-    Command command;
+    MechMessage message;
+    Command& command = message.gait;
+
     auto maybe_map = [this](double* destination, int mapping, int sign,
                             double minval, double maxval) {
       if (mapping < 0) { return; }
@@ -174,20 +249,46 @@ class Commander {
       *destination = value;
     };
 
-    maybe_map(&command.translate_x_mm_s, mapping_.translate_x,
-              mapping_.sign_translate_x,
-              -options_.max_translate_x_mm_s, options_.max_translate_x_mm_s);
-    maybe_map(&command.translate_y_mm_s, mapping_.translate_y,
-              mapping_.sign_translate_y,
-              -options_.max_translate_y_mm_s, options_.max_translate_y_mm_s);
-    maybe_map(&command.rotate_deg_s, mapping_.rotate,
-              mapping_.sign_rotate,
-              -options_.max_rotate_deg_s, options_.max_rotate_deg_s);
-    maybe_map(&command.body_z_mm, mapping_.body_z,
-              mapping_.sign_body_z,
-              options_.min_body_z_mm, options_.max_body_z_mm);
+    if (key_map_[mapping_.body]) {
+      maybe_map(&command.body_x_mm, mapping_.body_x,
+                mapping_.sign_body_x,
+                -options_.max_body_x_mm, options_.max_body_x_mm);
+      maybe_map(&command.body_y_mm, mapping_.body_y,
+                mapping_.sign_body_y,
+                -options_.max_body_y_mm, options_.max_body_y_mm);
+      maybe_map(&command.body_pitch_deg, mapping_.body_pitch,
+                mapping_.sign_body_pitch,
+                -options_.max_body_pitch_deg, options_.max_body_pitch_deg);
+      maybe_map(&command.body_roll_deg, mapping_.body_roll,
+                mapping_.sign_body_roll,
+                -options_.max_body_roll_deg, options_.max_body_roll_deg);
+    } else if (key_map_[mapping_.turret]) {
+      message.turret.move_x_deg_s = 0.0;
+      message.turret.move_y_deg_s = 0.0;
+      maybe_map(&(*message.turret.move_x_deg_s),
+                mapping_.turret_x, mapping_.sign_turret_x,
+                -options_.max_turret_rate_deg_s,
+                options_.max_turret_rate_deg_s);
+      maybe_map(&(*message.turret.move_y_deg_s),
+                mapping_.turret_y, mapping_.sign_turret_y,
+                -options_.max_turret_rate_deg_s,
+                options_.max_turret_rate_deg_s);
+    } else {
+      maybe_map(&command.translate_x_mm_s, mapping_.translate_x,
+                mapping_.sign_translate_x,
+                -options_.max_translate_x_mm_s, options_.max_translate_x_mm_s);
+      maybe_map(&command.translate_y_mm_s, mapping_.translate_y,
+                mapping_.sign_translate_y,
+                -options_.max_translate_y_mm_s, options_.max_translate_y_mm_s);
+      maybe_map(&command.rotate_deg_s, mapping_.rotate,
+                mapping_.sign_rotate,
+                -options_.max_rotate_deg_s, options_.max_rotate_deg_s);
+      maybe_map(&command.body_z_mm, mapping_.body_z,
+                mapping_.sign_body_z,
+                options_.min_body_z_mm, options_.max_body_z_mm);
+    }
 
-    if (btn_a_) {
+    if (key_map_[mapping_.crouch]) {
       command.body_z_mm = options_.min_body_z_mm;
     }
 
@@ -197,29 +298,34 @@ class Commander {
         command.rotate_deg_s != 0;
     command.lift_height_percent = active ? 100.0 : 0.0;
 
-    if (active) {
-      if (command.translate_y_mm_s > 0.0) {
-        command.body_y_mm = options_.forward_body_y_mm;
-      } else if (command.translate_y_mm_s < 0.0) {
-        command.body_y_mm = options_.reverse_body_y_mm;
+    if (!key_map_[mapping_.body]) {
+      if (active) {
+        if (command.translate_y_mm_s > 0.0) {
+          command.body_y_mm = options_.forward_body_y_mm;
+        } else if (command.translate_y_mm_s < 0.0) {
+          command.body_y_mm = options_.reverse_body_y_mm;
+        } else {
+          command.body_y_mm = options_.idle_body_y_mm;
+        }
       } else {
         command.body_y_mm = options_.idle_body_y_mm;
       }
-    } else {
-      command.body_y_mm = options_.idle_body_y_mm;
     }
 
     if (options_.verbose) {
-      std::cout << boost::format("x=%4.0f y=%4.0f r=%4.0f z=%4.0f\r") %
+      std::cout << boost::format("x=%4.0f y=%4.0f r=%4.0f z=%4.0f bx=%4.0f by=%4.0f\r") %
           command.translate_x_mm_s %
           command.translate_y_mm_s %
           command.rotate_deg_s %
-          command.body_z_mm;
+          command.body_z_mm %
+          command.body_x_mm %
+          command.body_y_mm;
       std::cout.flush();
     }
 
-    std::string message = SerializeCommand(command);
-    socket_->send_to(boost::asio::buffer(message), target_);
+
+    std::string message_str = SerializeCommand(message);
+    socket_->send_to(boost::asio::buffer(message_str), target_);
   }
 
   const Options options_;
@@ -231,7 +337,7 @@ class Commander {
   const AxisMapping mapping_;
 
   LinuxInput::Event event_;
-  bool btn_a_ = false;
+  std::map<int, int> key_map_;
 };
 
 int work(int argc, char** argv) {
@@ -241,7 +347,8 @@ int work(int argc, char** argv) {
 
   std::string target = "192.168.0.123";
   std::string joystick;
-  Command command;
+  MechMessage message;
+  Command& command = message.gait;
   Options options;
 
   po::options_description desc("Allowable options");
@@ -281,8 +388,8 @@ int work(int argc, char** argv) {
   udp::socket socket(service, udp::v4());
 
   if (joystick.empty()) {
-    auto message = SerializeCommand(command);
-    socket.send_to(boost::asio::buffer(message), *it);
+    auto message_str = SerializeCommand(message);
+    socket.send_to(boost::asio::buffer(message_str), *it);
   } else {
     LinuxInput input(service, joystick);
 
