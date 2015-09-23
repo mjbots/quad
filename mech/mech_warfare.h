@@ -25,6 +25,7 @@
 #include "mjmech_imu_driver.h"
 #include "ripple.h"
 #include "servo_monitor.h"
+#include "turret.h"
 
 namespace mjmech {
 namespace mech {
@@ -46,6 +47,7 @@ class MechWarfare : boost::noncopyable {
                                         m_.servo.get(),
                                         m_.ahrs->ahrs_data_signal()));
     m_.servo_monitor.reset(new ServoMonitor(context, m_.servo.get()));
+    m_.turret.reset(new Turret(context, m_.servo_base.get()));
   }
 
   MechWarfare(boost::asio::io_service&);
@@ -60,6 +62,7 @@ class MechWarfare : boost::noncopyable {
     std::unique_ptr<Ahrs> ahrs;
     std::unique_ptr<GaitDriver> gait_driver;
     std::unique_ptr<ServoMonitor> servo_monitor;
+    std::unique_ptr<Turret> turret;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -69,6 +72,7 @@ class MechWarfare : boost::noncopyable {
       a->Visit(MJ_NVP(ahrs));
       a->Visit(MJ_NVP(gait_driver));
       a->Visit(MJ_NVP(servo_monitor));
+      a->Visit(MJ_NVP(turret));
     }
   };
 
