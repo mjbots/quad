@@ -87,6 +87,16 @@ class JsonWriteArchive : public VisitArchive<JsonWriteArchive> {
     ostr_ << "\n" << MakeChildIndent() << "]";
   }
 
+  template <typename NameValuePair, typename T>
+  void VisitValue(const NameValuePair& nvp, boost::optional<T>* data, int) {
+    if (!(*data)) {
+      ostr_ << "null";
+    } else {
+      VisitArchive<JsonWriteArchive>::Visit(
+          MakeNameValuePair(&(*data), nvp.name()));
+    }
+  }
+
   template <typename NameValuePair>
   void VisitValue(const NameValuePair& nvp, std::string* value, int) {
     ostr_ << "\"" << *value << "\"";
