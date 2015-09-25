@@ -75,20 +75,11 @@ class Turret : boost::noncopyable {
     bool fire_enabled = false;
     int fire_count = 0;
 
-    struct Position {
-      double x_deg = 0.0;
-      double y_deg = 0.0;
-
-      template <typename Archive>
-      void Serialize(Archive* a) {
-        a->Visit(MJ_NVP(x_deg));
-        a->Visit(MJ_NVP(y_deg));
-      }
-    };
-
-    Position imu;
-    Position absolute;
-    boost::optional<Position> imu_command;
+    TurretCommand::Imu imu;
+    TurretCommand::Absolute absolute;
+    boost::optional<TurretCommand::Imu> imu_command;
+    int last_sequence = -1;
+    TurretCommand::Rate rate;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -99,6 +90,8 @@ class Turret : boost::noncopyable {
       a->Visit(MJ_NVP(imu));
       a->Visit(MJ_NVP(absolute));
       a->Visit(MJ_NVP(imu_command));
+      a->Visit(MJ_NVP(last_sequence));
+      a->Visit(MJ_NVP(rate));
     }
   };
 
