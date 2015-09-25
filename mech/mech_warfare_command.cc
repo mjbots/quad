@@ -20,11 +20,13 @@
 #include <boost/property_tree/json_parser.hpp>
 
 #include "base/fail.h"
+#include "base/json_archive.h"
 #include "base/linux_input.h"
 #include "base/program_options_archive.h"
 #include "base/property_tree_archive.h"
 
 #include "gait.h"
+#include "turret_command.h"
 
 namespace {
 using namespace mjmech::base;
@@ -155,17 +157,7 @@ struct Options {
 
 struct MechMessage {
   Command gait;
-
-  struct Turret {
-    boost::optional<double> move_x_deg_s;
-    boost::optional<double> move_y_deg_s;
-
-    template <typename Archive>
-    void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(move_x_deg_s));
-      a->Visit(MJ_NVP(move_y_deg_s));
-    }
-  } turret;
+  TurretCommand turret;
 
   template <typename Archive>
   void Serialize(Archive* a) {
@@ -176,9 +168,7 @@ struct MechMessage {
 
 std::string SerializeCommand(const MechMessage& message_in) {
   MechMessage message = message_in;
-  std::ostringstream ostr;
-  pt::write_json(ostr, PropertyTreeWriteArchive().Accept(&message).tree());
-  return ostr.str();
+  return mjmech::base::JsonWriteArchive::Write(&message);
 }
 
 class Commander {
@@ -263,13 +253,13 @@ class Commander {
                 mapping_.sign_body_roll,
                 -options_.max_body_roll_deg, options_.max_body_roll_deg);
     } else if (key_map_[mapping_.turret]) {
-      message.turret.move_x_deg_s = 0.0;
-      message.turret.move_y_deg_s = 0.0;
-      maybe_map(&(*message.turret.move_x_deg_s),
+      message.turret.sequence = sequence_++;
+      message.turret.rate = TurretCommand::Rate();
+      maybe_map(&(message.turret.rate->x_deg_s),
                 mapping_.turret_x, mapping_.sign_turret_x,
                 -options_.max_turret_rate_deg_s,
                 options_.max_turret_rate_deg_s);
-      maybe_map(&(*message.turret.move_y_deg_s),
+      maybe_map(&(message.turret.rate->y_deg_s),
                 mapping_.turret_y, mapping_.sign_turret_y,
                 -options_.max_turret_rate_deg_s,
                 options_.max_turret_rate_deg_s);
@@ -338,6 +328,7 @@ class Commander {
 
   LinuxInput::Event event_;
   std::map<int, int> key_map_;
+  int sequence_ = 0;
 };
 
 int work(int argc, char** argv) {
