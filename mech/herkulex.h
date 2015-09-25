@@ -469,6 +469,8 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
                       std::function<void (base::ErrorCode,
                                           MemReadResponse)> handler) {
     auto post_error = [&](base::ErrorCode ec) {
+      ec.Append(boost::format("when reading servo 0x%02x") %
+                static_cast<int>(to_send.servo));
       this->Post(std::bind(handler, ec, MemReadResponse()));
     };
 
