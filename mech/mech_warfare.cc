@@ -131,6 +131,9 @@ void MechWarfare::HandleRead(base::ErrorCode ec, std::size_t size) {
 void MechWarfare::HandleMessage(const boost::property_tree::ptree& tree) {
   auto optional_gait = tree.get_child_optional("gait");
   if (optional_gait) { HandleMessageGait(*optional_gait); }
+
+  auto optional_turret = tree.get_child_optional("turret");
+  if (optional_turret) { HandleMessageTurret(*optional_turret); }
 }
 
 void MechWarfare::HandleMessageGait(const boost::property_tree::ptree& tree) {
@@ -138,6 +141,13 @@ void MechWarfare::HandleMessageGait(const boost::property_tree::ptree& tree) {
   base::PropertyTreeReadArchive(
       tree, base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&command);
   m_.gait_driver->SetCommand(command);
+}
+
+void MechWarfare::HandleMessageTurret(const boost::property_tree::ptree& tree) {
+  TurretCommand command;
+  base::PropertyTreeReadArchive(
+      tree, base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&command);
+  m_.turret->SetCommand(command);
 }
 
 }

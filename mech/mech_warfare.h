@@ -101,6 +101,7 @@ class MechWarfare : boost::noncopyable {
   void HandleRead(base::ErrorCode, std::size_t);
   void HandleMessage(const boost::property_tree::ptree&);
   void HandleMessageGait(const boost::property_tree::ptree&);
+  void HandleMessageTurret(const boost::property_tree::ptree&);
 
   boost::asio::io_service& service_;
 
