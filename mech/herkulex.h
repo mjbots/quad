@@ -174,6 +174,9 @@ class HerkuleXProtocol : boost::noncopyable {
     return init.result.get();
   }
 
+  template <typename Handler>
+  void Post(Handler handler) { service_.post(handler); }
+
  private:
   void RawSendPacket(const Packet& packet, base::ErrorHandler handler) {
     if (!stream_) {
@@ -250,7 +253,7 @@ class HerkuleXProtocol : boost::noncopyable {
       char c = 0;
       istr.read(&c, 1);
       if (istr.gcount() != 1) {
-        throw std::runtime_error("inconsistent header");
+        base::Fail("inconsistent header");
       }
       buf = buf + std::string(&c, 1);
       if (buf.size() > 2) {
@@ -465,55 +468,67 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
                       typename Base::Packet to_send,
                       std::function<void (base::ErrorCode,
                                           MemReadResponse)> handler) {
-    try {
-      if (ec) {
-        ec.Append(boost::format("when reading register %d") %
-                  static_cast<int>(reg));
-        throw base::SystemError(ec);
-      }
+    auto post_error = [&](base::ErrorCode ec) {
+      this->Post(std::bind(handler, ec, MemReadResponse()));
+    };
 
-      if (result.servo != to_send.servo && to_send.servo != BROADCAST) {
-        throw base::SystemError::einval(
-            (boost::format("Synchronization error, sent request for servo "
-                           "0x%02x, response from 0x%02x") %
-             static_cast<int>(to_send.servo) %
-             static_cast<int>(result.servo)).str());
-      }
-
-      if (result.command != (0x40 | to_send.command)) {
-        throw base::SystemError::einval(
-            (boost::format(
-                "Expected response command 0x%02x, received 0x%02x") %
-             static_cast<int>(0x40 | to_send.command) %
-             static_cast<int>(result.command)).str());
-      }
-
-      if (result.data.size() != length + 4) {
-        throw base::SystemError::einval(
-            (boost::format("Expected length response %d, received %d") %
-             static_cast<int>(length + 4) %
-             result.data.size()).str());
-      }
-
-      MemReadResponse response = result;
-
-      if (response.register_start != reg) {
-        throw base::SystemError::einval(
-            (boost::format("Expected register 0x%02x, received 0x%02x") %
-             static_cast<int>(reg) %
-             static_cast<int>(response.register_start)).str());
-      }
-
-      if (response.length != length) {
-        throw base::SystemError::einval(
-            (boost::format("Expected length %d, received %d") %
-             static_cast<int>(length) %
-             static_cast<int>(response.length)).str());
-      }
-      handler(base::ErrorCode(), response);
-    } catch (base::SystemError& se) {
-      handler(se.error_code(), MemReadResponse());
+    if (ec) {
+      ec.Append(boost::format("when reading register %d") %
+                static_cast<int>(reg));
+      post_error(ec);
+      return;
     }
+
+    if (result.servo != to_send.servo && to_send.servo != BROADCAST) {
+      post_error(
+          base::ErrorCode::einval(
+              (boost::format("Synchronization error, sent request for servo "
+                             "0x%02x, response from 0x%02x") %
+               static_cast<int>(to_send.servo) %
+               static_cast<int>(result.servo)).str()));
+      return;
+    }
+
+    if (result.command != (0x40 | to_send.command)) {
+      post_error(
+          base::ErrorCode::einval(
+              (boost::format(
+                  "Expected response command 0x%02x, received 0x%02x") %
+               static_cast<int>(0x40 | to_send.command) %
+               static_cast<int>(result.command)).str()));
+      return;
+    }
+
+    if (result.data.size() != length + 4) {
+      post_error(
+          base::ErrorCode::einval(
+              (boost::format("Expected length response %d, received %d") %
+               static_cast<int>(length + 4) %
+               result.data.size()).str()));
+      return;
+    }
+
+    MemReadResponse response = result;
+
+    if (response.register_start != reg) {
+      post_error(
+          base::ErrorCode::einval(
+              (boost::format("Expected register 0x%02x, received 0x%02x") %
+               static_cast<int>(reg) %
+               static_cast<int>(response.register_start)).str()));
+      return;
+    }
+
+    if (response.length != length) {
+      post_error(
+          base::ErrorCode::einval(
+              (boost::format("Expected length %d, received %d") %
+               static_cast<int>(length) %
+               static_cast<int>(response.length)).str()));
+      return;
+    }
+
+    handler(base::ErrorCode(), response);
   }
 
   typedef std::function<void (const boost::system::error_code&,
@@ -546,36 +561,45 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
       typename Base::StatusResponse result,
       typename Base::Packet to_send,
       StatusHandler handler) {
-    try {
-      if (ec) { throw base::SystemError(ec); }
+    auto post_error = [&](base::ErrorCode ec) {
+      this->Post(std::bind(handler, ec, typename Base::StatusResponse()));
+    };
 
-      if (result.servo != to_send.servo && to_send.servo != BROADCAST) {
-        throw base::SystemError::einval(
-            (boost::format(
-                "Synchronization error, send status to servo 0x%02x, "
-                "response from 0x%02x") %
-             static_cast<int>(to_send.servo) %
-             static_cast<int>(result.servo)).str());
-      }
-
-      if (result.command != ACK_STAT) {
-        throw base::SystemError::einval(
-            (boost::format(
-                "Expected response command 0x%02x, received 0x%02x") %
-             static_cast<int>(ACK_STAT) %
-             static_cast<int>(result.command)).str());
-      }
-
-      if (result.data.size() != 2) {
-        throw base::SystemError::einval(
-            (boost::format("Received status of incorrect size, expected 2, "
-                           "got %d") %
-             result.data.size()).str());
-      }
-      handler(base::ErrorCode(), typename Base::StatusResponse(result));
-    } catch (base::SystemError& se) {
-      handler(se.error_code(), typename Base::StatusResponse());
+    if (ec) {
+      post_error(ec);
+      return;
     }
+
+    if (result.servo != to_send.servo && to_send.servo != BROADCAST) {
+      post_error(
+          base::ErrorCode::einval(
+              (boost::format(
+                  "Synchronization error, send status to servo 0x%02x, "
+                  "response from 0x%02x") %
+               static_cast<int>(to_send.servo) %
+               static_cast<int>(result.servo)).str()));
+      return;
+    }
+
+    if (result.command != ACK_STAT) {
+      post_error(
+          base::ErrorCode::einval(
+              (boost::format(
+                  "Expected response command 0x%02x, received 0x%02x") %
+               static_cast<int>(ACK_STAT) %
+               static_cast<int>(result.command)).str()));
+      return;
+    }
+
+    if (result.data.size() != 2) {
+      post_error(
+          base::ErrorCode::einval(
+              (boost::format("Received status of incorrect size, expected 2, "
+                             "got %d") %
+               result.data.size()).str()));
+      return;
+    }
+    handler(base::ErrorCode(), typename Base::StatusResponse(result));
   }
 
   template <typename Handler>
