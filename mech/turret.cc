@@ -182,6 +182,8 @@ class Turret::Impl : boost::noncopyable {
 
   void HandleFireControl(base::ErrorCode ec,
                          Mech::ServoBase::MemReadResponse response) {
+    FailIf(ec);
+
     data_.fire_enabled = response.register_data.at(0) != 0;
     data_.agitator_enabled = response.register_data.at(1) != 0;
 
