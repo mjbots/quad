@@ -132,6 +132,25 @@ class PropertyTreeReadArchive
 
   template <typename T>
   void VisitHelper(const char* name,
+                   boost::optional<T>* optional,
+                   int) {
+    auto optional_child = tree_.get_child_optional(name);
+    if (!optional_child) {
+      *optional = boost::none;
+      return;
+    }
+    auto child = *optional_child;
+    if (child.template get_value<std::string>() == "null") {
+      *optional = boost::none;
+      return;
+    }
+    *optional = T();
+    PropertyTreeReadArchive(child).
+        Visit(FakeNvp<T>(name, &(**optional)));
+  }
+
+  template <typename T>
+  void VisitHelper(const char* name,
                    T* value,
                    long) {
     auto optional_child = tree_.get_child_optional(name);

@@ -94,7 +94,7 @@ class JsonWriteArchive : public VisitArchive<JsonWriteArchive> {
       ostr_ << "null";
     } else {
       VisitArchive<JsonWriteArchive>::Visit(
-          MakeNameValuePair(&(*data), nvp.name()));
+          MakeNameValuePair(&(**data), nvp.name()));
     }
   }
 
