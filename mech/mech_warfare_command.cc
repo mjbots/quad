@@ -95,7 +95,7 @@ AxisMapping GetAxisMapping(const LinuxInput* input) {
     result.sign_body_roll = 1;
 
     result.turret_x = ABS_RX;
-    result.sign_turret_x = 1;
+    result.sign_turret_x = -1;
   }
   if (features.capabilities.test(ABS_RY)) {
     result.body_z = ABS_RY;
@@ -105,7 +105,7 @@ AxisMapping GetAxisMapping(const LinuxInput* input) {
     result.sign_body_pitch = 1;
 
     result.turret_y = ABS_RY;
-    result.sign_turret_y = -1;
+    result.sign_turret_y = 1;
   }
 
   result.crouch = BTN_A;
@@ -131,7 +131,7 @@ struct Options {
   double max_body_y_mm = 30;
   double max_body_pitch_deg = 20;
   double max_body_roll_deg = 20;
-  double max_turret_rate_deg_s = 20;
+  double max_turret_rate_deg_s = 100;
   bool verbose = false;
 
   template <typename Archive>
