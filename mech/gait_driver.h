@@ -64,7 +64,7 @@ class GaitDriver : boost::noncopyable {
 
     /// This long with no commands will result in stopping the gait
     /// engine and setting all servos to unpowered.
-    double command_timeout_s = 15.0;
+    double command_timeout_s = 2.0;
 
     /// Before entering brake mode, spend this long getting into the
     /// idle pose.
