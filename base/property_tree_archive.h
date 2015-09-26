@@ -168,9 +168,10 @@ class PropertyTreeReadArchive
       *optional = boost::none;
       return;
     }
-    *optional = T();
-    PropertyTreeReadArchive(child).
-        Visit(FakeNvp<T>(pair.name(), &(**optional)));
+    T value;
+    PropertyTreeReadArchive(tree_).
+        Visit(FakeNvp<T>(pair.name(), &value));
+    *optional = value;
   }
 
   template <typename NameValuePair, typename T>

@@ -129,3 +129,53 @@ BOOST_AUTO_TEST_CASE(VectorPropertyTreeTest) {
     BOOST_CHECK_EQUAL(ostr.str(), expected);
   }
 }
+
+namespace {
+struct OptionalContainer {
+  int foo = 3;
+  boost::optional<TestData> optional_sub;
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(MJ_NVP(foo));
+    a->Visit(MJ_NVP(optional_sub));
+  }
+};
+}
+
+BOOST_AUTO_TEST_CASE(ReadOptionalStructTest) {
+  {
+    std::string source = R"XX({
+  "foo": 9,
+  "optional_sub": null
+})XX";
+
+    std::istringstream inf(source);
+    boost::property_tree::ptree tree;
+    boost::property_tree::read_json(inf, tree);
+
+    OptionalContainer dut;
+    PropertyTreeReadArchive(tree).Accept(&dut);
+    BOOST_CHECK(!dut.optional_sub);
+  }
+
+  {
+    std::string source = R"XX({
+  "foo": 9,
+  "optional_sub": {
+    "intval": 99,
+    "doubleval": 100.3
+  }
+})XX";
+
+    std::istringstream inf(source);
+    boost::property_tree::ptree tree;
+    boost::property_tree::read_json(inf, tree);
+
+    OptionalContainer dut;
+    PropertyTreeReadArchive(tree).Accept(&dut);
+
+    BOOST_REQUIRE(dut.optional_sub);
+    BOOST_CHECK_EQUAL(dut.optional_sub->intval, 99);
+  }
+}
