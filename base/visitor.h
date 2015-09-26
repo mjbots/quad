@@ -14,42 +14,73 @@
 
 #pragma once
 
+///@file
+///
+/// These classes and macros support instances of the Visitor pattern.
+/// Objects which wish to be visited implement a templated "Serialize"
+/// method which takes a single templated "Archive*" argument.  It
+/// then calls the "Visit" method on the archive multiple times, each
+/// passing something modeling the NameValuePair concept.
+
 #include <tuple>
 #include <type_traits>
 
 namespace mjmech {
 namespace base {
 
+/// template <typename T>
+/// class NameValuePair {
+///  public:
+///   const char* name() const;
+///   T get_value() const; // may return a T or const T&
+///   void set_value(T); // may take a T or const T&
+/// };
+
+
+/// A class which models the NameValuePair concept that stores a
+/// pointer to the underlying data.
 template <typename T>
-struct NameValuePair : public std::tuple<T*, const char*> {
-  NameValuePair(T* value, const char* name)
-      : std::tuple<T*, const char*>(value, name) {}
-  T* value() { return std::get<0>(*this); }
-  T* value() const { return std::get<0>(*this); }
-  const char* name() const { return std::get<1>(*this); }
+class ReferenceNameValuePair {
+ public:
+  ReferenceNameValuePair(T* value, const char* name)
+      : value_(value), name_(name) {}
+  const T& get_value() const { return *value_; }
+  void set_value(const T& value) const { *value_ = value; }
+
+  T* value() const { return value_; }
+
+  const char* name() const { return name_; }
+
+ private:
+  T* const value_;
+  const char* const name_;
 };
 
 template <typename T>
-NameValuePair<T> MakeNameValuePair(T* value, const char* name) {
-  return NameValuePair<T>(value, name);
+ReferenceNameValuePair<T> MakeNameValuePair(T* value, const char* name) {
+  return ReferenceNameValuePair<T>(value, name);
 }
 
 template <typename RawEnumeration, typename NameMapGetter>
-class EnumerationNameValuePair : public NameValuePair<int> {
+class EnumerationNameValuePair {
  public:
+  typedef RawEnumeration Base;
   EnumerationNameValuePair(RawEnumeration* value,
                            const char* name,
                            NameMapGetter mapper)
-      : NameValuePair<int>(reinterpret_cast<int*>(value), name),
-        enumeration_mapper(mapper) {}
+      : enumeration_mapper(mapper),
+        value_(value),
+        name_(name) {}
 
-  static_assert(
-      std::is_same<
-        typename std::underlying_type<RawEnumeration>::type,
-        int>::value,
-      "enumerations must be int");
+  int get_value() const { return static_cast<int>(*value_); }
+  void set_value(int value) const { *value_ = static_cast<RawEnumeration>(value); }
+  const char* name() const { return name_; }
 
   const NameMapGetter enumeration_mapper;
+
+ private:
+  RawEnumeration* const value_;
+  const char* const name_;
 };
 
 template <typename RawEnumeration, typename NameMapGetter>

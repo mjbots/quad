@@ -17,8 +17,11 @@
 #include "visitor.h"
 #include "visit_archive.h"
 
+#include "program_options_archive_detail.h"
+
 namespace mjmech {
 namespace base {
+
 class ProgramOptionsArchive : public VisitArchive<ProgramOptionsArchive> {
  public:
   ProgramOptionsArchive(
@@ -37,11 +40,12 @@ class ProgramOptionsArchive : public VisitArchive<ProgramOptionsArchive> {
   void VisitScalar(const NameValuePair& pair) {
     (*description_).add_options()(
         (prefix_ + pair.name()).c_str(),
-        boost::program_options::value(pair.value()));
+        new detail::ProgramOptionsArchiveValue<NameValuePair>(pair));
   }
 
   boost::program_options::options_description* const description_;
   const std::string prefix_;
 };
+
 }
 }

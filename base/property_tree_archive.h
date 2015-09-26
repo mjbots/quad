@@ -98,8 +98,28 @@ class PropertyTreeReadArchive
   }
 
   template <typename NameValuePair>
+  void VisitEnumeration(const NameValuePair& pair) {
+    auto optional_child = tree_.get_child_optional(pair.name());
+    if (!optional_child) { HandleMissing(pair.name()); return; }
+    auto child = *optional_child;
+    // First, try to parse this as a stringified enumeration, then as
+    // an integer if that fails.
+    std::string maybe_enum = child.template get_value<std::string>();
+    for (const auto& kp: pair.enumeration_mapper()) {
+      if (kp.second == maybe_enum) {
+        pair.set_value(static_cast<int>(kp.first));
+        return;
+      }
+    }
+
+    // No strings matched, so try treating it as a number.
+    pair.set_value(child.template get_value<int>());
+  }
+
+  template <typename NameValuePair>
   void VisitScalar(const NameValuePair& pair) {
-    VisitHelper(pair.name(), pair.value(), 0);
+    typename std::decay<decltype(pair.get_value())>::type* dummy = nullptr;
+    VisitHelper(pair, dummy, 0);
   }
 
   template <typename T>
@@ -109,18 +129,21 @@ class PropertyTreeReadArchive
 
     const char* name() const { return name_; }
     T* value() const { return value_; }
+    const T& get_value() const { return *value_; }
+    void set_value(const T& value) const { *value_ = value; }
 
    private:
     const char* const name_;
     T* const value_;
   };
 
-  template <typename T>
-  void VisitHelper(const char* name,
-                   std::vector<T>* value_vector,
+  template <typename NameValuePair, typename T>
+  void VisitHelper(const NameValuePair& pair,
+                   std::vector<T>*,
                    int) {
-    auto optional_child = tree_.get_child_optional(name);
-    if (!optional_child) { HandleMissing(name); return; }
+    auto value_vector = pair.value();
+    auto optional_child = tree_.get_child_optional(pair.name());
+    if (!optional_child) { HandleMissing(pair.name()); return; }
     auto child = *optional_child;
     value_vector->clear();
     for (auto it = child.begin(); it != child.end(); ++it) {
@@ -130,11 +153,12 @@ class PropertyTreeReadArchive
     }
   }
 
-  template <typename T>
-  void VisitHelper(const char* name,
-                   boost::optional<T>* optional,
+  template <typename NameValuePair, typename T>
+  void VisitHelper(const NameValuePair& pair,
+                   boost::optional<T>*,
                    int) {
-    auto optional_child = tree_.get_child_optional(name);
+    auto optional = pair.value();
+    auto optional_child = tree_.get_child_optional(pair.name());
     if (!optional_child) {
       *optional = boost::none;
       return;
@@ -146,17 +170,17 @@ class PropertyTreeReadArchive
     }
     *optional = T();
     PropertyTreeReadArchive(child).
-        Visit(FakeNvp<T>(name, &(**optional)));
+        Visit(FakeNvp<T>(pair.name(), &(**optional)));
   }
 
-  template <typename T>
-  void VisitHelper(const char* name,
-                   T* value,
+  template <typename NameValuePair, typename T>
+  void VisitHelper(const NameValuePair& pair,
+                   T*,
                    long) {
-    auto optional_child = tree_.get_child_optional(name);
-    if (!optional_child) { HandleMissing(name); return; }
+    auto optional_child = tree_.get_child_optional(pair.name());
+    if (!optional_child) { HandleMissing(pair.name()); return; }
     auto child = *optional_child;
-    *value = child.template get_value<T>();
+    pair.set_value(child.template get_value<T>());
   }
 
  private:

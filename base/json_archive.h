@@ -62,8 +62,16 @@ class JsonWriteArchive : public VisitArchive<JsonWriteArchive> {
   }
 
   template <typename NameValuePair>
+  void VisitEnumeration(const NameValuePair& pair) {
+    std::string value = pair.enumeration_mapper()[
+        static_cast<typename NameValuePair::Base>(pair.get_value())];
+    VisitValue(pair, &value, 0);
+  }
+
+  template <typename NameValuePair>
   void VisitScalar(const NameValuePair& pair) {
-    VisitValue(pair, pair.value(), 0);
+    auto value = pair.get_value();
+    VisitValue(pair, &value, 0);
   }
 
   template <typename NameValuePair, typename T>

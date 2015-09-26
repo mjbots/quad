@@ -36,6 +36,18 @@ struct TestStruct {
   std::vector<int> vecint = {1, 2, 3};
   std::array<SubStruct, 2> arraysub;
 
+  enum TestEnum {
+    kFun,
+    kStuff,
+  } test_enum = kStuff;;
+
+  static std::map<TestEnum, const char*> TestEnumMapper() {
+    return std::map<TestEnum, const char*>{
+      { kFun, "kFun" },
+      { kStuff, "kStuff" },
+    };
+  }
+
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(v));
@@ -44,6 +56,7 @@ struct TestStruct {
     a->Visit(MJ_NVP(sub));
     a->Visit(MJ_NVP(vecint));
     a->Visit(MJ_NVP(arraysub));
+    a->Visit(MJ_ENUM(test_enum, TestEnumMapper));
   }
 };
 }
@@ -72,7 +85,8 @@ BOOST_AUTO_TEST_CASE(BasicJsonWriteTest) {
     {
       "predicate":true
     }
-  ]
+  ],
+  "test_enum":"kStuff"
 })XX";
   BOOST_CHECK_EQUAL(ostr.str(), expected);
 }

@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <type_traits>
+
 #include <boost/assert.hpp>
 
 #include "fast_stream.h"
@@ -73,6 +75,7 @@ class TelemetryWriteArchive {
   template <typename T>
   struct FakeNvp {
     FakeNvp(T* value) : value_(value) {}
+    const T& get_value() const { return *value_; }
     T* value() const { return value_; }
 
     T* const value_;
@@ -209,7 +212,8 @@ class TelemetryWriteArchive {
 
     template <typename NameValuePair>
     void VisitScalar(const NameValuePair& pair) {
-      VisitHelper(pair, pair.value(), 0);
+      typename std::decay<decltype(pair.get_value())>::type * dummy = nullptr;
+      VisitHelper(pair, dummy, 0);
     }
 
    private:
@@ -225,8 +229,9 @@ class TelemetryWriteArchive {
 
     template <typename NameValuePair, typename T, std::size_t N>
     void VisitHelper(const NameValuePair& pair,
-                     std::array<T, N>* value,
+                     std::array<T, N>*,
                      int) {
+      auto value = pair.value();
       for (int i = 0; i < N; i++) {
         VisitArchive<DataVisitor>::Visit(
             FakeNvp<T>(&(*value)[i]));
@@ -235,8 +240,9 @@ class TelemetryWriteArchive {
 
     template <typename NameValuePair, typename T>
     void VisitHelper(const NameValuePair& pair,
-                     std::vector<T>* value,
+                     std::vector<T>*,
                      int) {
+      auto value = pair.value();
       stream_.Write(static_cast<uint32_t>(value->size()));
       for (int i = 0; i < static_cast<int>(value->size()); i++) {
         VisitArchive<DataVisitor>::Visit(
@@ -246,8 +252,9 @@ class TelemetryWriteArchive {
 
     template <typename NameValuePair, typename T>
     void VisitHelper(const NameValuePair& pair,
-                     boost::optional<T>* value,
+                     boost::optional<T>*,
                      int) {
+      auto value = pair.value();
       stream_.Write(static_cast<uint8_t>(*value ? 1 : 0));
       if (*value) {
         VisitArchive<DataVisitor>::Visit(
@@ -264,7 +271,7 @@ class TelemetryWriteArchive {
 
     template <typename NameValuePair>
     void VisitPrimitive(const NameValuePair& pair) {
-      stream_.Write(*pair.value());
+      stream_.Write(pair.get_value());
     }
 
     WriteStream& stream_;
