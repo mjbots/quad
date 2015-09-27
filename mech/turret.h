@@ -50,6 +50,10 @@ class Turret : boost::noncopyable {
     double min_y_deg = -35;
     double max_y_deg = 35;
 
+    double fire_duration_s = 0.2;
+    double agitator_pwm = 0.5;
+    double fire_motor_pwm = 0.75;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(gimbal_address));
@@ -60,6 +64,9 @@ class Turret : boost::noncopyable {
       a->Visit(MJ_NVP(max_x_deg));
       a->Visit(MJ_NVP(min_y_deg));
       a->Visit(MJ_NVP(max_y_deg));
+      a->Visit(MJ_NVP(fire_duration_s));
+      a->Visit(MJ_NVP(agitator_pwm));
+      a->Visit(MJ_NVP(fire_motor_pwm));
     }
   };
 

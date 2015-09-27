@@ -262,7 +262,6 @@ class Commander {
                 mapping_.sign_body_roll,
                 -options_.max_body_roll_deg, options_.max_body_roll_deg);
     } else if (key_map_[mapping_.turret]) {
-      message.turret.sequence = sequence_++;
       message.turret.rate = TurretCommand::Rate();
       maybe_map(&(message.turret.rate->x_deg_s),
                 mapping_.turret_x, mapping_.sign_turret_x,
@@ -272,6 +271,12 @@ class Commander {
                 mapping_.turret_y, mapping_.sign_turret_y,
                 -options_.max_turret_rate_deg_s,
                 options_.max_turret_rate_deg_s);
+
+      const bool do_fire =
+          linux_input_->abs_info(mapping_.fire).scaled() > 0.0;
+      message.turret.fire.sequence = sequence_++;
+      using FM = TurretCommand::Fire::Mode;
+      message.turret.fire.command = do_fire ? FM::kCont : FM::kOff;
     } else {
       maybe_map(&command.translate_x_mm_s, mapping_.translate_x,
                 mapping_.sign_translate_x,

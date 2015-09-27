@@ -18,12 +18,6 @@ namespace mjmech {
 namespace mech {
 
 struct TurretCommand {
-  /// The sequence number must be updated to something different
-  /// for a new fire command to take effect.  This number should
-  /// never be set by C++ software running in this process, but
-  /// should only be taken directly from network messages.
-  int sequence = 0;
-
   /// Command the turret to move at the given rate in the IMU
   /// coordinate frame.
   struct Rate {
@@ -67,6 +61,12 @@ struct TurretCommand {
   boost::optional<Absolute> absolute;
 
   struct Fire {
+    /// The sequence number must be updated to something different
+    /// for a new fire command to take effect.  This number should
+    /// never be set by C++ software running in this process, but
+    /// should only be taken directly from network messages.
+    int sequence = 0;
+
     enum Mode : int {
       kOff,
           kInPos1,
@@ -93,6 +93,7 @@ struct TurretCommand {
 
     template <typename Archive>
     void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(sequence));
       a->Visit(MJ_ENUM(command, &Fire::CommandMapper));
     }
   };
@@ -104,7 +105,6 @@ struct TurretCommand {
 
   template <typename Archive>
   void Serialize(Archive* a) {
-    a->Visit(MJ_NVP(sequence));
     a->Visit(MJ_NVP(rate));
     a->Visit(MJ_NVP(imu));
     a->Visit(MJ_NVP(absolute));

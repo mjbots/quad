@@ -59,6 +59,22 @@ struct LedControl {
   const int length = 1;
 };
 
+struct FireTime {
+  const int position = 80;
+  const int length = 1;
+};
+
+struct FirePwm {
+  const int position = 81;
+  const int length = 1;
+};
+
+struct AgitatorPwm {
+  const int position = 82;
+  const int length = 1;
+};
+
+
 class Parser {
  public:
   Parser(const Mech::ServoBase::MemReadResponse& response)
@@ -262,9 +278,6 @@ void Turret::SetCommand(const TurretCommand& command) {
 
   turret_command_signal_(&log);
 
-  // Just ignore commands with a repeated sequence.
-  if (command.sequence == impl_->data_.last_sequence) { return; }
-
   if (command.absolute) {
     // Absolute takes precedence.
 
@@ -322,6 +335,51 @@ void Turret::SetCommand(const TurretCommand& command) {
   impl_->servo_->RamWrite(
       impl_->parameters_.fire_control_address, LedControl(), leds,
       std::bind(&Impl::HandleWrite, impl_.get(), std::placeholders::_1));
+
+  // Now do the fire control, only accept things where the sequence
+  // number has advanced.
+  if (command.fire.sequence != impl_->data_.last_sequence) {
+    using FM = TurretCommand::Fire::Mode;
+
+    impl_->data_.last_sequence = command.fire.sequence;
+
+    const double fire_time_s = [&]() {
+      switch (command.fire.command) {
+        case FM::kOff: { return 0.0; }
+        case FM::kNow1: { return impl_->parameters_.fire_duration_s; }
+        case FM::kCont: { return 0.5; }
+        case FM::kInPos1:
+        case FM::kInPos2:
+        case FM::kInPos3:
+        case FM::kInPos5: {
+          // TODO jpieper: Once we do support this (if we do at all),
+          // we should probably capture the command around so that we
+          // can keep trying to execute it as the gimbal moves into
+          // position.
+          base::Fail("Unsupported fire control command");
+          break;
+        }
+      }
+      base::AssertNotReached();
+    }();
+
+    const auto u8 = [](int val) {
+      return static_cast<uint8_t>(std::max(0, std::min(255, val)));
+    };
+    const uint8_t fire_data[] = {
+      u8(fire_time_s / 0.01),
+      u8(impl_->parameters_.fire_motor_pwm * 255),
+    };
+    std::string fire_data_str(reinterpret_cast<const char*>(fire_data),
+                              sizeof(fire_data));
+    impl_->servo_->MemWrite(
+        impl_->servo_->RAM_WRITE,
+        impl_->parameters_.fire_control_address,
+        FireTime().position,
+        fire_data_str,
+        std::bind(&Impl::HandleWrite, impl_.get(),
+                  std::placeholders::_1));
+  }
 }
 
 Turret::Parameters* Turret::parameters() { return &impl_->parameters_; }
