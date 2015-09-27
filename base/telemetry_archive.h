@@ -124,7 +124,7 @@ class TelemetryWriteArchive {
       enum_stream.Write(nvalues);
 
       for (const auto& pair: items) {
-        uint32_t key = pair.first;
+        uint32_t key = static_cast<uint32_t>(pair.first);
         std::string value = pair.second;
         enum_stream.Write(key);
         enum_stream.Write(value);
