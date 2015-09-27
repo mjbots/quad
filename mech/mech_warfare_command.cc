@@ -60,6 +60,9 @@ struct AxisMapping {
   int turret_y = -1;
   int sign_turret_y = 1;
 
+  int fire = -1;
+  int laser = -1;
+
   int crouch = -1;
   int body = -1;
   int turret = -1;
@@ -111,6 +114,9 @@ AxisMapping GetAxisMapping(const LinuxInput* input) {
   result.crouch = BTN_A;
   result.body = BTN_TR;
   result.turret = BTN_TL;
+
+  result.laser = BTN_WEST;
+  result.fire = ABS_RZ;
 
 
   return result;
@@ -210,6 +216,9 @@ class Commander {
 
     if (event_.ev_type == EV_KEY) {
       key_map_[event_.code] = event_.value;
+      if (event_.code == mapping_.laser && event_.value) {
+        laser_on_ = !laser_on_;
+      }
     }
   }
 
@@ -302,6 +311,8 @@ class Commander {
       }
     }
 
+    message.turret.laser_on = laser_on_;
+
     if (options_.verbose) {
       std::cout << boost::format(
           "x=%4.0f y=%4.0f r=%4.0f z=%4.0f bx=%4.0f by=%4.0f") %
@@ -336,6 +347,7 @@ class Commander {
   boost::asio::deadline_timer timer_;
   const AxisMapping mapping_;
 
+  bool laser_on_ = false;
   LinuxInput::Event event_;
   std::map<int, int> key_map_;
   int sequence_ = 0;

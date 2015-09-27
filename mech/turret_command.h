@@ -100,6 +100,7 @@ struct TurretCommand {
   Fire fire;
 
   bool agitator = false;
+  bool laser_on = false;
 
   template <typename Archive>
   void Serialize(Archive* a) {
@@ -109,6 +110,7 @@ struct TurretCommand {
     a->Visit(MJ_NVP(absolute));
     a->Visit(MJ_NVP(fire));
     a->Visit(MJ_NVP(agitator));
+    a->Visit(MJ_NVP(laser_on));
   }
 };
 

@@ -54,6 +54,11 @@ struct AbsoluteYaw {
   const int length = 2;
 };
 
+struct LedControl {
+  const int position = 0x35;
+  const int length = 1;
+};
+
 class Parser {
  public:
   Parser(const Mech::ServoBase::MemReadResponse& response)
@@ -311,6 +316,12 @@ void Turret::SetCommand(const TurretCommand& command) {
     // care of.
     impl_->data_.rate = *command.rate;
   }
+
+  // Update the laser status.
+  uint8_t leds = (command.laser_on ? 1 : 0) << 2;
+  impl_->servo_->RamWrite(
+      impl_->parameters_.fire_control_address, LedControl(), leds,
+      std::bind(&Impl::HandleWrite, impl_.get(), std::placeholders::_1));
 }
 
 Turret::Parameters* Turret::parameters() { return &impl_->parameters_; }
