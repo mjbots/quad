@@ -23,6 +23,10 @@
 namespace mjmech {
 namespace base {
 
+void AssertNotReached() {
+  Fail("assert not reached");
+}
+
 namespace {
 std::string FormatFrame(const std::string& frame) {
   size_t openparen = frame.find_first_of('(');
