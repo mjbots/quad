@@ -62,6 +62,7 @@ struct AxisMapping {
 
   int fire = -1;
   int laser = -1;
+  int agitator = -1;
 
   int crouch = -1;
   int body = -1;
@@ -117,7 +118,7 @@ AxisMapping GetAxisMapping(const LinuxInput* input) {
 
   result.laser = BTN_WEST;
   result.fire = ABS_RZ;
-
+  result.agitator = BTN_NORTH;
 
   return result;
 }
@@ -317,6 +318,9 @@ class Commander {
     }
 
     message.turret.laser_on = laser_on_;
+    message.turret.agitator =
+        key_map_[mapping_.agitator] ?
+        TurretCommand::AgitatorMode::kOn : TurretCommand::AgitatorMode::kOff;
 
     if (options_.verbose) {
       std::cout << boost::format(

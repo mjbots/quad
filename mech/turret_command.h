@@ -100,7 +100,21 @@ struct TurretCommand {
 
   Fire fire;
 
-  bool agitator = false;
+  enum class AgitatorMode {
+    kOff,
+    kOn,
+    kAuto,
+  };
+
+  static std::map<AgitatorMode, const char*> AgitatorModeMapper() {
+    return std::map<AgitatorMode, const char*>{
+      {AgitatorMode::kOff, "kOff"},
+      {AgitatorMode::kOn, "kOn"},
+      {AgitatorMode::kAuto, "kAuto"},
+    };
+  }
+
+  AgitatorMode agitator = AgitatorMode::kOff;
   bool laser_on = false;
 
   template <typename Archive>
@@ -109,7 +123,7 @@ struct TurretCommand {
     a->Visit(MJ_NVP(imu));
     a->Visit(MJ_NVP(absolute));
     a->Visit(MJ_NVP(fire));
-    a->Visit(MJ_NVP(agitator));
+    a->Visit(MJ_ENUM(agitator, AgitatorModeMapper));
     a->Visit(MJ_NVP(laser_on));
   }
 };

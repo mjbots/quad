@@ -336,6 +336,32 @@ void Turret::SetCommand(const TurretCommand& command) {
       impl_->parameters_.fire_control_address, LedControl(), leds,
       std::bind(&Impl::HandleWrite, impl_.get(), std::placeholders::_1));
 
+  const auto u8 = [](int val) {
+    return static_cast<uint8_t>(std::max(0, std::min(255, val)));
+  };
+
+  // Update the agitator status.
+  using AM = TurretCommand::AgitatorMode;
+  const uint8_t agitator_pwm = u8([&]() {
+      switch (command.agitator) {
+        case AM::kOff: {
+          return 0.0;
+        }
+        case AM::kOn: {
+          return impl_->parameters_.agitator_pwm;
+        }
+        case AM::kAuto: {
+          base::Fail("Unsupported agitator mode");
+      }
+      }
+      base::AssertNotReached();
+    }() * 255);
+
+  impl_->servo_->RamWrite(
+      impl_->parameters_.fire_control_address, AgitatorPwm(), agitator_pwm,
+      std::bind(&Impl::HandleWrite, impl_.get(), std::placeholders::_1));
+
+
   // Now do the fire control, only accept things where the sequence
   // number has advanced.
   if (command.fire.sequence != impl_->data_.last_sequence) {
@@ -363,9 +389,6 @@ void Turret::SetCommand(const TurretCommand& command) {
       base::AssertNotReached();
     }();
 
-    const auto u8 = [](int val) {
-      return static_cast<uint8_t>(std::max(0, std::min(255, val)));
-    };
     const double pwm =
         (fire_time_s == 0.0) ? 0.0 : impl_->parameters_.fire_motor_pwm;
     const uint8_t fire_data[] = {
