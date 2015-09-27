@@ -366,9 +366,11 @@ void Turret::SetCommand(const TurretCommand& command) {
     const auto u8 = [](int val) {
       return static_cast<uint8_t>(std::max(0, std::min(255, val)));
     };
+    const double pwm =
+        (fire_time_s == 0.0) ? 0.0 : impl_->parameters_.fire_motor_pwm;
     const uint8_t fire_data[] = {
       u8(fire_time_s / 0.01),
-      u8(impl_->parameters_.fire_motor_pwm * 255),
+      u8(pwm * 255),
     };
     std::string fire_data_str(reinterpret_cast<const char*>(fire_data),
                               sizeof(fire_data));
