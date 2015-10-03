@@ -358,11 +358,13 @@ class HerkuleXProtocol : boost::noncopyable {
 
 struct HerkuleXConstants {
   struct Register {
-    constexpr Register(const uint8_t position, const uint8_t length)
-        : position(position), length(length) {}
+    constexpr Register(
+        const uint8_t position, const uint8_t length, const uint8_t bit_align=8)
+        : position(position), length(length), bit_align(bit_align) {}
 
     uint8_t position;
     uint8_t length;
+    uint8_t bit_align;
   };
 
   HerkuleXConstants();
@@ -710,7 +712,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
           BOOST_ASSERT(response.register_data.size() >= field.length);
           for (int i = 0; i < field.length; i++) {
             result |= (static_cast<uint8_t>(
-                           response.register_data[i]) << (i * 8));
+                           response.register_data[i]) << (i * field.bit_align));
           }
 
           init.handler(base::ErrorCode(), result);

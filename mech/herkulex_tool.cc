@@ -146,6 +146,15 @@ const std::map<std::string, Command> g_commands = {
         for (char c: response.register_data) {
           std::cout << boost::format(" %02X") % static_cast<int>(c);
         }
+        if (response.register_data.size() > 1) {
+          int value = 0;
+          for (size_t i = 0; i < response.register_data.size(); i++) {
+            value |= (static_cast<uint8_t>(
+                          response.register_data[i]) << (i * reg.bit_align));
+          }
+
+          std::cout << boost::format(" (%d)") % value;
+        }
         std::cout << "\n";
       } } },
   { "ram_write", { kArg, [](CommandContext& ctx) {
