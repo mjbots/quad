@@ -217,6 +217,16 @@ const std::map<std::string, Command> g_commands = {
 
         init.result.get();
       } } },
+  { "list_registers", { kNoArgs, [](CommandContext& ctx) {
+        HC constants;
+        for (const auto& pair: constants.ram_registers) {
+          std::cout << boost::format("%-30s 0x%02X length=%d stride=%d") %
+              pair.first %
+              static_cast<int>(pair.second.position) %
+              static_cast<int>(pair.second.length) %
+              static_cast<int>(pair.second.bit_align) << "\n";
+        }
+      } } },
 };
 
 class CommandValue : public boost::program_options::value_semantic {
