@@ -98,8 +98,7 @@ HC::Register ParseRegister(const std::string& args) {
           (boost::format("Could not parse RAM address '%s'") %
            args).str());
     }
-    reg_address = it->second.position;
-    reg_size = it->second.length;
+    return it->second;
   }
 
   return HC::Register{
