@@ -175,6 +175,25 @@ const std::map<std::string, Command> g_commands = {
         ctx.servo.MemWrite(ctx.servo.RAM_WRITE, ctx.options.address,
                            reg.position, ostr.str(), ctx.yield);
       } } },
+  { "value_write", { kArg, [](CommandContext& ctx) {
+        std::vector<std::string> args;
+        boost::split(args, ctx.args, boost::is_any_of(":"));
+        if (args.size() < 2) {
+          throw std::runtime_error("value_write requires ADDR:VALUE");
+        }
+
+        HC::Register reg = ParseRegister(args.at(0));
+        const int value = std::stoi(args.at(1), 0, 0);
+        std::ostringstream ostr;
+        const int mask = (1 << reg.bit_align) - 1;
+        for (size_t i = 0; i < reg.length; i++) {
+          const uint8_t byte = (value >> (i * reg.bit_align)) & mask;
+          ostr.write(reinterpret_cast<const char*>(&byte), 1);
+        }
+
+        ctx.servo.MemWrite(ctx.servo.RAM_WRITE, ctx.options.address,
+                           reg.position, ostr.str(), ctx.yield);
+      } } },
   { "set_address", { kArg, [](CommandContext& ctx) {
         int new_address = std::stoi(ctx.args, 0, 0);
         ctx.servo.EepWrite(ctx.options.address, HC::id(),
