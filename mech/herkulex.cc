@@ -42,6 +42,17 @@ HerkuleXConstants::HerkuleXConstants()
   { "inpos_margin", Register{44, 1} },
   { "cal_diff", cal_diff() },
   { "torque_control", torque_control() },
+
+  { "gimbal_pitch", Register{0x50, 4} },
+  { "gimbal_yaw", Register{0x54, 4} },
+  { "gimbal_imu_pitch", Register{0x58, 4} },
+  { "gimbal_imu_yaw", Register{0x5c, 4} },
+  { "gimbal_encoder_yaw", Register{0x60, 2} },
+  { "gimbal_encoder_agc", Register{0x62, 2} },
+  { "gimbal_encoder_flags", Register{0x64, 2} },
+  { "gimbal_encoder_mag", Register{0x66, 2 } },
+  { "gimbal_absolute", Register{0x68, 2} },
+  { "gimbal_gyro_cal", Register{0x6a, 1} },
       }
 {
 }
