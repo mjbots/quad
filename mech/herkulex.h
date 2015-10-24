@@ -31,8 +31,7 @@
 namespace mjmech {
 namespace mech {
 
-template <class Factory>
-class HerkuleXProtocol : boost::noncopyable {
+class HerkuleXBase : boost::noncopyable {
  public:
   struct Packet {
     int servo = 0;
@@ -75,6 +74,103 @@ class HerkuleXProtocol : boost::noncopyable {
     bool motor_on = (reg49 & 0x40) != 0;
   };
 
+  enum Command {
+    EEP_WRITE = 0x01,
+    EEP_READ = 0x02,
+    RAM_WRITE = 0x03,
+    RAM_READ = 0x04,
+    I_JOG = 0x05,
+    S_JOG = 0x06,
+    STAT = 0x07,
+    ROLLBACK = 0x08,
+    REBOOT = 0x09,
+    ACK_EEP_WRITE = 0x41,
+    ACK_EEP_READ = 0x42,
+    ACK_RAM_WRITE = 0x43,
+    ACK_RAM_READ = 0x44,
+    ACK_I_JOG = 0x45,
+    ACK_S_JOG = 0x46,
+    ACK_STAT = 0x47,
+    ACK_ROLLBACK = 0x48,
+    ACK_REBOOT = 0x49,
+  };
+
+  enum MagicID {
+    BROADCAST = 0xfe,
+  };
+
+  struct MemReadResponse : public StatusResponse {
+    MemReadResponse() {}
+
+    MemReadResponse(const Packet& packet)
+    : StatusResponse(packet,
+                     packet.data.substr(packet.data.size() - 2)),
+      register_start(packet.data.at(0)),
+      length(packet.data.at(1)) {}
+
+    uint8_t register_start = 0;
+    uint8_t length = 0;
+    std::string register_data{
+      StatusResponse::data.substr(
+          std::min(static_cast<std::size_t>(2),
+                   StatusResponse::data.size()), length)};
+  };
+
+  static uint16_t AngleToCount(double angle_deg) {
+    return std::min(
+        1023, std::max(0, static_cast<int>(512 + angle_deg / 0.325)));
+  }
+
+  static double CountsToAngleDeg(int counts) {
+    return (counts - 512) * 0.325;
+  }
+
+  static double CountsToTemperatureC(int counts) {
+    // Note, this formula was derived from the Dongbu lookup table,
+    // and becomes terribly inaccurate below -20C.
+    return (counts - 40) * 0.5125 - 19.38;
+  }
+
+  static double CountsToVoltage(int counts) {
+    return counts * 0.074;
+  }
+};
+
+struct HerkuleXConstants {
+  struct Register {
+    constexpr Register(
+        const uint8_t position, const uint8_t length, const uint8_t bit_align=8)
+        : position(position), length(length), bit_align(bit_align) {}
+
+    uint8_t position;
+    uint8_t length;
+    uint8_t bit_align;
+  };
+
+  HerkuleXConstants();
+
+  const std::map<std::string, Register> ram_registers;
+
+  // RAM registers
+  static constexpr Register status_error() { return Register{48, 1}; }
+  static constexpr Register status_details() { return Register{49, 1}; }
+  static constexpr Register temperature_c() { return Register{55, 1}; }
+  static constexpr Register voltage() { return Register{54, 1}; }
+  static constexpr Register position() { return Register{60, 2}; }
+  // NOTE: Older versions of the datasheet say this should be a RAM
+  // register 62, but the newer ones have the correct value of 64.
+  static constexpr Register pwm() { return Register{64, 2}; }
+  static constexpr Register cal_diff() { return Register{53, 1}; }
+  static constexpr Register torque_control() { return Register{52, 1}; }
+
+
+  // EEPROM registers
+  static constexpr Register id() { return Register{6, 1}; }
+};
+
+template <class Factory>
+class HerkuleXProtocol : public HerkuleXBase {
+ public:
   HerkuleXProtocol(boost::asio::io_service& service,
                    Factory& factory)
       : service_(service),
@@ -356,86 +452,17 @@ class HerkuleXProtocol : boost::noncopyable {
   boost::asio::streambuf rx_streambuf_{512};
 };
 
-struct HerkuleXConstants {
-  struct Register {
-    constexpr Register(
-        const uint8_t position, const uint8_t length, const uint8_t bit_align=8)
-        : position(position), length(length), bit_align(bit_align) {}
-
-    uint8_t position;
-    uint8_t length;
-    uint8_t bit_align;
-  };
-
-  HerkuleXConstants();
-
-  const std::map<std::string, Register> ram_registers;
-
-  // RAM registers
-  static constexpr Register temperature_c() { return Register{55, 1}; }
-  static constexpr Register voltage() { return Register{54, 1}; }
-  static constexpr Register position() { return Register{60, 2}; }
-  // NOTE: Older versions of the datasheet say this should be a RAM
-  // register 62, but the newer ones have the correct value of 64.
-  static constexpr Register pwm() { return Register{64, 2}; }
-  static constexpr Register cal_diff() { return Register{53, 1}; }
-  static constexpr Register torque_control() { return Register{52, 1}; }
-
-
-  // EEPROM registers
-  static constexpr Register id() { return Register{6, 1}; }
-};
-
 template <class Factory>
 class HerkuleX : public HerkuleXProtocol<Factory> {
  public:
   typedef HerkuleXProtocol<Factory> Base;
+  typedef typename Base::MemReadResponse MemReadResponse;
+  typedef typename Base::Command Command;
+  typedef typename Base::MagicID MagicID;
 
   template <typename... Args>
   HerkuleX(Args&&... args)
       : HerkuleXProtocol<Factory>(std::forward<Args>(args)...) {}
-
-  enum Command {
-    EEP_WRITE = 0x01,
-    EEP_READ = 0x02,
-    RAM_WRITE = 0x03,
-    RAM_READ = 0x04,
-    I_JOG = 0x05,
-    S_JOG = 0x06,
-    STAT = 0x07,
-    ROLLBACK = 0x08,
-    REBOOT = 0x09,
-    ACK_EEP_WRITE = 0x41,
-    ACK_EEP_READ = 0x42,
-    ACK_RAM_WRITE = 0x43,
-    ACK_RAM_READ = 0x44,
-    ACK_I_JOG = 0x45,
-    ACK_S_JOG = 0x46,
-    ACK_STAT = 0x47,
-    ACK_ROLLBACK = 0x48,
-    ACK_REBOOT = 0x49,
-  };
-
-  enum MagicID {
-    BROADCAST = 0xfe,
-  };
-
-  struct MemReadResponse : public Base::StatusResponse {
-    MemReadResponse() {}
-
-    MemReadResponse(const typename Base::Packet& packet)
-        : Base::StatusResponse(packet,
-                               packet.data.substr(packet.data.size() - 2)),
-          register_start(packet.data.at(0)),
-          length(packet.data.at(1)) {}
-
-    uint8_t register_start = 0;
-    uint8_t length = 0;
-    std::string register_data{
-      Base::StatusResponse::data.substr(
-          std::min(static_cast<std::size_t>(2),
-                   Base::StatusResponse::data.size()), length)};
-  };
 
   template <typename Handler>
   BOOST_ASIO_INITFN_RESULT_TYPE(
@@ -483,7 +510,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
       return;
     }
 
-    if (result.servo != to_send.servo && to_send.servo != BROADCAST) {
+    if (result.servo != to_send.servo && to_send.servo != MagicID::BROADCAST) {
       post_error(
           base::ErrorCode::einval(
               (boost::format("Synchronization error, sent request for servo "
@@ -549,7 +576,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
 
     typename Base::Packet to_send;
     to_send.servo = servo;
-    to_send.command = STAT;
+    to_send.command = Command::STAT;
 
     this->SendReceivePacket(
         to_send, std::bind(&HerkuleX::HandleStatusResponse, this,
@@ -574,7 +601,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
       return;
     }
 
-    if (result.servo != to_send.servo && to_send.servo != BROADCAST) {
+    if (result.servo != to_send.servo && to_send.servo != MagicID::BROADCAST) {
       post_error(
           base::ErrorCode::einval(
               (boost::format(
@@ -585,12 +612,12 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
       return;
     }
 
-    if (result.command != ACK_STAT) {
+    if (result.command != Command::ACK_STAT) {
       post_error(
           base::ErrorCode::einval(
               (boost::format(
                   "Expected response command 0x%02x, received 0x%02x") %
-               static_cast<int>(ACK_STAT) %
+               static_cast<int>(Command::ACK_STAT) %
                static_cast<int>(result.command)).str()));
       return;
     }
@@ -617,7 +644,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
 
     typename Base::Packet to_send;
     to_send.servo = servo;
-    to_send.command = REBOOT;
+    to_send.command = Command::REBOOT;
 
     this->SendPacket(to_send, base::ErrorHandler(init.handler));
 
@@ -680,12 +707,12 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
 
   template <typename T, typename Handler>
   void RamWrite(uint8_t servo, T field, int value, Handler handler) {
-    MemWriteValue(RAM_WRITE, servo, field, value, handler);
+    MemWriteValue(Command::RAM_WRITE, servo, field, value, handler);
   }
 
   template <typename T, typename Handler>
   void EepWrite(uint8_t servo, T field, int value, Handler handler) {
-    MemWriteValue(EEP_WRITE, servo, field, value, handler);
+    MemWriteValue(Command::EEP_WRITE, servo, field, value, handler);
   }
 
   typedef std::function<void (base::ErrorCode, int)> IntHandler;
@@ -725,14 +752,14 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
   BOOST_ASIO_INITFN_RESULT_TYPE(
       Handler, void(boost::system::error_code, int))
   RamRead(uint8_t servo, T field, Handler handler) {
-    return MemReadValue(RAM_READ, servo, field, handler);
+    return MemReadValue(Command::RAM_READ, servo, field, handler);
   }
 
   template <typename T, typename Handler>
   BOOST_ASIO_INITFN_RESULT_TYPE(
       Handler, void(boost::system::error_code, int))
   EepRead(uint8_t servo, T field, Handler handler) {
-    return MemReadValue(EEP_READ, servo, field, handler);
+    return MemReadValue(Command::EEP_READ, servo, field, handler);
   }
 
   template <typename Targets, typename Handler>
@@ -763,9 +790,9 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
     }
 
     typename Base::Packet to_send;
-    to_send.servo = BROADCAST;
+    to_send.servo = MagicID::BROADCAST;
     to_send.data = data.str();
-    to_send.command = S_JOG;
+    to_send.command = Command::S_JOG;
 
     this->SendPacket(to_send, base::ErrorHandler(init.handler));
 

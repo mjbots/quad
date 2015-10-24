@@ -21,21 +21,55 @@
 #include "base/comm.h"
 #include "base/visitor.h"
 
+#include "herkulex.h"
+
 namespace mjmech {
 namespace mech {
-class ServoInterface;
-
 class ServoMonitor : boost::noncopyable {
  public:
+  class HerkuleXServo {
+   public:
+    virtual ~HerkuleXServo() {}
+
+    typedef boost::function<
+      void (base::ErrorCode, HerkuleXBase::MemReadResponse)> MemReadHandler;
+
+    virtual void RamRead(
+        uint8_t servo, uint8_t reg, uint8_t length, MemReadHandler) = 0;
+
+    virtual void ClearStatus(uint8_t servo, base::ErrorHandler) = 0;
+  };
+
+  template <typename T>
+  class HerkuleXServoConcrete : public HerkuleXServo {
+   public:
+    HerkuleXServoConcrete(T* base) : base_(base) {}
+    virtual ~HerkuleXServoConcrete() {}
+
+    virtual void RamRead(
+        uint8_t servo, uint8_t reg, uint8_t length, MemReadHandler handler) {
+      base_->MemRead(HerkuleXBase::RAM_READ,
+                     servo, reg, length, handler);
+    }
+
+    virtual void ClearStatus(uint8_t servo, base::ErrorHandler handler) {
+      base_->MemWrite(HerkuleXBase::RAM_WRITE,
+                      servo, HerkuleXConstants::status_details().position,
+                      std::string(0, 2), handler);
+    }
+
+    T* const base_;
+  };
+
   template <typename Context>
   ServoMonitor(Context& context,
-               ServoInterface* servo) :
+               HerkuleXServo* servo) :
       ServoMonitor(context.service, &context.telemetry_registry, servo) {}
 
   template <typename TelemetryRegistry>
   ServoMonitor(boost::asio::io_service& service,
                TelemetryRegistry* telemetry_registry,
-               ServoInterface* servo)
+               HerkuleXServo* servo)
       : ServoMonitor(service, servo) {
     telemetry_registry->Register("servo", &servo_data_signal_);
   }
@@ -72,7 +106,7 @@ class ServoMonitor : boost::noncopyable {
 
  private:
   ServoMonitor(boost::asio::io_service& service,
-               ServoInterface* servo);
+               HerkuleXServo* servo);
 
   struct ServoData {
     boost::posix_time::ptime timestamp;

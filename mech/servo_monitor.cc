@@ -30,7 +30,7 @@ class ServoMonitor::Impl : boost::noncopyable {
  public:
   Impl(ServoMonitor* parent,
        boost::asio::io_service& service,
-       ServoInterface* servo)
+       HerkuleXServo* servo)
       : parent_(parent),
         service_(service),
         servo_(servo),
@@ -76,11 +76,6 @@ class ServoMonitor::Impl : boost::noncopyable {
     // here.  If we do, then our timeout is probably too short.
     BOOST_ASSERT(!outstanding_);
 
-    // First, make sure that we have records for all the servos that
-    // have been used.
-    const std::set<int>& addresses = servo_->GetUsedAddresses();
-    for (int address: addresses) { servo_data_[address]; }
-
     switch (state_.mode) {
       case State::kIdle: { DoIdle(); break; }
       case State::kTemperature: { DoTemperature(); break; }
@@ -102,8 +97,10 @@ class ServoMonitor::Impl : boost::noncopyable {
 
     // Send out a request for voltage.
     outstanding_ = true;
-    servo_->GetVoltage({state_.last_servo},
-                       std::bind(&Impl::HandleVoltage, this,
+    servo_->RamRead(state_.last_servo,
+                    HerkuleXConstants::voltage().position,
+                    HerkuleXConstants::voltage().length,
+                    std::bind(&Impl::HandleVoltage, this,
                                  state_.last_servo,
                                  std::placeholders::_1,
                                  std::placeholders::_2));
@@ -111,62 +108,73 @@ class ServoMonitor::Impl : boost::noncopyable {
 
   void DoTemperature() {
     outstanding_ = true;
-    servo_->GetTemperature({state_.last_servo},
-                           std::bind(&Impl::HandleTemperature, this,
-                                     state_.last_servo,
-                                     std::placeholders::_1,
-                                     std::placeholders::_2));
+    servo_->RamRead(state_.last_servo,
+                    HerkuleXConstants::temperature_c().position,
+                    HerkuleXConstants::temperature_c().length,
+                    std::bind(&Impl::HandleTemperature, this,
+                              state_.last_servo,
+                              std::placeholders::_1,
+                              std::placeholders::_2));
   }
 
   void HandleVoltage(int requested_servo,
                      base::ErrorCode ec,
-                     std::vector<ServoInterface::Voltage> voltages) {
-    FailIf(ec);
+                     const HerkuleXBase::MemReadResponse& response) {
     BOOST_ASSERT(outstanding_);
     outstanding_ = false;
 
-    auto& servo = servo_data_[requested_servo];
     const auto now = boost::posix_time::microsec_clock::universal_time();
-
-    if (voltages.empty()) {
+    if (ec == boost::asio::error::operation_aborted) {
       UpdateServoTimeout(requested_servo, now);
-    } else {
-      // Yay, we got a result!
-      UpdateServoFound(requested_servo, now);
-
-      BOOST_ASSERT(voltages[0].address == requested_servo);
-      servo.voltage_V = voltages[0].voltage;
-
-      // Next time, ask for the same servo's temperature.
-      state_.mode = State::kTemperature;
+      return;
     }
+    FailIf(ec);
+
+    auto& servo = servo_data_[requested_servo];
+
+    // Yay, we got a result!
+    UpdateServoFound(requested_servo, now);
+
+    BOOST_ASSERT(response.servo == requested_servo);
+    BOOST_ASSERT(response.register_data.size() >= 1);
+    servo.voltage_V =
+        HerkuleXBase::CountsToVoltage(response.register_data[0]);
+
+    CheckFaults(response);
+
+    // Next time, ask for the same servo's temperature.
+    state_.mode = State::kTemperature;
   }
 
   void HandleTemperature(
       int requested_servo,
       base::ErrorCode ec,
-      std::vector<ServoInterface::Temperature> temperatures) {
-    FailIf(ec);
-
+      const HerkuleXBase::MemReadResponse& response) {
     BOOST_ASSERT(outstanding_);
     outstanding_ = false;
 
-    auto& servo = servo_data_[requested_servo];
     const auto now = boost::posix_time::microsec_clock::universal_time();
-
-    if (temperatures.empty()) {
+    if (ec == boost::asio::error::operation_aborted) {
       UpdateServoTimeout(requested_servo, now);
-    } else {
-      UpdateServoFound(requested_servo, now);
-
-      BOOST_ASSERT(temperatures[0].address == requested_servo);
-      servo.temperature_C = temperatures[0].temperature_C;
-
-      EmitData();
-
-      // Switch back to idle so we move on to the next servo.
-      state_.mode = State::kIdle;
+      return;
     }
+    FailIf(ec);
+
+    auto& servo = servo_data_[requested_servo];
+
+    UpdateServoFound(requested_servo, now);
+
+    BOOST_ASSERT(response.servo == requested_servo);
+    BOOST_ASSERT(response.register_data.size() >= 1);
+    servo.temperature_C =
+        HerkuleXBase::CountsToTemperatureC(response.register_data[0]);
+
+    CheckFaults(response);
+
+    EmitData();
+
+    // Switch back to idle so we move on to the next servo.
+    state_.mode = State::kIdle;
   }
 
   void UpdateServoTimeout(int requested_servo,
@@ -241,9 +249,51 @@ class ServoMonitor::Impl : boost::noncopyable {
     parent_->servo_data_signal_(&data);
   }
 
+  void CheckFaults(const HerkuleXBase::MemReadResponse& response) {
+    if (response.reg48) {
+      std::cerr << boost::format("ServoMonitor: %02X err=%s\n")
+          % response.servo % FaultToString(response);
+      servo_->ClearStatus(response.servo,
+                          std::bind(&Impl::HandleClear, this,
+                                    std::placeholders::_1));
+    }
+  }
+
+  void HandleClear(base::ErrorCode ec) {
+    FailIf(ec);
+  }
+
+  std::string FaultToString(const HerkuleXBase::MemReadResponse& response) {
+    std::vector<std::string> errors;
+
+#define CHECK(x) if (response.x) { errors.push_back(#x); }
+    CHECK(exceeded_input_voltage_limit);
+    CHECK(exceeded_allowed_pot_limit);
+    CHECK(exceeded_temperature_limit);
+    CHECK(invalid_packet);
+    CHECK(overload_detected);
+    CHECK(driver_fault_detected);
+    CHECK(eep_reg_distorted);
+    CHECK(checksum_error);
+    CHECK(unknown_command);
+    CHECK(exceeded_reg_range);
+    CHECK(garbage_detected);
+#undef CHECK
+
+    std::ostringstream ostr;
+    bool first = true;
+    for (const auto item: errors) {
+      if (!first) { ostr << "|"; }
+      ostr << item;
+      first = false;
+    }
+
+    return ostr.str();
+  }
+
   ServoMonitor* const parent_;
   boost::asio::io_service& service_;
-  ServoInterface* const servo_;
+  HerkuleXServo* const servo_;
 
   boost::asio::deadline_timer timer_;
 
@@ -274,7 +324,7 @@ class ServoMonitor::Impl : boost::noncopyable {
 };
 
 ServoMonitor::ServoMonitor(boost::asio::io_service& service,
-                           ServoInterface* servo)
+                           HerkuleXServo* servo)
     : impl_(new Impl(this, service, servo)) {}
 
 ServoMonitor::~ServoMonitor() {}

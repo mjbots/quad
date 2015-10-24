@@ -27,8 +27,10 @@ class ServoMonitorApp : boost::noncopyable {
   ServoMonitorApp(Context& context)
     : factory_(context.service) {
     m_.servo_base.reset(new Mech::ServoBase(context.service, factory_));
-    m_.servo.reset(new Mech::Servo(m_.servo_base.get()));
-    m_.servo_monitor.reset(new ServoMonitor(context, m_.servo.get()));
+    m_.servo_iface.reset(
+        new ServoMonitor::HerkuleXServoConcrete<Mech::ServoBase>(
+            m_.servo_base.get()));
+    m_.servo_monitor.reset(new ServoMonitor(context, m_.servo_iface.get()));
   }
 
   void AsyncStart(base::ErrorHandler handler) {
@@ -37,13 +39,12 @@ class ServoMonitorApp : boost::noncopyable {
 
   struct Members {
     std::unique_ptr<Mech::ServoBase> servo_base;
-    std::unique_ptr<Mech::Servo> servo;
+    std::unique_ptr<ServoMonitor::HerkuleXServo> servo_iface;
     std::unique_ptr<ServoMonitor> servo_monitor;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(servo_base));
-      a->Visit(MJ_NVP(servo));
       a->Visit(MJ_NVP(servo_monitor));
     }
   };

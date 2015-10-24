@@ -49,9 +49,9 @@ class HerkuleXServoInterface : public ServoInterface {
     };
     std::vector<Target> targets;
     for (const auto& joint: joints) {
-      used_addresses_.insert(joint.address);
       targets.emplace_back(Target{
-          MapAddress(joint.address), AngleToCount(joint.angle_deg), 0});
+          MapAddress(joint.address),
+              HerkuleXBase::AngleToCount(joint.angle_deg), 0});
     }
     servo_->SJog(targets, parameters_.pose_time_s, handler);
   }
@@ -59,8 +59,6 @@ class HerkuleXServoInterface : public ServoInterface {
   virtual void EnablePower(PowerState power_state,
                            const std::vector<int>& ids_in,
                            base::ErrorHandler handler) override {
-    UpdateAddresses(ids_in);
-
     uint8_t value = [power_state]() {
       switch (power_state) {
         case kPowerFree: { return 0x00; }
@@ -99,7 +97,6 @@ class HerkuleXServoInterface : public ServoInterface {
 
   virtual void GetPose(
       const std::vector<int>& ids, PoseHandler handler) override {
-    UpdateAddresses(ids);
     DoGetPose(base::ErrorCode(), 0,
               boost::none,
               ids, std::vector<Joint>{}, handler);
@@ -121,7 +118,7 @@ class HerkuleXServoInterface : public ServoInterface {
 
     auto result = current_result;
     if (!ec && address) {
-      result.emplace_back(Joint{*address, CountsToAngleDeg(value)});
+      result.emplace_back(Joint{*address, HerkuleXBase::CountsToAngleDeg(value)});
     }
     if (ids.empty()) { handler(base::ErrorCode(), result); return; }
 
@@ -138,7 +135,6 @@ class HerkuleXServoInterface : public ServoInterface {
 
   virtual void GetTemperature(
       const std::vector<int>& ids, TemperatureHandler handler) override {
-    UpdateAddresses(ids);
     DoGetTemperature(base::ErrorCode(), 0,
                      boost::none,
                      ids, std::vector<Temperature>{}, handler);
@@ -160,7 +156,8 @@ class HerkuleXServoInterface : public ServoInterface {
 
     auto result = current_result;
     if (!ec && address) {
-      result.emplace_back(Temperature{*address, CountsToTemperatureC(value)});
+      result.emplace_back(
+          Temperature{*address, HerkuleXBase::CountsToTemperatureC(value)});
     }
     if (ids.empty()) { handler(base::ErrorCode(), result); return; }
 
@@ -177,7 +174,6 @@ class HerkuleXServoInterface : public ServoInterface {
 
   virtual void GetVoltage(
       const std::vector<int>& ids, VoltageHandler handler) override {
-    UpdateAddresses(ids);
     DoGetVoltage(base::ErrorCode(), 0,
                  boost::none,
                  ids, std::vector<Voltage>{}, handler);
@@ -208,7 +204,8 @@ class HerkuleXServoInterface : public ServoInterface {
 
     auto result = current_result;
     if (!ec && address) {
-      result.emplace_back(Voltage{*address, CountsToVoltage(value)});
+      result.emplace_back(
+          Voltage{*address, HerkuleXBase::CountsToVoltage(value)});
     }
 
     if (ids.empty()) { handler(base::ErrorCode(), result); return; }
@@ -224,29 +221,6 @@ class HerkuleXServoInterface : public ServoInterface {
                               new_ids, result, handler));
   }
 
-  uint16_t AngleToCount(double angle_deg) const {
-    return std::min(
-        1023, std::max(0, static_cast<int>(512 + angle_deg / 0.325)));
-  }
-
-  double CountsToAngleDeg(int counts) const {
-    return (counts - 512) * 0.325;
-  }
-
-  double CountsToTemperatureC(int counts) const {
-    // Note, this formula was derived from the Dongbu lookup table,
-    // and becomes terribly inaccurate below -20C.
-    return (counts - 40) * 0.5125 - 19.38;
-  }
-
-  double CountsToVoltage(int counts) const {
-    return counts * 0.074;
-  }
-
-  virtual const std::set<int>& GetUsedAddresses() const {
-    return used_addresses_;
-  }
-
  private:
   static uint8_t MapAddress(int address) {
     if (address < 0 || address > 0xfe) {
@@ -255,16 +229,8 @@ class HerkuleXServoInterface : public ServoInterface {
     return static_cast<uint8_t>(address);
   }
 
-  template <typename Array>
-  void UpdateAddresses(const Array& array) {
-    std::copy_if(array.begin(), array.end(),
-                 std::inserter(used_addresses_, used_addresses_.begin()),
-                 [](int val) { return val != Servo::BROADCAST; });
-  }
-
   Parameters parameters_;
   Servo* const servo_;
-  std::set<int> used_addresses_;
 };
 }
 }

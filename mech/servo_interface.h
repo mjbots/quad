@@ -61,10 +61,6 @@ class ServoInterface : boost::noncopyable {
       base::ErrorCode, std::vector<Voltage>)> VoltageHandler;
 
   virtual void GetVoltage(const std::vector<int>&, VoltageHandler) = 0;
-
-  /// @return the list of addresses which have been commanded at one
-  /// point.
-  virtual const std::set<int>& GetUsedAddresses() const = 0;
 };
 
 }
