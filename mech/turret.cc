@@ -123,17 +123,23 @@ class Turret::Impl : boost::noncopyable {
     base::FailIf(ec);
     StartTimer();
 
+    if (is_disabled()) { return; }
+
     DoPoll();
   }
 
   void DoPoll() {
+    poll_count_++;
+
     // If we don't currently know it, ask for the current command.
-    if (!data_.imu_command) {
+    if (!data_.imu_command ||
+        (poll_count_ % parameters_.command_update_decimate) == 0) {
       const int kAddressPitchCommand = 0x50;
       servo_->MemRead(
           servo_->RAM_READ, parameters_.gimbal_address,
           kAddressPitchCommand, 8,
-          [this](base::ErrorCode ec, Mech::ServoBase::MemReadResponse response) {
+          [this](base::ErrorCode ec,
+                 Mech::ServoBase::MemReadResponse response) {
             HandleCommand(ec, response);
           });
     }
@@ -167,6 +173,10 @@ class Turret::Impl : boost::noncopyable {
 
   void HandleCommand(base::ErrorCode ec,
                      Mech::ServoBase::MemReadResponse response) {
+    if (ec == boost::asio::error::operation_aborted) {
+      TemporarilyDisableTurret();
+      return;
+    }
     FailIf(ec);
 
     Parser parser = response;
@@ -180,6 +190,10 @@ class Turret::Impl : boost::noncopyable {
 
   void HandleCurrent(base::ErrorCode ec,
                      Mech::ServoBase::MemReadResponse response) {
+    if (ec == boost::asio::error::operation_aborted) {
+      TemporarilyDisableTurret();
+      return;
+    }
     FailIf(ec);
 
     Parser parser = response;
@@ -250,11 +264,27 @@ class Turret::Impl : boost::noncopyable {
                   std::placeholders::_1));
   }
 
+  void TemporarilyDisableTurret() {
+    std::cerr << boost::format(
+        "Turret: Device unresponsive, disabling for %d seconds.\n") %
+        parameters_.disable_period_s;
+    disable_until_ = boost::posix_time::microsec_clock::universal_time() +
+        base::ConvertSecondsToDuration(parameters_.disable_period_s);
+  }
+
+  bool is_disabled() const {
+    if (disable_until_.is_not_a_date_time()) { return false; }
+    const auto now = boost::posix_time::microsec_clock::universal_time();
+    return now < disable_until_;
+  }
+
   Turret* const parent_;
   boost::asio::io_service& service_;
   Mech::ServoBase* const servo_;
   boost::asio::deadline_timer timer_;
   Parameters parameters_;
+  boost::posix_time::ptime disable_until_;
+  int poll_count_ = 0;
 
   TurretData data_;
 };
@@ -277,6 +307,8 @@ void Turret::SetCommand(const TurretCommand& command) {
   log.command = command;
 
   turret_command_signal_(&log);
+
+  if (impl_->is_disabled()) { return; }
 
   if (command.absolute) {
     // Absolute takes precedence.

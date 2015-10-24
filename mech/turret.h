@@ -44,6 +44,8 @@ class Turret : boost::noncopyable {
     int gimbal_address = 98;
     int fire_control_address = 99;
     double period_s = 0.1;
+    int command_update_decimate = 10;
+    double disable_period_s = 60.0;
     double auto_agitator_time_s = 2.0;
     double min_x_deg = -120;
     double max_x_deg = 120;
@@ -59,6 +61,8 @@ class Turret : boost::noncopyable {
       a->Visit(MJ_NVP(gimbal_address));
       a->Visit(MJ_NVP(fire_control_address));
       a->Visit(MJ_NVP(period_s));
+      a->Visit(MJ_NVP(command_update_decimate));
+      a->Visit(MJ_NVP(disable_period_s));
       a->Visit(MJ_NVP(auto_agitator_time_s));
       a->Visit(MJ_NVP(min_x_deg));
       a->Visit(MJ_NVP(max_x_deg));
