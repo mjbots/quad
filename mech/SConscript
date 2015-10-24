@@ -17,6 +17,8 @@ Import('libbase')
 env = canonenv.Clone()
 
 env.Append(CPPPATH=['.'])
+env.Append(LIBS=['boost_filesystem',
+                 'boost_date_time'])
 
 crenv = env.Clone()
 crenv.Append(LIBS=['boost_coroutine',

@@ -15,6 +15,8 @@
 #include MODULE_HEADER_FILE
 
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/filesystem.hpp>
+#include <boost/format.hpp>
 #include <boost/program_options.hpp>
 
 #include "base/fail.h"
@@ -78,7 +80,28 @@ int safe_main(int argc, char**argv) {
 
   if (!log_file.empty()) {
     context.telemetry_log.SetRealtime(!debug);
-    context.telemetry_log.Open(log_file);
+
+    // Make sure that the log file has a date and timestamp somewhere
+    // in the name.
+    namespace fs = boost::filesystem;
+    fs::path log_file_path(log_file);
+    std::string extension = log_file_path.extension().native();
+
+    const auto now = boost::posix_time::microsec_clock::universal_time();
+    std::string datestamp =
+        (boost::format("%s-%02d%02d%02d") %
+         to_iso_string(now.date()) %
+         now.time_of_day().hours() %
+         now.time_of_day().minutes() %
+         now.time_of_day().seconds()).str();
+
+    const std::string stem = log_file_path.stem().native();
+
+    fs::path stamped_path = log_file_path.parent_path() /
+        (boost::format("%s-%s%s") %
+         stem % datestamp % extension).str();
+
+    context.telemetry_log.Open(stamped_path.native());
   }
 
   std::shared_ptr<ErrorHandlerJoiner> joiner =
