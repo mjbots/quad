@@ -26,7 +26,7 @@ class ProgramOptionsArchiveValue : public boost::program_options::value_semantic
   ProgramOptionsArchiveValue(const NameValuePair& nvp) : nvp_(nvp) {}
   virtual ~ProgramOptionsArchiveValue() {}
 
-  virtual std::string name() const { return nvp_.name(); }
+  virtual std::string name() const { return ""; }
   virtual unsigned min_tokens() const { return 1; }
   virtual unsigned max_tokens() const { return 1; }
   virtual bool adjacent_tokens_only() const { return true; }
