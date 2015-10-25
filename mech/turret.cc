@@ -131,19 +131,6 @@ class Turret::Impl : boost::noncopyable {
   void DoPoll() {
     poll_count_++;
 
-    // If we don't currently know it, ask for the current command.
-    if (!data_.imu_command ||
-        (poll_count_ % parameters_.command_update_decimate) == 0) {
-      const int kAddressPitchCommand = 0x50;
-      servo_->MemRead(
-          servo_->RAM_READ, parameters_.gimbal_address,
-          kAddressPitchCommand, 8,
-          [this](base::ErrorCode ec,
-                 Mech::ServoBase::MemReadResponse response) {
-            HandleCommand(ec, response);
-          });
-    }
-
     // If we are doing a rate motion, and know the current command,
     // send our updated command.
 
@@ -159,6 +146,19 @@ class Turret::Impl : boost::noncopyable {
       data_.imu_command = next;
 
       SendImuCommand(next);
+    }
+
+    // If we don't currently know it, ask for the current command.
+    if (!data_.imu_command ||
+        (poll_count_ % parameters_.command_update_decimate) == 0) {
+      const int kAddressPitchCommand = 0x50;
+      servo_->MemRead(
+          servo_->RAM_READ, parameters_.gimbal_address,
+          kAddressPitchCommand, 8,
+          [this](base::ErrorCode ec,
+                 Mech::ServoBase::MemReadResponse response) {
+            HandleCommand(ec, response);
+          });
     }
 
     // Then, ask for IMU and absolute coordinates every time.
