@@ -54,8 +54,8 @@ class ServoMonitor : boost::noncopyable {
 
     virtual void ClearStatus(uint8_t servo, base::ErrorHandler handler) {
       base_->MemWrite(HerkuleXBase::RAM_WRITE,
-                      servo, HerkuleXConstants::status_details().position,
-                      std::string(0, 2), handler);
+                      servo, HerkuleXConstants::status_error().position,
+                      std::string(2, '\x00'), handler);
     }
 
     T* const base_;
