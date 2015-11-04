@@ -56,5 +56,29 @@ HerkuleXConstants::HerkuleXConstants()
       }
 {
 }
+
+boost::system::error_code make_error_code(herkulex_error e) {
+  return boost::system::error_code(static_cast<int>(e), herkulex_category());
+}
+
+const char* herkulex_category_impl::name() const noexcept {
+  return "herkulex";
+}
+
+std::string herkulex_category_impl::message(int ev) const noexcept {
+  switch (static_cast<herkulex_error>(ev)) {
+    case herkulex_error::synchronization_error: {
+      return "synchronization error";
+    }
+    default: {
+      return "unknown";
+    }
+  }
+}
+
+const boost::system::error_category& herkulex_category() {
+  static herkulex_category_impl impl;
+  return impl;
+}
 }
 }

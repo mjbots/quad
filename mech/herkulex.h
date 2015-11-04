@@ -31,6 +31,14 @@
 namespace mjmech {
 namespace mech {
 
+enum class herkulex_error {
+  synchronization_error = 1,
+};
+
+const boost::system::error_category& herkulex_category();
+
+boost::system::error_code make_error_code(herkulex_error e);
+
 class HerkuleXBase : boost::noncopyable {
  public:
   struct Packet {
@@ -512,7 +520,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
 
     if (result.servo != to_send.servo && to_send.servo != MagicID::BROADCAST) {
       post_error(
-          base::ErrorCode::einval(
+          MakeSynchronizationError(
               (boost::format("Synchronization error, sent request for servo "
                              "0x%02x, response from 0x%02x") %
                static_cast<int>(to_send.servo) %
@@ -522,7 +530,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
 
     if (result.command != (0x40 | to_send.command)) {
       post_error(
-          base::ErrorCode::einval(
+          MakeSynchronizationError(
               (boost::format(
                   "Expected response command 0x%02x, received 0x%02x") %
                static_cast<int>(0x40 | to_send.command) %
@@ -532,7 +540,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
 
     if (result.data.size() != length + 4) {
       post_error(
-          base::ErrorCode::einval(
+          MakeSynchronizationError(
               (boost::format("Expected length response %d, received %d") %
                static_cast<int>(length + 4) %
                result.data.size()).str()));
@@ -543,7 +551,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
 
     if (response.register_start != reg) {
       post_error(
-          base::ErrorCode::einval(
+          MakeSynchronizationError(
               (boost::format("Expected register 0x%02x, received 0x%02x") %
                static_cast<int>(reg) %
                static_cast<int>(response.register_start)).str()));
@@ -552,7 +560,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
 
     if (response.length != length) {
       post_error(
-          base::ErrorCode::einval(
+          MakeSynchronizationError(
               (boost::format("Expected length %d, received %d") %
                static_cast<int>(length) %
                static_cast<int>(response.length)).str()));
@@ -603,7 +611,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
 
     if (result.servo != to_send.servo && to_send.servo != MagicID::BROADCAST) {
       post_error(
-          base::ErrorCode::einval(
+          MakeSynchronizationError(
               (boost::format(
                   "Synchronization error, send status to servo 0x%02x, "
                   "response from 0x%02x") %
@@ -614,7 +622,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
 
     if (result.command != Command::ACK_STAT) {
       post_error(
-          base::ErrorCode::einval(
+          MakeSynchronizationError(
               (boost::format(
                   "Expected response command 0x%02x, received 0x%02x") %
                static_cast<int>(Command::ACK_STAT) %
@@ -624,7 +632,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
 
     if (result.data.size() != 2) {
       post_error(
-          base::ErrorCode::einval(
+          MakeSynchronizationError(
               (boost::format("Received status of incorrect size, expected 2, "
                              "got %d") %
                result.data.size()).str()));
@@ -798,6 +806,28 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
 
     return init.result.get();
   }
+
+  static base::ErrorCode MakeSynchronizationError(const std::string& message) {
+    base::ErrorCode result(herkulex_error::synchronization_error);
+    result.Append(message);
+    return result;
+  }
+};
+
+class herkulex_category_impl : public boost::system::error_category {
+ public:
+  virtual const char* name() const noexcept;
+  virtual std::string message(int ev) const noexcept;
+};
+
+}
+}
+
+namespace boost {
+namespace system {
+template <>
+struct is_error_code_enum<mjmech::mech::herkulex_error> {
+  static const bool value = true;
 };
 }
 }

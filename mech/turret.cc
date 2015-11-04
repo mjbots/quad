@@ -173,9 +173,12 @@ class Turret::Impl : boost::noncopyable {
 
   void HandleCommand(base::ErrorCode ec,
                      Mech::ServoBase::MemReadResponse response) {
-    if (ec == boost::asio::error::operation_aborted) {
-      TemporarilyDisableTurret();
+    if (ec == boost::asio::error::operation_aborted ||
+        ec == herkulex_error::synchronization_error) {
+      TemporarilyDisableTurret(ec);
       return;
+    } else {
+      MarkCommunicationsActive();
     }
     FailIf(ec);
 
@@ -190,9 +193,12 @@ class Turret::Impl : boost::noncopyable {
 
   void HandleCurrent(base::ErrorCode ec,
                      Mech::ServoBase::MemReadResponse response) {
-    if (ec == boost::asio::error::operation_aborted) {
-      TemporarilyDisableTurret();
+    if (ec == boost::asio::error::operation_aborted ||
+        ec == herkulex_error::synchronization_error) {
+      TemporarilyDisableTurret(ec);
       return;
+    } else {
+      MarkCommunicationsActive();
     }
     FailIf(ec);
 
@@ -264,12 +270,21 @@ class Turret::Impl : boost::noncopyable {
                   std::placeholders::_1));
   }
 
-  void TemporarilyDisableTurret() {
-    std::cerr << boost::format(
-        "Turret: Device unresponsive, disabling for %d seconds.\n") %
-        parameters_.disable_period_s;
-    disable_until_ = boost::posix_time::microsec_clock::universal_time() +
-        base::ConvertSecondsToDuration(parameters_.disable_period_s);
+  void TemporarilyDisableTurret(const base::ErrorCode& ec) {
+    std::cerr << "error reading turret: " << ec.message() << "\n";
+    error_count_++;
+
+    if (error_count_ >= parameters_.error_disable_count) {
+      std::cerr << boost::format(
+          "Turret: Device unresponsive, disabling for %d seconds.\n") %
+          parameters_.disable_period_s;
+      disable_until_ = boost::posix_time::microsec_clock::universal_time() +
+          base::ConvertSecondsToDuration(parameters_.disable_period_s);
+    }
+  }
+
+  void MarkCommunicationsActive() {
+    error_count_ = 0;
   }
 
   bool is_disabled() const {
@@ -285,6 +300,7 @@ class Turret::Impl : boost::noncopyable {
   Parameters parameters_;
   boost::posix_time::ptime disable_until_;
   int poll_count_ = 0;
+  int error_count_ = 0;
 
   TurretData data_;
 };
