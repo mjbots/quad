@@ -22,6 +22,7 @@
 #include "meta/meta.hpp"
 
 #include "comm.h"
+#include "comm_factory_generators.h"
 #include "visitor.h"
 
 namespace mjmech {
@@ -187,113 +188,6 @@ class StreamFactory : boost::noncopyable {
 
   boost::asio::io_service& service_;
   std::tuple<StreamGenerators...> generators_;
-};
-
-/// A Generator to make stdio backed streams.
-class StdioGenerator : boost::noncopyable {
- public:
-  struct Parameters {
-    int in = 0;
-    int out = 1;
-
-    template <typename Archive>
-    void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(in));
-      a->Visit(MJ_NVP(out));
-    }
-  };
-
-  static const char* type() { return "stdio"; }
-
-  static void AsyncCreate(
-      boost::asio::io_service&,
-      const Parameters&,
-      StreamHandler handler);
-};
-
-/// A Generator to make serial port backed streams.
-class SerialPortGenerator : boost::noncopyable {
- public:
-  struct Parameters {
-    std::string serial_port;
-    int baud_rate = 115200;
-    std::string parity = "n";
-    int data_bits = 8;
-
-    template <typename Archive>
-    void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(serial_port));
-      a->Visit(MJ_NVP(baud_rate));
-      a->Visit(MJ_NVP(parity));
-      a->Visit(MJ_NVP(data_bits));
-    }
-  };
-
-  static const char* type() { return "serial"; }
-
-  static void AsyncCreate(
-      boost::asio::io_service&,
-      const Parameters&,
-      StreamHandler handler);
-};
-
-/// A Generator to make TCP client backed streams.
-class TcpClientGenerator : boost::noncopyable {
- public:
-  struct Parameters {
-    std::string host;
-    int port;
-
-    template <typename Archive>
-    void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(host));
-      a->Visit(MJ_NVP(port));
-    }
-  };
-
-  static const char* type() { return "tcp"; }
-
-  static void AsyncCreate(
-      boost::asio::io_service&,
-      const Parameters&,
-      StreamHandler handler);
-};
-
-/// Serves up bi-direction synthetic streams.  The AsyncCreate method
-/// always returns streams of kDirectionA.  GetStream users may get
-/// streams of either direction.
-class PipeGenerator : boost::noncopyable {
- public:
-  struct Parameters {
-    std::string key;
-
-    template <typename Archive>
-    void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(key));
-    }
-  };
-
-  static const char* type() { return "pipe"; }
-
-  PipeGenerator();
-  ~PipeGenerator();
-
-  void AsyncCreate(boost::asio::io_service&,
-                   const Parameters&,
-                   StreamHandler handler);
-
-  enum class Mode {
-    kDirectionA,
-    kDirectionB,
-  };
-
-  SharedStream GetStream(boost::asio::io_service&,
-                         const std::string& key,
-                         Mode mode);
-
- private:
-  class Impl;
-  std::unique_ptr<Impl> impl_;
 };
 
 }

@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "base/comm_factory.h"
+#include "base/concrete_comm_factory.h"
 
 #include "herkulex.h"
 #include "herkulex_servo_interface.h"
@@ -22,12 +22,8 @@
 namespace mjmech {
 namespace mech {
 struct Mech {
-  typedef base::StreamFactory<
-    base::StdioGenerator,
-    base::SerialPortGenerator,
-    base::TcpClientGenerator,
-    base::PipeGenerator> Factory;
-  typedef HerkuleX<Factory> ServoBase;
+  typedef base::ConcreteStreamFactory Factory;
+  typedef HerkuleX ServoBase;
   typedef HerkuleXServoInterface<ServoBase> Servo;
 };
 }

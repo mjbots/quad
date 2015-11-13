@@ -16,7 +16,8 @@
 
 #include <boost/test/auto_unit_test.hpp>
 
-#include "base/comm_factory.h"
+#include "base/comm_factory_generators.h"
+#include "base/concrete_comm_factory.h"
 
 using namespace mjmech::base;
 using namespace mjmech::mech;
@@ -25,10 +26,12 @@ namespace {
 class Fixture {
  public:
   Fixture() {
-    herkulex_.parameters()->stream.type = "pipe";
-    herkulex_.parameters()->stream.Get<PipeGenerator>()->key = "test";
+    herkulex_.parameters()->stream.options_description()->
+        find("type", false).semantic()->notify(std::string("pipe"));
+    herkulex_.parameters()->stream.options_description()->
+        find("pipe.key", false).semantic()->notify(std::string("test"));
 
-    stream_ = factory_.generator<PipeGenerator>()->GetStream(
+    stream_ = factory_.pipe_generator()->GetStream(
         service_, "test", PipeGenerator::Mode::kDirectionB);
 
     boost::asio::spawn(service_,
@@ -46,9 +49,9 @@ class Fixture {
   }
 
   boost::asio::io_service service_;
-  typedef StreamFactory<PipeGenerator> Factory;
+  typedef ConcreteStreamFactory Factory;
   Factory factory_{service_};
-  typedef HerkuleX<Factory> Servo;
+  typedef HerkuleX Servo;
   Servo herkulex_{service_, factory_};
   SharedStream stream_;
   boost::asio::streambuf streambuf_;

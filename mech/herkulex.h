@@ -21,9 +21,9 @@
 #include <boost/asio/write.hpp>
 #include <boost/signals2/signal.hpp>
 
-#include "base/comm.h"
 #include "base/command_sequencer.h"
 #include "base/common.h"
+#include "base/concrete_comm_factory.h"
 #include "base/fail.h"
 #include "base/signal_result.h"
 #include "base/visitor.h"
@@ -38,6 +38,20 @@ enum class herkulex_error {
 const boost::system::error_category& herkulex_category();
 
 boost::system::error_code make_error_code(herkulex_error e);
+}
+}
+
+namespace boost {
+namespace system {
+template <>
+struct is_error_code_enum<mjmech::mech::herkulex_error> {
+  static const bool value = true;
+};
+}
+}
+
+namespace mjmech {
+namespace mech {
 
 class HerkuleXBase : boost::noncopyable {
  public:
@@ -176,17 +190,16 @@ struct HerkuleXConstants {
   static constexpr Register id() { return Register{6, 1}; }
 };
 
-template <class Factory>
 class HerkuleXProtocol : public HerkuleXBase {
  public:
   HerkuleXProtocol(boost::asio::io_service& service,
-                   Factory& factory)
+                   base::ConcreteStreamFactory& factory)
       : service_(service),
         factory_(factory),
         sequencer_(service) {}
 
   struct Parameters {
-    typename Factory::Parameters stream;
+    base::ConcreteStreamFactory::Parameters stream;
     double packet_timeout_s = 0.05;
 
     template <typename Archive>
@@ -399,7 +412,7 @@ class HerkuleXProtocol : public HerkuleXBase {
       return;
     }
 
-    if (rx_streambuf_.size() < (size - 7)) {
+    if (static_cast<int>(rx_streambuf_.size()) < (size - 7)) {
       boost::asio::async_read(
           *stream_,
           rx_streambuf_,
@@ -451,7 +464,7 @@ class HerkuleXProtocol : public HerkuleXBase {
   }
 
   boost::asio::io_service& service_;
-  Factory& factory_;
+  base::ConcreteStreamFactory& factory_;
   Parameters parameters_;
   base::CommandSequencer sequencer_;
   base::SharedStream stream_;
@@ -460,17 +473,16 @@ class HerkuleXProtocol : public HerkuleXBase {
   boost::asio::streambuf rx_streambuf_{512};
 };
 
-template <class Factory>
-class HerkuleX : public HerkuleXProtocol<Factory> {
+class HerkuleX : public HerkuleXProtocol {
  public:
-  typedef HerkuleXProtocol<Factory> Base;
-  typedef typename Base::MemReadResponse MemReadResponse;
-  typedef typename Base::Command Command;
-  typedef typename Base::MagicID MagicID;
+  typedef HerkuleXProtocol Base;
+  typedef Base::MemReadResponse MemReadResponse;
+  typedef Base::Command Command;
+  typedef Base::MagicID MagicID;
 
   template <typename... Args>
   HerkuleX(Args&&... args)
-      : HerkuleXProtocol<Factory>(std::forward<Args>(args)...) {}
+      : HerkuleXProtocol(std::forward<Args>(args)...) {}
 
   template <typename Handler>
   BOOST_ASIO_INITFN_RESULT_TYPE(
@@ -483,7 +495,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
         void (boost::system::error_code, MemReadResponse)> init(
             BOOST_ASIO_MOVE_CAST(Handler)(handler));
 
-    typename Base::Packet to_send;
+    Base::Packet to_send;
     to_send.servo = servo;
     to_send.command = command;
     uint8_t buf[2] = { reg, length };
@@ -499,10 +511,10 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
   }
 
   void MemReadHandler(base::ErrorCode ec,
-                      typename Base::Packet result,
+                      Base::Packet result,
                       uint8_t reg,
                       uint8_t length,
-                      typename Base::Packet to_send,
+                      Base::Packet to_send,
                       std::function<void (base::ErrorCode,
                                           MemReadResponse)> handler) {
     auto post_error = [&](base::ErrorCode ec) {
@@ -538,7 +550,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
       return;
     }
 
-    if (result.data.size() != length + 4) {
+    if (static_cast<int>(result.data.size()) != (length + 4)) {
       post_error(
           MakeSynchronizationError(
               (boost::format("Expected length response %d, received %d") %
@@ -571,18 +583,18 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
   }
 
   typedef std::function<void (const boost::system::error_code&,
-                              typename Base::StatusResponse)> StatusHandler;
+                              Base::StatusResponse)> StatusHandler;
 
   template <typename Handler>
   BOOST_ASIO_INITFN_RESULT_TYPE(
-      Handler, void(boost::system::error_code, typename Base::StatusResponse))
+      Handler, void(boost::system::error_code, Base::StatusResponse))
   Status(uint8_t servo, Handler handler) {
     boost::asio::detail::async_result_init<
       Handler,
-      void (boost::system::error_code, typename Base::StatusResponse)> init(
+      void (boost::system::error_code, Base::StatusResponse)> init(
           BOOST_ASIO_MOVE_CAST(Handler)(handler));
 
-    typename Base::Packet to_send;
+    Base::Packet to_send;
     to_send.servo = servo;
     to_send.command = Command::STAT;
 
@@ -597,11 +609,11 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
 
   void HandleStatusResponse(
       base::ErrorCode ec,
-      typename Base::StatusResponse result,
-      typename Base::Packet to_send,
+      Base::StatusResponse result,
+      Base::Packet to_send,
       StatusHandler handler) {
     auto post_error = [&](base::ErrorCode ec) {
-      this->Post(std::bind(handler, ec, typename Base::StatusResponse()));
+      this->Post(std::bind(handler, ec, Base::StatusResponse()));
     };
 
     if (ec) {
@@ -638,7 +650,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
                result.data.size()).str()));
       return;
     }
-    handler(base::ErrorCode(), typename Base::StatusResponse(result));
+    handler(base::ErrorCode(), Base::StatusResponse(result));
   }
 
   template <typename Handler>
@@ -650,7 +662,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
         void (boost::system::error_code)> init(
             BOOST_ASIO_MOVE_CAST(Handler)(handler));
 
-    typename Base::Packet to_send;
+    Base::Packet to_send;
     to_send.servo = servo;
     to_send.command = Command::REBOOT;
 
@@ -670,7 +682,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
         void (boost::system::error_code)> init(
             BOOST_ASIO_MOVE_CAST(Handler)(handler));
 
-    typename Base::Packet to_send;
+    Base::Packet to_send;
     to_send.servo = servo;
     to_send.command = command;
     std::ostringstream ostr;
@@ -797,7 +809,7 @@ class HerkuleX : public HerkuleXProtocol<Factory> {
       data.write(reinterpret_cast<const char*>(buf), sizeof(buf));
     }
 
-    typename Base::Packet to_send;
+    Base::Packet to_send;
     to_send.servo = MagicID::BROADCAST;
     to_send.data = data.str();
     to_send.command = Command::S_JOG;
@@ -823,11 +835,3 @@ class herkulex_category_impl : public boost::system::error_category {
 }
 }
 
-namespace boost {
-namespace system {
-template <>
-struct is_error_code_enum<mjmech::mech::herkulex_error> {
-  static const bool value = true;
-};
-}
-}

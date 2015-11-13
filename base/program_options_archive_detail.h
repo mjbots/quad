@@ -26,29 +26,61 @@ class ProgramOptionsArchiveValue : public boost::program_options::value_semantic
   ProgramOptionsArchiveValue(const NameValuePair& nvp) : nvp_(nvp) {}
   virtual ~ProgramOptionsArchiveValue() {}
 
-  virtual std::string name() const { return ""; }
-  virtual unsigned min_tokens() const { return 1; }
-  virtual unsigned max_tokens() const { return 1; }
-  virtual bool adjacent_tokens_only() const { return true; }
-  virtual bool is_composing() const { return false; }
-  virtual bool is_required() const { return false; }
+  virtual std::string name() const override { return ""; }
+  virtual unsigned min_tokens() const override { return 1; }
+  virtual unsigned max_tokens() const override { return 1; }
+  virtual bool is_composing() const override { return false; }
+  virtual bool is_required() const override { return false; }
   virtual void parse(boost::any& value_store,
-                     const std::vector<std::string>& new_tokens, bool utf8) const {
+                     const std::vector<std::string>& new_tokens,
+                     bool utf8) const override {
     value_store = boost::lexical_cast<
       typename std::decay<decltype(nvp_.get_value())>::type>(new_tokens.at(0));
   }
 
-  virtual bool apply_default(boost::any&) const {
+  virtual bool apply_default(boost::any&) const override {
     return false;
   }
 
-  virtual void notify(const boost::any& value_store) const {
+  virtual void notify(const boost::any& value_store) const override {
     if (value_store.empty()) { return; }
     nvp_.set_value(boost::any_cast<decltype(nvp_.get_value())>(value_store));
   }
 
  private:
   NameValuePair nvp_;
+};
+
+class ProgramOptionsArchiveWrapValue :
+      public boost::program_options::value_semantic {
+ public:
+  ProgramOptionsArchiveWrapValue(
+      boost::shared_ptr<const boost::program_options::value_semantic> base)
+      : base_(base) {}
+
+  virtual ~ProgramOptionsArchiveWrapValue() {}
+
+  virtual std::string name() const override { return base_->name(); }
+  virtual unsigned min_tokens() const override { return base_->min_tokens(); }
+  virtual unsigned max_tokens() const override { return base_->max_tokens(); }
+  virtual bool is_composing() const override { return base_->is_composing(); }
+  virtual bool is_required() const override { return base_->is_required(); }
+  virtual void parse(boost::any& value_store,
+                     const std::vector<std::string>& new_tokens,
+                     bool utf8) const override {
+    base_->parse(value_store, new_tokens, utf8);
+  }
+
+  virtual bool apply_default(boost::any& value) const override {
+    return base_->apply_default(value);
+  }
+
+  virtual void notify(const boost::any& value_store) const override {
+    base_->notify(value_store);
+  }
+
+ private:
+  const boost::shared_ptr<const boost::program_options::value_semantic> base_;
 };
 }
 

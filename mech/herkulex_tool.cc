@@ -19,8 +19,8 @@
 #include <boost/asio/posix/stream_descriptor.hpp>
 #include <boost/program_options.hpp>
 
-#include "base/comm_factory.h"
 #include "base/common.h"
+#include "base/concrete_comm_factory.h"
 #include "base/program_options_archive.h"
 
 #include "herkulex.h"
@@ -35,10 +35,7 @@ struct Options {
   int address = 254;
 };
 
-typedef StreamFactory<StdioGenerator,
-                      SerialPortGenerator,
-                      TcpClientGenerator> Factory;
-typedef HerkuleX<Factory> Servo;
+typedef HerkuleX Servo;
 typedef HerkuleXConstants HC;
 
 struct CommandContext {
@@ -278,12 +275,14 @@ class CommandValue : public boost::program_options::value_semantic {
 
 int work(int argc, char** argv) {
   boost::asio::io_service service;
-  Factory factory(service);
+  ConcreteStreamFactory factory(service);
   Servo servo(service, factory);
   HerkuleXServoInterface<Servo> servo_interface(&servo);
 
   // Default to something moderately useful.
-  servo.parameters()->stream.type = "serial";
+  boost::any value = std::string("serial");
+  servo.parameters()->stream.options_description()->
+      find("type", false).semantic()->apply_default(value);
 
   Options options;
 

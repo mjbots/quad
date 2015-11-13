@@ -38,6 +38,23 @@ class ProgramOptionsArchive : public VisitArchive<ProgramOptionsArchive> {
 
   template <typename NameValuePair>
   void VisitScalar(const NameValuePair& pair) {
+    VisitOptions(pair, 0);
+  }
+
+  template <typename NameValuePair>
+  auto VisitOptions(const NameValuePair& pair, int) ->
+      decltype(pair.value()->options_description()) {
+    for (auto option: pair.value()->options_description()->options()) {
+      (*description_).add_options()(
+          (prefix_ + option->long_name()).c_str(),
+          new detail::ProgramOptionsArchiveWrapValue(option->semantic()),
+          option->description().c_str());
+    }
+    return 0;
+  }
+
+  template <typename NameValuePair>
+  void VisitOptions(const NameValuePair& pair, long) {
     (*description_).add_options()(
         (prefix_ + pair.name()).c_str(),
         new detail::ProgramOptionsArchiveValue<NameValuePair>(pair));

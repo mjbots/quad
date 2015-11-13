@@ -19,6 +19,7 @@ env.Append(CPPPATH=['.'])
 
 SOURCES = [
     'comm_factory.cc',
+    'concrete_comm_factory.cc',
     'error_code.cc',
     'fail.cc',
     'linux_input.cc',
