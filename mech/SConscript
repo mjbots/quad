@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import sys
+
 Import('canonenv')
 Import('libbase')
 env = canonenv.Clone()
@@ -25,8 +27,41 @@ crenv.Append(LIBS=['boost_coroutine',
                    'boost_context',
                    ])
 
+#gsenv = env.Clone()
+gsenv = crenv
+
+# We do not want to use stock gstreamer -- it has hard-to-catch bugs like
+# streams stopping after few minutes of operation. We require a custom-built
+# one from 'mj-gstreamer-build' project.
+gstreamer_root = '/opt/gstreamer-1.4.5'
+gs_min_revision = 1
+try:
+    gs_rev = open(gstreamer_root + '/mj-gstreamer-revision', 'r').read().strip()
+except IOError:
+    print >>sys.stderr, \
+        'ERROR: custom-compiled gstreamer not found. try install_packages.sh'
+    sys.exit(1)
+
+if int(gs_rev) < gs_min_revision:
+    print >>sys.stderr, 'ERROR: custom-compiled gstreamer has wrong revision'
+    print >>sys.stderr, 'try removing %s, then re-run install_packages.sh' \
+        % gstreamer_root
+    sys.exit(1)
+
+
+gsenv['GS_LIB'] = gstreamer_root + '/lib'
+gsenv['RPATH'] = '$GS_LIB'
+
+for lib in [
+        'gstreamer-rtsp-server-1.0', 'gstreamer-rtsp-1.0', 'gstreamer-sdp-1.0',
+        'gstreamer-1.0', 'gstreamer-base-1.0', 'gstreamer-app-1.0',
+        'glib-2.0', 'gobject-2.0']:
+    gsenv.ParseConfig('PKG_CONFIG_PATH=$GS_LIB/pkgconfig pkg-config '
+                      '--cflags --libs ' + lib)
+
 SOURCES = [
     'ahrs.cc',
+    gsenv.SharedObject('camera_driver.cc'),
     'gait_driver.cc',
     'herkulex.cc',
     'mech_warfare.cc',
@@ -76,3 +111,4 @@ ModuleMain('mjmech_imu_driver', 'MjmechImuDriver')
 ModuleMain('mech_warfare', 'MechWarfare')
 ModuleMain('servo_monitor_app', 'ServoMonitorApp')
 ModuleMain('ahrs_app', 'AhrsApp')
+ModuleMain('video_sender_app', 'VideoSenderApp')
