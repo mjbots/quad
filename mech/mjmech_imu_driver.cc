@@ -15,26 +15,12 @@
 #include "mjmech_imu_driver.h"
 
 #include <linux/i2c-dev.h>
-#include <linux/i2c.h>
 
 #include <thread>
 
 #include "base/common.h"
 #include "base/fail.h"
 #include "base/quaternion.h"
-
-  static inline __s32 i2c_smbus_access(int file, char read_write, __u8 command, 
-                                       int size, union i2c_smbus_data *data)
-  {
-    struct i2c_smbus_ioctl_data args;
-
-    args.read_write = read_write;
-    args.command = command;
-    args.size = size;
-    args.data = data;
-    return ioctl(file,I2C_SMBUS,&args);
-  }
-
 
 namespace mjmech {
 namespace mech {
@@ -47,7 +33,6 @@ int ErrWrap(int value) {
   return value;
 }
 }
-
 
 class MjmechImuDriver::Impl : boost::noncopyable {
  public:
