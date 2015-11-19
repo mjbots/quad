@@ -72,8 +72,20 @@ class VideoSenderApp : boost::noncopyable {
   void HandleStats(const CameraDriver::CameraStats* stats) {
     stats_count_++;
     if (parameters_.require_stats_good) {
+      std::ostringstream errors;
       if (stats->raw_frames < 5) {
-        base::Fail("Raw frames are not produced");
+        errors << "not enough raw frames; ";
+      }
+      if (stats->h264_frames < 5) {
+        errors << "not enough h264 frames; ";
+      }
+      if (errors.tellp()) {
+        if (stats_count_ <= 1) {
+          std::cerr << "First stat report was bad, hope next one is better: "
+                    << errors.str() << "\n";
+        } else {
+          base::Fail("status report had errors:\n " + errors.str());
+        };
       }
     }
     if (parameters_.max_stats && parameters_.max_stats <= stats_count_) {

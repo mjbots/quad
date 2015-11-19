@@ -27,8 +27,7 @@ crenv.Append(LIBS=['boost_coroutine',
                    'boost_context',
                    ])
 
-#gsenv = env.Clone()
-gsenv = crenv
+gsenv = env.Clone()
 
 # We do not want to use stock gstreamer -- it has hard-to-catch bugs like
 # streams stopping after few minutes of operation. We require a custom-built
@@ -97,18 +96,26 @@ mech_warfare_command = crenv.Program(
     'mw_command',
     ['mech_warfare_command.cc'] + libmech + libbase)
 
-def ModuleMain(root, cname):
-    mjmech_main = crenv.Object(
+def ModuleMain(root, cname, env=None):
+    if env is None:
+        env = crenv
+    mjmech_main = env.Object(
         root + '_main.o', 'module_main.cc',
         CPPDEFINES={'MODULE_HEADER_FILE': '\\"' + root + '.h\\"',
                     'MODULE_CLASS_NAME': cname})
-    crenv.Depends(mjmech_main, root + '.h')
-    crenv.Depends(mjmech_main, libmech)
-    crenv.Depends(mjmech_main, libbase)
-    crenv.Program(root, mjmech_main + libmech + libbase)
+    env.Depends(mjmech_main, root + '.h')
+    env.Depends(mjmech_main, libmech)
+    env.Depends(mjmech_main, libbase)
+    return env.Program(root, mjmech_main + libmech + libbase)
 
 ModuleMain('mjmech_imu_driver', 'MjmechImuDriver')
 ModuleMain('mech_warfare', 'MechWarfare')
 ModuleMain('servo_monitor_app', 'ServoMonitorApp')
 ModuleMain('ahrs_app', 'AhrsApp')
-ModuleMain('video_sender_app', 'VideoSenderApp')
+sender = ModuleMain('video_sender_app', 'VideoSenderApp',
+                    env=gsenv)
+
+gsenv.Command(
+    'video_sender_test.passed', sender,
+    '$SOURCE --camera.print_stats=1 --max_stats=2 --require_stats_good=1 '
+    '--camera.device=TEST && touch $TARGET')

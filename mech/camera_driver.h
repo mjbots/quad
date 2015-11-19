@@ -21,8 +21,13 @@
 #include "base/comm.h"
 #include "base/visitor.h"
 
+struct _GstSample;
+typedef struct _GstSample GstSample;
+
 namespace mjmech {
 namespace mech {
+
+class CameraFrameConsumer;
 
 class CameraDriver : boost::noncopyable {
  public:
@@ -43,6 +48,10 @@ class CameraDriver : boost::noncopyable {
 
   void AsyncStart(base::ErrorHandler handler);
 
+  // Register a frame consumer. Pointer must be valid for the lifetime
+  // of an object. Must be called before AsyncStart.
+  void AddFrameConsumer(CameraFrameConsumer*);
+
   struct Parameters {
     // argv/argc to pass to gst
     std::string gst_options;
@@ -50,10 +59,11 @@ class CameraDriver : boost::noncopyable {
     double stats_interval_ms = 1000;
     bool print_stats = false;
     std::string device;
-    std::string resolution;
+    std::string h264_caps;
+    std::string decoded_caps;
     std::string write_h264;
     bool dumb_camera = false;
-
+    int verbosity = 0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -62,10 +72,11 @@ class CameraDriver : boost::noncopyable {
       a->Visit(MJ_NVP(print_stats));
       // may be set to TEST to use test source
       a->Visit(MJ_NVP(device));
-      // in 640x480 format
-      a->Visit(MJ_NVP(resolution));
+      a->Visit(MJ_NVP(h264_caps));
+      a->Visit(MJ_NVP(decoded_caps));
       a->Visit(MJ_NVP(write_h264));
       a->Visit(MJ_NVP(dumb_camera));
+      a->Visit(MJ_NVP(verbosity));
     }
   };
 
@@ -73,12 +84,22 @@ class CameraDriver : boost::noncopyable {
 
   struct CameraStats {
     boost::posix_time::ptime timestamp;
+    // raw frames from camera
     int raw_frames = 0;
+    // h264 chunks
+    int h264_frames = 0;
+    // bytes in h264 chunks
+    int h264_bytes = 0;
+    // h264 chunks which were sent to an active RTSP connection
+    int h264_frames_rtsp = 0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(timestamp));
       a->Visit(MJ_NVP(raw_frames));
+      a->Visit(MJ_NVP(h264_frames));
+      a->Visit(MJ_NVP(h264_bytes));
+      a->Visit(MJ_NVP(h264_frames_rtsp));
     }
   };
 
@@ -93,5 +114,25 @@ class CameraDriver : boost::noncopyable {
   class Impl;
   std::unique_ptr<Impl> impl_;
 };
+
+
+// This interface class can consume camera frames.
+class CameraFrameConsumer : boost::noncopyable {
+ public:
+  // Gstreamer has been initialized. The consumer can set up its
+  // internal settings. Invoked from main gst thread.
+  virtual void GstReady() {};
+
+  // Consume an h264 frame. Invoked from an internal thread.
+  virtual void ConsumeH264Sample(GstSample*) {};
+
+  // Consume a raw frame. Invoked from an internal thread.
+  virtual void ConsumeRawSample(GstSample*) {};
+
+  // Going to emit stats soon. The argument is a mutable
+  // stats pointer. Invoked from main gst thread.
+  virtual void PreEmitStats(CameraDriver::CameraStats* stats) {};
+};
+
 }
 }

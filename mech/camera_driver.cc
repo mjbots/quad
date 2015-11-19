@@ -84,19 +84,99 @@ class CameraDriver::Impl : boost::noncopyable {
   void AsyncStart(base::ErrorHandler handler) {
     BOOST_ASSERT(std::this_thread::get_id() == parent_id_);
 
+    started_ = true;
+
     // Capture our parent's parameters before starting our thread.
     parameters_ = parent_->parameters_;
 
     child_ = std::thread(std::bind(&Impl::Run, this, handler));
   }
 
+  void AddFrameConsumer(CameraFrameConsumer* c) {
+    BOOST_ASSERT(std::this_thread::get_id() == parent_id_);
+    BOOST_ASSERT(!started_);
+    consumers_.push_back(c);
+  }
+
+
  private:
+  // Escape string for gstreamer pipeline
+  std::string pp_escape(const std::string& s) {
+    if (s.find(' ') == std::string::npos) {
+      return s;
+    }
+    base::Fail("string escaping not implemented");
+  }
 
   std::string MakeLaunchCmd() {
     std::ostringstream out;
-    // TODO: port from video-ui/vserver/video_tools/camera-recv.c
-    out << "videotestsrc is-live=1 pattern=ball "
-        << "! queue ! appsink name=raw-sink";
+
+    std::string device = "/dev/video0";
+    if (parameters_.device != "")  {
+      device = parameters_.device;
+    }
+
+    bool is_test = device == "TEST";
+    bool is_dumb = parameters_.dumb_camera || is_test;
+
+    if (is_test) {
+      out << "videotestsrc is-live=1 pattern=ball ";
+    } else if (is_dumb) {
+      out << "v4l2src name=src device=" << pp_escape(device)
+          << " ! videoconvert ";
+    } else {
+      out << "uvch264src device=" << pp_escape(device)
+          << " name=src auto-start=true message-forward=true"
+          << " iframe-period=1000 "
+          << "src.vfsrc ";
+    }
+
+    // Make decoded image endpoint
+    std::string decoded_caps =
+        "video/x-raw,format=YUY2,width=640,height=480,framerate=30/1";
+    if (parameters_.decoded_caps != "") {
+      decoded_caps = parameters_.decoded_caps;
+    }
+    out << "! " << decoded_caps << " ";
+    if (is_dumb) {
+      out << "! tee name=dec-tee ";
+    };
+    out << "! queue ! appsink name=raw-sink ";
+
+    // Make H264 endpoint
+    if (is_dumb) {
+      out << "dec-tee. ! videoconvert ! queue "
+          << " ! x264enc tune=zerolatency ! video/x-h264 ";
+    } else {
+      std::string h264_caps =
+          "video/x-h264,width=1920,height=1080,framerate=30/1";
+      if (parameters_.h264_caps != "") {
+        h264_caps = parameters_.h264_caps;
+      }
+      out << "src.vidsrc ! " << h264_caps << " ! h264parse ";
+    };
+
+    // Maybe save it
+    if (parameters_.write_h264 != "") {
+      std::string muxer = "mp4mux";
+      std::string tail = parameters_.write_h264.substr(
+          std::max(0, static_cast<int>(parameters_.write_h264.size()) - 4));
+      if (tail == ".mkv") {
+        muxer = "matroskamux streamable=true";
+      } else if (tail == ".avi") {
+        muxer = "avimux";
+      } else if (tail != ".mp4") {
+        std::cerr
+            << "Unknown h264 savefile extension " << tail
+            << ", assuming MP4 format\n";
+      }
+      out << "! tee name=h264-tee ! queue ! " << muxer
+          << " ! filesink name=h264writer location="
+          << pp_escape(parameters_.write_h264)
+          << " h264-tee. ";
+    }
+
+    out << "! queue ! appsink name=h264-sink";
     return out.str();
   }
 
@@ -106,6 +186,11 @@ class CameraDriver::Impl : boost::noncopyable {
     // Init global state
     gstreamer_global_init(parameters_.gst_options);
     loop_ = g_main_loop_new(NULL, FALSE);
+
+    // Init consumers
+    for (CameraFrameConsumer* c: consumers_) {
+      c->GstReady();
+    }
 
     std::string launch_cmd = MakeLaunchCmd();
 
@@ -125,6 +210,10 @@ class CameraDriver::Impl : boost::noncopyable {
     gst_bus_add_watch(bus, handle_bus_message_wrapper, this);
     gst_object_unref(bus);
 
+    // Hook the deep nitification
+    g_signal_connect(pipeline_, "deep-notify",
+                     G_CALLBACK(handle_deep_notify_wrapper), this);
+
     // Hook / setup raw data sink
     GstAppSink* raw_sink = GST_APP_SINK(
        gst_bin_get_by_name_recurse_up(GST_BIN(pipeline_), "raw-sink"));
@@ -138,6 +227,19 @@ class CameraDriver::Impl : boost::noncopyable {
                      G_CALLBACK(raw_sink_new_sample_wrapper), this);
     gst_object_unref(raw_sink);
 
+    // Hook / setup h264 data sink
+    GstAppSink* h264_sink = GST_APP_SINK(
+       gst_bin_get_by_name_recurse_up(GST_BIN(pipeline_), "h264-sink"));
+    if (raw_sink == NULL) {
+      base::Fail("could not find h264-sink element");
+    }
+    gst_app_sink_set_emit_signals(h264_sink, TRUE);
+    gst_app_sink_set_max_buffers(h264_sink, 120);
+    gst_app_sink_set_drop(h264_sink, TRUE);
+    g_signal_connect(h264_sink, "new-sample",
+                     G_CALLBACK(h264_sink_new_sample_wrapper), this);
+    gst_object_unref(h264_sink);
+
     std::cerr << "created pipeline with cmd: " << launch_cmd << "\n";
 
     // Start the pipeline
@@ -145,7 +247,10 @@ class CameraDriver::Impl : boost::noncopyable {
     GstStateChangeReturn rv =
       gst_element_set_state(pipeline_, GST_STATE_PLAYING);
     if (rv == GST_STATE_CHANGE_FAILURE) {
-      base::Fail(boost::format("Failed to start pipeline: %d") % rv);
+      // no need to exit here -- we will get an error message on the bus with
+      // more information.
+      std::cerr << (
+          boost::format("Warning: Failed to start pipeline: %d\n") % rv);
     }
 
     // Set up the timer for stats
@@ -153,7 +258,6 @@ class CameraDriver::Impl : boost::noncopyable {
       g_timeout_add(parameters_.stats_interval_ms,
                     stats_timeout_wrapper, this);
     }
-
 
     g_main_loop_run(loop_);
     if (done_) {
@@ -216,6 +320,49 @@ class CameraDriver::Impl : boost::noncopyable {
     return true;
   }
 
+  static gboolean handle_deep_notify_wrapper(
+      GstObject* gstobject, GstObject* prop_object,
+      GParamSpec* prop, gpointer user_data) {
+    static_cast<CameraDriver::Impl*>(user_data)
+        ->HandleDeepNotify(gstobject, prop_object, prop);
+    return TRUE;
+  }
+
+  void HandleDeepNotify(GstObject* gstobject, GstObject* prop_object,
+                        GParamSpec* prop) {
+    // Code from implementation of gst_object_default_deep_notify
+    // This is what happens in gst-launch with -v option
+    if (! (prop->flags & G_PARAM_READABLE)) {
+      // Unreadable parameter -- ignore
+      return;
+    }
+    if (strcmp(prop->name, "caps") == 0) {
+      // caps are just too verbose...
+      return;
+    }
+
+    // only select device-fd field.
+    if (strcmp(prop->name, "device-fd") == 0) {
+      // TODO: record device-fd for uvch264 source, print message only when
+      // verbose is set.
+      ;
+    }
+
+    if (parameters_.verbosity >= 1) {
+      GValue value = { 0, };
+      g_value_init(&value, prop->value_type);
+      g_object_get_property(G_OBJECT(prop_object), prop->name, &value);
+      // Can also do g_value_dup_string(&value) when
+      // G_VALUE_HOLDS_STRING(&value)
+      gchar* str = gst_value_serialize (&value);
+      char* obj_name = gst_object_get_path_string(prop_object);
+      std::cerr << boost::format("camera-recv deep notify %s: %s = %s\n") %
+          obj_name % prop->name % str;
+      g_free (obj_name);
+      g_free (str);
+      g_value_unset (&value);
+    }
+  }
 
   static GstFlowReturn raw_sink_new_sample_wrapper(GstElement* sink,
                                            gpointer user_data) {
@@ -234,12 +381,49 @@ class CameraDriver::Impl : boost::noncopyable {
 
     //GstCaps* caps = gst_sample_get_caps(sample);
     //GstBuffer* buf = gst_sample_get_buffer(sample);
-    //std::cerr << "got sample\n";
+
+    for (CameraFrameConsumer* c: consumers_) {
+      c->ConsumeRawSample(sample);
+    }
 
     {
       std::lock_guard<std::mutex> guard(stats_mutex_);
       stats_->raw_frames++;
     }
+    gst_sample_unref(sample);
+    return GST_FLOW_OK;
+  }
+
+  static GstFlowReturn h264_sink_new_sample_wrapper(GstElement* sink,
+                                           gpointer user_data) {
+    return static_cast<CameraDriver::Impl*>(user_data)
+      ->HandleH264SinkNewSample(sink);
+  }
+
+  // WARNING: This runs in internal gstreamer thread
+  GstFlowReturn HandleH264SinkNewSample(GstElement* sink) {
+    GstSample* sample = NULL;
+    g_signal_emit_by_name(sink, "pull-sample", &sample);
+    if (!sample) {
+      std::cerr << "warning: h264 sink is out of samples\n";
+      return GST_FLOW_OK;
+    }
+
+    //GstCaps* caps = gst_sample_get_caps(sample);
+    GstBuffer* buf = gst_sample_get_buffer(sample);
+    int len = gst_buffer_get_size(buf);
+    // no need to unref buffer -- it is held by sample
+
+    for (CameraFrameConsumer* c: consumers_) {
+      c->ConsumeH264Sample(sample);
+    }
+
+    {
+      std::lock_guard<std::mutex> guard(stats_mutex_);
+      stats_->h264_frames++;
+      stats_->h264_bytes += len;
+    }
+
     gst_sample_unref(sample);
     return GST_FLOW_OK;
   }
@@ -259,6 +443,11 @@ class CameraDriver::Impl : boost::noncopyable {
     }
 
     other->timestamp = boost::posix_time::microsec_clock::universal_time();
+
+    for (CameraFrameConsumer* c: consumers_) {
+      c->PreEmitStats(other.get());
+    }
+
     service_.post(std::bind(&CameraDriver::Impl::HandleStatsMainThread,
                             this, other));
   }
@@ -291,6 +480,8 @@ class CameraDriver::Impl : boost::noncopyable {
   boost::asio::io_service& service_;
   boost::asio::io_service::work work_;
   Parameters parameters_;
+  std::vector<CameraFrameConsumer*> consumers_;
+  bool started_ = false;
 
   const std::thread::id parent_id_;
   std::thread child_;
@@ -309,6 +500,10 @@ CameraDriver::CameraDriver(boost::asio::io_service& service)
   : impl_(new Impl(this, service)) {};
 
 CameraDriver::~CameraDriver() {}
+
+void CameraDriver::AddFrameConsumer(CameraFrameConsumer* c) {
+  impl_->AddFrameConsumer(c);
+}
 
 void CameraDriver::AsyncStart(base::ErrorHandler handler) {
   impl_->AsyncStart(handler);
