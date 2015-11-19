@@ -18,17 +18,21 @@
 #include "base/fail.h"
 
 #include "camera_driver.h"
-//#include "rtsp_sender.h"
+#include "rtsp_server.h"
 
 namespace mjmech {
 namespace mech {
+
 class VideoSenderApp : boost::noncopyable {
  public:
   template <typename Context>
     VideoSenderApp(Context& context)
     : service_(context.service) {
     m_.camera.reset(new CameraDriver(context));
-    //m_.rtsp_sender.reset(new RtspSender(context));
+    m_.rtsp.reset(new RtspServer(context));
+
+    m_.camera->AddFrameConsumer(m_.rtsp->get_frame_consumer());
+
     m_.camera->stats_signal()->connect(
        std::bind(&VideoSenderApp::HandleStats, this, std::placeholders::_1));
   }
@@ -39,12 +43,12 @@ class VideoSenderApp : boost::noncopyable {
 
   struct Members {
     std::unique_ptr<CameraDriver> camera;
-    //std::unique_ptr<RtspSender> rtsp_sender;
+    std::unique_ptr<RtspServer> rtsp;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(camera));
-      //a->Visit(MJ_NVP(rtsp_sender));
+      a->Visit(MJ_NVP(rtsp));
     }
   };
 
@@ -54,7 +58,7 @@ class VideoSenderApp : boost::noncopyable {
     // if non-zero, exit after that many stats messages are received
     int max_stats = 0;
     // if True, crash when stats do indicate the camera is not working.
-    bool require_stats_good = true;
+    bool require_stats_good = false;
 
     template <typename Archive>
     void Serialize(Archive* a) {

@@ -65,6 +65,7 @@ SOURCES = [
     'herkulex.cc',
     'mech_warfare.cc',
     'mjmech_imu_driver.cc',
+    gsenv.SharedObject('rtsp_server.cc'),
     'servo_monitor.cc',
     'turret.cc',
     ]
@@ -118,4 +119,4 @@ sender = ModuleMain('video_sender_app', 'VideoSenderApp',
 gsenv.Command(
     'video_sender_test.passed', sender,
     '$SOURCE --camera.print_stats=1 --max_stats=2 --require_stats_good=1 '
-    '--camera.device=TEST && touch $TARGET')
+    '--camera.device=TEST --rtsp.port=0 && touch $TARGET')
