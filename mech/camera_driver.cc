@@ -146,7 +146,7 @@ class CameraDriver::Impl : boost::noncopyable {
     // Make H264 endpoint
     if (is_dumb) {
       out << "dec-tee. ! videoconvert ! queue "
-          << " ! x264enc tune=zerolatency ! video/x-h264 ";
+          << " ! x264enc tune=zerolatency key-int-max=10 ! video/x-h264 ";
     } else {
       std::string h264_caps =
           "video/x-h264,width=1920,height=1080,framerate=30/1";
@@ -412,6 +412,8 @@ class CameraDriver::Impl : boost::noncopyable {
     //GstCaps* caps = gst_sample_get_caps(sample);
     GstBuffer* buf = gst_sample_get_buffer(sample);
     int len = gst_buffer_get_size(buf);
+    bool key_frame = !GST_BUFFER_FLAG_IS_SET(buf, GST_BUFFER_FLAG_DELTA_UNIT);
+
     // no need to unref buffer -- it is held by sample
 
     for (CameraFrameConsumer* c: consumers_) {
@@ -422,6 +424,7 @@ class CameraDriver::Impl : boost::noncopyable {
       std::lock_guard<std::mutex> guard(stats_mutex_);
       stats_->h264_frames++;
       stats_->h264_bytes += len;
+      if (key_frame) { stats_->h264_key_frames++; };
     }
 
     gst_sample_unref(sample);

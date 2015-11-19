@@ -88,6 +88,7 @@ class CameraDriver : boost::noncopyable {
     int raw_frames = 0;
     // h264 chunks
     int h264_frames = 0;
+    int h264_key_frames = 0;
     // bytes in h264 chunks
     int h264_bytes = 0;
     // h264 chunks which were sent to an active RTSP connection
@@ -98,6 +99,7 @@ class CameraDriver : boost::noncopyable {
       a->Visit(MJ_NVP(timestamp));
       a->Visit(MJ_NVP(raw_frames));
       a->Visit(MJ_NVP(h264_frames));
+      a->Visit(MJ_NVP(h264_key_frames));
       a->Visit(MJ_NVP(h264_bytes));
       a->Visit(MJ_NVP(h264_frames_rtsp));
     }
