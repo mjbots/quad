@@ -37,7 +37,7 @@ const char* kLaunchCmd =
     ")";
 };
 
-class RtspServer::Impl : public CameraFrameConsumer {
+class RtspServer::Impl : boost::noncopyable {
  public:
   Impl(RtspServer* parent, boost::asio::io_service& service)
       : parent_(parent),
@@ -58,8 +58,7 @@ class RtspServer::Impl : public CameraFrameConsumer {
     started_ = true;
   }
 
-  // CameraFrameConsumer interface
-  virtual void GstReady() {
+  void GstReady() {
     BOOST_ASSERT(!gst_started_);
     gst_started_ = true;
     gst_id_ = std::this_thread::get_id();
@@ -107,8 +106,7 @@ class RtspServer::Impl : public CameraFrameConsumer {
                       ) % port;
   }
 
-  // CameraFrameConsumer interface
-  virtual void ConsumeH264Sample(GstSample* sample) {
+  void ConsumeH264Sample(GstSample* sample) {
     std::lock_guard<std::mutex> guard(appsrc_mutex_);
     if (!appsrc_h264_caps_) {
       GstCaps* caps = gst_sample_get_caps(sample);
@@ -191,8 +189,7 @@ class RtspServer::Impl : public CameraFrameConsumer {
     }
   };
 
-  // CameraFrameConsumer interface
-  virtual void PreEmitStats(CameraDriver::CameraStats* stats) {
+  void PreEmitStats(CameraDriver::CameraStats* stats) {
     std::atomic<int> other(0);
     samples_pushed_.exchange(other);
     stats->h264_frames_rtsp += other;
@@ -405,17 +402,42 @@ class RtspServer::Impl : public CameraFrameConsumer {
   std::atomic_int samples_pushed_;
 };
 
-}
 
 
-namespace mech {
+/// The CameraConsumer is a separate class which holds a reference to impl --
+/// this way, this impl will not be destroyed while camera_driver is sending
+/// frames to it.
+class RtspServer::FrameConsumerImpl : public CameraFrameConsumer {
+ public:
+  FrameConsumerImpl(std::shared_ptr<RtspServer::Impl> impl)
+      : impl_(impl) {};
+
+  // CameraFrameConsumer interface
+  virtual void GstReady() {
+    impl_->GstReady();
+  }
+
+  virtual void ConsumeH264Sample(GstSample* sample) {
+    impl_->ConsumeH264Sample(sample);
+  }
+
+  virtual void PreEmitStats(CameraDriver::CameraStats* stats) {
+    impl_->PreEmitStats(stats);
+  }
+
+ private:
+  std::shared_ptr<RtspServer::Impl> impl_;
+};
+
 RtspServer::RtspServer(boost::asio::io_service& service)
-  : impl_(new Impl(this, service)) {}
+    : impl_(new Impl(this, service)),
+      frame_consumer_impl_(new FrameConsumerImpl(impl_)) {
+}
 
 RtspServer::~RtspServer() {}
 
-CameraFrameConsumer* RtspServer::get_frame_consumer() {
-  return impl_.get();
+std::weak_ptr<CameraFrameConsumer> RtspServer::get_frame_consumer() {
+  return frame_consumer_impl_;
 }
 
 void RtspServer::AsyncStart(base::ErrorHandler handler) {

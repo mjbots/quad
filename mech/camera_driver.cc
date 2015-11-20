@@ -92,7 +92,7 @@ class CameraDriver::Impl : boost::noncopyable {
     child_ = std::thread(std::bind(&Impl::Run, this, handler));
   }
 
-  void AddFrameConsumer(CameraFrameConsumer* c) {
+  void AddFrameConsumer(std::weak_ptr<CameraFrameConsumer> c) {
     BOOST_ASSERT(std::this_thread::get_id() == parent_id_);
     BOOST_ASSERT(!started_);
     consumers_.push_back(c);
@@ -188,7 +188,10 @@ class CameraDriver::Impl : boost::noncopyable {
     loop_ = g_main_loop_new(NULL, FALSE);
 
     // Init consumers
-    for (CameraFrameConsumer* c: consumers_) {
+    for (std::weak_ptr<CameraFrameConsumer>& c_weak: consumers_) {
+      std::shared_ptr<CameraFrameConsumer> c = c_weak.lock();
+      // All pointers should be alive at Run() time
+      BOOST_ASSERT(c);
       c->GstReady();
     }
 
@@ -382,7 +385,12 @@ class CameraDriver::Impl : boost::noncopyable {
     //GstCaps* caps = gst_sample_get_caps(sample);
     //GstBuffer* buf = gst_sample_get_buffer(sample);
 
-    for (CameraFrameConsumer* c: consumers_) {
+    for (std::weak_ptr<CameraFrameConsumer>& c_weak: consumers_) {
+      std::shared_ptr<CameraFrameConsumer> c = c_weak.lock();
+      if (!c) {
+        std::cerr << "frame consumer gone -- not delivering raw sample\n";
+        continue;
+      }
       c->ConsumeRawSample(sample);
     }
 
@@ -416,7 +424,12 @@ class CameraDriver::Impl : boost::noncopyable {
 
     // no need to unref buffer -- it is held by sample
 
-    for (CameraFrameConsumer* c: consumers_) {
+    for (std::weak_ptr<CameraFrameConsumer>& c_weak: consumers_) {
+      std::shared_ptr<CameraFrameConsumer> c = c_weak.lock();
+      if (!c) {
+        std::cerr << "frame consumer gone -- not delivering h264 ample\n";
+        continue;
+      }
       c->ConsumeH264Sample(sample);
     }
 
@@ -452,7 +465,12 @@ class CameraDriver::Impl : boost::noncopyable {
 
     other->timestamp = boost::posix_time::microsec_clock::universal_time();
 
-    for (CameraFrameConsumer* c: consumers_) {
+    for (std::weak_ptr<CameraFrameConsumer>& c_weak: consumers_) {
+      std::shared_ptr<CameraFrameConsumer> c = c_weak.lock();
+      if (!c) {
+        std::cerr << "frame consumer gone -- not asking for stats\n";
+        continue;
+      }
       c->PreEmitStats(other.get());
     }
 
@@ -488,7 +506,7 @@ class CameraDriver::Impl : boost::noncopyable {
   boost::asio::io_service& service_;
   boost::asio::io_service::work work_;
   Parameters parameters_;
-  std::vector<CameraFrameConsumer*> consumers_;
+  std::vector<std::weak_ptr<CameraFrameConsumer> > consumers_;
   bool started_ = false;
 
   const std::thread::id parent_id_;
@@ -509,7 +527,7 @@ CameraDriver::CameraDriver(boost::asio::io_service& service)
 
 CameraDriver::~CameraDriver() {}
 
-void CameraDriver::AddFrameConsumer(CameraFrameConsumer* c) {
+void CameraDriver::AddFrameConsumer(std::weak_ptr<CameraFrameConsumer> c) {
   impl_->AddFrameConsumer(c);
 }
 

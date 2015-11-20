@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <memory>
+
 #include <boost/asio/io_service.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/signals2/signal.hpp>
@@ -50,7 +52,7 @@ class CameraDriver : boost::noncopyable {
 
   // Register a frame consumer. Pointer must be valid for the lifetime
   // of an object. Must be called before AsyncStart.
-  void AddFrameConsumer(CameraFrameConsumer*);
+  void AddFrameConsumer(std::weak_ptr<CameraFrameConsumer>);
 
   struct Parameters {
     // argv/argc to pass to gst

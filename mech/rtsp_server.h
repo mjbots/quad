@@ -60,13 +60,15 @@ class RtspServer : boost::noncopyable {
 
   // Get a frameconsumer interface. pointer has same lifetime
   // as this object.
-  CameraFrameConsumer* get_frame_consumer();
+  std::weak_ptr<CameraFrameConsumer> get_frame_consumer();
 
  private:
   Parameters parameters_;
 
   class Impl;
-  std::unique_ptr<Impl> impl_;
+  class FrameConsumerImpl;
+  std::shared_ptr<Impl> impl_;
+  std::shared_ptr<FrameConsumerImpl> frame_consumer_impl_;
 };
 
 }
