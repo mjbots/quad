@@ -24,6 +24,7 @@
 
 #include "base/common.h"
 #include "base/fail.h"
+#include "base/logging.h"
 
 namespace mjmech {
 namespace mech {
@@ -101,8 +102,8 @@ class RtspServer::Impl : boost::noncopyable {
       base::Fail("failed to bind RTSP server port.");
     }
     BOOST_ASSERT(id > 0);
-    std::cerr <<
-        boost::format("RTSP server ready at rtsp://127.0.0.1:%d/video\n"
+    log_.noticeStream() <<
+        boost::format("RTSP server ready at rtsp://127.0.0.1:%d/video"
                       ) % port;
   }
 
@@ -112,9 +113,12 @@ class RtspServer::Impl : boost::noncopyable {
       GstCaps* caps = gst_sample_get_caps(sample);
       // Should only have one struct at this stage.
       BOOST_ASSERT(GST_CAPS_IS_SIMPLE(caps));
-      char* caps_str = gst_caps_to_string(caps);
-      std::cerr << "Setting H264 caps to RTSP server: " << caps_str << "\n";
-      g_free(caps_str);
+
+      if (log_.isDebugEnabled()) {
+        char* caps_str = gst_caps_to_string(caps);
+        log_.debug("Setting H264 caps to RTSP server: %s", caps_str);
+        g_free(caps_str);
+      }
 
       // get_caps did addref, so it all works out properly
       BOOST_ASSERT(appsrc_h264_caps_ == NULL);
@@ -134,7 +138,7 @@ class RtspServer::Impl : boost::noncopyable {
       return;
     }
     if (appsrc_needs_iframe_) {
-      std::cerr << "Got IFRAME in stream, now sending data\n";
+      log_.notice("Got IFRAME in stream, now sending data");
       appsrc_needs_iframe_ = false;
     }
 
@@ -183,7 +187,7 @@ class RtspServer::Impl : boost::noncopyable {
 
     GstFlowReturn ret = gst_app_src_push_buffer(appsrc_h264_, buf);
     if (ret != GST_FLOW_OK) {
-      std::cerr << "Failed to push buffer to rtsp h264: " << ret << "\n";
+      log_.warnStream() << "Failed to push buffer to rtsp h264: " << ret;
     } else {
       samples_pushed_.fetch_add(1);
     }
@@ -203,7 +207,7 @@ class RtspServer::Impl : boost::noncopyable {
   }
 
   void HandleMediaConfigure(GstRTSPMediaFactory *sender, GstRTSPMedia *media) {
-    std::cerr << "rtsp server got client\n";
+    log_.notice("rtsp server got client");
     g_signal_connect(media, "unprepared",
                      G_CALLBACK(media_unprepared_wrapper), this);
     g_signal_connect(media, "new-state",
@@ -248,8 +252,9 @@ class RtspServer::Impl : boost::noncopyable {
     static_cast<RtspServer::Impl*>(user_data)->HandleClientClosed(c);
   }
   void HandleClientClosed(GstRTSPClient *client) {
-    std::cerr << "client " << reinterpret_cast<intptr_t>(client)
-              << " disconnected\n";
+    log_.noticeStream()
+        << "client " << reinterpret_cast<intptr_t>(client)
+        << " disconnected";
   }
 
 
@@ -260,9 +265,9 @@ class RtspServer::Impl : boost::noncopyable {
   void HandleClientConnected(
       GstRTSPServer* gstrtspserver, GstRTSPClient* client) {
     GstRTSPConnection* conn = gst_rtsp_client_get_connection(client);
-    std::cerr << "client " << reinterpret_cast<intptr_t>(client)
-              << " connected from "
-              << gst_rtsp_connection_get_ip(conn) << "\n";
+    log_.noticeStream()
+        << "client " << reinterpret_cast<intptr_t>(client)
+        << " connected from " << gst_rtsp_connection_get_ip(conn);
     g_signal_connect(client, "closed",
                      G_CALLBACK(client_closed_wrapper), this);
   }
@@ -306,7 +311,8 @@ class RtspServer::Impl : boost::noncopyable {
         const GstStructure* mstruct = gst_message_get_structure(message);
         char* struct_info =
             mstruct ? gst_structure_to_string(mstruct) : g_strdup("no-struct");
-        std::cerr << boost::format("RTSP bus Message '%s' from '%s': %s")
+        log_.noticeStream()
+            << boost::format("RTSP bus Message '%s' from '%s': %s")
             % GST_MESSAGE_TYPE_NAME(message)
             % GST_MESSAGE_SRC_NAME(message)
             % struct_info;
@@ -320,8 +326,9 @@ class RtspServer::Impl : boost::noncopyable {
     static_cast<RtspServer::Impl*>(user_data)->HandleMediaUnprepared(m);
   }
   void HandleMediaUnprepared(GstRTSPMedia *gstrtspmedia) {
-    std::cerr << "Tearing down video source, there were " << error_count_
-              << " errors\n";
+    log_.noticeStream()
+        << "Tearing down video source, there were " << error_count_
+        << " errors";
     {
       std::lock_guard<std::mutex> guard(appsrc_mutex_);
       if (appsrc_h264_) {
@@ -336,7 +343,8 @@ class RtspServer::Impl : boost::noncopyable {
       GstRTSPMedia *gstrtspmedia, gint state, gpointer user_data) {
     // TODO theamk: if media did not go to PLAYING state after a while, raise
     // an error.
-    std::cerr << "Video source in state " << state << "\n";
+    static_cast<RtspServer::Impl*>(user_data)->
+        log_.noticeStream() << "Video source in state " << state;
   }
 
   static void appsrc_enough_data_wrapper(GstAppSrc *src, gpointer user_data) {
@@ -346,22 +354,23 @@ class RtspServer::Impl : boost::noncopyable {
     static int kMaxErrors = 20;
     if (error_count_ < kMaxErrors) {
       char* name = gst_element_get_name(src);
-      std::cerr << "RTSP appsource '" << name
-                << "' says: enough, dropping data\n";;
+      log_.warnStream() << "RTSP appsource '" << name
+                        << "' says: enough, dropping data";;
       g_free(name);
     };
     error_count_++;
     if (error_count_ == kMaxErrors) {
-      std::cerr << "Further errors suppressed\n";
+      log_.warn("Further errors suppressed");
     }
   }
 
   static void appsrc_seek_data_wrapper(
       GstAppSrc *src, guint64 pos, gpointer user_data) {
     char* name = gst_element_get_name(src);
-    std::cerr << boost::format(
-        "RTSP appsource '%s' says: seek me to %d. "
-        "This is not suppored, trouble ahead.\n") % name % pos;
+    static_cast<RtspServer::Impl*>(user_data)->
+        log_.warnStream() << boost::format(
+            "RTSP appsource '%s' says: seek me to %d. "
+            "This is not suppored, trouble ahead.") % name % pos;
     g_free(name);
   }
 
@@ -370,6 +379,8 @@ class RtspServer::Impl : boost::noncopyable {
   boost::asio::io_service& service_;
   const std::thread::id parent_id_;
   std::thread::id gst_id_;
+
+  base::LogRef log_ = base::GetLogInstance("rtsp_server");
 
   bool started_ = false;
   bool gst_started_ = false;

@@ -23,6 +23,7 @@
 #include "base/common.h"
 #include "base/fail.h"
 #include "base/json_archive.h"
+#include "base/logging.h"
 #include "base/property_tree_archive.h"
 
 namespace mjmech {
@@ -48,7 +49,8 @@ void gstreamer_global_init(const std::string& gst_options) {
   g_strfreev(gs_argv);
 
   char* version = gst_version_string();
-  std::cerr << "gstreamer ready: " << version << "\n";
+  base::GetLogInstance("camera_driver").debugStream()
+      << "gstreamer ready: " << version;
   g_free(version);
 
   // Exit on critical messages from our app
@@ -166,9 +168,8 @@ class CameraDriver::Impl : boost::noncopyable {
       } else if (tail == ".avi") {
         muxer = "avimux";
       } else if (tail != ".mp4") {
-        std::cerr
-            << "Unknown h264 savefile extension " << tail
-            << ", assuming MP4 format\n";
+        log_.error("Unknown h264 savefile extension " + tail +
+                   ", assuming MP4 format");
       }
       out << "! tee name=h264-tee ! queue ! " << muxer
           << " ! filesink name=h264writer location="
@@ -243,7 +244,7 @@ class CameraDriver::Impl : boost::noncopyable {
                      G_CALLBACK(h264_sink_new_sample_wrapper), this);
     gst_object_unref(h264_sink);
 
-    std::cerr << "created pipeline with cmd: " << launch_cmd << "\n";
+    log_.debug("created pipeline with cmd: " + launch_cmd);
 
     // Start the pipeline
     // TODO theamk: only when autostart == true?
@@ -252,8 +253,7 @@ class CameraDriver::Impl : boost::noncopyable {
     if (rv == GST_STATE_CHANGE_FAILURE) {
       // no need to exit here -- we will get an error message on the bus with
       // more information.
-      std::cerr << (
-          boost::format("Warning: Failed to start pipeline: %d\n") % rv);
+      log_.error("Failed to start pipeline: %d", rv);
     }
 
     // Set up the timer for stats
@@ -264,7 +264,7 @@ class CameraDriver::Impl : boost::noncopyable {
 
     g_main_loop_run(loop_);
     if (done_) {
-      std::cerr << "camera driver main loop quitting\n";
+      log_.debug("main loop quitting");
     } else {
       base::Fail("camera driver loop exited unexpectedly");
     }
@@ -315,9 +315,10 @@ class CameraDriver::Impl : boost::noncopyable {
       const GstStructure* mstruct = gst_message_get_structure(message);
       char* struct_info =
         mstruct ? gst_structure_to_string(mstruct) : g_strdup("no-struct");
-      std::cerr << boost::format("camera_driver message '%s' from '%s': %s") %
-        GST_MESSAGE_TYPE_NAME(message) % GST_MESSAGE_SRC_NAME(message)
-        % struct_info;
+      log_.noticeStream() <<
+          boost::format("camera_driver message '%s' from '%s': %s") %
+          GST_MESSAGE_TYPE_NAME(message) % GST_MESSAGE_SRC_NAME(message)
+          % struct_info;
       g_free(struct_info);
     }
     return true;
@@ -351,7 +352,7 @@ class CameraDriver::Impl : boost::noncopyable {
       ;
     }
 
-    if (parameters_.verbosity >= 1) {
+    if (log_.isDebugEnabled()) {
       GValue value = { 0, };
       g_value_init(&value, prop->value_type);
       g_object_get_property(G_OBJECT(prop_object), prop->name, &value);
@@ -359,8 +360,8 @@ class CameraDriver::Impl : boost::noncopyable {
       // G_VALUE_HOLDS_STRING(&value)
       gchar* str = gst_value_serialize (&value);
       char* obj_name = gst_object_get_path_string(prop_object);
-      std::cerr << boost::format("camera-recv deep notify %s: %s = %s\n") %
-          obj_name % prop->name % str;
+      log_.debug("camera-recv deep notify %s: %s = %s",
+                 obj_name, prop->name, str);
       g_free (obj_name);
       g_free (str);
       g_value_unset (&value);
@@ -378,7 +379,7 @@ class CameraDriver::Impl : boost::noncopyable {
     GstSample* sample = NULL;
     g_signal_emit_by_name(sink, "pull-sample", &sample);
     if (!sample) {
-      std::cerr << "warnign: raw sink is out of samples\n";
+      log_.error("raw sink is out of samples");
       return GST_FLOW_OK;
     }
 
@@ -388,7 +389,7 @@ class CameraDriver::Impl : boost::noncopyable {
     for (std::weak_ptr<CameraFrameConsumer>& c_weak: consumers_) {
       std::shared_ptr<CameraFrameConsumer> c = c_weak.lock();
       if (!c) {
-        std::cerr << "frame consumer gone -- not delivering raw sample\n";
+        log_.warn("frame consumer gone -- not delivering raw sample");
         continue;
       }
       c->ConsumeRawSample(sample);
@@ -413,7 +414,7 @@ class CameraDriver::Impl : boost::noncopyable {
     GstSample* sample = NULL;
     g_signal_emit_by_name(sink, "pull-sample", &sample);
     if (!sample) {
-      std::cerr << "warning: h264 sink is out of samples\n";
+      base::Fail("warning: h264 sink is out of samples");
       return GST_FLOW_OK;
     }
 
@@ -427,7 +428,7 @@ class CameraDriver::Impl : boost::noncopyable {
     for (std::weak_ptr<CameraFrameConsumer>& c_weak: consumers_) {
       std::shared_ptr<CameraFrameConsumer> c = c_weak.lock();
       if (!c) {
-        std::cerr << "frame consumer gone -- not delivering h264 ample\n";
+        log_.warn("frame consumer gone -- not delivering h264 sample");
         continue;
       }
       c->ConsumeH264Sample(sample);
@@ -435,7 +436,7 @@ class CameraDriver::Impl : boost::noncopyable {
 
     int flags = GST_BUFFER_FLAGS(buf);
     if (flags != 0 && flags != GST_BUFFER_FLAG_DELTA_UNIT) {
-      std::cerr << "unusual buffer flags " << flags << "\n";
+      log_.notice("unusual buffer flags %d", flags);
     }
 
     {
@@ -468,7 +469,7 @@ class CameraDriver::Impl : boost::noncopyable {
     for (std::weak_ptr<CameraFrameConsumer>& c_weak: consumers_) {
       std::shared_ptr<CameraFrameConsumer> c = c_weak.lock();
       if (!c) {
-        std::cerr << "frame consumer gone -- not asking for stats\n";
+        log_.warn("frame consumer gone -- not asking for stats");
         continue;
       }
       c->PreEmitStats(other.get());
@@ -481,7 +482,7 @@ class CameraDriver::Impl : boost::noncopyable {
   void HandleStatsMainThread(std::shared_ptr<CameraStats> stats) {
     BOOST_ASSERT(std::this_thread::get_id() == parent_id_);
 
-    if (parameters_.print_stats) {
+    if (stats_log_.isDebugEnabled()) {
       std::ostringstream out;
       //base::JsonWriteArchive(out).Accept(other.get());
       base::PropertyTreeWriteArchive arch;
@@ -495,7 +496,7 @@ class CameraDriver::Impl : boost::noncopyable {
       if (out.tellp() == 0) {
         out << "(no data)";
       }
-      std::cout << "camera stats: " << out.str() << "\n";
+      stats_log_.debug(out.str());
     }
 
     parent_->camera_stats_signal_(stats.get());
@@ -508,6 +509,8 @@ class CameraDriver::Impl : boost::noncopyable {
   Parameters parameters_;
   std::vector<std::weak_ptr<CameraFrameConsumer> > consumers_;
   bool started_ = false;
+  base::LogRef log_ = base::GetLogInstance("camera_driver");
+  base::LogRef stats_log_ = base::GetLogInstance("camera_driver.stats");
 
   const std::thread::id parent_id_;
   std::thread child_;

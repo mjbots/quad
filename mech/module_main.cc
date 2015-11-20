@@ -21,6 +21,7 @@
 
 #include "base/fail.h"
 #include "base/handler_util.h"
+#include "base/logging.h"
 #include "base/program_options_archive.h"
 #include "base/telemetry_log.h"
 #include "base/telemetry_log_registrar.h"
@@ -60,6 +61,7 @@ int safe_main(int argc, char**argv) {
        "disable real-time signals and other debugging hindrances")
       ;
 
+  AddLoggingOptions(&desc);
   ProgramOptionsArchive(&desc, "remote_debug.").Accept(
       context.remote_debug.parameters());
   ProgramOptionsArchive(&desc).Accept(module.parameters());
@@ -67,6 +69,8 @@ int safe_main(int argc, char**argv) {
   po::variables_map vm;
   po::store(po::parse_command_line(argc, argv, desc), vm);
   po::notify(vm);
+
+  InitLogging();
 
   if (!config_file.empty()) {
     po::store(po::parse_config_file<char>(config_file.c_str(), desc), vm);

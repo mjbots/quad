@@ -118,5 +118,5 @@ sender = ModuleMain('video_sender_app', 'VideoSenderApp',
 
 gsenv.Command(
     'video_sender_test.passed', sender,
-    '$SOURCE --camera.print_stats=1 --max_stats=2 --require_stats_good=1 '
+    '$SOURCE -t camera_driver.stats --max_stats=2 --require_stats_good=1 '
     '--camera.device=TEST --rtsp.port=0 && touch $TARGET')

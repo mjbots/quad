@@ -16,6 +16,7 @@
 
 #include "base/component_archives.h"
 #include "base/fail.h"
+#include "base/logging.h"
 
 #include "camera_driver.h"
 #include "rtsp_server.h"
@@ -93,7 +94,7 @@ class VideoSenderApp : boost::noncopyable {
       }
     }
     if (parameters_.max_stats && parameters_.max_stats <= stats_count_) {
-      std::cerr << "Got required number of camers stats, quitting\n";
+      log_.notice("Got required number of camera stats, quitting");
       service_.stop();
     }
   }
@@ -102,6 +103,7 @@ class VideoSenderApp : boost::noncopyable {
   Members m_;
   Parameters parameters_{&m_};
   int stats_count_ = 0;
+  base::LogRef log_ = base::GetLogInstance("video_sender_app");
 };
 }
 }

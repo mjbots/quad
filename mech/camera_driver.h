@@ -59,26 +59,22 @@ class CameraDriver : boost::noncopyable {
     std::string gst_options;
 
     double stats_interval_ms = 1000;
-    bool print_stats = false;
     std::string device;
     std::string h264_caps;
     std::string decoded_caps;
     std::string write_h264;
     bool dumb_camera = false;
-    int verbosity = 0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(gst_options));
       a->Visit(MJ_NVP(stats_interval_ms));
-      a->Visit(MJ_NVP(print_stats));
       // may be set to TEST to use test source
       a->Visit(MJ_NVP(device));
       a->Visit(MJ_NVP(h264_caps));
       a->Visit(MJ_NVP(decoded_caps));
       a->Visit(MJ_NVP(write_h264));
       a->Visit(MJ_NVP(dumb_camera));
-      a->Visit(MJ_NVP(verbosity));
     }
   };
 

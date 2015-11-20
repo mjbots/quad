@@ -23,6 +23,7 @@ SOURCES = [
     'error_code.cc',
     'fail.cc',
     'linux_input.cc',
+    'logging.cc',
     'telemetry_log.cc',
     'telemetry_remote_debug_server.cc',
     ]
@@ -70,4 +71,3 @@ telemetry_log_test = crenv.Program(
 linux_input_manual_test = crenv.Program(
     'linux_input_manual_test',
     ['test/linux_input_manual_test.cc'] + libbase)
-
