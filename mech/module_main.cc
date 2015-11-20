@@ -115,6 +115,22 @@ int safe_main(int argc, char**argv) {
     }
   }
 
+  // TODO theamk: move this to logging.cc
+  TextLogMessageSignal log_signal_mt;
+  context.telemetry_registry.Register("text_log", &log_signal_mt);
+
+  // TODO theamk: should this marshalling be done by telemetry log
+  // itself?
+  TextLogMessageSignal* log_signal = GetLogMessageSignal();
+  log_signal->connect(
+      [&log_signal_mt, &context](const TextLogMessage* msg) {
+        const TextLogMessage msg_copy = *msg;
+        context.service.post(
+            [msg_copy, &log_signal_mt]() {log_signal_mt(&msg_copy);});
+      });
+
+  //WriteTextLogToTelemetryLog(&context.telemetry_registry);
+
   std::shared_ptr<ErrorHandlerJoiner> joiner =
       std::make_shared<ErrorHandlerJoiner>(
           [=](ErrorCode ec) {

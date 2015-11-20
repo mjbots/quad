@@ -22,11 +22,52 @@
 #include <log4cpp/OstreamAppender.hh>
 #include <log4cpp/PatternLayout.hh>
 
+#include "telemetry_log.h"
+
 namespace mjmech {
 namespace base {
 
 namespace {
 //boost::once_flag singleton_ready = BOOST_ONCE_INIT;
+
+class SignalAppender : public log4cpp::AppenderSkeleton {
+ public:
+  SignalAppender(TextLogMessageSignal* signal)
+      : log4cpp::AppenderSkeleton("signal"),
+        signal_(signal) {
+    // We want to log everything
+    setThreshold(log4cpp::Priority::DEBUG);
+  }
+
+  virtual ~SignalAppender() {}
+
+  virtual void _append(const log4cpp::LoggingEvent& event) {
+    TextLogMessage msg;
+    msg.timestamp =
+        boost::posix_time::ptime(boost::gregorian::date(1970,1,1)) +
+        boost::posix_time::seconds(event.timeStamp.getSeconds()) +
+        boost::posix_time::microseconds(event.timeStamp.getMicroSeconds());
+    msg.thread = event.threadName;
+    msg.priority = log4cpp::Priority::getPriorityName(event.priority);
+    msg.priority_int = event.priority;
+    msg.ndc = event.ndc;
+    msg.category = event.categoryName;
+    msg.message = event.message;
+
+    (*signal_)(&msg);
+  }
+
+  virtual bool requiresLayout () const {
+    return false;
+  }
+
+  virtual void close() {};
+
+  virtual void setLayout(log4cpp::Layout*) {};
+
+ private:
+  TextLogMessageSignal* signal_;
+};
 
 class LoggerSetup : boost::noncopyable {
  public:
@@ -39,6 +80,13 @@ class LoggerSetup : boost::noncopyable {
 
   void AddLoggingOptions(boost::program_options::options_description* desc) {
     namespace po = boost::program_options;
+
+    // TODO theamk: consider always logging all messages to telemetry? but this
+    // may trigger expensive debug message generation.
+
+    // TODO theamk: consider adding flag which turns off all stderr messages,
+    // only leaves messages in telemetry log.
+
     desc->add_options()
         ("verbose,v",
          po::bool_switch()->notifier(
@@ -49,6 +97,12 @@ class LoggerSetup : boost::noncopyable {
          po::value<std::vector<std::string> >()->notifier(
              std::bind(&LoggerSetup::HandleTrace, this, std::placeholders::_1)),
          "enable debug logging for this exact source");
+  }
+
+  //void WriteLogToTelemetryLog(TelemetryLog* log) {  }
+
+  TextLogMessageSignal* GetLogMessageSignal() {
+    return &signal_;
   }
 
  private:
@@ -63,7 +117,12 @@ class LoggerSetup : boost::noncopyable {
 
     log4cpp::Category& root = log4cpp::Category::getRoot();
     root.setPriority(log4cpp::Priority::DEBUG);
+    // passes ownership
     root.addAppender(appender);
+
+    SignalAppender* appender2 = new SignalAppender(&signal_);
+    // passes ownership
+    root.addAppender(appender2);
   };
 
   static void MakeSingleton(LoggerSetup** out) {
@@ -86,6 +145,8 @@ class LoggerSetup : boost::noncopyable {
       }
     }
   }
+
+  TextLogMessageSignal signal_;
 };
 
 
@@ -97,6 +158,14 @@ void AddLoggingOptions(boost::program_options::options_description* desc) {
 
 void InitLogging() {
   LoggerSetup::get();
+}
+
+//void WriteLogToTelemetryLog(TelemetryLog* log) {
+//  LoggerSetup::get()->WriteLogToTelemetryLog(log);
+//}
+
+TextLogMessageSignal* GetLogMessageSignal() {
+  return LoggerSetup::get()->GetLogMessageSignal();
 }
 
 LogRef GetLogInstance(const std::string& name) {
