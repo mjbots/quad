@@ -51,12 +51,15 @@ int safe_main(int argc, char**argv) {
   std::string config_file;
   std::string log_file;
   bool debug = false;
+  bool log_short_name = false;
 
   po::options_description desc("Allowable options");
   desc.add_options()
       ("help,h", "display usage message")
       ("config,c", po::value(&config_file), "read options from file")
       ("log,l", po::value(&log_file), "write to log file")
+      ("log_short_name,L", po::bool_switch(&log_short_name),
+       "do not insert timestamp in log file name")
       ("debug,d", po::bool_switch(&debug),
        "disable real-time signals and other debugging hindrances")
       ;
@@ -105,7 +108,11 @@ int safe_main(int argc, char**argv) {
         (boost::format("%s-%s%s") %
          stem % datestamp % extension).str();
 
-    context.telemetry_log.Open(stamped_path.native());
+    if (log_short_name) {
+      context.telemetry_log.Open(log_file);
+    } else {
+      context.telemetry_log.Open(stamped_path.native());
+    }
   }
 
   std::shared_ptr<ErrorHandlerJoiner> joiner =
