@@ -143,6 +143,13 @@ class RtspServer::Impl : public CameraFrameConsumer {
     if (!appsrc_offset_valid_) {
       // Record offsets from first sample.
       appsrc_offset_valid_ = true;
+      if (!GST_CLOCK_TIME_IS_VALID(buf->pts)) {
+        appsrc_offset_ = buf->dts;
+      } else if (!GST_CLOCK_TIME_IS_VALID(buf->dts)) {
+        appsrc_offset_ = buf->pts;
+      } else {
+        appsrc_offset_ = std::min(buf->pts, buf->dts);
+      }
       appsrc_offset_dts_ = buf->dts;
       appsrc_offset_pts_ = buf->pts;
     }
@@ -152,18 +159,28 @@ class RtspServer::Impl : public CameraFrameConsumer {
 
     // Make buffer writeable and apply pts/dts offsets
     buf = gst_buffer_make_writable(buf);
-    if (GST_CLOCK_TIME_IS_VALID(appsrc_offset_pts_)) {
-      BOOST_ASSERT(GST_CLOCK_TIME_IS_VALID(buf->pts));
-      buf->pts -= appsrc_offset_pts_;
-    } else {
-      BOOST_ASSERT(!GST_CLOCK_TIME_IS_VALID(buf->pts));
-    }
 
-    if (GST_CLOCK_TIME_IS_VALID(appsrc_offset_dts_)) {
-      BOOST_ASSERT(GST_CLOCK_TIME_IS_VALID(buf->dts));
-      buf->dts -= appsrc_offset_dts_;
+    if (0) {
+      if (GST_CLOCK_TIME_IS_VALID(appsrc_offset_pts_)) {
+        BOOST_ASSERT(GST_CLOCK_TIME_IS_VALID(buf->pts));
+        buf->pts -= appsrc_offset_pts_;
+      } else {
+        BOOST_ASSERT(!GST_CLOCK_TIME_IS_VALID(buf->pts));
+      }
+
+      if (GST_CLOCK_TIME_IS_VALID(appsrc_offset_dts_)) {
+        BOOST_ASSERT(GST_CLOCK_TIME_IS_VALID(buf->dts));
+        buf->dts -= appsrc_offset_dts_;
+      } else {
+        BOOST_ASSERT(!GST_CLOCK_TIME_IS_VALID(buf->dts));
+      }
     } else {
-      BOOST_ASSERT(!GST_CLOCK_TIME_IS_VALID(buf->dts));
+      if (GST_CLOCK_TIME_IS_VALID(buf->dts)) {
+        buf->dts -= appsrc_offset_;
+      }
+      if (GST_CLOCK_TIME_IS_VALID(buf->pts)) {
+        buf->pts -= appsrc_offset_;
+      }
     }
 
     GstFlowReturn ret = gst_app_src_push_buffer(appsrc_h264_, buf);
@@ -380,6 +397,7 @@ class RtspServer::Impl : public CameraFrameConsumer {
   GstCaps* appsrc_h264_caps_ = NULL;
   bool appsrc_needs_iframe_ = false;
   bool appsrc_offset_valid_ = false;
+  GstClockTime appsrc_offset_ = 0;
   GstClockTime appsrc_offset_dts_ = 0;
   GstClockTime appsrc_offset_pts_ = 0;
 

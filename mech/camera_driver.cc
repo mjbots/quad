@@ -420,6 +420,11 @@ class CameraDriver::Impl : boost::noncopyable {
       c->ConsumeH264Sample(sample);
     }
 
+    int flags = GST_BUFFER_FLAGS(buf);
+    if (flags != 0 && flags != GST_BUFFER_FLAG_DELTA_UNIT) {
+      std::cerr << "unusual buffer flags " << flags << "\n";
+    }
+
     {
       std::lock_guard<std::mutex> guard(stats_mutex_);
       stats_->h264_frames++;
