@@ -161,11 +161,12 @@ class CameraDriver::Impl : boost::noncopyable {
     }
 
     // Make decoded image endpoint
+    double decoded_fps =
+        (parameters_.decoded_framerate > 0)
+        ? parameters_.decoded_framerate
+        : parameters_.framerate;
     out << "! video/x-raw,format=YUY2,framerate="
-        << FormatFraction(
-            (parameters_.decoded_framerate > 0)
-            ? parameters_.decoded_framerate
-            : parameters_.framerate) << ","
+        << FormatFraction(decoded_fps) << ","
         << parameters_.decoded_caps << " ";
     if (is_dumb) {
       out << "! tee name=dec-tee ";
@@ -175,8 +176,15 @@ class CameraDriver::Impl : boost::noncopyable {
     // Make H264 endpoint
     if (is_dumb) {
       out << "dec-tee. ! videoconvert ! queue "
-          << " ! x264enc tune=zerolatency key-int-max=10"
-          << " ! video/x-h264,framerate="
+          << " ! x264enc tune=zerolatency byte-stream=true ";
+      if (parameters_.iframe_interval_s) {
+        int key_int = 0.5 + decoded_fps * parameters_.iframe_interval_s;
+        out << "key-int-max=" << std::max(1, key_int) << " ";
+      }
+      if (parameters_.bitrate_Bps > 0) {
+        out << "bitrate=" << (parameters_.bitrate_Bps * 8 / 1024) << " ";
+      }
+      out << " ! video/x-h264,framerate="
           << FormatFraction(parameters_.framerate) << " ";
     } else {
       out << "src.vidsrc ! video/x-h264,framerate="
