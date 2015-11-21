@@ -111,23 +111,32 @@ class CameraDriver::Impl : boost::noncopyable {
 
  private:
   // Escape string for gstreamer pipeline
-  std::string pp_escape(const std::string& s) {
+  static std::string pp_escape(const std::string& s) {
     if (s.find(' ') == std::string::npos) {
       return s;
     }
     base::Fail("string escaping not implemented");
   }
 
+  // Format floating point number as fraction (10/1)
+  static std::string FormatFraction(double val) {
+    BOOST_ASSERT(val > 0);
+    gint n = 0, d = 0;
+    gst_util_double_to_fraction(val, &n, &d);
+    return (boost::format("%d/%d") % n % d).str();
+  }
+
   std::string MakeLaunchCmd() {
     std::ostringstream out;
 
-    std::string device = "/dev/video0";
-    if (parameters_.device != "")  {
-      device = parameters_.device;
+    std::string device = parameters_.device;
+    if (device == "")  {
+      device = "/dev/video0";
     }
 
     bool is_test = device == "TEST";
     bool is_dumb = parameters_.dumb_camera || is_test;
+    dumb_camera_ = is_dumb;
 
     if (is_test) {
       out << "videotestsrc is-live=1 pattern=ball ";
@@ -136,18 +145,28 @@ class CameraDriver::Impl : boost::noncopyable {
           << " ! videoconvert ";
     } else {
       out << "uvch264src device=" << pp_escape(device)
-          << " name=src auto-start=true message-forward=true"
-          << " iframe-period=1000 "
-          << "src.vfsrc ";
+          << " name=src auto-start=true message-forward=true";
+      if (parameters_.iframe_interval_s > 0) {
+        out << " iframe-period=" <<
+            static_cast<int>(parameters_.iframe_interval_s * 1000.0);
+      }
+      if (parameters_.bitrate_Bps > 0) {
+        int bps = (parameters_.bitrate_Bps * 8);
+        out << " average-bitrate=" << bps
+            << " initial-bitrate=" << bps
+            << " peak-bitrate=" << (bps * 1.5);
+      }
+      out << " " << parameters_.extra_uvch264
+          << " src.vfsrc ";
     }
 
     // Make decoded image endpoint
-    std::string decoded_caps =
-        "video/x-raw,format=YUY2,width=640,height=480,framerate=30/1";
-    if (parameters_.decoded_caps != "") {
-      decoded_caps = parameters_.decoded_caps;
-    }
-    out << "! " << decoded_caps << " ";
+    out << "! video/x-raw,format=YUY2,framerate="
+        << FormatFraction(
+            (parameters_.decoded_framerate > 0)
+            ? parameters_.decoded_framerate
+            : parameters_.framerate) << ","
+        << parameters_.decoded_caps << " ";
     if (is_dumb) {
       out << "! tee name=dec-tee ";
     };
@@ -156,21 +175,24 @@ class CameraDriver::Impl : boost::noncopyable {
     // Make H264 endpoint
     if (is_dumb) {
       out << "dec-tee. ! videoconvert ! queue "
-          << " ! x264enc tune=zerolatency key-int-max=10 ! video/x-h264 ";
+          << " ! x264enc tune=zerolatency key-int-max=10"
+          << " ! video/x-h264,framerate="
+          << FormatFraction(parameters_.framerate) << " ";
     } else {
-      std::string h264_caps =
-          "video/x-h264,width=1920,height=1080,framerate=30/1";
-      if (parameters_.h264_caps != "") {
-        h264_caps = parameters_.h264_caps;
-      }
-      out << "src.vidsrc ! " << h264_caps << " ! h264parse ";
+      out << "src.vidsrc ! video/x-h264,framerate="
+          << FormatFraction(parameters_.framerate) << ","
+          << parameters_.h264_caps << " ! h264parse ";
     };
 
+    if (parameters_.write_video != "" ||
+        parameters_.custom_h264_consumer != "") {
+      out << "! tee name=h264-tee ";
+    }
     // Maybe save it
-    if (parameters_.write_h264 != "") {
+    if (parameters_.write_video != "") {
       std::string muxer = "mp4mux";
-      std::string tail = parameters_.write_h264.substr(
-          std::max(0, static_cast<int>(parameters_.write_h264.size()) - 4));
+      std::string tail = parameters_.write_video.substr(
+          std::max(0, static_cast<int>(parameters_.write_video.size()) - 4));
       if (tail == ".mkv") {
         muxer = "matroskamux streamable=true";
       } else if (tail == ".avi") {
@@ -179,12 +201,17 @@ class CameraDriver::Impl : boost::noncopyable {
         log_.error("Unknown h264 savefile extension " + tail +
                    ", assuming MP4 format");
       }
-      out << "! tee name=h264-tee ! queue ! " << muxer
+      out << "! queue ! " << muxer
           << " ! filesink name=h264writer location="
-          << pp_escape(parameters_.write_h264)
+          << pp_escape(parameters_.write_video)
           << " h264-tee. ";
     }
-
+    // Maybe serve it to custom consumer
+    if (parameters_.custom_h264_consumer != "") {
+      out << "! queue ! " << parameters_.custom_h264_consumer
+          << " h264-tee. ";
+    }
+    // And pass it to our app
     out << "! queue ! appsink name=h264-sink";
     return out.str();
   }
@@ -266,8 +293,8 @@ class CameraDriver::Impl : boost::noncopyable {
     }
 
     // Set up the timer for stats
-    if (parameters_.stats_interval_ms > 0) {
-      g_timeout_add(parameters_.stats_interval_ms,
+    if (parameters_.stats_interval_s > 0) {
+      g_timeout_add(parameters_.stats_interval_s * 1000.0,
                     stats_timeout_wrapper, this);
     }
 
@@ -331,11 +358,11 @@ class CameraDriver::Impl : boost::noncopyable {
     }
     default: { break; };
     }
-    if (print_message && log_.isDebugEnabled()) {
+    if (print_message && bus_log_.isDebugEnabled()) {
       const GstStructure* mstruct = gst_message_get_structure(message);
       char* struct_info =
         mstruct ? gst_structure_to_string(mstruct) : g_strdup("no-struct");
-      log_.debugStream() <<
+      bus_log_.debugStream() <<
           boost::format("message '%s' from '%s': %s") %
           GST_MESSAGE_TYPE_NAME(message) % GST_MESSAGE_SRC_NAME(message)
           % struct_info;
@@ -360,19 +387,23 @@ class CameraDriver::Impl : boost::noncopyable {
       // Unreadable parameter -- ignore
       return;
     }
-    if (strcmp(prop->name, "caps") == 0) {
+    if (strcmp(prop->name, "caps") == 0 ||
+        strcmp(prop->name, "device") == 0 ||
+        strcmp(prop->name, "num-buffers") == 0) {
       // caps are just too verbose...
       return;
     }
 
     // only select device-fd field.
-    if (strcmp(prop->name, "device-fd") == 0) {
-      // TODO: record device-fd for uvch264 source, print message only when
-      // verbose is set.
-      ;
+    if (strcmp(prop->name, "device-fd") == 0 &&
+        prop->value_type == G_TYPE_INT) {
+      gint dev_fd = -1;
+      g_object_get(prop_object, "device-fd", &dev_fd, NULL);
+      log_.debug("uvch264src camera has fd %d", dev_fd);
+      return;
     }
 
-    if (log_.isDebugEnabled()) {
+    if (bus_log_.isDebugEnabled()) {
       GValue value = { 0, };
       g_value_init(&value, prop->value_type);
       g_object_get_property(G_OBJECT(prop_object), prop->name, &value);
@@ -380,8 +411,8 @@ class CameraDriver::Impl : boost::noncopyable {
       // G_VALUE_HOLDS_STRING(&value)
       gchar* str = gst_value_serialize (&value);
       char* obj_name = gst_object_get_path_string(prop_object);
-      log_.debug("camera-recv deep notify %s: %s = %s",
-                 obj_name, prop->name, str);
+      bus_log_.debug("camera-recv deep notify %s: %s = %s",
+                     obj_name, prop->name, str);
       g_free (obj_name);
       g_free (str);
       g_value_unset (&value);
@@ -457,17 +488,31 @@ class CameraDriver::Impl : boost::noncopyable {
     total_h264_frames_++;
 
     int flags = GST_BUFFER_FLAGS(buf);
-    if (flags != 0 && flags != GST_BUFFER_FLAG_DELTA_UNIT &&
-        ((total_h264_frames_ > 1) || (flags != GST_BUFFER_FLAG_DISCONT)
-         )) {
-      log_.notice("unusual buffer flags %d in frame %d",
-                  flags, total_h264_frames_);
+    int unusual_flags = flags &~ GST_BUFFER_FLAG_DELTA_UNIT;
+    if ((total_h264_frames_ <= 1) || !dumb_camera_) {
+      // somehow, our camera alwasy reports DISCONT flag
+      unusual_flags &=~ GST_BUFFER_FLAG_DISCONT;
     }
+    if (unusual_flags) {
+      log_.notice("unusual buffer flags 0x%X (total 0x%X) in frame %d",
+                  unusual_flags, flags, total_h264_frames_);
+    }
+
+    double interval = 0;
+    if (GST_CLOCK_TIME_IS_VALID(last_h264_pts_)) {
+      interval = GST_TIME_AS_USECONDS(buf->pts - last_h264_pts_) * 1e-6;
+    } else if (GST_CLOCK_TIME_IS_VALID(last_h264_dts_)) {
+      interval = GST_TIME_AS_USECONDS(buf->dts - last_h264_dts_) * 1e-6;
+    }
+    last_h264_pts_ = buf->pts;
+    last_h264_dts_ = buf->dts;
 
     {
       std::lock_guard<std::mutex> guard(stats_mutex_);
       stats_->h264_frames++;
       stats_->h264_bytes += len;
+      stats_->h264_max_interval_s = std::max(
+          stats_->h264_max_interval_s, interval);
       if (key_frame) { stats_->h264_key_frames++; };
     }
 
@@ -549,6 +594,7 @@ class CameraDriver::Impl : boost::noncopyable {
   bool started_ = false;
   base::LogRef log_ = base::GetLogInstance("camera_driver");
   base::LogRef stats_log_ = base::GetLogInstance("camera_driver.stats");
+  base::LogRef bus_log_ = base::GetLogInstance("camera_driver.bus");
 
   const std::thread::id parent_id_;
   std::mutex startup_mutex_;
@@ -561,6 +607,9 @@ class CameraDriver::Impl : boost::noncopyable {
   std::mutex stats_mutex_;
   std::shared_ptr<CameraStats> stats_;
   int total_h264_frames_ =0;
+  bool dumb_camera_ = false;
+  GstClockTime last_h264_pts_ = GST_CLOCK_TIME_NONE;
+  GstClockTime last_h264_dts_ = GST_CLOCK_TIME_NONE;
 };
 
 

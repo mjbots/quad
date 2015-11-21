@@ -58,23 +58,54 @@ class CameraDriver : boost::noncopyable {
     // argv/argc to pass to gst
     std::string gst_options;
 
-    double stats_interval_ms = 1000;
+    double stats_interval_s = 1.0;
+
+    // may be set to TEST to use test source
     std::string device;
-    std::string h264_caps;
-    std::string decoded_caps;
-    std::string write_h264;
+
+    // Desired framerate
+    double framerate = 30;
+    // For h264 and dumb cameras, the viewfinder framerate (0 means same as
+    // primary)
+    double decoded_framerate = 0;
+
+    // Desired I-frame interval. 0 for default.
+    double iframe_interval_s = 1.0;
+    // Desired bitrate, BYTES/sec. 0 for default (375000)
+    int bitrate_Bps = 0;
+
+    // Partial caps for h264 stream. Only applicable to h264 camera.
+    std::string h264_caps = "width=1920,height=1080";
+    // Partial caps for decoded stream, specifies primary caps for dumb camera.
+    std::string decoded_caps = "width=640,height=480";
+    // Extra parameters to uvch264src
+    std::string extra_uvch264;
+    // If non-empty, write video file to this location
+    std::string write_video;
+
+    // If True, use regular v4l driver and encode h264 in software
     bool dumb_camera = false;
+    // If non-empty, gstreamer pipeline that is fed h264 data
+    std::string custom_h264_consumer;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(gst_options));
-      a->Visit(MJ_NVP(stats_interval_ms));
-      // may be set to TEST to use test source
+      a->Visit(MJ_NVP(stats_interval_s));
       a->Visit(MJ_NVP(device));
+
+      a->Visit(MJ_NVP(framerate));
+      a->Visit(MJ_NVP(decoded_framerate));
+      a->Visit(MJ_NVP(iframe_interval_s));
+      a->Visit(MJ_NVP(bitrate_Bps));
+
       a->Visit(MJ_NVP(h264_caps));
       a->Visit(MJ_NVP(decoded_caps));
-      a->Visit(MJ_NVP(write_h264));
+      a->Visit(MJ_NVP(extra_uvch264));
+
+      a->Visit(MJ_NVP(write_video));
       a->Visit(MJ_NVP(dumb_camera));
+      a->Visit(MJ_NVP(custom_h264_consumer));
     }
   };
 
@@ -87,6 +118,7 @@ class CameraDriver : boost::noncopyable {
     // h264 chunks
     int h264_frames = 0;
     int h264_key_frames = 0;
+    double h264_max_interval_s = 0;
     // bytes in h264 chunks
     int h264_bytes = 0;
     // h264 chunks which were sent to an active RTSP connection
@@ -99,6 +131,7 @@ class CameraDriver : boost::noncopyable {
       a->Visit(MJ_NVP(h264_frames));
       a->Visit(MJ_NVP(h264_key_frames));
       a->Visit(MJ_NVP(h264_bytes));
+      a->Visit(MJ_NVP(h264_max_interval_s));
       a->Visit(MJ_NVP(h264_frames_rtsp));
     }
   };
