@@ -14,9 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import itertools
 import optparse
 import os
 import sys
+import time
 
 SCRIPT_PATH=os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.join(SCRIPT_PATH, '../python'))
@@ -29,6 +31,10 @@ def main():
     parser.add_option('-n', '--name', default=[], action='append',
                       help='name to export')
     parser.add_option('-o', '--output', default='-', help='destination')
+    parser.add_option('-s', '--sort', action='store_true',
+                      help='sort record by type')
+    parser.add_option('-t', '--timestamps', action='store_true',
+                      help='Make timestamps readable')
 
     options, args = parser.parse_args()
 
@@ -44,13 +50,20 @@ def main():
     pred = lambda x: True
     if options.name:
         pred = lambda x: x in options.name
-    data = br.get(pred)
 
-    for key, data in data.iteritems():
-        for item in data:
-            print >>out, item
+    if options.sort:
+        data = itertools.chain(
+            *(data for (_, data) in sorted(br.get(pred).iteritems()))
+        )
+    else:
+        data = (data for (_, data) in br.items(pred))
+
+    for item in data:
+        if options.timestamps:
+            ts_str = time.strftime('%F %T', time.gmtime(item.timestamp)) + \
+                     ('%.6f' % (item.timestamp % 1.0))[1:]
+            item = item._replace(timestamp=ts_str)
+        print >>out, item
 
 if __name__ == '__main__':
     main()
-
-
