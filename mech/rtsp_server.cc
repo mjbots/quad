@@ -71,7 +71,7 @@ class RtspServer::Impl : boost::noncopyable {
     }
 
     this->server_ = gst_rtsp_server_new();
-    if (parameters_.port > 0) {
+    if (parameters_.port >= 0) {
       std::string service = (
           boost::format("%d") % parameters_.port).str();
       gst_rtsp_server_set_service(server_, service.c_str());
