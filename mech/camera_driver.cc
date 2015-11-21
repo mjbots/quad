@@ -98,6 +98,7 @@ class CameraDriver::Impl : boost::noncopyable {
     // Capture our parent's parameters before starting our thread.
     parameters_ = parent_->parameters_;
 
+    std::lock_guard<std::mutex> guard(startup_mutex_);
     child_ = std::thread(std::bind(&Impl::Run, this, handler));
   }
 
@@ -189,10 +190,8 @@ class CameraDriver::Impl : boost::noncopyable {
   }
 
   void Run(base::ErrorHandler handler) {
-    static std::thread::id this_id, child_id;
-    this_id = std::this_thread::get_id();
-    child_id = child_.get_id();
-    BOOST_ASSERT(this_id == child_id);
+    std::lock_guard<std::mutex> guard(startup_mutex_);
+    BOOST_ASSERT(child_.get_id() == std::this_thread::get_id());
 
     // Init global state
     gstreamer_global_init(parameters_.gst_options);
@@ -552,6 +551,7 @@ class CameraDriver::Impl : boost::noncopyable {
   base::LogRef stats_log_ = base::GetLogInstance("camera_driver.stats");
 
   const std::thread::id parent_id_;
+  std::mutex startup_mutex_;
   std::thread child_;
   bool done_ = false;
   GMainLoop* loop_ = NULL;
