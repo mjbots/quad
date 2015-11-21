@@ -164,6 +164,7 @@ class RtspServer::Impl : boost::noncopyable {
     buf = gst_buffer_make_writable(buf);
 
     if (0) {
+      // One offset per value
       if (GST_CLOCK_TIME_IS_VALID(appsrc_offset_pts_)) {
         BOOST_ASSERT(GST_CLOCK_TIME_IS_VALID(buf->pts));
         buf->pts -= appsrc_offset_pts_;
@@ -177,13 +178,18 @@ class RtspServer::Impl : boost::noncopyable {
       } else {
         BOOST_ASSERT(!GST_CLOCK_TIME_IS_VALID(buf->dts));
       }
-    } else {
+    } else if (0) {
+      // One shared offset
       if (GST_CLOCK_TIME_IS_VALID(buf->dts)) {
         buf->dts -= appsrc_offset_;
       }
       if (GST_CLOCK_TIME_IS_VALID(buf->pts)) {
         buf->pts -= appsrc_offset_;
       }
+    } else {
+      // Actually, camera returns completely bogus time. Just ignore it.
+      buf->dts = GST_CLOCK_TIME_NONE;
+      buf->pts = GST_CLOCK_TIME_NONE;
     }
 
     GstFlowReturn ret = gst_app_src_push_buffer(appsrc_h264_, buf);

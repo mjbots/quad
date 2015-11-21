@@ -499,13 +499,11 @@ class CameraDriver::Impl : boost::noncopyable {
     }
 
     double interval = 0;
-    if (GST_CLOCK_TIME_IS_VALID(last_h264_pts_)) {
-      interval = GST_TIME_AS_USECONDS(buf->pts - last_h264_pts_) * 1e-6;
-    } else if (GST_CLOCK_TIME_IS_VALID(last_h264_dts_)) {
-      interval = GST_TIME_AS_USECONDS(buf->dts - last_h264_dts_) * 1e-6;
+    const auto now = boost::posix_time::microsec_clock::universal_time();
+    if (last_h264_time_) {
+      interval = base::ConvertDurationToSeconds(now - *last_h264_time_);
     }
-    last_h264_pts_ = buf->pts;
-    last_h264_dts_ = buf->dts;
+    last_h264_time_ = now;
 
     {
       std::lock_guard<std::mutex> guard(stats_mutex_);
@@ -608,8 +606,7 @@ class CameraDriver::Impl : boost::noncopyable {
   std::shared_ptr<CameraStats> stats_;
   int total_h264_frames_ =0;
   bool dumb_camera_ = false;
-  GstClockTime last_h264_pts_ = GST_CLOCK_TIME_NONE;
-  GstClockTime last_h264_dts_ = GST_CLOCK_TIME_NONE;
+  boost::optional<boost::posix_time::ptime> last_h264_time_;
 };
 
 
