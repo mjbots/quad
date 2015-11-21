@@ -78,9 +78,16 @@ class CameraDriver::Impl : boost::noncopyable {
   ~Impl() {
     done_ = true;
     if (loop_) {
-      g_main_loop_quit(loop_);
+      // post the 'quit' message to the main loop
+      // TODO theamk: this will need to use to use explicit main loop if
+      // we ever have more than one glib main loops.
+      g_timeout_add(1, shutdown_wrapper, this);
     }
-    if (child_.joinable()) { child_.join(); }
+    if (child_.joinable()) {
+      // TODO theamk: maybe add timeout here, in case gstreamer fails to
+      // stop in time?
+      child_.join();
+    }
   }
 
   void AsyncStart(base::ErrorHandler handler) {
@@ -182,7 +189,10 @@ class CameraDriver::Impl : boost::noncopyable {
   }
 
   void Run(base::ErrorHandler handler) {
-    BOOST_ASSERT(std::this_thread::get_id() == child_.get_id());
+    static std::thread::id this_id, child_id;
+    this_id = std::this_thread::get_id();
+    child_id = child_.get_id();
+    BOOST_ASSERT(this_id == child_id);
 
     // Init global state
     gstreamer_global_init(parameters_.gst_options);
@@ -280,10 +290,20 @@ class CameraDriver::Impl : boost::noncopyable {
   bool HandleBusMessage(GstBus *bus, GstMessage *message) {
     BOOST_ASSERT(std::this_thread::get_id() == child_.get_id());
 
-    bool print_message = false;
+    bool print_message = true;
     switch (GST_MESSAGE_TYPE(message)) {
     case GST_MESSAGE_EOS: {
-      base::Fail("EOS on pipeline");
+      if (!done_) {
+        base::Fail("Unexpected EOS on pipeline");
+      };
+      log_.debug("got EOS -- stopping pipeline");
+      GstStateChangeReturn rv =
+          gst_element_set_state(pipeline_, GST_STATE_NULL);
+      // note: 0 is failure, 1 is success, 2 is async (=fill do later)
+      // note: when going to STATE_NULL, we will never get _ASYNC
+      BOOST_ASSERT(rv == GST_STATE_CHANGE_SUCCESS);
+      g_main_loop_quit(loop_);
+      print_message = false;
       break;
     }
     case GST_MESSAGE_ERROR: {
@@ -304,19 +324,20 @@ class CameraDriver::Impl : boost::noncopyable {
     case GST_MESSAGE_STATE_CHANGED:
     case GST_MESSAGE_STREAM_STATUS:
     case GST_MESSAGE_TAG:
-    case GST_MESSAGE_NEW_CLOCK: {
+    case GST_MESSAGE_NEW_CLOCK:
+    case GST_MESSAGE_ASYNC_DONE: {
       // Ignore
       print_message = false;
       break;
     }
     default: { break; };
     }
-    if (print_message) {
+    if (print_message && log_.isDebugEnabled()) {
       const GstStructure* mstruct = gst_message_get_structure(message);
       char* struct_info =
         mstruct ? gst_structure_to_string(mstruct) : g_strdup("no-struct");
-      log_.noticeStream() <<
-          boost::format("camera_driver message '%s' from '%s': %s") %
+      log_.debugStream() <<
+          boost::format("message '%s' from '%s': %s") %
           GST_MESSAGE_TYPE_NAME(message) % GST_MESSAGE_SRC_NAME(message)
           % struct_info;
       g_free(struct_info);
@@ -389,7 +410,7 @@ class CameraDriver::Impl : boost::noncopyable {
     for (std::weak_ptr<CameraFrameConsumer>& c_weak: consumers_) {
       std::shared_ptr<CameraFrameConsumer> c = c_weak.lock();
       if (!c) {
-        log_.warn("frame consumer gone -- not delivering raw sample");
+        log_.debug("frame consumer gone -- not delivering raw sample");
         continue;
       }
       c->ConsumeRawSample(sample);
@@ -428,15 +449,20 @@ class CameraDriver::Impl : boost::noncopyable {
     for (std::weak_ptr<CameraFrameConsumer>& c_weak: consumers_) {
       std::shared_ptr<CameraFrameConsumer> c = c_weak.lock();
       if (!c) {
-        log_.warn("frame consumer gone -- not delivering h264 sample");
+        log_.debug("frame consumer gone -- not delivering h264 sample");
         continue;
       }
       c->ConsumeH264Sample(sample);
     }
 
+    total_h264_frames_++;
+
     int flags = GST_BUFFER_FLAGS(buf);
-    if (flags != 0 && flags != GST_BUFFER_FLAG_DELTA_UNIT) {
-      log_.notice("unusual buffer flags %d", flags);
+    if (flags != 0 && flags != GST_BUFFER_FLAG_DELTA_UNIT &&
+        ((total_h264_frames_ > 1) || (flags != GST_BUFFER_FLAG_DISCONT)
+         )) {
+      log_.notice("unusual buffer flags %d in frame %d",
+                  flags, total_h264_frames_);
     }
 
     {
@@ -502,6 +528,19 @@ class CameraDriver::Impl : boost::noncopyable {
     parent_->camera_stats_signal_(stats.get());
   }
 
+  static gboolean shutdown_wrapper(gpointer user_data) {
+    static_cast<CameraDriver::Impl*>(user_data)->HandleShutdown();
+    return FALSE;
+  }
+
+  void HandleShutdown() {
+    BOOST_ASSERT(std::this_thread::get_id() == child_.get_id());
+    BOOST_ASSERT(done_);
+    // send 'end of stream' event
+    gst_element_send_event(pipeline_, gst_event_new_eos());
+    log_.debug("shutdown requested -- sending end-of-stream");
+  }
+
   // From both.
   CameraDriver* const parent_;
   boost::asio::io_service& service_;
@@ -521,7 +560,7 @@ class CameraDriver::Impl : boost::noncopyable {
   GstElement* pipeline_ = NULL;
   std::mutex stats_mutex_;
   std::shared_ptr<CameraStats> stats_;
-
+  int total_h264_frames_ =0;
 };
 
 

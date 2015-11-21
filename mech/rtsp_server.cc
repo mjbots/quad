@@ -47,6 +47,7 @@ class RtspServer::Impl : boost::noncopyable {
         parent_id_(std::this_thread::get_id()) {}
 
   ~Impl() {
+    log_.debug("object destoyed");
   }
 
   void AsyncStart(base::ErrorHandler handler) {
