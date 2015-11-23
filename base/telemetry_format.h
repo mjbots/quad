@@ -132,7 +132,6 @@
 ///         * type-specified data
 ///  19 - enum
 ///     * field specific data
-///       * uint32_t size
 ///       * uint32_t nvalues
 ///       * nvalues copies of
 ///         * uint32_t value

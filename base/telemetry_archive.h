@@ -50,14 +50,17 @@ class TelemetryWriteArchive {
     return ostr.str();
   }
 
-  static std::string MakeSchema() {
-    FastOStringStream ostr;
-    TelemetryWriteStream<FastOStringStream> stream(ostr);
-
+  template <typename OStream>
+  static void WriteSchema(OStream& stream_in) {
+    TelemetryWriteStream<OStream> stream(stream_in);
     stream.Write(static_cast<uint32_t>(0)); // SchemaFlags
 
     WriteSchemaObject(stream, static_cast<RootSerializable*>(0));
+  }
 
+  static std::string MakeSchema() {
+    FastOStringStream ostr;
+    WriteSchema(ostr);
     return ostr.str();
   }
 
@@ -116,23 +119,16 @@ class TelemetryWriteArchive {
     void VisitEnumeration(const NameValuePair& pair) {
       stream_.Write(static_cast<uint32_t>(TF::FieldType::kEnum));
 
-      FastOStringStream enum_ostr;
-      TelemetryWriteStream<FastOStringStream> enum_stream(enum_ostr);
-
       const auto items = pair.enumeration_mapper();
       uint32_t nvalues = items.size();
-      enum_stream.Write(nvalues);
+      stream_.Write(nvalues);
 
       for (const auto& pair: items) {
         uint32_t key = static_cast<uint32_t>(pair.first);
         std::string value = pair.second;
-        enum_stream.Write(key);
-        enum_stream.Write(value);
+        stream_.Write(key);
+        stream_.Write(value);
       }
-
-      stream_.Write(static_cast<uint32_t>(enum_ostr.data()->size()));
-      stream_.RawWrite(enum_ostr.data()->data(),
-                       enum_ostr.data()->size());
     }
 
     template <typename NameValuePair>

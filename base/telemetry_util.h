@@ -260,7 +260,6 @@ class TelemetrySchemaReader {
         break;
       }
       case TF::FieldType::kEnum: {
-        stream_.Read<uint32_t>(); // size (ignored)
         uint32_t nvalues = stream_.Read<uint32_t>();
         std::map<int, std::string> items;
         for (uint32_t i = 0; i < nvalues; i++) {
