@@ -23,11 +23,14 @@
 
 #include <cstdio>
 #include <list>
+#include <map>
 #include <mutex>
 #include <thread>
 
 #include <snappy.h>
 #include <snappy-sinksource.h>
+
+#include <boost/format.hpp>
 
 #include "circular_buffer.h"
 #include "fail.h"
