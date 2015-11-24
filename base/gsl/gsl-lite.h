@@ -829,7 +829,7 @@ inline std::wstring to_string( cwstring_span const & view )
 namespace detail {
 
 template<class T, class SizeType, const T Sentinel>
-static span<T> ensure_sentinel( T * seq, SizeType max = std::numeric_limits<SizeType>::max() )
+static span<T> ensure_sentinel( T * seq, SizeType max = std::numeric_limits<typename std::iterator_traits<T*>::difference_type>::max() )
 {
     typedef T * pointer;
     typedef typename std::iterator_traits<pointer>::difference_type difference_type;
@@ -852,7 +852,7 @@ static span<T> ensure_sentinel( T * seq, SizeType max = std::numeric_limits<Size
 //
 
 template< class T >
-inline span<T> ensure_z( T * const & sz, size_t max = std::numeric_limits<size_t>::max() )
+inline span<T> ensure_z( T * const & sz, size_t max = std::numeric_limits<typename std::iterator_traits<T*>::difference_type>::max() )
 {
     return detail::ensure_sentinel<T, size_t, 0>( sz, max );
 }
