@@ -21,6 +21,7 @@
 
 #include "base/common.h"
 #include "base/concrete_comm_factory.h"
+#include "base/error_wrap.h"
 #include "base/program_options_archive.h"
 
 #include "herkulex.h"

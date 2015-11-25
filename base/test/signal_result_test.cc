@@ -14,6 +14,7 @@
 
 #include "signal_result.h"
 
+#include <boost/asio/spawn.hpp>
 #include <boost/test/auto_unit_test.hpp>
 
 using namespace mjmech::base;

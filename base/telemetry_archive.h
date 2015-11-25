@@ -17,6 +17,7 @@
 #include <type_traits>
 
 #include <boost/assert.hpp>
+#include <boost/optional.hpp>
 
 #include "fast_stream.h"
 #include "telemetry_format.h"

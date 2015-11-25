@@ -24,6 +24,7 @@
 #include <boost/program_options.hpp>
 
 #include "common.h"
+#include "error_wrap.h"
 #include "program_options_archive.h"
 
 using namespace std::placeholders;

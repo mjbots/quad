@@ -14,10 +14,12 @@
 
 #include "herkulex.h"
 
+#include <boost/asio/spawn.hpp>
 #include <boost/test/auto_unit_test.hpp>
 
 #include "base/comm_factory_generators.h"
 #include "base/concrete_comm_factory.h"
+#include "base/error_wrap.h"
 
 using namespace mjmech::base;
 using namespace mjmech::mech;

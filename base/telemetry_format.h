@@ -17,7 +17,6 @@
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 
 #include "common.h"
-#include "error_code.h"
 
 /// @file
 ///
@@ -250,7 +249,7 @@ class TelemetryWriteStream {
   void Write(const std::string& data) {
     if (data.size() >
         static_cast<std::size_t>(TF::BlockOffsets::kMaxBlockSize)) {
-      throw SystemError::einval("invalid pstring size");
+      BOOST_ASSERT(false);
     }
     Write(static_cast<uint32_t>(data.size()));
     RawWrite(data.data(), data.size());
@@ -313,7 +312,7 @@ class TelemetryReadStream {
   void Ignore(size_t size) {
     istr_.ignore(size);
     if (static_cast<std::size_t>(istr_.gcount()) != size) {
-      throw SystemError(boost::system::error_code(boost::asio::error::eof));
+      BOOST_ASSERT(false);
     }
   }
 
@@ -330,7 +329,7 @@ class TelemetryReadStream {
   std::string ReadString() {
     uint32_t size = Read<uint32_t>();
     if (size > static_cast<std::size_t>(TF::BlockOffsets::kMaxBlockSize)) {
-      throw SystemError::einval("corrupt pstring");
+      BOOST_ASSERT(false);
     }
     std::string result(size, static_cast<char>(0));
     RawRead(&result[0], size);
@@ -361,7 +360,7 @@ class TelemetryReadStream {
   void RawRead(char* out, std::size_t size) {
     istr_.read(out, size);
     if (static_cast<std::size_t>(istr_.gcount()) != size) {
-      throw SystemError(boost::system::error_code(boost::asio::error::eof));
+      BOOST_ASSERT(false);
     }
   }
 

@@ -17,47 +17,25 @@
 #include <cmath>
 #include <limits>
 
-#include <boost/asio/spawn.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
-#include <boost/format.hpp>
-#include <boost/system/system_error.hpp>
+#include <boost/math/constants/constants.hpp>
 
 namespace mjmech {
 namespace base {
 const double kNaN = std::numeric_limits<double>::signaling_NaN();
 
 inline double Degrees(double radians) {
-  return 180.0 * radians / M_PI;
+  return 180.0 * radians / boost::math::constants::pi<double>();
 }
 
 inline double Radians(double degrees) {
-  return M_PI * degrees / 180.0;
+  return boost::math::constants::pi<double>() * degrees / 180.0;
 }
 
 inline double GetSign(double value) {
   if (value < 0.0) { return -1.0; }
   else if (value > 0.0) { return 1.0; }
   else { return 0.0; }
-}
-
-/// The following routine can be used to wrap coroutines such that
-/// boost::system_error information is captured.  The default
-/// boost::exception_ptr ignores this exception, making it challenging
-/// to even report what happened.
-template <typename Coroutine>
-auto ErrorWrap(Coroutine coro) {
-  return [=](boost::asio::yield_context yield) {
-    try {
-      return coro(yield);
-    } catch (boost::system::system_error& e) {
-      std::throw_with_nested(
-          std::runtime_error(
-              (boost::format("system_error: %s: %s") %
-               e.what() % e.code()).str()));
-    } catch (std::runtime_error& e) {
-      std::throw_with_nested(std::runtime_error(e.what()));
-    }
-  };
 }
 
 inline boost::posix_time::time_duration
