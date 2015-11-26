@@ -18,18 +18,18 @@
 #include <limits>
 
 #include <boost/date_time/posix_time/posix_time_types.hpp>
-#include <boost/math/constants/constants.hpp>
 
 namespace mjmech {
 namespace base {
 const double kNaN = std::numeric_limits<double>::signaling_NaN();
+const double kPi = 3.14159265358979323846;
 
 inline double Degrees(double radians) {
-  return 180.0 * radians / boost::math::constants::pi<double>();
+  return 180.0 * radians / kPi;
 }
 
 inline double Radians(double degrees) {
-  return boost::math::constants::pi<double>() * degrees / 180.0;
+  return kPi * degrees / 180.0;
 }
 
 inline double GetSign(double value) {

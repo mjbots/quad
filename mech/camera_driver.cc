@@ -20,6 +20,8 @@
 #include <gst/gst.h>
 #include <gst/app/gstappsink.h>
 
+#include <boost/format.hpp>
+
 #include "base/common.h"
 #include "base/fail.h"
 #include "base/json_archive.h"

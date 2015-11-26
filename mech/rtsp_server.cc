@@ -22,6 +22,8 @@
 #include <gst/app/gstappsrc.h>
 #include <gst/rtsp-server/rtsp-server.h>
 
+#include <boost/format.hpp>
+
 #include "base/common.h"
 #include "base/fail.h"
 #include "base/logging.h"

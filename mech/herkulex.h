@@ -19,6 +19,7 @@
 #include <boost/asio/read_until.hpp>
 #include <boost/asio/streambuf.hpp>
 #include <boost/asio/write.hpp>
+#include <boost/format.hpp>
 #include <boost/signals2/signal.hpp>
 
 #include "base/command_sequencer.h"
