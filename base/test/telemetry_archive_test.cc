@@ -193,3 +193,19 @@ BOOST_AUTO_TEST_CASE(TelemetryArchiveDataTest) {
 )XX";
   BOOST_CHECK_EQUAL(repr.str(), expected);
 }
+
+BOOST_AUTO_TEST_CASE(TelemetryArchiveSimpleReadDataTest) {
+  TelemetryWriteArchive<Test1> write_archive;
+  Test1 data;
+  data.value_i32 = 99;
+  data.value_f64 = 4.0;
+  std::string result = write_archive.Serialize(&data);
+
+  TelemetrySimpleReadArchive<Test1> dut;
+  std::istringstream istr(result);
+  Test1 updated;
+
+  BOOST_CHECK_NE(updated.value_i32, 99);
+  dut.Deserialize(&updated, istr);
+  BOOST_CHECK_EQUAL(updated.value_i32, 99);
+}

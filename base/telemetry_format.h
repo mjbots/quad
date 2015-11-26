@@ -16,6 +16,7 @@
 
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 
+#include "gsl/gsl-lite.h"
 #include "common.h"
 
 /// @file
@@ -247,6 +248,10 @@ class TelemetryWriteStream {
   TelemetryWriteStream(Stream& ostr) : ostr_(ostr) {}
 
   void Write(const std::string& data) {
+    Write(gsl::cstring_span(data));
+  }
+
+  void Write(const gsl::cstring_span& data) {
     if (data.size() >
         static_cast<std::size_t>(TF::BlockOffsets::kMaxBlockSize)) {
       BOOST_ASSERT(false);

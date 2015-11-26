@@ -20,6 +20,7 @@
 #include <boost/optional.hpp>
 
 #include "fast_stream.h"
+#include "telemetry_archive_detail.h"
 #include "telemetry_format.h"
 #include "visit_archive.h"
 
@@ -75,15 +76,6 @@ class TelemetryWriteArchive {
 
     visitor.Finish();
   }
-
-  template <typename T>
-  struct FakeNvp {
-    FakeNvp(T* value) : value_(value) {}
-    const T& get_value() const { return *value_; }
-    T* value() const { return value_; }
-
-    T* const value_;
-  };
 
   template <typename WriteStream>
   class SchemaVisitor : public VisitArchive<SchemaVisitor<WriteStream>> {
@@ -145,9 +137,9 @@ class TelemetryWriteArchive {
       stream_.Write(static_cast<uint32_t>(TF::FieldType::kPair));
 
       VisitArchive<SchemaVisitor>::Visit(
-          FakeNvp<First>(&pair.value()->first));
+          detail::FakeNvp<First>(&pair.value()->first));
       VisitArchive<SchemaVisitor>::Visit(
-          FakeNvp<Second>(&pair.value()->second));
+          detail::FakeNvp<Second>(&pair.value()->second));
     }
 
     template <typename NameValuePair, typename T, std::size_t N>
@@ -158,7 +150,7 @@ class TelemetryWriteArchive {
       stream_.Write(static_cast<uint32_t>(N));
 
       VisitArchive<SchemaVisitor>::Visit(
-          FakeNvp<T>(static_cast<T*>(nullptr)));
+          detail::FakeNvp<T>(static_cast<T*>(nullptr)));
     }
 
     template <typename NameValuePair, typename T>
@@ -168,7 +160,7 @@ class TelemetryWriteArchive {
       stream_.Write(static_cast<uint32_t>(TF::FieldType::kVector));
 
       VisitArchive<SchemaVisitor>::Visit(
-          FakeNvp<T>(static_cast<T*>(nullptr)));
+          detail::FakeNvp<T>(static_cast<T*>(nullptr)));
     }
 
     template <typename NameValuePair, typename T>
@@ -177,7 +169,8 @@ class TelemetryWriteArchive {
                      int) {
       stream_.Write(static_cast<uint32_t>(TF::FieldType::kOptional));
 
-      VisitArchive<SchemaVisitor>::Visit(FakeNvp<T>(static_cast<T*>(0)));
+      VisitArchive<SchemaVisitor>::Visit(
+          detail::FakeNvp<T>(static_cast<T*>(0)));
     }
 
     template <typename NameValuePair, typename T>
@@ -197,81 +190,35 @@ class TelemetryWriteArchive {
   };
 
   template <typename WriteStream>
-  class DataVisitor : public VisitArchive<DataVisitor<WriteStream>> {
+  class DataVisitor : public detail::DataVisitorBase<
+      DataVisitor<WriteStream>, WriteStream> {
    public:
-    DataVisitor(WriteStream& stream) : stream_(stream) {}
+    typedef detail::DataVisitorBase<DataVisitor<WriteStream>, WriteStream> Base;
+    DataVisitor(WriteStream& stream) : Base(stream) {}
 
     template <typename NameValuePair>
-    void VisitSerializable(const NameValuePair& pair) {
-      DataVisitor sub(stream_);
-      sub.Accept(pair.value());
-    }
-
-    template <typename NameValuePair>
-    void VisitScalar(const NameValuePair& pair) {
-      typename std::decay<decltype(pair.get_value())>::type * dummy = nullptr;
-      VisitHelper(pair, dummy, 0);
-    }
-
-   private:
-    template <typename NameValuePair, typename First, typename Second>
-    void VisitHelper(const NameValuePair& pair,
-                     std::pair<First, Second>*,
-                     int) {
-      VisitArchive<DataVisitor>::Visit(
-          FakeNvp<First>(&pair.value()->first));
-      VisitArchive<DataVisitor>::Visit(
-          FakeNvp<Second>(&pair.value()->second));
-    }
-
-    template <typename NameValuePair, typename T, std::size_t N>
-    void VisitHelper(const NameValuePair& pair,
-                     std::array<T, N>*,
-                     int) {
+    void VisitVector(const NameValuePair& pair) {
       auto value = pair.value();
-      for (int i = 0; i < N; i++) {
-        VisitArchive<DataVisitor>::Visit(
-            FakeNvp<T>(&(*value)[i]));
-      }
-    }
-
-    template <typename NameValuePair, typename T>
-    void VisitHelper(const NameValuePair& pair,
-                     std::vector<T>*,
-                     int) {
-      auto value = pair.value();
-      stream_.Write(static_cast<uint32_t>(value->size()));
+      this->stream_.Write(static_cast<uint32_t>(value->size()));
       for (int i = 0; i < static_cast<int>(value->size()); i++) {
-        VisitArchive<DataVisitor>::Visit(
-            FakeNvp<T>(&(*value)[i]));
+        Base::Visit(detail::MakeFakeNvp(&(*value)[i]));
       }
     }
 
-    template <typename NameValuePair, typename T>
-    void VisitHelper(const NameValuePair& pair,
-                     boost::optional<T>*,
-                     int) {
+    template <typename NameValuePair>
+    void VisitOptional(const NameValuePair& pair) {
       auto value = pair.value();
-      stream_.Write(static_cast<uint8_t>(*value ? 1 : 0));
+      this->stream_.Write(static_cast<uint8_t>(*value ? 1 : 0));
       if (*value) {
-        VisitArchive<DataVisitor>::Visit(
-            FakeNvp<T>(&(**value)));
+        Base::Visit(detail::MakeFakeNvp(&(**value)));
       }
-    }
-
-    template <typename NameValuePair, typename T>
-    void VisitHelper(const NameValuePair& pair,
-                     T*,
-                     long) {
-      VisitPrimitive(pair);
     }
 
     template <typename NameValuePair>
     void VisitPrimitive(const NameValuePair& pair) {
-      stream_.Write(pair.get_value());
+      this->stream_.Write(pair.get_value());
     }
 
-    WriteStream& stream_;
   };
 
   static TF::FieldType FindType(bool*) { return TF::FieldType::kBool; }
@@ -289,6 +236,81 @@ class TelemetryWriteArchive {
   static TF::FieldType FindType(boost::posix_time::ptime*) {
     return TF::FieldType::kPtime;
   }
+};
+
+/// This archive can read a serialized structure assuming that the
+/// schema exactly matches what was serialized.  An out of band
+/// mechanism is required to enforce this.
+template <typename RootSerializable>
+class TelemetrySimpleReadArchive {
+ public:
+  typedef TelemetryFormat TF;
+
+  template <typename IStream>
+  static void Deserialize(RootSerializable* serializable,
+                          IStream& stream_in) {
+    TelemetryReadStream<IStream> stream(stream_in);
+
+    DataVisitor<TelemetryReadStream<IStream> > visitor(stream);
+    visitor.Accept(serializable);
+  }
+
+ private:
+  template <typename ReadStream>
+  class DataVisitor : public detail::DataVisitorBase<
+      DataVisitor<ReadStream>, ReadStream> {
+   public:
+    typedef detail::DataVisitorBase<DataVisitor<ReadStream>, ReadStream> Base;
+    DataVisitor(ReadStream& stream) : Base(stream) {}
+
+    template <typename NameValuePair>
+    void VisitVector(const NameValuePair& pair) {
+      auto value = pair.value();
+      uint32_t size = this->stream_.template Read<uint32_t>();
+      value->resize(size);
+      for (int i = 0; i < static_cast<int>(value->size()); i++) {
+        Base::Visit(detail::MakeFakeNvp(&(*value)[i]));
+      }
+    }
+
+    template <typename NameValuePair>
+    void VisitOptional(const NameValuePair& pair) {
+      auto value = pair.value();
+      uint8_t present = this->stream_.template Read<uint8_t>();
+      if (!present) {
+        *value = boost::none;
+      } else {
+        typedef typename std::decay<decltype(pair.get_value())>::type ValueType;
+        *value = ValueType();
+        Base::Visit(detail::MakeFakeNvp(&(**value)));
+      }
+    }
+
+    template <typename NameValuePair>
+    void VisitPrimitive(const NameValuePair& pair) {
+      typedef typename std::decay<decltype(pair.get_value())>::type T;
+      T* t = nullptr;
+      ReadPrimitive(pair, t, 0);
+    }
+
+    template <typename NameValuePair>
+    void ReadPrimitive(const NameValuePair& pair, std::string*, int) {
+      pair.set_value(this->stream_.ReadString());
+    }
+
+    template <typename NameValuePair>
+    void ReadPrimitive(const NameValuePair& pair,
+                       boost::posix_time::ptime*, int) {
+      pair.set_value(this->stream_.ReadPtime());
+    }
+
+    template <typename NameValuePair, typename T>
+    void ReadPrimitive(const NameValuePair& pair,
+                       T* value, long) {
+      pair.set_value(this->stream_.template Read<T>());
+    }
+
+  };
 };
 }
 }
