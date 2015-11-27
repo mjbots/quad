@@ -16,8 +16,9 @@
 
 #include <type_traits>
 
-#include <boost/assert.hpp>
+#ifndef MJMECH_DISABLE_BOOST
 #include <boost/optional.hpp>
+#endif
 
 #include "fast_stream.h"
 #include "telemetry_archive_detail.h"
@@ -163,6 +164,7 @@ class TelemetryWriteArchive {
           detail::FakeNvp<T>(static_cast<T*>(nullptr)));
     }
 
+#ifndef MJMECH_DISABLE_BOOST
     template <typename NameValuePair, typename T>
     void VisitHelper(const NameValuePair& pair,
                      boost::optional<T>*,
@@ -172,6 +174,7 @@ class TelemetryWriteArchive {
       VisitArchive<SchemaVisitor>::Visit(
           detail::FakeNvp<T>(static_cast<T*>(0)));
     }
+#endif
 
     template <typename NameValuePair, typename T>
     void VisitHelper(const NameValuePair& pair,
@@ -233,9 +236,11 @@ class TelemetryWriteArchive {
   static TF::FieldType FindType(float*) { return TF::FieldType::kFloat32; }
   static TF::FieldType FindType(double*) { return TF::FieldType::kFloat64; }
   static TF::FieldType FindType(std::string*) { return TF::FieldType::kString; }
+#ifndef MJMECH_DISABLE_BOOST
   static TF::FieldType FindType(boost::posix_time::ptime*) {
     return TF::FieldType::kPtime;
   }
+#endif
 };
 
 /// This archive can read a serialized structure assuming that the
@@ -273,6 +278,7 @@ class TelemetrySimpleReadArchive {
       }
     }
 
+#ifndef MJMECH_DISABLE_BOOST
     template <typename NameValuePair>
     void VisitOptional(const NameValuePair& pair) {
       auto value = pair.value();
@@ -285,6 +291,7 @@ class TelemetrySimpleReadArchive {
         Base::Visit(detail::MakeFakeNvp(&(**value)));
       }
     }
+#endif
 
     template <typename NameValuePair>
     void VisitPrimitive(const NameValuePair& pair) {
@@ -298,11 +305,13 @@ class TelemetrySimpleReadArchive {
       pair.set_value(this->stream_.ReadString());
     }
 
+#ifndef MJMECH_DISABLE_BOOST
     template <typename NameValuePair>
     void ReadPrimitive(const NameValuePair& pair,
                        boost::posix_time::ptime*, int) {
       pair.set_value(this->stream_.ReadPtime());
     }
+#endif
 
     template <typename NameValuePair, typename T>
     void ReadPrimitive(const NameValuePair& pair,

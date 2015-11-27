@@ -14,10 +14,18 @@
 
 #pragma once
 
+#ifndef MJMECH_DISABLE_BOOST
+#include <boost/asio/error.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
+#else
+#include <assert.h>
+#endif
 
 #include "gsl/gsl-lite.h"
 #include "common.h"
+#ifndef MJMECH_DISABLE_BOOST
+#include "error_code.h"
+#endif
 
 /// @file
 ///
@@ -254,7 +262,11 @@ class TelemetryWriteStream {
   void Write(const gsl::cstring_span& data) {
     if (data.size() >
         static_cast<std::size_t>(TF::BlockOffsets::kMaxBlockSize)) {
-      BOOST_ASSERT(false);
+#ifndef MJMECH_DISABLE_BOOST
+      throw SystemError::einval("invalid pstring size");
+#else
+      assert(false);
+#endif
     }
     Write(static_cast<uint32_t>(data.size()));
     RawWrite(data.data(), data.size());
@@ -275,10 +287,12 @@ class TelemetryWriteStream {
   void Write(uint64_t value) { WriteScalar(value); }
   void Write(float value) { WriteScalar(value); }
   void Write(double value) { WriteScalar(value); }
+#ifndef MJMECH_DISABLE_BOOST
   void Write(const boost::posix_time::ptime time) {
     int64_t value = ConvertPtimeToMicroseconds(time);
     Write(value);
   }
+#endif
   void WriteVarint(uint64_t value) {
     do {
       uint32_t word = value & 0x7fffffff;
@@ -317,7 +331,11 @@ class TelemetryReadStream {
   void Ignore(size_t size) {
     istr_.ignore(size);
     if (static_cast<std::size_t>(istr_.gcount()) != size) {
-      BOOST_ASSERT(false);
+#ifndef MJMECH_DISABLE_BOOST
+      throw SystemError(boost::system::error_code(boost::asio::error::eof));
+#else
+      assert(false);
+#endif
     }
   }
 
@@ -326,15 +344,21 @@ class TelemetryReadStream {
     return ReadScalar<T>();
   }
 
+#ifndef MJMECH_DISABLE_BOOST
   boost::posix_time::ptime ReadPtime() {
     int64_t value = Read<int64_t>();
     return ConvertMicrosecondsToPtime(value);
   }
+#endif
 
   std::string ReadString() {
     uint32_t size = Read<uint32_t>();
     if (size > static_cast<std::size_t>(TF::BlockOffsets::kMaxBlockSize)) {
-      BOOST_ASSERT(false);
+#ifndef MJMECH_DISABLE_BOOST
+      throw SystemError::einval("corrupt pstring");
+#else
+      assert(false);
+#endif
     }
     std::string result(size, static_cast<char>(0));
     RawRead(&result[0], size);
@@ -365,7 +389,11 @@ class TelemetryReadStream {
   void RawRead(char* out, std::size_t size) {
     istr_.read(out, size);
     if (static_cast<std::size_t>(istr_.gcount()) != size) {
-      BOOST_ASSERT(false);
+#ifndef MJMECH_DISABLE_BOOST
+      throw SystemError(boost::system::error_code(boost::asio::error::eof));
+#else
+      assert(false);
+#endif
     }
   }
 

@@ -76,12 +76,14 @@ class DataVisitorBase : public VisitArchive<Derived> {
     static_cast<Derived*>(this)->VisitVector(pair);
   }
 
+#ifndef MJMECH_DISABLE_BOOST
   template <typename NameValuePair, typename T>
   void VisitHelper(const NameValuePair& pair,
                    boost::optional<T>*,
                    int) {
     static_cast<Derived*>(this)->VisitOptional(pair);
   }
+#endif
 
   template <typename NameValuePair, typename T>
   void VisitHelper(const NameValuePair& pair,

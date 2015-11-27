@@ -17,7 +17,9 @@
 #include <cmath>
 #include <limits>
 
+#ifndef MJMECH_DISABLE_BOOST
 #include <boost/date_time/posix_time/posix_time_types.hpp>
+#endif
 
 namespace mjmech {
 namespace base {
@@ -38,6 +40,7 @@ inline double GetSign(double value) {
   else { return 0.0; }
 }
 
+#ifndef MJMECH_DISABLE_BOOST
 inline boost::posix_time::time_duration
 ConvertSecondsToDuration(double time_s) {
   const int64_t int_time = static_cast<int64_t>(time_s);
@@ -86,5 +89,6 @@ ConvertMicrosecondsToPtime(int64_t value) {
       value *
       boost::posix_time::time_duration::ticks_per_second() / 1000000);
 }
+#endif
 }
 }
