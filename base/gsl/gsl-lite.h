@@ -21,7 +21,6 @@
 #define GSL_GSL_LITE_H_INCLUDED
 
 #include <exception>
-#include <iterator>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -472,16 +471,6 @@ public:
     typedef pointer       iterator;
     typedef const_pointer const_iterator;
 
-#if gsl_BETWEEN( gsl_COMPILER_MSVC_VERSION, 6, 7 )
-    typedef std::reverse_iterator< iterator, T >             reverse_iterator;
-    typedef std::reverse_iterator< const_iterator, const T > const_reverse_iterator;
-#else
-    typedef std::reverse_iterator< iterator >                reverse_iterator;
-    typedef std::reverse_iterator< const_iterator >          const_reverse_iterator;
-#endif
-
-    typedef typename std::iterator_traits< iterator >::difference_type difference_type;
-
     gsl_constexpr14 span()
         : begin_( NULL )
         , end_  ( NULL )
@@ -589,26 +578,6 @@ public:
     gsl_constexpr14 const_iterator cend() const
     {
         return const_iterator( end() );
-    }
-
-    gsl_constexpr14 reverse_iterator rbegin() const
-    {
-        return reverse_iterator( end() );
-    }
-
-    gsl_constexpr14 reverse_iterator rend() const
-    {
-        return reverse_iterator( begin() );
-    }
-
-    gsl_constexpr14 const_reverse_iterator crbegin() const
-    {
-        return const_reverse_iterator( cend() );
-    }
-
-    gsl_constexpr14 const_reverse_iterator crend() const
-    {
-        return const_reverse_iterator( cbegin() );
     }
 
     gsl_constexpr14 operator bool () const gsl_noexcept
