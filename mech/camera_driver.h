@@ -23,6 +23,8 @@
 #include "base/comm.h"
 #include "base/visitor.h"
 
+#include "gst_main_loop.h"
+
 struct _GstSample;
 typedef struct _GstSample GstSample;
 
@@ -55,9 +57,6 @@ class CameraDriver : boost::noncopyable {
   void AddFrameConsumer(std::weak_ptr<CameraFrameConsumer>);
 
   struct Parameters {
-    // argv/argc to pass to gst
-    std::string gst_options;
-
     double stats_interval_s = 1.0;
 
     // may be set to TEST to use test source
@@ -90,7 +89,6 @@ class CameraDriver : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(gst_options));
       a->Visit(MJ_NVP(stats_interval_s));
       a->Visit(MJ_NVP(device));
 
@@ -140,6 +138,8 @@ class CameraDriver : boost::noncopyable {
     return &camera_stats_signal_;
   }
 
+  void HandleGstReady(GstMainLoopRef&);
+
  private:
   boost::signals2::signal<void (const CameraStats*)> camera_stats_signal_;
   Parameters parameters_;
@@ -148,14 +148,9 @@ class CameraDriver : boost::noncopyable {
   std::unique_ptr<Impl> impl_;
 };
 
-
 // This interface class can consume camera frames.
 class CameraFrameConsumer : boost::noncopyable {
  public:
-  // Gstreamer has been initialized. The consumer can set up its
-  // internal settings. Invoked from main gst thread.
-  virtual void GstReady() {};
-
   // Consume an h264 frame. Invoked from an internal thread.
   virtual void ConsumeH264Sample(GstSample*) {};
 

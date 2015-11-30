@@ -49,7 +49,7 @@ class RtspServer::Impl : boost::noncopyable {
         parent_id_(std::this_thread::get_id()) {}
 
   ~Impl() {
-    log_.debug("object destoyed");
+    log_.debug("object destroyed");
   }
 
   void AsyncStart(base::ErrorHandler handler) {
@@ -62,10 +62,12 @@ class RtspServer::Impl : boost::noncopyable {
     started_ = true;
   }
 
-  void GstReady() {
+  void HandleGstReady(GstMainLoopRef& ref) {
     BOOST_ASSERT(!gst_started_);
     gst_started_ = true;
     gst_id_ = std::this_thread::get_id();
+    gst_loop_ = ref;
+
     BOOST_ASSERT(gst_id_ != parent_id_);
 
     if (!started_) {
@@ -393,6 +395,7 @@ class RtspServer::Impl : boost::noncopyable {
 
   bool started_ = false;
   bool gst_started_ = false;
+  GstMainLoopRef gst_loop_;
 
   // Main server object.
   GstRTSPServer* server_ = NULL;
@@ -433,10 +436,6 @@ class RtspServer::FrameConsumerImpl : public CameraFrameConsumer {
       : impl_(impl) {};
 
   // CameraFrameConsumer interface
-  virtual void GstReady() {
-    impl_->GstReady();
-  }
-
   virtual void ConsumeH264Sample(GstSample* sample) {
     impl_->ConsumeH264Sample(sample);
   }
@@ -455,6 +454,10 @@ RtspServer::RtspServer(boost::asio::io_service& service)
 }
 
 RtspServer::~RtspServer() {}
+
+void RtspServer::HandleGstReady(GstMainLoopRef& ref) {
+  impl_->HandleGstReady(ref);
+}
 
 std::weak_ptr<CameraFrameConsumer> RtspServer::get_frame_consumer() {
   return frame_consumer_impl_;

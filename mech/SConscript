@@ -66,6 +66,7 @@ SOURCES = [
     'mech_warfare.cc',
     'mjmech_imu_driver.cc',
     gsenv.SharedObject('rtsp_server.cc'),
+    gsenv.SharedObject('gst_main_loop.cc'),
     'servo_monitor.cc',
     'turret.cc',
     ]

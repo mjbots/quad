@@ -19,6 +19,7 @@
 #include "base/logging.h"
 
 #include "camera_driver.h"
+#include "gst_main_loop.h"
 #include "rtsp_server.h"
 
 namespace mjmech {
@@ -29,8 +30,17 @@ class VideoSenderApp : boost::noncopyable {
   template <typename Context>
     VideoSenderApp(Context& context)
     : service_(context.service) {
+    m_.gst_main.reset(new GstMainLoop(context));
     m_.camera.reset(new CameraDriver(context));
     m_.rtsp.reset(new RtspServer(context));
+
+    m_.gst_main->ready_signal()->connect(
+        std::bind(&CameraDriver::HandleGstReady, m_.camera.get(),
+                  std::placeholders::_1));
+
+    m_.gst_main->ready_signal()->connect(
+        std::bind(&RtspServer::HandleGstReady, m_.rtsp.get(),
+                  std::placeholders::_1));
 
     m_.camera->AddFrameConsumer(m_.rtsp->get_frame_consumer());
 
@@ -43,11 +53,13 @@ class VideoSenderApp : boost::noncopyable {
   }
 
   struct Members {
+    std::unique_ptr<GstMainLoop> gst_main;
     std::unique_ptr<CameraDriver> camera;
     std::unique_ptr<RtspServer> rtsp;
 
     template <typename Archive>
     void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(gst_main));
       a->Visit(MJ_NVP(camera));
       a->Visit(MJ_NVP(rtsp));
     }

@@ -31,64 +31,18 @@
 namespace mjmech {
 namespace mech {
 
-namespace {
-
-void gstreamer_global_init(const std::string& gst_options) {
-  // prepare argc/argv for getstreamer
-  // (the path in argv[0] may matter. so we set it to
-  // bogus, but recognizeable value)
-  std::string cmdline = "/mjmech-workdir/camera_driver";
-  if (gst_options != "") {
-    cmdline += " " + gst_options;
-  }
-  char ** gs_argv = g_strsplit(cmdline.c_str(), " ", 0);
-  int gs_argc = g_strv_length(gs_argv);
-  gst_init(&gs_argc, reinterpret_cast<char***>(&gs_argv));
-  if (gs_argc != 1) {
-    base::Fail(std::string("Unhandled gst option: ") +
-               std::string(gs_argv[1]));
-  }
-  g_strfreev(gs_argv);
-
-  char* version = gst_version_string();
-  base::GetLogInstance("camera_driver").debugStream()
-      << "gstreamer ready: " << version;
-  g_free(version);
-
-  // Exit on critical messages from our app
-  g_log_set_fatal_mask(
-       NULL,
-       static_cast<GLogLevelFlags>(G_LOG_LEVEL_ERROR | G_LOG_LEVEL_CRITICAL));
-  // Exit on critical messages from GStreamer
-  g_log_set_fatal_mask(
-       "GStreamer",
-       static_cast<GLogLevelFlags>(G_LOG_LEVEL_ERROR | G_LOG_LEVEL_CRITICAL));
-};
-
-}
-
 
 class CameraDriver::Impl : boost::noncopyable {
  public:
   Impl(CameraDriver* parent, boost::asio::io_service& service)
       : parent_(parent),
-        service_(service),
-        work_(service_),
+        parent_service_(service),
         parent_id_(std::this_thread::get_id()),
         stats_(new CameraStats()) {}
 
   ~Impl() {
-    done_ = true;
-    if (loop_) {
-      // post the 'quit' message to the main loop
-      // TODO theamk: this will need to use to use explicit main loop if
-      // we ever have more than one glib main loops.
-      g_timeout_add(1, shutdown_wrapper, this);
-    }
-    if (child_.joinable()) {
-      // TODO theamk: maybe add timeout here, in case gstreamer fails to
-      // stop in time?
-      child_.join();
+    if (gst_loop_) {
+      gst_loop_->WaitForQuit();
     }
   }
 
@@ -96,12 +50,7 @@ class CameraDriver::Impl : boost::noncopyable {
     BOOST_ASSERT(std::this_thread::get_id() == parent_id_);
 
     started_ = true;
-
-    // Capture our parent's parameters before starting our thread.
     parameters_ = parent_->parameters_;
-
-    std::lock_guard<std::mutex> guard(startup_mutex_);
-    child_ = std::thread(std::bind(&Impl::Run, this, handler));
   }
 
   void AddFrameConsumer(std::weak_ptr<CameraFrameConsumer> c) {
@@ -110,6 +59,13 @@ class CameraDriver::Impl : boost::noncopyable {
     consumers_.push_back(c);
   }
 
+
+  void HandleGstReady(GstMainLoopRef& loop_ref) {
+    gst_loop_ = loop_ref;
+    loop_ref->quit_request_signal()->connect(
+        std::bind(&Impl::HandleShutdown, this, std::placeholders::_1));
+    SetupPipeline();
+  }
 
  private:
   // Escape string for gstreamer pipeline
@@ -226,22 +182,7 @@ class CameraDriver::Impl : boost::noncopyable {
     return out.str();
   }
 
-  void Run(base::ErrorHandler handler) {
-    std::lock_guard<std::mutex> guard(startup_mutex_);
-    BOOST_ASSERT(child_.get_id() == std::this_thread::get_id());
-
-    // Init global state
-    gstreamer_global_init(parameters_.gst_options);
-    loop_ = g_main_loop_new(NULL, FALSE);
-
-    // Init consumers
-    for (std::weak_ptr<CameraFrameConsumer>& c_weak: consumers_) {
-      std::shared_ptr<CameraFrameConsumer> c = c_weak.lock();
-      // All pointers should be alive at Run() time
-      BOOST_ASSERT(c);
-      c->GstReady();
-    }
-
+  void SetupPipeline() {
     std::string launch_cmd = MakeLaunchCmd();
 
     // Create a gstreamer pipeline
@@ -307,13 +248,6 @@ class CameraDriver::Impl : boost::noncopyable {
       g_timeout_add(parameters_.stats_interval_s * 1000.0,
                     stats_timeout_wrapper, this);
     }
-
-    g_main_loop_run(loop_);
-    if (done_) {
-      log_.debug("main loop quitting");
-    } else {
-      base::Fail("camera driver loop exited unexpectedly");
-    }
   }
 
 
@@ -324,12 +258,12 @@ class CameraDriver::Impl : boost::noncopyable {
   }
 
   bool HandleBusMessage(GstBus *bus, GstMessage *message) {
-    BOOST_ASSERT(std::this_thread::get_id() == child_.get_id());
+    BOOST_ASSERT(std::this_thread::get_id() == gst_loop_->thread_id());
 
     bool print_message = true;
     switch (GST_MESSAGE_TYPE(message)) {
     case GST_MESSAGE_EOS: {
-      if (!done_) {
+      if (!quit_request_) {
         base::Fail("Unexpected EOS on pipeline");
       };
       log_.debug("got EOS -- stopping pipeline");
@@ -338,7 +272,7 @@ class CameraDriver::Impl : boost::noncopyable {
       // note: 0 is failure, 1 is success, 2 is async (=fill do later)
       // note: when going to STATE_NULL, we will never get _ASYNC
       BOOST_ASSERT(rv == GST_STATE_CHANGE_SUCCESS);
-      g_main_loop_quit(loop_);
+      quit_request_.reset();
       print_message = false;
       break;
     }
@@ -534,7 +468,7 @@ class CameraDriver::Impl : boost::noncopyable {
   }
 
   void HandleStatsTimeout() {
-    BOOST_ASSERT(std::this_thread::get_id() == child_.get_id());
+    BOOST_ASSERT(std::this_thread::get_id() == gst_loop_->thread_id());
 
     std::shared_ptr<CameraStats> other(new CameraStats());
     {
@@ -553,8 +487,8 @@ class CameraDriver::Impl : boost::noncopyable {
       c->PreEmitStats(other.get());
     }
 
-    service_.post(std::bind(&CameraDriver::Impl::HandleStatsMainThread,
-                            this, other));
+    parent_service_.post(std::bind(&CameraDriver::Impl::HandleStatsMainThread,
+                                   this, other));
   }
 
   void HandleStatsMainThread(std::shared_ptr<CameraStats> stats) {
@@ -580,14 +514,10 @@ class CameraDriver::Impl : boost::noncopyable {
     parent_->camera_stats_signal_(stats.get());
   }
 
-  static gboolean shutdown_wrapper(gpointer user_data) {
-    static_cast<CameraDriver::Impl*>(user_data)->HandleShutdown();
-    return FALSE;
-  }
-
-  void HandleShutdown() {
-    BOOST_ASSERT(std::this_thread::get_id() == child_.get_id());
-    BOOST_ASSERT(done_);
+  void HandleShutdown(GstMainLoopRefObj::QuitPostponerPtr& ptr) {
+    BOOST_ASSERT(std::this_thread::get_id() == gst_loop_->thread_id());
+    BOOST_ASSERT(!quit_request_);
+    quit_request_ = ptr;
     // send 'end of stream' event
     gst_element_send_event(pipeline_, gst_event_new_eos());
     log_.debug("shutdown requested -- sending end-of-stream");
@@ -595,8 +525,8 @@ class CameraDriver::Impl : boost::noncopyable {
 
   // From both.
   CameraDriver* const parent_;
-  boost::asio::io_service& service_;
-  boost::asio::io_service::work work_;
+  boost::asio::io_service& parent_service_;
+
   Parameters parameters_;
   std::vector<std::weak_ptr<CameraFrameConsumer> > consumers_;
   bool started_ = false;
@@ -605,10 +535,8 @@ class CameraDriver::Impl : boost::noncopyable {
   base::LogRef bus_log_ = base::GetLogInstance("camera_driver.bus");
 
   const std::thread::id parent_id_;
-  std::mutex startup_mutex_;
-  std::thread child_;
-  bool done_ = false;
-  GMainLoop* loop_ = NULL;
+  GstMainLoopRef gst_loop_;
+  GstMainLoopRefObj::QuitPostponerPtr quit_request_;
 
   // From child (and maybe gst threads) only.
   GstElement* pipeline_ = NULL;
@@ -631,6 +559,10 @@ void CameraDriver::AddFrameConsumer(std::weak_ptr<CameraFrameConsumer> c) {
 
 void CameraDriver::AsyncStart(base::ErrorHandler handler) {
   impl_->AsyncStart(handler);
+}
+
+void CameraDriver::HandleGstReady(GstMainLoopRef& loop_ref) {
+  impl_->HandleGstReady(loop_ref);
 }
 
 }

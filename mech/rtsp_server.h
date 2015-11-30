@@ -62,6 +62,8 @@ class RtspServer : boost::noncopyable {
   // as this object.
   std::weak_ptr<CameraFrameConsumer> get_frame_consumer();
 
+  void HandleGstReady(GstMainLoopRef&);
+
  private:
   Parameters parameters_;
 
