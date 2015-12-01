@@ -119,9 +119,8 @@ class TelemetryWriteArchive {
 
       for (const auto& pair: items) {
         uint32_t key = static_cast<uint32_t>(pair.first);
-        std::string value = pair.second;
         stream_.Write(key);
-        stream_.Write(value);
+        stream_.Write(gsl::ensure_z(pair.second));
       }
     }
 
