@@ -62,13 +62,14 @@ SOURCES = [
     'ahrs.cc',
     gsenv.SharedObject('camera_driver.cc'),
     'gait_driver.cc',
+    gsenv.SharedObject('gst_main_loop.cc'),
     'herkulex.cc',
     'mech_warfare.cc',
     'mjmech_imu_driver.cc',
     gsenv.SharedObject('rtsp_server.cc'),
-    gsenv.SharedObject('gst_main_loop.cc'),
     'servo_monitor.cc',
     'turret.cc',
+    gsenv.SharedObject('video_display.cc'),
     ]
 
 libmech = env.StaticLibrary('mech', SOURCES)
@@ -114,10 +115,18 @@ ModuleMain('mjmech_imu_driver', 'MjmechImuDriver')
 ModuleMain('mech_warfare', 'MechWarfare')
 ModuleMain('servo_monitor_app', 'ServoMonitorApp')
 ModuleMain('ahrs_app', 'AhrsApp')
+
 sender = ModuleMain('video_sender_app', 'VideoSenderApp',
                     env=gsenv)
-
 gsenv.Command(
     'video_sender_test.passed', sender,
     '$SOURCE -t camera_driver.stats --max_stats=2 --require_stats_good=1 '
-    '--camera.device=TEST --rtsp.port=0 && touch $TARGET')
+    '--remote_debug.port=0 --camera.device=TEST --rtsp.port=0 && touch $TARGET')
+
+controller = ModuleMain('video_controller_app', 'VideoControllerApp',
+                        env=gsenv)
+gsenv.Command(
+    'video_controller_test.passed', controller,
+    '$SOURCE -t video_display.stats --max_stats=2 --require_stats_good=1 '
+    '--remote_debug.port=0 --display.source=TEST --display.hide_video=1 '
+    ' && touch $TARGET')
