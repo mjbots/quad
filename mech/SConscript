@@ -62,6 +62,7 @@ SOURCES = [
     'ahrs.cc',
     gsenv.SharedObject('camera_driver.cc'),
     'gait_driver.cc',
+    gsenv.SharedObject('gst_helpers.cc'),
     gsenv.SharedObject('gst_main_loop.cc'),
     'herkulex.cc',
     'mech_warfare.cc',

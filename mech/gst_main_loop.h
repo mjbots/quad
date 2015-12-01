@@ -29,8 +29,8 @@ namespace mech {
 
 class GstMainLoopRefObj : boost::noncopyable {
  public:
-  // TODO theamk: add other useful functions, such as
-  // callLater?
+  virtual void AddPeriodicTimer(double interval_s,
+                                std::function<void()> callback) = 0;
 
   // Wait for main loop to quit. Must be called from program's main asio
   // thread. Will Fail() if thread fails to exit after a while.

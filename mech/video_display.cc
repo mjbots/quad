@@ -26,48 +26,12 @@
 
 #include "base/common.h"
 #include "base/fail.h"
-#include "base/json_archive.h"
 #include "base/logging.h"
-#include "base/property_tree_archive.h"
+
+#include "gst_helpers.h"
 
 namespace mjmech {
 namespace mech {
-
-// TODO theamk: need to factor out common gst-pipeline support from
-// both VideoDisplay and CameraDriver.
-
-
-// Note: The 'identiy' elements are not required -- we could have
-// achieved the same effect with pad probes. I just think that identity
-// elements are slightly easier to understand.
-class IdentityHandoffHandler : boost::noncopyable {
- public:
-  typedef std::function<void(GstBuffer*)> Callback;
-
-  IdentityHandoffHandler(GstElement* pipeline,
-                         const char* element_name,
-                         Callback cb)
-      : callback_(cb) {
-    GstElement* target =
-        gst_bin_get_by_name_recurse_up(GST_BIN(pipeline), element_name);
-    if (!target) {
-      base::Fail(boost::format("Cannot find identity element %s in a pipeline")
-                 % element_name);
-    }
-    int id = g_signal_connect(target, "handoff",
-                              G_CALLBACK(handoff_wrapper), this);
-    BOOST_ASSERT(id > 0);
-    gst_object_unref(target);
-  }
-
- private:
-  Callback callback_;
-  static void handoff_wrapper(GstElement*, GstBuffer* buffer,
-                              gpointer user_data) {
-    static_cast<IdentityHandoffHandler*>(user_data)
-        ->callback_(buffer);
-  }
-};
 
 class VideoDisplay::Impl : boost::noncopyable {
  public:
@@ -85,6 +49,7 @@ class VideoDisplay::Impl : boost::noncopyable {
 
   void AsyncStart(base::ErrorHandler handler) {
     BOOST_ASSERT(std::this_thread::get_id() == parent_id_);
+    BOOST_ASSERT(!gst_loop_);
 
     started_ = true;
     parameters_ = parent_->parameters_;
@@ -92,28 +57,14 @@ class VideoDisplay::Impl : boost::noncopyable {
 
   void HandleGstReady(GstMainLoopRef& loop_ref) {
     gst_loop_ = loop_ref;
-    loop_ref->quit_request_signal()->connect(
-        std::bind(&Impl::HandleShutdown, this, std::placeholders::_1));
+    if (!started_) {
+      log_.debug("component disabled");
+      return;
+    }
     SetupPipeline();
   }
 
  private:
-  // Escape string for gstreamer pipeline
-  static std::string pp_escape(const std::string& s) {
-    if (s.find(' ') == std::string::npos) {
-      return s;
-    }
-    base::Fail("string escaping not implemented");
-  }
-
-  // Format floating point number as fraction (10/1)
-  static std::string FormatFraction(double val) {
-    BOOST_ASSERT(val > 0);
-    gint n = 0, d = 0;
-    gst_util_double_to_fraction(val, &n, &d);
-    return (boost::format("%d/%d") % n % d).str();
-  }
-
   std::string MakeLaunchCmd() {
     std::ostringstream out;
 
@@ -126,7 +77,7 @@ class VideoDisplay::Impl : boost::noncopyable {
       out << "video/x-raw,width=640,height=480,framerate=15/1"
           << " ! queue ! x264enc tune=zerolatency byte-stream=true ";
     } else if (boost::starts_with(source, "rtsp://")) {
-      out << "rtspsrc location=" << pp_escape(source)
+      out << "rtspsrc location=" << gst::PipelineEscape(source)
           <<" latency=200 ";
     } else if (source != "") {
       out << source << " ";
@@ -140,20 +91,10 @@ class VideoDisplay::Impl : boost::noncopyable {
 
     // Maybe save them
     if (parameters_.write_video != "") {
-      std::string muxer = "mp4mux";
-      std::string tail = parameters_.write_video.substr(
-          std::max(0, static_cast<int>(parameters_.write_video.size()) - 4));
-      if (tail == ".mkv") {
-        muxer = "matroskamux streamable=true";
-      } else if (tail == ".avi") {
-        muxer = "avimux";
-      } else if (tail != ".mp4") {
-        log_.error("Unknown h264 savefile extension " + tail +
-                   ", assuming MP4 format");
-      }
-      out << "! tee name=h264-tee ! queue ! " << muxer
+      out << "! tee name=h264-tee ! queue ! "
+          << gst::MuxerForVideoName(parameters_.write_video)
           << " ! filesink name=h264writer location="
-          << pp_escape(parameters_.write_video)
+          << gst::PipelineEscape(parameters_.write_video)
           << " h264-tee. ";
     }
 
@@ -181,42 +122,30 @@ class VideoDisplay::Impl : boost::noncopyable {
   void SetupPipeline() {
     std::string launch_cmd = MakeLaunchCmd();
 
-    log_.debugStream() << "creating pipeline " << launch_cmd;
-
-    // Create a gstreamer pipeline
-    GError* error = NULL;
-    pipeline_ = gst_parse_launch(launch_cmd.c_str(), &error);
-    if (!pipeline_ || error) {
-      base::Fail(
-          boost::format("Failed to launch gstreamer pipeline: error %d: %s"
-                        "\nPipeline command was: %s\n")
-          % error->code % error->message % launch_cmd);
-    }
-    BOOST_ASSERT(error == NULL);
-
-    // Hook the global bus
-    GstBus* bus = gst_element_get_bus(pipeline_);
-    gst_bus_add_watch(bus, handle_bus_message_wrapper, this);
-    gst_object_unref(bus);
+    pipeline_.reset(
+        new gst::PipelineWrapper(
+            gst_loop_, "video_display", launch_cmd));
 
     // Hook the counters. Note: we should have stored them somewhere
     // if we wanted to release the memory properly.
-    new IdentityHandoffHandler(
-        pipeline_, "raw-detector", [this](GstBuffer* buf) {
+    pipeline_->ConnectIdentityHandoff(
+        "raw-detector", [this](GstBuffer* buf) {
           std::lock_guard<std::mutex> guard(stats_mutex_);
           stats_->raw_frames++;
           stats_->raw_bytes += gst_buffer_get_size(buf);
         });
-    new IdentityHandoffHandler(
-        pipeline_, "h264-detector", [this](GstBuffer* buf) {
+
+    pipeline_->ConnectIdentityHandoff(
+        "h264-detector", [this](GstBuffer* buf) {
           std::lock_guard<std::mutex> guard(stats_mutex_);
           stats_->h264_frames++;
           if (!GST_BUFFER_FLAG_IS_SET(buf, GST_BUFFER_FLAG_DELTA_UNIT)) {
             stats_->h264_key_frames++;
           }
         });
-    new IdentityHandoffHandler(
-        pipeline_, "decoded-detector", [this](GstBuffer* buf) {
+
+    pipeline_->ConnectIdentityHandoff(
+        "decoded-detector", [this](GstBuffer* buf) {
           std::lock_guard<std::mutex> guard(stats_mutex_);
           stats_->decoded_frames++;
 
@@ -229,90 +158,14 @@ class VideoDisplay::Impl : boost::noncopyable {
           last_decoded_time_ = now;
         });
 
-    // Start the pipeline
-    GstStateChangeReturn rv =
-      gst_element_set_state(pipeline_, GST_STATE_PLAYING);
-    if (rv == GST_STATE_CHANGE_FAILURE) {
-      // no need to exit here -- we will get an error message on the bus with
-      // more information.
-      log_.error("Failed to start pipeline: %d", rv);
-    }
+    pipeline_->Start();
 
     // Set up the timer for stats
     if (parameters_.stats_interval_s > 0) {
-      g_timeout_add(parameters_.stats_interval_s * 1000.0,
-                    stats_timeout_wrapper, this);
+      gst_loop_->AddPeriodicTimer(
+           parameters_.stats_interval_s,
+           std::bind(&Impl::HandleStatsTimeout, this));
     }
-  }
-
-
-  static gboolean handle_bus_message_wrapper(
-      GstBus *bus, GstMessage *message, gpointer user_data) {
-    return static_cast<VideoDisplay::Impl*>(user_data)
-      ->HandleBusMessage(bus, message) ? TRUE : FALSE;
-  }
-
-  bool HandleBusMessage(GstBus *bus, GstMessage *message) {
-    BOOST_ASSERT(std::this_thread::get_id() == gst_loop_->thread_id());
-
-    bool print_message = true;
-    switch (GST_MESSAGE_TYPE(message)) {
-    case GST_MESSAGE_EOS: {
-      if (!quit_request_) {
-        base::Fail("Unexpected EOS on pipeline");
-      };
-      log_.debug("got EOS -- stopping pipeline");
-      GstStateChangeReturn rv =
-          gst_element_set_state(pipeline_, GST_STATE_NULL);
-      // note: 0 is failure, 1 is success, 2 is async (=fill do later)
-      // note: when going to STATE_NULL, we will never get _ASYNC
-      BOOST_ASSERT(rv == GST_STATE_CHANGE_SUCCESS);
-      quit_request_.reset();
-      print_message = false;
-      break;
-    }
-    case GST_MESSAGE_ERROR: {
-      std::string error_msg = "(no error)";
-      GError *err = NULL;
-      gchar *dbg = NULL;
-      gst_message_parse_error(message, &err, &dbg);
-      if (err) {
-        error_msg = (boost::format("%s\nDebug details: %s")
-                     % err->message % (dbg ? dbg : "(NONE)")).str();
-        g_error_free(err);
-      }
-      if (dbg) { g_free(dbg); }
-
-      base::Fail("gstreamer pipeline error: " + error_msg);
-      break;
-    }
-    case GST_MESSAGE_STATE_CHANGED:
-    case GST_MESSAGE_STREAM_STATUS:
-    case GST_MESSAGE_TAG:
-    case GST_MESSAGE_NEW_CLOCK:
-    case GST_MESSAGE_ASYNC_DONE: {
-      // Ignore
-      print_message = false;
-      break;
-    }
-    default: { break; };
-    }
-    if (print_message && bus_log_.isDebugEnabled()) {
-      const GstStructure* mstruct = gst_message_get_structure(message);
-      char* struct_info =
-        mstruct ? gst_structure_to_string(mstruct) : g_strdup("no-struct");
-      bus_log_.debugStream() <<
-          boost::format("message '%s' from '%s': %s") %
-          GST_MESSAGE_TYPE_NAME(message) % GST_MESSAGE_SRC_NAME(message)
-          % struct_info;
-      g_free(struct_info);
-    }
-    return true;
-  }
-
-  static gboolean stats_timeout_wrapper(gpointer user_data) {
-    static_cast<VideoDisplay::Impl*>(user_data)->HandleStatsTimeout();
-    return TRUE;
   }
 
   void HandleStatsTimeout() {
@@ -334,32 +187,10 @@ class VideoDisplay::Impl : boost::noncopyable {
     BOOST_ASSERT(std::this_thread::get_id() == parent_id_);
 
     if (stats_log_.isDebugEnabled()) {
-      std::ostringstream out;
-      //base::JsonWriteArchive(out).Accept(other.get());
-      base::PropertyTreeWriteArchive arch;
-      arch.Accept(stats.get());
-      for (const auto& elem: arch.tree()) {
-        if (elem.first == "timestamp") { continue; }
-        if (elem.second.data() == "0") { continue; }
-        if (out.tellp()) { out << " "; }
-        out << elem.first << "=" << elem.second.data();
-      }
-      if (out.tellp() == 0) {
-        out << "(no data)";
-      }
-      stats_log_.debug(out.str());
+      stats_log_.debug(gst::FormatStatsForLogging(stats.get()));
     }
 
     parent_->stats_signal_(stats.get());
-  }
-
-  void HandleShutdown(GstMainLoopRefObj::QuitPostponerPtr& ptr) {
-    BOOST_ASSERT(std::this_thread::get_id() == gst_loop_->thread_id());
-    BOOST_ASSERT(!quit_request_);
-    quit_request_ = ptr;
-    // send 'end of stream' event
-    gst_element_send_event(pipeline_, gst_event_new_eos());
-    log_.debug("shutdown requested -- sending end-of-stream");
   }
 
   // From both.
@@ -370,14 +201,12 @@ class VideoDisplay::Impl : boost::noncopyable {
   bool started_ = false;
   base::LogRef log_ = base::GetLogInstance("video_display");
   base::LogRef stats_log_ = base::GetLogInstance("video_display.stats");
-  base::LogRef bus_log_ = base::GetLogInstance("video_display.bus");
 
   const std::thread::id parent_id_;
   GstMainLoopRef gst_loop_;
-  GstMainLoopRefObj::QuitPostponerPtr quit_request_;
 
   // From child (and maybe gst threads) only.
-  GstElement* pipeline_ = NULL;
+  std::unique_ptr<gst::PipelineWrapper> pipeline_;
 
   std::mutex stats_mutex_;
   std::shared_ptr<Stats> stats_;

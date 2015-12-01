@@ -255,11 +255,25 @@ class GstMainLoop::MainLoopRefImpl : public GstMainLoopRefObj {
     return impl_->thread_id();
   }
 
+  virtual void AddPeriodicTimer(double interval,
+                                std::function<void()> callback) {
+    // TODO theamk: forward this function to impl, too.
+    g_timeout_add(interval * 1000.0, periodic_timer_wrapper,
+                  new std::function<void()>(callback));
+  }
+
   virtual ~MainLoopRefImpl() {
     impl_->NoReferencesLeft();
   }
 
  private:
+  static gboolean periodic_timer_wrapper(gpointer data) {
+    std::function<void()>* callback =
+      static_cast<std::function<void()>*>(data);
+    (*callback) ();
+    return TRUE;
+  }
+
   std::shared_ptr<Impl> impl_;
 };
 
