@@ -16,11 +16,45 @@ import sys
 
 Import('canonenv')
 Import('libbase')
+Import('ModuleMain')
+
 env = canonenv.Clone()
 
 env.Append(CPPPATH=['.'])
-env.Append(LIBS=['boost_filesystem',
-                 'boost_date_time'])
+
+def SetupGStreamer(gsenv):
+    # We do not want to use stock gstreamer -- it has hard-to-catch bugs like
+    # streams stopping after few minutes of operation. We require a custom-built
+    # one from 'mj-gstreamer-build' project.
+    gstreamer_root = '/opt/gstreamer-1.4.5'
+    gs_min_revision = 1
+    try:
+        gs_rev = open(gstreamer_root + '/mj-gstreamer-revision',
+                      'r').read().strip()
+    except IOError:
+        print >>sys.stderr, (
+            'ERROR: custom-compiled gstreamer not found. try '
+            'install_packages.sh')
+        sys.exit(1)
+
+    if int(gs_rev) < gs_min_revision:
+        print >>sys.stderr, \
+            'ERROR: custom-compiled gstreamer has wrong revision'
+        print >>sys.stderr, \
+            'try removing %s, then re-run install_packages.sh' \
+            % gstreamer_root
+        sys.exit(1)
+
+    gsenv['GS_LIB'] = gstreamer_root + '/lib'
+    gsenv['RPATH'] = '$GS_LIB'
+
+    for lib in [
+            'gstreamer-rtsp-server-1.0', 'gstreamer-rtsp-1.0',
+            'gstreamer-sdp-1.0',
+            'gstreamer-1.0', 'gstreamer-base-1.0', 'gstreamer-app-1.0',
+            'glib-2.0', 'gobject-2.0']:
+        gsenv.ParseConfig('PKG_CONFIG_PATH=$GS_LIB/pkgconfig pkg-config '
+                          '--cflags --libs ' + lib)
 
 crenv = env.Clone()
 crenv.Append(LIBS=['boost_coroutine',
@@ -28,53 +62,31 @@ crenv.Append(LIBS=['boost_coroutine',
                    ])
 
 gsenv = env.Clone()
-
-# We do not want to use stock gstreamer -- it has hard-to-catch bugs like
-# streams stopping after few minutes of operation. We require a custom-built
-# one from 'mj-gstreamer-build' project.
-gstreamer_root = '/opt/gstreamer-1.4.5'
-gs_min_revision = 1
-try:
-    gs_rev = open(gstreamer_root + '/mj-gstreamer-revision', 'r').read().strip()
-except IOError:
-    print >>sys.stderr, \
-        'ERROR: custom-compiled gstreamer not found. try install_packages.sh'
-    sys.exit(1)
-
-if int(gs_rev) < gs_min_revision:
-    print >>sys.stderr, 'ERROR: custom-compiled gstreamer has wrong revision'
-    print >>sys.stderr, 'try removing %s, then re-run install_packages.sh' \
-        % gstreamer_root
-    sys.exit(1)
-
-
-gsenv['GS_LIB'] = gstreamer_root + '/lib'
-gsenv['RPATH'] = '$GS_LIB'
-
-for lib in [
-        'gstreamer-rtsp-server-1.0', 'gstreamer-rtsp-1.0', 'gstreamer-sdp-1.0',
-        'gstreamer-1.0', 'gstreamer-base-1.0', 'gstreamer-app-1.0',
-        'glib-2.0', 'gobject-2.0']:
-    gsenv.ParseConfig('PKG_CONFIG_PATH=$GS_LIB/pkgconfig pkg-config '
-                      '--cflags --libs ' + lib)
+SetupGStreamer(gsenv)
 
 SOURCES = [
     'ahrs.cc',
-    gsenv.SharedObject('camera_driver.cc'),
     'gait_driver.cc',
-    gsenv.SharedObject('gst_helpers.cc'),
-    gsenv.SharedObject('gst_main_loop.cc'),
     'herkulex.cc',
     'mech_warfare.cc',
     'mjmech_imu_driver.cc',
-    gsenv.SharedObject('rtsp_server.cc'),
     'servo_monitor.cc',
     'turret.cc',
-    gsenv.SharedObject('video_display.cc'),
     ]
 
-libmech = env.StaticLibrary('mech', SOURCES)
-libmech_so = env.SharedLibrary('mech', SOURCES)
+GST_SOURCES = [
+    'camera_driver.cc',
+    'gst_helpers.cc',
+    'gst_main_loop.cc',
+    'rtsp_server.cc',
+    'video_display.cc',
+]
+
+GST_OBJECTS = [gsenv.SharedObject(name)
+               for name in GST_SOURCES]
+
+libmech = env.StaticLibrary('mech', SOURCES + GST_OBJECTS)
+libmech_so = env.SharedLibrary('mech', SOURCES + GST_OBJECTS)
 
 Export('libmech')
 Export('libmech_so')
@@ -100,32 +112,23 @@ mech_warfare_command = crenv.Program(
     'mw_command',
     ['mech_warfare_command.cc'] + libmech + libbase)
 
-def ModuleMain(root, cname, env=None):
-    if env is None:
-        env = crenv
-    mjmech_main = env.Object(
-        root + '_main.o', 'module_main.cc',
-        CPPDEFINES={'MODULE_HEADER_FILE': '\\"' + root + '.h\\"',
-                    'MODULE_CLASS_NAME': cname})
-    env.Depends(mjmech_main, root + '.h')
-    env.Depends(mjmech_main, libmech)
-    env.Depends(mjmech_main, libbase)
-    return env.Program(root, mjmech_main + libmech + libbase)
 
-ModuleMain('mjmech_imu_driver', 'MjmechImuDriver')
-ModuleMain('mech_warfare', 'MechWarfare')
-ModuleMain('servo_monitor_app', 'ServoMonitorApp')
-ModuleMain('ahrs_app', 'AhrsApp')
+for env in (crenv, gsenv):
+    env['MODULE_MAIN_LIBS'] = libmech + libbase
+    env['MODULE_MAIN_NSPREFIX'] = 'mech::'
 
-sender = ModuleMain('video_sender_app', 'VideoSenderApp',
-                    env=gsenv)
+ModuleMain(crenv, 'mjmech_imu_driver', 'MjmechImuDriver')
+ModuleMain(crenv, 'mech_warfare', 'MechWarfare')
+ModuleMain(crenv, 'servo_monitor_app', 'ServoMonitorApp')
+ModuleMain(crenv, 'ahrs_app', 'AhrsApp')
+
+sender = ModuleMain(gsenv, 'video_sender_app', 'VideoSenderApp')
 gsenv.Command(
     'video_sender_test.passed', sender,
     '$SOURCE -t camera_driver.stats --max_stats=2 --require_stats_good=1 '
     '--remote_debug.port=0 --camera.device=TEST --rtsp.port=0 && touch $TARGET')
 
-controller = ModuleMain('video_controller_app', 'VideoControllerApp',
-                        env=gsenv)
+controller = ModuleMain(gsenv, 'video_controller_app', 'VideoControllerApp')
 gsenv.Command(
     'video_controller_test.passed', controller,
     '$SOURCE -t video_display.stats --max_stats=2 --require_stats_good=1 '

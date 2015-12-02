@@ -71,3 +71,21 @@ telemetry_log_test = crenv.Program(
 linux_input_manual_test = crenv.Program(
     'linux_input_manual_test',
     ['test/linux_input_manual_test.cc'] + libbase)
+
+
+module_main_file = File('module_main.cc')
+
+def ModuleMain(env, root, cname):
+    prefix = env.get('MODULE_MAIN_NSPREFIX', '')
+    module_main = env.Object(
+        root + '_main.o', module_main_file,
+        CPPDEFINES={'MODULE_HEADER_FILE': '\\"' + root + '.h\\"',
+                    'MODULE_CLASS_NAME': prefix + cname})
+    env.Depends(module_main, root + '.h')
+    libs = env['MODULE_MAIN_LIBS']
+    env.Depends(module_main, libs)
+    return env.Program(root, module_main + libs)
+Export("ModuleMain")
+
+env['MODULE_MAIN_LIBS'] = libbase
+env['MODULE_MAIN_NSPREFIX'] = 'base::'

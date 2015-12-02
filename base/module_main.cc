@@ -19,20 +19,21 @@
 #include <boost/format.hpp>
 #include <boost/program_options.hpp>
 
-#include "base/fail.h"
-#include "base/handler_util.h"
-#include "base/logging.h"
-#include "base/program_options_archive.h"
-#include "base/telemetry_log.h"
-#include "base/telemetry_log_registrar.h"
-#include "base/telemetry_registry.h"
-#include "base/telemetry_remote_debug_registrar.h"
-#include "base/telemetry_remote_debug_server.h"
+#include "fail.h"
+#include "handler_util.h"
+#include "logging.h"
+#include "program_options_archive.h"
+#include "telemetry_log.h"
+#include "telemetry_log_registrar.h"
+#include "telemetry_registry.h"
+#include "telemetry_remote_debug_registrar.h"
+#include "telemetry_remote_debug_server.h"
 
-using namespace mjmech::base;
-using namespace mjmech::mech;
+namespace mjmech {
 
 namespace {
+using namespace mjmech::base;
+
 struct Context {
   boost::asio::io_service service;
   TelemetryLog telemetry_log;
@@ -145,10 +146,11 @@ int safe_main(int argc, char**argv) {
   return 0;
 }
 }
+}
 
 int main(int argc, char**argv) {
   try {
-    return safe_main(argc, argv);
+    return mjmech::safe_main(argc, argv);
   } catch (std::exception& e) {
     std::cerr << "Error: " << e.what() << "\n";
     return 1;
