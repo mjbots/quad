@@ -1,0 +1,45 @@
+New Odroid setup procedure
+Using Odroid U3+
+
+(1) Start by plugging eMMC card into your computer. Get an small
+"Ubuntu 14.04 Server" image from:
+  http://forum.odroid.com/viewtopic.php?f=77&t=5123
+  http://odroid.in/ubuntu_14.04lts/
+
+mkdir -p /tmp/odroid-image && cd /tmp/odroid-image
+wget http://odroid.in/ubuntu_14.04lts/ubuntu-14.04lts-server-odroid-u-20140604.img.xz
+md5sum ubuntu-14.04lts-server-odroid-u-20140604.img.xz
+# b7568e191eef679116e252ae5136ecee  ubuntu-14.04lts-server-odroid-u-20140604.img.x
+
+  Then extract it to the eMMC card:
+ls -l /dev/disk/by-path/*-usb-*:[0-9]
+xzcat *lts-server*.xz | sudo dd bs=1M of=/dev/sdXX
+# 3384803328 bytes (3.4 GB) copied, 268.485 s, 12.6 MB/s
+sync
+
+(2) Do the initial setup:
+# Plug wired ethernet and power. Device should appear as 'odroid-server':
+ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no root@odroid-server
+# password: odroid
+odroid-utility.sh
+# choose "4  Resize your root partition"
+# choose "7  Change Hostname"
+#  -> Examples below use "odroid-mjmech"
+# choose "2  Update kernel"
+#  -> choose "1 Update Kernel"
+# exit all
+useradd -Um odroid
+chsh -s /bin/bash odroid
+passwd odroid
+visudo
+# add the line:
+  odroid  ALL=NOPASSWD: ALL
+# logout, install ssh public key
+ssh-copy-id -i ~/.ssh/id_dsa.pub odroid@odroid-mjmech
+ssh odroid@odroid-mjmech sudo uptime
+
+(3) Upload the code and configure the devices:
+tools/odroid/push-tree.sh odroid-mjmech sudo tools/odroid/setup-system.sh
+
+(4) Setup wifi auth:
+ssh odroid@odroid-mjmech -t sudo editor /etc/wpa_supplicant/wpa_supplicant.conf
