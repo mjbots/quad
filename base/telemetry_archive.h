@@ -88,14 +88,14 @@ class TelemetryWriteArchive {
     void Finish() {
       // Write out the "final" record.
       stream_.Write(static_cast<uint32_t>(0));
-      stream_.Write(std::string());
+      stream_.Write(gsl::ensure_z(""));
       stream_.Write(static_cast<uint32_t>(TF::FieldType::kFinal));
     }
 
     template <typename NameValuePair>
     void Visit(const NameValuePair& pair) {
       stream_.Write(static_cast<uint32_t>(0)); // FieldFlags;
-      stream_.Write(std::string(pair.name()));
+      stream_.Write(gsl::ensure_z(pair.name()));
 
       VisitArchive<SchemaVisitor>::Visit(pair);
     }
