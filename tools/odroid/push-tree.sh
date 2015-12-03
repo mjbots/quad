@@ -37,7 +37,7 @@ shift
 
 (set -x; rsync --exclude-from=.gitignore -vrtlE -e ssh --delete $dry_run \
     --exclude=hw/ --exclude=docs/ --exclude=video-ui/ --exclude=.git \
-    --exclude=old/ \
+    --exclude=old/ --exclude=core --exclude=*'*.core' \
      -- . "odroid@$host:mjmech-clean")
 EC=$?
 
