@@ -8,7 +8,8 @@ work_plan.pdf
 mtool_main_window.py
 *.fcstd?
 *.blend?
-build
+build-armv7l
+build-x86_64
 mjmech-data
 *.l#?
 *.s#?

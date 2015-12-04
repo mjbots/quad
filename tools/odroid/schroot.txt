@@ -1,0 +1,58 @@
+Setup schroot to build on your own computer:
+
+(1) Prepare image:
+# download xz for odroid
+unxz -k *.xz
+# copy out root disk
+sudo kpartx -l ubuntu-14.04lts-server-odroid-u-20140604.img
+# used last and second numbers from loop*p2
+sudo dd bs=512 conv=sparse skip=208896 count=6402048 if=ubuntu-14.04lts-server-odroid-u-20140604.img of=/var/lib/schroot/odroid-build.img
+# file was 3.1G, but only took 701M on disk (ls -lh vs du -h)
+# increase file size a bit
+sudo fsck -f /var/lib/schroot/odroid-build.img
+sudo truncate -s '>5G' /var/lib/schroot/odroid-build.img
+sudo resize2fs /var/lib/schroot/odroid-build.img
+sudo fsck -f /var/lib/schroot/odroid-build.img
+
+(2) Configure schroot:
+apt-get install schroot
+sudo cat > /etc/schroot/chroot.d/odroid-build.conf <<EOF
+[odroid-build]
+users=theamk
+type=loopback
+file=/var/lib/schroot/odroid-build.img
+union-type=overlayfs
+EOF
+
+(3) Install packages:
+sudo schroot -c source:odroid-build ./install_packages.sh -f
+
+(4) build:
+time schroot -c odroid-build -- scons -j4 -k
+# note: -k because tests fail
+
+Problems:
+ - "qemu: Unsupported syscall: 350"  (arm syscall 350 is 'timerfd_create')
+ - some test fail, specifically test_base and video_test. test_msch passes.
+
+Benchmarks:
+direct x64 (-j4): real 4m30.909s / user 14m45.921s / sys 0m42.884s
+qemu arm (-j4): real 61m12.561s / user 211m33.304s / sys 1m9.481s
+direct arm (-j1): real 41m45.404s / user 40m8.325s / sys 1m22.815s
+
+Results?
+Building arm binaries in qemu is 15 times slower than native x86_64 builds,
+and ~5.25 slower than native arm builds. So why would you build in qemu?
+- You have 6+ cores and/or your CPU is faster than "i5-3470T @ 2.90GHz"
+- You want to save eMMC wear on odroid
+- Your builds are running out of memory on odroid
+
+Ideas to make it faster:
+- Somehow replace gcc with x86-native gcc crosscompiler which uses
+  non-crosscompiled paths.
+- Install cross-compiler outside; use 'distcc' to invoke g++ outside.
+  The scons and linker would still be arm-emulated, but at least g++ will
+  be fast.
+- Install cross-compiler outside; compile everything outside of chroot,
+  but set up the flags to point to libs and headers inside the chroot.
+  This way, we will only need to enter chroot to install new packages.
