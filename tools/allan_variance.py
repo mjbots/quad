@@ -141,7 +141,7 @@ class Record(object):
 
         for name in enumerate_fields(sample,
                                      lambda name, value: 'time' in name):
-            self.timestamp_scale = 1.0
+            self.timestamp_scale = 1e-4
             self.timestamp_field = name
             break
 

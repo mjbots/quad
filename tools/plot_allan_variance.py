@@ -36,7 +36,8 @@ def main():
     time_field = columns[0]
     time_data = data[time_field]
 
-    for key, value in data.iteritems():
+    for key in sorted(data.keys()):
+        value = data[key]
         if key == time_field:
             continue
         if 'time' in key:
