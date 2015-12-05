@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+
 Import('canonenv')
 env = canonenv.Clone()
 
@@ -26,6 +28,7 @@ SOURCES = [
     'logging.cc',
     'telemetry_log.cc',
     'telemetry_remote_debug_server.cc',
+    'udp_socket.cc',
     ]
 
 libbase = env.StaticLibrary('base', SOURCES)
@@ -84,8 +87,9 @@ def ModuleMain(env, root, cname):
     env.Depends(module_main, root + '.h')
     libs = env['MODULE_MAIN_LIBS']
     env.Depends(module_main, libs)
-    return env.Program(root, module_main + libs)
+    return env.Program(os.path.basename(root), module_main + libs)
 Export("ModuleMain")
 
 env['MODULE_MAIN_LIBS'] = libbase
 env['MODULE_MAIN_NSPREFIX'] = 'base::'
+ModuleMain(env, 'test/udp_manual_test', 'UdpManualTest')
