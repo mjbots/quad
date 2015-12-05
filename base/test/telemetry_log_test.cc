@@ -64,4 +64,6 @@ BOOST_AUTO_TEST_CASE(TelemetryLogBasicTest) {
   char buf[15] = {};
   istr.read(buf, 14);
   BOOST_CHECK_EQUAL(std::string(buf), "invalid block\n");
+
+  log.Close();
 }
