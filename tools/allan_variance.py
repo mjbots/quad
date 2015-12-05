@@ -59,6 +59,9 @@ class Variance(object):
     def variance(self):
         return self.M2 / self.n
 
+    def stddev(self):
+        return self.variance() ** .5
+
 
 class ChannelWindow(object):
     def __init__(self, window_s):
@@ -203,7 +206,7 @@ def main():
 
         for name in sorted(record.channels.keys()):
             channel = record.channels[name]
-            print ',', channel.windows[period_index].variance.variance(),
+            print ',', channel.windows[period_index].variance.stddev(),
 
         print
 
