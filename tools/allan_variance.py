@@ -143,7 +143,7 @@ class Record(object):
             self.channels[name] = Channel(self.periods)
 
         for name in enumerate_fields(sample,
-                                     lambda name, value: 'time' in name):
+                                     lambda name, value: 'timestamp' in name):
             self.timestamp_scale = 1e-4
             self.timestamp_field = name
             break
@@ -151,9 +151,9 @@ class Record(object):
     def window_periods(self):
         period_s = 0.05
         result = []
-        while period_s < 1e5:
+        while period_s < 1e7:
             result.append(period_s)
-            period_s *= 1.1
+            period_s *= 1.05
 
         return result
 
@@ -179,6 +179,8 @@ def main():
 
     parser.add_option('--input', '-i', help='tlog file')
     parser.add_option('--record', '-r', help='record to measure')
+    parser.add_option('--limit', '-l', type='int', default=None,
+                      help='maximum records to read')
 
     options, args = parser.parse_args()
     assert len(args) == 0, 'unexpected arguments'
@@ -187,7 +189,12 @@ def main():
     br = telemetry_log.BulkReader(open(options.input))
     record = None
 
+    i = 0
     for name, data in br.items([options.record]):
+        i += 1
+        if options.limit and i > options.limit:
+            break
+
         if record is None:
             record = Record(data)
             if len(record.channels) == 0:
