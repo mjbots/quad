@@ -128,12 +128,12 @@ def get(sample, name):
 
 
 class Record(object):
-    def __init__(self, sample):
+    def __init__(self, sample, scale):
         # Find the names of all structure elements which have a
         # floating point value and aren't labeled as a "timestamp" or
         # "time" of some sort.
         self.channels = {}
-        self.periods = self.window_periods()
+        self.periods = self.window_periods(scale)
         self.timestamp_field = None
         self.timestamp_scale = 1.0
 
@@ -148,12 +148,12 @@ class Record(object):
             self.timestamp_field = name
             break
 
-    def window_periods(self):
+    def window_periods(self, scale):
         period_s = 0.05
         result = []
         while period_s < 1e7:
             result.append(period_s)
-            period_s *= 1.05
+            period_s *= scale
 
         return result
 
@@ -181,6 +181,7 @@ def main():
     parser.add_option('--record', '-r', help='record to measure')
     parser.add_option('--limit', '-l', type='int', default=None,
                       help='maximum records to read')
+    parser.add_option('--scale', '-s', type='float', default=1.1)
 
     options, args = parser.parse_args()
     assert len(args) == 0, 'unexpected arguments'
@@ -196,7 +197,7 @@ def main():
             break
 
         if record is None:
-            record = Record(data)
+            record = Record(data, options.scale)
             if len(record.channels) == 0:
                 raise RuntimeError('no float channels found')
         record.add(data)
