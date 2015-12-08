@@ -1,4 +1,4 @@
-Compiling custom kernel
+Compiling mainline kernel for odroid
 
 -----------------------------
 Motivation:
@@ -23,6 +23,7 @@ http://rglinuxtech.com/?p=1622 (and other posts on this blog)
 
 Instructions:
 https://mescanef.net/blog/2014/12/custom-kernel-compilation-for-odroid-u2-u3-on-host-running-fedora-linux/
+http://rtisat.blogspot.com/search/label/odroid-u3
 
 -----------------------------
 Preparation:
@@ -37,33 +38,14 @@ dd bs=64 skip=1 if=/media/boot/uInitrd  | zcat | cpio --list | less
 
 New kernel needs new u-boot, which can be updated per blog post above.
 Run the following on the odroid:
-    aptitiude install device-tree-compiler
-    wget http://odroid.in/guides/ubuntu-lfs/boot.tar.gz
-    tar xzf boot.tar.gz
+    apt-get install device-tree-compiler
     git clone https://github.com/tobiasjakobi/u-boot
     cd u-boot
     make odroid_config
     make
-    cp u-boot-dtb.bin ../boot/u-boot.bin
-
+    # commands and constants are from /usr/local/bin/kernel_update.sh
     echo 0 | sudo tee /sys/block/mmcblk0boot0/force_ro
     sudo dd iflag=dsync oflag=dsync if=./u-boot-dtb.bin of=/dev/mmcblk0boot0 seek=62
-
-    cd ../boot
-    bash ./sd_fusing.sh /dev/mmcblk0
-
-                        signed_bl1_position=0
-                        bl2_position=30
-                        uboot_position=62
-                        tzsw_position=2110
-
-
-(the old kernels still work after this procedure)
-u-boot version after:
-  Exynos4412 # version
-  U-Boot 2010.12-svn (May 12 2014 - 15:05:46) for Exynox4412
-
-uboot update: see /usr/local/bin/kernel_update.sh
 
 -----------------------------
 Process:
@@ -87,23 +69,24 @@ the tree, so 'git diff' becomes more helpful.
 
 use previous configuration with new things set as modules:
  rm tools/odroid/kernel/config-linux-4.3
- KCONFIG_ALLCONFIG=$PWD/tools/odroid/kernel/config-hardkernel-3.8.13.30 tools/odroid/kernel/kmake.sh allmodconfig
+ KCONFIG_ALLCONFIG=$PWD/tools/odroid/kernel/config-hardkernel-3.8.13.30 \
+     tools/odroid/kernel/kmake.sh linux-4.3 allmodconfig
 OR use previous configuration with new things set as default:
  cp tools/odroid/kernel/config-hardkernel-3.8.13.30 tools/odroid/kernel/config-linux-4.3
- tools/odroid/kernel/kmake.sh olddefconfig
+ tools/odroid/kernel/kmake.sh linux-4.3 olddefconfig
 
 the enter/exit menunconfig to inspect it by hand and update the config:
- tools/odroid/kernel/kmake.sh menuconfig
+ tools/odroid/kernel/kmake.sh linux-4.3 menuconfig
  # pay attention to options with '(NEW)'
  # make sure to clear CONFIG_EXTRA_FIRMWARE if using mainline kernels
  # make sure to CONFIG_MODULE_COMPRESS is not set
 
 (3) build and copy modules
- time tools/odroid/kernel/kmake.sh -j4 zImage modules
- tools/odroid/kernel/kmake.sh modules_install firmware_install zinstall
+ time tools/odroid/kernel/kmake.sh linux-4.3 -j4 zImage modules
+ tools/odroid/kernel/kmake.sh linux-4.3 modules_install firmware_install zinstall
 
  # Check version
- tools/odroid/kernel/kmake.sh -s kernelrelease
+ tools/odroid/kernel/kmake.sh linux-4.3 -s kernelrelease
  # optionally delete old modules
  rm /usr/src/kernel-odroid/linux-4.3-install/boot/*.old
  ssh odroid@odroid-mjmech rm -rf /lib/modules/4.3.0-mjmech1 /lib/firmware-linux-4.3
