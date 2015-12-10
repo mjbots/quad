@@ -89,17 +89,17 @@ allow-hotplug eth0
 iface eth0 inet dhcp
 EOF
 
-# Enale wpa_supplicant
+# Enable wpa_supplicant
 copy_stdin_to /etc/network/interfaces.d/wlan0 <<EOF
 auto wlan0
 allow-hotplug wlan0
 iface wlan0 inet manual
         # there seems to be some sort of race on startup, so
         # sleep for some time.
-        #pre-up sleep 5
+        pre-up sleep 5
         wpa-driver wext
         wpa-roam /etc/wpa_supplicant/wpa_supplicant.conf
-        post-up iw dev wlan0 power_save off
+        post-up iw dev wlan0 power_save off || true
 
 iface default inet dhcp
 EOF
@@ -155,6 +155,11 @@ net_code+=" && initctl emit --no-wait static-network-up"
 net_code+=" && logger network was not up, continuing boot anyway"
 perl -p -e 's/(ifup -a)/$1\n$ENV{"net_code"}\n/' \
    /etc/init/networking.conf.orig | copy_stdin_to /etc/init/networking.conf
+
+# disable IPv6  (to prevent extra packets)
+copy_stdin_to /etc/sysctl.d/60-mjmech.conf <<EOF
+net.ipv6.conf.all.disable_ipv6 = 1
+EOF
 
 # one logfile is enough
 copy_stdin_to /etc/rsyslog.d/50-default.conf <<EOF

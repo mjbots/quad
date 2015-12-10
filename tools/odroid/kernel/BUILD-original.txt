@@ -66,3 +66,14 @@ fatload mmc 0:1 40008000 boot-at2.scr; run bootscript
 # activate new script permanently
 cd /media/boot
 sudo cp boot-at2.scr boot.scr
+
+
+-----------------------------
+Add rtl8812au (small Edimax wifi dongle):
+
+cd /local2/odroid2
+git clone https://github.com/gnab/rtl8812au.git
+cd rtl8812au
+make ARCH=arm CROSS_COMPILE=$odroid_tc KSRC=../linux
+rsync -av --no-owner --no-group --rsync-path='sudo rsync' 8812au.ko odroid@odroid-mjmech:/lib/modules/3.8.13.30-at2/kernel/
+ssh odroid@odroid-mjmech sudo depmod -a
