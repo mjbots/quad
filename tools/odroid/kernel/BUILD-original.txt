@@ -1,0 +1,68 @@
+Re-compiling original odroid kernel
+
+STATUS: Successful -- system boots fine
+
+-----------------------------
+# Trying to follow instructions as close as possible:
+#  https://mescanef.net/blog/2014/12/custom-kernel-compilation-for-odroid-u2-u3-on-host-running-fedora-linux/
+# Differences:
+#  (1) rpm ugliness since we are on deb system
+#  (2) easier deploy -- new script, --rsync-path trick
+
+cd /local2/odroid2
+
+# get linux sources
+git clone https://github.com/hardkernel/linux.git -b odroid-3.8.y
+
+# get toolchain
+mkdir rpm && cd rpm
+TC1=https://copr-be.cloud.fedoraproject.org/results/lantw44/arm-linux-gnueabi-toolchain/fedora-20-x86_64
+wget $TC1/arm-linux-gnueabi-binutils-2.25-2.fc21/arm-linux-gnueabi-binutils-2.25-2.fc20.x86_64.rpm
+wget $TC1/arm-linux-gnueabi-gcc-5.1.0-2.fc21/arm-linux-gnueabi-gcc-5.1.0-2.fc20.x86_64.rpm
+wget $TC1/arm-linux-gnueabi-glibc-2.21-2.fc21/arm-linux-gnueabi-glibc-2.21-2.fc20.x86_64.rpm
+wget ftp://rpmfind.net/linux/fedora/linux/updates/21/x86_64/i/isl-0.14-3.fc21.x86_64.rpm
+wget ftp://rpmfind.net/linux/fedora/linux/updates/21/x86_64/g/gmp-6.0.0-9.fc21.x86_64.rpm
+
+rpm2cpio arm-linux-gnueabi-binutils-2.25-2.fc20.x86_64.rpm | cpio -dium
+rpm2cpio arm-linux-gnueabi-gcc-5.1.0-2.fc20.x86_64.rpm | cpio -dium
+rpm2cpio arm-linux-gnueabi-glibc-2.21-2.fc20.x86_64.rpm | cpio -dium
+rpm2cpio isl-0.14-3.fc21.x86_64.rpm | cpio -dium
+rpm2cpio gmp-6.0.0-9.fc21.x86_64.rpm | cpio -dium
+
+cd ..
+
+# configure
+odroid_tc=${PWD}/rpm/usr/bin/arm-linux-gnueabi-
+export LD_LIBRARY_PATH=${PWD}/rpm/usr/lib64
+${odroid_tc}gcc -v
+# gcc version 5.1.0 (GCC)
+cd linux
+CORES=4 LOADADDR=40008000 ARCH=arm CROSS_COMPILE=$odroid_gcc make odroidu_defconfig
+CORES=4 LOADADDR=40008000 ARCH=arm CROSS_COMPILE=$odroid_gcc make menuconfig
+# in 'General Setup', set 'Local Version' to '-at2'
+
+# build and copy
+CORES=4 LOADADDR=40008000 ARCH=arm CROSS_COMPILE=$odroid_gcc make -j4 uImage zImage modules
+mkdir -p modules/media/boot
+CORES=4 LOADADDR=40008000 ARCH=arm CROSS_COMPILE=$odroid_gcc make modules_install  INSTALL_MOD_PATH="modules/"
+cp arch/arm/boot/zImage modules/media/boot/zImage-at2
+#cp arch/arm/boot/uImage modules/media/boot/uImage-at2
+rsync -av --no-owner --no-group --rsync-path='sudo rsync' modules/ odroid@odroid-mjmech:/
+
+# prepare new script
+ssh odroid@odroid-mjmech
+cd /media/boot
+dd if=boot-auto_edid.scr bs=1 skip=72 | perl -pe 's/(Image)/$1-at2/g' > /tmp/script
+sudo mkimage -T script -d /tmp/script boot-at2.scr
+diff -a <(strings boot-auto_edid.scr) <(strings boot-at2.scr)
+
+# reboot and choose new script to test
+
+# switch to serial port @115200
+reboot
+# Hold "Enter" until you get 'Exynos4412 #' prompt:
+fatload mmc 0:1 40008000 boot-at2.scr; run bootscript
+
+# activate new script permanently
+cd /media/boot
+sudo cp boot-at2.scr boot.scr

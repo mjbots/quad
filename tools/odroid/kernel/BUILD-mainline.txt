@@ -1,5 +1,8 @@
 Compiling mainline kernel for odroid
 
+STATUS: Unsuccessful -- kernel fails to boot
+(silence after 'Starting kernel...' message)
+
 -----------------------------
 Motivation:
 

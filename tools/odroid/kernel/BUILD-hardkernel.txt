@@ -1,6 +1,9 @@
 Compiling new odroid kernel
 (modified version, from hardkernel)
 
+STATUS: Unsuccessful -- kernel fails to boot
+(silence after 'Starting kernel...' message)
+
 -----------------------------
 Motivation:
 
