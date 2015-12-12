@@ -17,3 +17,5 @@ env = canonenv.Clone()
 
 env.Command('ui_tplot_main_window.py', 'tplot_main_window.ui',
             'pyside-uic $SOURCE -o $TARGET')
+env.Command('ui_tview_main_window.py', 'tview_main_window.ui',
+            'pyside-uic $SOURCE -o $TARGET')
