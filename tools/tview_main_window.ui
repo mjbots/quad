@@ -51,12 +51,20 @@
      </property>
      <item>
       <widget class="QTreeWidget" name="configTreeWidget">
+       <property name="columnCount">
+        <number>2</number>
+       </property>
        <attribute name="headerVisible">
-        <bool>false</bool>
+        <bool>true</bool>
        </attribute>
        <column>
         <property name="text">
-         <string notr="true">1</string>
+         <string notr="true">Name</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string notr="true">Value</string>
         </property>
        </column>
       </widget>
@@ -78,12 +86,20 @@
      </property>
      <item>
       <widget class="QTreeWidget" name="telemetryTreeWidget">
+       <property name="columnCount">
+        <number>2</number>
+       </property>
        <attribute name="headerVisible">
-        <bool>false</bool>
+        <bool>true</bool>
        </attribute>
        <column>
         <property name="text">
-         <string notr="true">1</string>
+         <string notr="true">Name</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string notr="true">Value</string>
         </property>
        </column>
       </widget>

@@ -92,7 +92,7 @@ def _set_tree_widget_data(item, struct,
                                   getter=lambda x, y: x[int(y)],
                                   required_size=len(field))
         else:
-            child.setText(1, str(field))
+            child.setText(1, repr(field))
 
 
 class TviewMainWindow(QtGui.QMainWindow):
@@ -119,6 +119,11 @@ class TviewMainWindow(QtGui.QMainWindow):
 
         self.ui = ui_tview_main_window.Ui_TviewMainWindow()
         self.ui.setupUi(self)
+
+        self.ui.telemetryTreeWidget.itemExpanded.connect(
+            self._handle_tree_expanded)
+        self.ui.telemetryTreeWidget.itemCollapsed.connect(
+            self._handle_tree_collapsed)
 
         self.console = TviewConsoleWidget()
         self.console.ansi_codes = False
@@ -170,7 +175,9 @@ class TviewMainWindow(QtGui.QMainWindow):
         if line is None:
             return
 
-        self.console.add_text(line + '\n')
+        display = True
+        if line == '':
+            display = False
 
         if line.startswith('schema '):
             self._serial_state = self.STATE_SCHEMA
@@ -178,6 +185,10 @@ class TviewMainWindow(QtGui.QMainWindow):
         elif line.startswith('emit '):
             self._serial_state = self.STATE_DATA
             self._schema_name = line.split(' ', 1)[1].strip()
+            display = False
+
+        if display:
+            self.console.add_text(line + '\n')
 
     def _get_serial_line(self):
         delim = '[\r\n]'
@@ -254,6 +265,7 @@ class TviewMainWindow(QtGui.QMainWindow):
                 self._serial_state = self.STATE_LINE
                 return
 
+        self._serial_state = self.STATE_LINE
         # Guess we are done.  Update our tree view.
         cbk, self._telemetry_callback = self._telemetry_callback, None
         if cbk:
@@ -270,7 +282,7 @@ class TviewMainWindow(QtGui.QMainWindow):
             if self._telemetry_records[name]:
                 return
 
-        archive = telemetry_archive.ReadArchivePython(schema, name)
+        archive = telemetry_archive.ReadArchive(schema, name)
         item = self._add_schema_to_tree(name, archive)
 
         self._telemetry_records[name] = Record(archive, item)
@@ -292,7 +304,9 @@ class TviewMainWindow(QtGui.QMainWindow):
 
         record = self._telemetry_records[name]
         struct = record.archive.deserialize(data)
-        _set_tree_widget_data(record.item, struct)
+        _set_tree_widget_data(record.tree_item, struct)
+
+        self._serial_state = self.STATE_LINE
 
     def _handle_sized_block(self):
         # Wait until we have the complete schema in the buffer.  It
@@ -336,6 +350,20 @@ class TviewMainWindow(QtGui.QMainWindow):
         add_item(item, archive.root)
         return item
 
+    def _handle_tree_expanded(self, item):
+        if item.parent() is None:
+            # OK, since we're a top level node, request to start
+            # receiving updates.
+            name = item.text(0)
+            self.write_line('tel fmt %s 0\r\n' % name)
+            self.write_line('tel rate %s 500\r\n' % name)
+
+    def _handle_tree_collapsed(self, item):
+        if item.parent() is None:
+            # Stop this guy.
+            name = item.text(0)
+            self.write_line('tel rate %s 0\r\n' % name)
+
 
 def main():
     usage, description = __doc__.split('\n\n', 1)
@@ -351,7 +379,7 @@ def main():
                          timeout=0.0)
     # Stop the spew.
     port.write('\r\n')
-    #port.write('tel stop\r\n')
+    port.write('tel stop\r\n')
 
     app = QtGui.QApplication(sys.argv)
 
