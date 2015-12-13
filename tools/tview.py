@@ -38,6 +38,16 @@ import telemetry_archive
 import telemetry_log
 import ui_tview_main_window
 
+class SizedTreeWidget(QtGui.QTreeWidget):
+    def __init__(self, parent=None):
+        QtGui.QTreeWidget.__init__(self, parent)
+        self.setColumnCount(2)
+        self.headerItem().setText(0, 'Name')
+        self.headerItem().setText(1, 'Value')
+
+    def sizeHint(self):
+        return QtCore.QSize(400, 500)
+
 class TviewConsoleWidget(HistoryConsoleWidget):
     line_input = QtCore.Signal(str)
 
@@ -46,6 +56,9 @@ class TviewConsoleWidget(HistoryConsoleWidget):
 
         self._prompt = '>>> '
         self.clear()
+
+    def sizeHint(self):
+        return QtCore.QSize(600, 200)
 
     def add_text(self, data):
         assert data.endswith('\n') or data.endswith('\r')
@@ -129,6 +142,12 @@ class TviewMainWindow(QtGui.QMainWindow):
         self.ui = ui_tview_main_window.Ui_TviewMainWindow()
         self.ui.setupUi(self)
 
+        self.ui.configTreeWidget = SizedTreeWidget()
+        self.ui.configDock.setWidget(self.ui.configTreeWidget)
+
+        self.ui.telemetryTreeWidget = SizedTreeWidget()
+        self.ui.telemetryDock.setWidget(self.ui.telemetryTreeWidget)
+
         self.ui.telemetryTreeWidget.itemExpanded.connect(
             self._handle_tree_expanded)
         self.ui.telemetryTreeWidget.itemCollapsed.connect(
@@ -136,6 +155,8 @@ class TviewMainWindow(QtGui.QMainWindow):
 
         self.ui.configTreeWidget.setItemDelegateForColumn(
             0, NoEditDelegate(self))
+        self.ui.configTreeWidget.itemExpanded.connect(
+            self._handle_config_expanded)
         self.ui.configTreeWidget.itemChanged.connect(
             self._handle_config_item_changed)
 
@@ -276,6 +297,8 @@ class TviewMainWindow(QtGui.QMainWindow):
 
             add_config(self._config_tree_items[name], rest, value)
 
+            self.ui.configTreeWidget.resizeColumnToContents(0)
+
     def update_telemetry(self, callback):
         self.ui.telemetryTreeWidget.clear()
         self._telemetry_records = {}
@@ -314,6 +337,7 @@ class TviewMainWindow(QtGui.QMainWindow):
 
         self._serial_state = self.STATE_LINE
         # Guess we are done.  Update our tree view.
+        self.ui.telemetryTreeWidget.resizeColumnToContents(0)
         cbk, self._telemetry_callback = self._telemetry_callback, None
         if cbk:
             cbk()
@@ -398,6 +422,7 @@ class TviewMainWindow(QtGui.QMainWindow):
         return item
 
     def _handle_tree_expanded(self, item):
+        self.ui.telemetryTreeWidget.resizeColumnToContents(0)
         if item.parent() is None:
             # OK, since we're a top level node, request to start
             # receiving updates.
@@ -410,6 +435,9 @@ class TviewMainWindow(QtGui.QMainWindow):
             # Stop this guy.
             name = item.text(0)
             self.write_line('tel rate %s 0\r\n' % name)
+
+    def _handle_config_expanded(self, item):
+        self.ui.configTreeWidget.resizeColumnToContents(0)
 
     def _handle_config_item_changed(self, item, column):
         if self._serial_state == self.STATE_CONFIG:
