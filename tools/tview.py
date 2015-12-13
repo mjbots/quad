@@ -23,6 +23,7 @@ import optparse
 import os
 import re
 import serial
+import struct
 import sys
 import time
 
@@ -141,8 +142,11 @@ class TviewMainWindow(QtGui.QMainWindow):
         data = self.port.read(8192)
         self._buffer += data
 
-        if len(data):
+        while True:
+            old_len = len(self._buffer)
             self._handle_serial_data()
+            if len(self._buffer) == old_len:
+                break
 
     def _handle_user_input(self, line):
         self.port.write(line + '\n')
@@ -154,9 +158,9 @@ class TviewMainWindow(QtGui.QMainWindow):
             self._handle_config()
         elif self._serial_state == self.STATE_TELEMETRY:
             self._handle_telemetry()
-        elif self._serial_schema == self.STATE_SCHEMA:
+        elif self._serial_state == self.STATE_SCHEMA:
             self._handle_schema()
-        elif self._serial_schema == self.STATE_DATA:
+        elif self._serial_state == self.STATE_DATA:
             self._handle_data()
         else:
             assert False
@@ -247,10 +251,10 @@ class TviewMainWindow(QtGui.QMainWindow):
         for name in self._telemetry_records.keys():
             if self._telemetry_records[name] is None:
                 self.write_line('tel schema %s\r\n' % name)
+                self._serial_state = self.STATE_LINE
                 return
 
         # Guess we are done.  Update our tree view.
-        self._update_schema_tree()
         cbk, self._telemetry_callback = self._telemetry_callback, None
         if cbk:
             cbk()
@@ -266,12 +270,12 @@ class TviewMainWindow(QtGui.QMainWindow):
             if self._telemetry_records[name]:
                 return
 
-        archive = telemetry_archive.ReadArchivePython(schema)
+        archive = telemetry_archive.ReadArchivePython(schema, name)
         item = self._add_schema_to_tree(name, archive)
 
-        self._telemetry_schemas[name] = Record(archive, item)
+        self._telemetry_records[name] = Record(archive, item)
 
-        self.add_text('<schema name=%s>\n' % name)
+        self.console.add_text('<schema name=%s>\n' % name)
 
         # Now look to see if there are any more we should request.
         self._update_schema()
@@ -283,10 +287,10 @@ class TviewMainWindow(QtGui.QMainWindow):
 
         name, self._schema_name = self._schema_name, None
 
-        if name not in self._telemetry_schemas:
+        if name not in self._telemetry_records:
             return
 
-        record = self._telemetry_schemas[name]
+        record = self._telemetry_records[name]
         struct = record.archive.deserialize(data)
         _set_tree_widget_data(record.item, struct)
 
@@ -296,11 +300,11 @@ class TviewMainWindow(QtGui.QMainWindow):
         if len(self._buffer) < 5:
             return
 
-        size = struct.unpack('<I', buffer[1:5])[0]
+        size = struct.unpack('<I', self._buffer[1:5])[0]
         if size > 2 ** 24:
             # Whoops, probably bogus.
             print 'Invalid schema size, skipping whatever we were doing.'
-            self._serial_state = STATE_LINE
+            self._serial_state = self.STATE_LINE
             return
 
         if len(self._buffer) < 5 + size:
@@ -312,7 +316,7 @@ class TviewMainWindow(QtGui.QMainWindow):
 
     def _add_schema_to_tree(self, name, archive):
         item = QtGui.QTreeWidgetItem()
-        item.setText(name)
+        item.setText(0, name)
         self.ui.telemetryTreeWidget.addTopLevelItem(item)
 
         # TODO jpieper: Factor this out of tplot.py.
