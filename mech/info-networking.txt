@@ -1,0 +1,245 @@
+Networking setup for mjmech
+
+================
+High level goals
+================
+
+ (1) A reliable video and control channel which works even when 2.4GHz band is
+     very busy.
+
+ (2) A way to upload/debug new code. Does not have to be as reliable.
+
+===================
+Implementable goals
+===================
+
+ - Use dual-band 802.11n cards. 'n' should give us stream diversity, while 5GHz
+   band will be likely less congested.
+
+ - Do not use WiFi association mechanisms, to make sure that short periods of
+   total interference stay short.
+
+ - Customize queue length and retransmission, to make sure that at least some
+   video appears, and that the latency is not too high.
+
+ - Be able to change the system properties reasonably fast (in under a
+   minute, not during the match).
+
+==============
+Current Design
+==============
+
+We are using ad-hoc mode, but specifying all the parameters ourselves.
+This should be enough to ensure that we can start communicating without having
+to wait for other station, and that we will not re-negotiate mid links.
+
+We are logging all the packets and measuring the latencies.
+
+To set up, use the script 'setup_wifi_link.py'. All wifi details are there.
+
+IP addressing:
+ - Devices have IP in the 10.89.0.0/16 network
+  - Well-known devices have short addresses:
+     mjmech-odroid has 10.89.0.10
+ - Multicast network is 239.89.108.0/24
+   239.89.108.10:2720 is multicast announcements from odroid
+   239.89.108.11:2721 is control commands
+
+=================
+Wifi card comments
+=================
+
+We want a wifi card that supports 5GHz and 802.11n, at least. These have
+problems.
+
+Driver: rt2800usb
+~~~~~~~~~~~~~~~~~
+uses in-tree driver.
+works great, but only tested in adhoc mode.
+
+Devices:
+* AWUS052NH, "ID 148f:3572 Ralink Technology, Corp. RT3572 Wireless Adapter"
+ - Large black/orange box with 2x external antennas, Mini USB B Female connector
+ - Front: orange, blue LED, "ALPHA NETWORKS", curved vent slots
+ - Back: black, slot for clip, "Model: AWUS052NH", S/N, MAC, etc..
+ - Size: 84.8x62x2.53mm + 24x10x8mm USB cable + 2x R10x160 antennas
+
+* DWA-160, "ID 2001:3c1a D-Link Corp. DWA-160 802.11abgn Xtreme N Dual Band Adapter(rev.B2) [Ralink RT5572]"
+ - Large white dongle with black border, large strap attachment point on top
+ - Front: "D-LINK", orange WPS button, orange LED
+ - Back: "D-LINK DWA-160", "P/N CWA160CA.....B2 Model: DWA-160B2",
+         "H/W Ver: B2", "F/W Ver: 2.40", S/N, MAC
+ - Size: 68.4x28.2x12mm + 12x12x4.5mm USB A plug
+
+Known problems:
+* problems connecting to regular wifi (WPA2 client) -- link disappears
+  in 10-60 seconds
+ - suspect this is due to old kernel (3.8.13)
+ - do not really care
+
+Driver: rtl8812au
+~~~~~~~~~~~~~~~~~
+Out-of-tree driver from: https://github.com/gnab/rtl8812au.git
+
+Devices:
+* Edimax AC600, "ID 7392:a812 Edimax Technology Co., Ltd"
+ - Black dongle with with strap attachment point on top
+ - Front: "EDIMAX AC"
+ - Back: "WPS" button, "EW-7811UTC", "FCC ID..", etc..
+ - Metal part of USB connector: I/C, SN, MAC
+ - Size: 25.6x15.6x7.5mm + 12.2x12x4.5mm USB A plug
+
+Known problems:
+* problems connecting to regular wifi (WPA2 client)
+ - do not care
+* does not use nl80211 ('iw' command)
+ - script special-cases, uses iwconfig
+* multicast does not work (no packets go out)
+ - fixed by patching the source: set 'psta->state |= _FW_LINKED'
+   in 'rtw_init_bcmc_stainfo'
+* cannot specify multicast rate (always 6Mbit/sec)
+ - no fix known
+* cannot force ad-hoc connection -- no way to set bssid
+ - no fix known
+
+Driver: mt7610u
+~~~~~~~~~~~~~~~
+Out-of-tree driver from: https://github.com/coolshou/mt7610u
+
+Devices:
+* AC600 WiFi Dual Band USB Adapter UW-600M01 "ID 0e8d:7610 MediaTek Inc."
+ - Black dongle with the small pinhole in the center of one side
+ - Only words on device itself is "wifi AC"
+ - Box says: STRONGR-R AC600 / UW-600M01
+ - Size: 15.1x14.9x8.1mm + 11.7x12x4.6mm USB plug
+
+Testing wireless cards
+~~~~~~~~~~~~~~~~~~~~~~
+If you have a new wireless card, you can check it as following:
+
+- Basic setup
+(1) on main PC, set up wifi link and a monitor mode. run 'horst' on it.
+ - In horst, enter 'ESSID' screen ('e' key), you should see the
+   telemetry network.
+ - bring wifi interface down on the main PC. the TSF value on horst will freeze.
+ - bring wifi interface up on DUT.
+ - Make sure TSF updates often and 'source' matches DUT's wireless MAC.
+ - Make sure parameters (CH=channel, BSSID, BINT=beacon interval)
+   match the configured ones.
+
+(2) Start sending packets into 'empty space' (since PC has not joined yet)
+ - In a new window:
+tools/odroid/push-tree.sh odroid-mjmech \
+  scons base/build-armv7l/udp_manual_test '&&' \
+   base/build-armv7l/udp_manual_test -v \
+      --socket1.send_addr 239.89.108.10:12720 --socket1.send_interval_s=0.005 \
+      --socket2.listen_addr 239.89.108.11:12721 --socket2.do_recv=1
+
+ - Make sure packets are being sent. We do not expect to recevie anything at
+   this time.
+ INFO[socket1]: stats: tx_count=1968 tx_size=1968000
+ INFO[socket2]: stats: (no data)
+
+ - In horst, switch to 'Stats' ('a' key)
+  - You may want to 'R'eset the stats
+  - Make sure prevalent rate is as configured in python (24M)
+  - Make sure 'Retries' is very low and not growing.
+  - Make sure 'Total bits/sec' is correct: 1.5M = 1000 bytes * 200 Hz
+  - Make sure 'Total usage' is reasonable (for configuration descirbed above,
+    it is 9-10%)
+
+(3) on main PC, bring the wireless interface back up.
+ - Make sure you can ping 10.89.0.10
+ - On horst ESSID screen, make sure channel/BSSID did not change.
+
+(4) Start sending
+ - Window 1:
+scons -j4 base/build-x86_64/udp_manual_test && \
+   base/build-x86_64/udp_manual_test -v \
+      --socket1.send_addr 239.89.108.11:12721 --socket1.send_interval_s=0.005 \
+      --socket2.listen_addr 239.89.108.10:12720 --socket2.do_recv=1
+
+ - Both windows will print statistics every 10 seconds. Make sure the loss is
+   less <90%:
+ INFO[socket1]: stats: tx_count=1967 tx_size=1967000
+ INFO[socket2]: stats: rx[10.89.0.10:46963]=1936 rx_count=1936 rx_size=1936000
+
+ - In horst, switch to 'Stats'.
+  - Make sure rate and retries are still correct.
+  - The 'Total bit/sec' will double.
+  - The 'Total usage' willb bigger -- for configuration descirbed above, it is 24-25%
+
+(5) Bring down the wireless interface on the main PC again.
+ - Make sure the packets are still being sent as in item (2)
+
+==============
+Other options:
+==============
+
+Security
+~~~~~~~~
+
+We have to think about security -- in the large event, there may be all sorts
+of people.
+
+For reliability, we cannot use stateful security like WPA/WPA2. We may use WEP
+eventually, but it will be disabled initially to simplify troubleshooting.
+
+Attack: taking over robot
+Status: not relevant -- we already use SSH to upload; assuming that our
+application is not stupidly insecure, it will not provide any access to the
+robot' OS.
+
+Attack: taking over controlling laptop
+Status: uses either our app or existing servers; our app should be fine, as long
+at it is not stupidly unsecure; as for other apps, it is not worse than using
+laptop in the coffee shop.
+
+Attack: Denial of service.
+Status: very likely possible, esp. if we crash on invalid packets. But wifi is
+easily jammable anyway anyway. TODO theamk finish
+
+Attack: information disclosure
+Status: whatever. We have no confidential info over the channel (unless a
+competitor incorporates it in their UI :) )
+
+Robot link setup
+~~~~~~~~~~~~~~~~
+
+Our only option is usb<->wifi cards -- the robot has no other fast exposed
+buses, and integrated wifi is not present / not dual-band.
+
+Base station setup
+~~~~~~~~~~~~~~~~~~
+
+We need to be able to fully control base stations (obviously venue's AP will
+not work, or may not be present at all). The options are:
+
+- Dedicate a router for base station, hook it to laptop via ethernet.
+ - PRO: may have very little latency if we write on-router daemon and card is
+        connected via PCI.
+ - PRO: nothing interferes with wifi setup
+ - PRO: may be placed very close to the stage
+ - CON: need to setup packet forwarding or write on-router daemon
+ - CON: the dual-band N models may be large, require external power
+
+- Use external USB card
+ - PRO: small size, no external power supply needed.
+ - PRO: May use the same type of the card the mech uses.
+ - CON: USB adds some latency.
+ - CON: NetworkManager will interfere.
+  - Disable it completely (annoying as built-in wifi may be used during
+    development / debugging).
+  - May use network namespaces
+   - This requires that anything that wants to talk to it has a root access.
+   - Or we need to setup a 'virtual router' that needs the same
+     packet-forwaring setup or router daemon that physical router requires.
+  - May just add card's MAC to networkmanager ignore file
+   - This is tricky to get right. Should probably script this.
+
+- Use laptop's integrated network card
+ - PRO: lower latency than USB-based cards
+ - CON: intervet will not work if integrated card was used for it.
+ - PRO: can just disable networkmanager's wifi entirely.
+ - CON: not sure how good integrated antenna is.
+ - CON: laptop's card may not be good enough, and we won't be able to use it.

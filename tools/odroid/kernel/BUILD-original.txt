@@ -77,6 +77,7 @@ cd rtl8812au
 make ARCH=arm CROSS_COMPILE=$odroid_tc KSRC=../linux
 rsync -av --no-owner --no-group --rsync-path='sudo rsync' 8812au.ko odroid@odroid-mjmech:/lib/modules/3.8.13.30-at2/kernel/
 ssh odroid@odroid-mjmech sudo depmod -a
+# or: ssh odroid@odroid-mjmech -t sudo rmmod 8812au\; sleep 2\; sudo modprobe -v 8812au
 
 -----------------------------
 Add mt7619u (small AC600 wifi dongle, really UW-600M01 model):

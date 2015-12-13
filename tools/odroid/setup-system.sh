@@ -75,7 +75,7 @@ copy_stdin_to() {
     fi
 }
 
-# Enable ifplugd support
+# Enable ifplugd support for wired ethernet
 copy_stdin_to /etc/default/ifplugd <<EOF
 INTERFACES="eth0"
 HOTPLUG_INTERFACES="eth0"
@@ -89,7 +89,16 @@ allow-hotplug eth0
 iface eth0 inet dhcp
 EOF
 
-# Enable wpa_supplicant
+# run our setup script fo rprimary link cards
+copy_stdin_to /etc/network/interfaces.d/wlinkX <<EOF
+auto wlink0
+iface wlink0 inet manual
+        # running root script from user's homedir is icky, but
+        # that user has passwordless sudo anyway
+        up mjmech-clean/tools/setup_wifi_link.py -i wlan0 up-boot
+EOF
+
+# Enable wpa_supplicant for any additional wifi cards
 copy_stdin_to /etc/network/interfaces.d/wlan0 <<EOF
 auto wlan0
 allow-hotplug wlan0
@@ -104,9 +113,20 @@ iface wlan0 inet manual
 iface default inet dhcp
 EOF
 
-# disable persistent net so any model of wlan card appears as wlan0
+# disable persistent net generator so any model of wlan card appears as wlan0
 echo -n | copy_stdin_to /etc/udev/rules.d/75-persistent-net-generator.rules
-echo -n | copy_stdin_to /etc/udev/rules.d/70-persistent-net.rules
+
+# add our rules to use dual-band wifi cards as comm link
+# to get info:
+#  udevadm info --query=all --attribute-walk --path=/sys/class/net/wlan0
+# (note we add line-break support here because udev does not have it)
+perl -0pe 's/\\\s*/ /g' <<EOF | \
+    copy_stdin_to /etc/udev/rules.d/70-persistent-net.rules
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="rtl8812au", ATTR{dev_id}=="0x0", \
+     ATTR{type}=="1", NAME="wlink%n"
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="rt2800usb", ATTR{dev_id}=="0x0", \
+     ATTR{type}=="1", NAME="wlink%n"
+EOF
 
 # Add wifi config file, but do not override wifi passwords
 if ! test -f /etc/wpa_supplicant/wpa_supplicant.conf; then
