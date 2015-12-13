@@ -255,7 +255,6 @@ class TviewMainWindow(QtGui.QMainWindow):
         else:
             name = line.strip()
             self._telemetry_records[name] = None
-            print 'got telemetry:', line
 
     def _update_schema(self):
         # Find a channel we don't have a schema for and request it.
