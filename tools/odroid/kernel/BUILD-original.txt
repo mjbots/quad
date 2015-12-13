@@ -77,3 +77,23 @@ cd rtl8812au
 make ARCH=arm CROSS_COMPILE=$odroid_tc KSRC=../linux
 rsync -av --no-owner --no-group --rsync-path='sudo rsync' 8812au.ko odroid@odroid-mjmech:/lib/modules/3.8.13.30-at2/kernel/
 ssh odroid@odroid-mjmech sudo depmod -a
+
+-----------------------------
+Add mt7619u (small AC600 wifi dongle, really UW-600M01 model):
+
+# note: this only builds driver which does station mode. for AP mode, use make
+# parameter MODE=AP to build a different driver.
+
+# note: docs/ contain some documentation. Most of it is extremelty out-of-date
+# and seems to be incompatible with current driver (none of the iwpriv names
+# match, for example)
+
+cd /local2/odroid2
+git clone https://github.com/coolshou/mt7610u
+cd mt7610u
+make ARCH=arm CROSS_COMPILE=$odroid_tc LINUX_SRC=../linux
+rsync -av --no-owner --no-group --rsync-path='sudo rsync' ./os/linux/mt7610u_sta.ko odroid@odroid-mjmech:/lib/modules/3.8.13.30-at2/kernel/
+ssh odroid@odroid-mjmech sudo depmod -a '&&' sudo mkdir -p /etc/Wireless/RT2870STA/
+rsync -av --no-owner --no-group --rsync-path='sudo rsync' conf/RT2870STA.dat odroid@odroid-mjmech:/etc/Wireless/RT2870STA/
+
+# then add 'coherent_pool=2M' to the end of kernel commandline
