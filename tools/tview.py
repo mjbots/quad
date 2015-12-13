@@ -95,6 +95,14 @@ def _set_tree_widget_data(item, struct,
             child.setText(1, repr(field))
 
 
+class NoEditDelegate(QtGui.QStyledItemDelegate):
+    def __init__(self, parent=None):
+        QtGui.QStyledItemDelegate.__init__(self, parent=parent)
+
+    def createEditor(self, parent, option, index):
+        return None
+
+
 class TviewMainWindow(QtGui.QMainWindow):
     STATE_LINE = 0
     STATE_CONFIG = 1
@@ -116,6 +124,7 @@ class TviewMainWindow(QtGui.QMainWindow):
 
         self._telemetry_records = {}
         self._schema_name = None
+        self._config_tree_items = {}
 
         self.ui = ui_tview_main_window.Ui_TviewMainWindow()
         self.ui.setupUi(self)
@@ -124,6 +133,11 @@ class TviewMainWindow(QtGui.QMainWindow):
             self._handle_tree_expanded)
         self.ui.telemetryTreeWidget.itemCollapsed.connect(
             self._handle_tree_collapsed)
+
+        self.ui.configTreeWidget.setItemDelegateForColumn(
+            0, NoEditDelegate(self))
+        self.ui.configTreeWidget.itemChanged.connect(
+            self._handle_config_item_changed)
 
         self.console = TviewConsoleWidget()
         self.console.ansi_codes = False
@@ -202,6 +216,7 @@ class TviewMainWindow(QtGui.QMainWindow):
     def update_config(self, callback):
         # Clear out our config tree.
         self.ui.configTreeWidget.clear()
+        self._config_tree_times = {}
 
         self._config_callback = callback
         self.write_line('conf enumerate\r\n')
@@ -226,7 +241,40 @@ class TviewMainWindow(QtGui.QMainWindow):
                 cbk()
         else:
             # Add it into our tree view.
-            print "got config:", line
+            key, value = line.split(' ', 1)
+            name, rest = key.split('.', 1)
+            if name not in self._config_tree_items:
+                item = QtGui.QTreeWidgetItem()
+                item.setText(0, name)
+                self.ui.configTreeWidget.addTopLevelItem(item)
+                self._config_tree_items[name] = item
+
+            def add_config(item, key, value):
+                if key == '':
+                    item.setText(1, value)
+                    item.setFlags(QtCore.Qt.ItemIsEditable |
+                                  QtCore.Qt.ItemIsSelectable |
+                                  QtCore.Qt.ItemIsEnabled)
+                    return
+
+                fields = key.split('.', 1)
+                this_field = fields[0]
+                next_key = ''
+                if len(fields) > 1:
+                    next_key = fields[1]
+
+                child = None
+                # See if we already have an appropriate child.
+                for i in range(item.childCount()):
+                    if item.child(i).text(0) == this_field:
+                        child = item.child(i)
+                        break
+                if child is None:
+                    child = QtGui.QTreeWidgetItem(item)
+                    child.setText(0, this_field)
+                add_config(child, next_key, value)
+
+            add_config(self._config_tree_items[name], rest, value)
 
     def update_telemetry(self, callback):
         self.ui.telemetryTreeWidget.clear()
@@ -362,6 +410,17 @@ class TviewMainWindow(QtGui.QMainWindow):
             # Stop this guy.
             name = item.text(0)
             self.write_line('tel rate %s 0\r\n' % name)
+
+    def _handle_config_item_changed(self, item, column):
+        if self._serial_state == self.STATE_CONFIG:
+            return
+        name = item.text(0)
+        value = item.text(1)
+        while item.parent():
+            name = item.parent().text(0) + '.' + name
+            item = item.parent()
+
+        self.write_line('conf set %s %s\r\n' % (name, value))
 
 
 def main():
