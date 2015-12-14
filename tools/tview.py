@@ -656,6 +656,9 @@ class TviewMainWindow(QtGui.QMainWindow):
         menu = QtGui.QMenu(self)
         left_action = menu.addAction('Plot Left')
         right_action = menu.addAction('Plot Right')
+        menu.addSeparator()
+        copy_name = menu.addAction('Copy Name')
+        copy_value = menu.addAction('Copy Value')
 
         requested = menu.exec_(self.ui.telemetryTreeWidget.mapToGlobal(pos))
 
@@ -672,6 +675,13 @@ class TviewMainWindow(QtGui.QMainWindow):
             plot_item = self.ui.plotWidget.add_plot(
                 name, record.get_signal(leaf), axis)
             self.ui.plotItemCombo.addItem(name, plot_item)
+        elif requested == copy_name:
+            QtGui.QApplication.clipboard().setText(item.text(0))
+        elif requested == copy_value:
+            QtGui.QApplication.clipboard().setText(item.text(1))
+        else:
+            # The user cancelled.
+            pass
 
     def _handle_config_expanded(self, item):
         self.ui.configTreeWidget.resizeColumnToContents(0)
