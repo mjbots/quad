@@ -305,6 +305,7 @@ class TviewMainWindow(QtGui.QMainWindow):
         QtGui.QMainWindow.__init__(self, parent)
 
         self.port = port
+        self.default_rate = 100
 
         self._buffer = ''
         self._serial_timer = QtCore.QTimer()
@@ -628,7 +629,7 @@ class TviewMainWindow(QtGui.QMainWindow):
             # receiving updates.
             name = item.text(0)
             self.write_line('tel fmt %s 0\r\n' % name)
-            self.write_line('tel rate %s 500\r\n' % name)
+            self.write_line('tel rate %s %d\r\n' % (name, self.default_rate))
 
     def _handle_tree_collapsed(self, item):
         if item.parent() is None:
