@@ -47,7 +47,8 @@ import telemetry_log
 import ui_tview_main_window
 
 
-LEGEND_LOC=3
+LEFT_LEGEND_LOC=3
+RIGHT_LEGEND_LOC=2
 
 
 # TODO jpieper: Factor these out of tplot.py
@@ -126,7 +127,7 @@ class PlotItem(object):
             self.plot_widget.next_color + 1) % len(self.plot_widget.COLORS)
 
         self.axis.add_line(line)
-        self.axis.legend(loc=LEGEND_LOC)
+        self.axis.legend(loc=self.axis.legend_loc)
 
         self.line = line
 
@@ -138,7 +139,7 @@ class PlotItem(object):
         if len(self.axis.lines) == 0:
             self.axis.legend_ = None
         else:
-            self.axis.legend(loc=LEGEND_LOC)
+            self.axis.legend(loc=self.axis.legend_loc)
         self.plot_widget.canvas.draw()
 
     def _handle_update(self, value):
@@ -183,6 +184,10 @@ class PlotWidget(QtGui.QWidget):
         self.left_axis = self.figure.add_subplot(111)
         self.left_axis.grid()
 
+        self.left_axis.legend_loc = LEFT_LEGEND_LOC
+
+        self.right_axis = None
+
         def draw():
             # NOTE jpieper: For some reason, on the first repaint
             # event, the height is negative, which throws spurious
@@ -203,8 +208,14 @@ class PlotWidget(QtGui.QWidget):
 
         self.canvas.setFocusPolicy(QtCore.Qt.ClickFocus)
 
-    def add_plot(self, name, signal):
-        item = PlotItem(self.left_axis, self, name, signal)
+    def add_plot(self, name, signal, axis_number):
+        axis = self.left_axis
+        if axis_number == 1:
+            if self.right_axis is None:
+                self.right_axis = self.left_axis.twinx()
+                self.right_axis.legend_loc = RIGHT_LEGEND_LOC
+            axis = self.right_axis
+        item = PlotItem(axis, self, name, signal)
         return item
 
     def remove_plot(self, item):
@@ -643,19 +654,23 @@ class TviewMainWindow(QtGui.QMainWindow):
             return
 
         menu = QtGui.QMenu(self)
-        plot_action = menu.addAction('Plot')
+        left_action = menu.addAction('Plot Left')
+        right_action = menu.addAction('Plot Right')
 
         requested = menu.exec_(self.ui.telemetryTreeWidget.mapToGlobal(pos))
 
-        if requested == plot_action:
+        if requested == left_action or requested == right_action:
             name = _get_item_name(item)
             root = _get_item_root(item)
 
             record = self._telemetry_records[root]
 
             leaf = name.split('.', 1)[1]
+            axis = 0
+            if requested == right_action:
+                axis = 1
             plot_item = self.ui.plotWidget.add_plot(
-                name, record.get_signal(leaf))
+                name, record.get_signal(leaf), axis)
             self.ui.plotItemCombo.addItem(name, plot_item)
 
     def _handle_config_expanded(self, item):
