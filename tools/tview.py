@@ -27,6 +27,14 @@ import struct
 import sys
 import time
 
+import matplotlib
+
+matplotlib.use('Qt4Agg')
+matplotlib.rcParams['backend.qt4'] = 'PySide'
+
+from matplotlib.backends import backend_qt4agg
+from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
+
 from IPython.external.qt import QtCore, QtGui
 from IPython.qt.console.history_console_widget import HistoryConsoleWidget
 
@@ -38,6 +46,152 @@ import telemetry_archive
 import telemetry_log
 import ui_tview_main_window
 
+
+# TODO jpieper: Factor these out of tplot.py
+def _get_data(value, name):
+    fields = name.split('.')
+    for field in fields:
+        if isinstance(value, list):
+            value = value[int(field)]
+        else:
+            value = getattr(value, field)
+    return value
+
+
+def _set_tree_widget_data(item, struct,
+                          getter=lambda x, y: getattr(x, y),
+                          required_size=0):
+    if item.childCount() < required_size:
+        for i in range(item.childCount(), required_size):
+            subitem = QtGui.QTreeWidgetItem(item)
+            subitem.setText(0, str(i))
+    for i in range(item.childCount()):
+        child = item.child(i)
+        name = child.text(0)
+
+        field = getter(struct, name)
+        if isinstance(field, tuple) and child.childCount() > 0:
+            _set_tree_widget_data(child, field)
+        elif isinstance(field, list):
+            _set_tree_widget_data(child, field,
+                                  getter=lambda x, y: x[int(y)],
+                                  required_size=len(field))
+        else:
+            child.setText(1, repr(field))
+
+
+class RecordSignal(object):
+    def __init__(self):
+        self._index = 0
+        self._callbacks = {}
+
+    def connect(self, handler):
+        result = self._index
+        self._index += 1
+        self._callbacks[result] = handler
+
+        class Connection(object):
+            def __init__(self, parent, index):
+                self.parent = parent
+                self.index = index
+
+            def remove(self):
+                del self.parent._callbacks[self.index]
+
+        return Connection(self, result)
+
+    def update(self, value):
+        for handler in self._callbacks.itervalues():
+            handler(value)
+
+
+class PlotItem(object):
+    def __init__(self, axis, plot_widget, name, signal):
+        self.axis = axis
+        self.plot_widget = plot_widget
+        self.name = name
+        self.line = None
+        self.xdata = []
+        self.ydata = []
+        self.connection = signal.connect(self._handle_update)
+
+    def _make_line(self):
+        line = matplotlib.lines.Line2D([], [])
+        line.set_label(self.name)
+        line.set_color(self.plot_widget.COLORS[self.plot_widget.next_color])
+        self.plot_widget.next_color = (
+            self.plot_widget.next_color + 1) % len(self.plot_widget.COLORS)
+
+        self.axis.add_line(line)
+        self.axis.legend()
+
+        self.line = line
+
+    def remove(self):
+        self.line.remove()
+        self.plot_widget.canvas.draw()
+        self.connection.remove()
+
+    def _handle_update(self, value):
+        if self.line is None:
+            self._make_line()
+
+        now = time.time()
+        self.xdata.append(now)
+        self.ydata.append(value)
+
+        # Remove elements from the beginning until there is at most
+        # one before the window.
+        oldest_time = now - self.plot_widget.history_s
+        oldest_index = None
+        for i in range(len(self.xdata)):
+            if self.xdata[i] >= oldest_time:
+                oldest_index = i - 1
+                break
+
+        if oldest_index and oldest_index > 1:
+            self.xdata = self.xdata[oldest_index:]
+            self.ydata = self.ydata[oldest_index:]
+
+        self.line.set_data(self.xdata, self.ydata)
+
+        self.axis.relim()
+        self.axis.autoscale_view()
+        self.plot_widget.canvas.draw()
+
+
+class PlotWidget(QtGui.QWidget):
+    COLORS = 'rbgcmyk'
+
+    def __init__(self, parent=None):
+        QtGui.QWidget.__init__(self, parent)
+
+        self.history_s = 10.0
+        self.next_color = 0
+
+        self.figure = matplotlib.figure.Figure()
+        self.canvas = FigureCanvas(self.figure)
+
+        self.left_axis = self.figure.add_subplot(111)
+
+        def draw():
+            FigureCanvas.draw(self.canvas)
+            self.canvas.repaint()
+
+        self.canvas.draw = draw
+
+        self.toolbar = backend_qt4agg.NavigationToolbar2QT(self.canvas, self)
+
+        layout = QtGui.QVBoxLayout(self)
+        layout.addWidget(self.toolbar, 0)
+        layout.addWidget(self.canvas, 1)
+
+        self.canvas.setFocusPolicy(QtCore.Qt.ClickFocus)
+
+    def add_plot(self, name, signal):
+        item = PlotItem(self.left_axis, self, name, signal)
+
+
 class SizedTreeWidget(QtGui.QTreeWidget):
     def __init__(self, parent=None):
         QtGui.QTreeWidget.__init__(self, parent)
@@ -46,7 +200,8 @@ class SizedTreeWidget(QtGui.QTreeWidget):
         self.headerItem().setText(1, 'Value')
 
     def sizeHint(self):
-        return QtCore.QSize(400, 500)
+        return QtCore.QSize(350, 500)
+
 
 class TviewConsoleWidget(HistoryConsoleWidget):
     line_input = QtCore.Signal(str)
@@ -83,29 +238,18 @@ class Record(object):
     def __init__(self, archive, tree_item):
         self.archive = archive
         self.tree_item = tree_item
+        self.signals = {}
 
+    def get_signal(self, name):
+        if name not in self.signals:
+            self.signals[name] = RecordSignal()
 
-# TODO jpieper: Factor this out of tplot.py
-def _set_tree_widget_data(item, struct,
-                          getter=lambda x, y: getattr(x, y),
-                          required_size=0):
-    if item.childCount() < required_size:
-        for i in range(item.childCount(), required_size):
-            subitem = QtGui.QTreeWidgetItem(item)
-            subitem.setText(0, str(i))
-    for i in range(item.childCount()):
-        child = item.child(i)
-        name = child.text(0)
+        return self.signals[name]
 
-        field = getter(struct, name)
-        if isinstance(field, tuple) and child.childCount() > 0:
-            _set_tree_widget_data(child, field)
-        elif isinstance(field, list):
-            _set_tree_widget_data(child, field,
-                                  getter=lambda x, y: x[int(y)],
-                                  required_size=len(field))
-        else:
-            child.setText(1, repr(field))
+    def update(self, struct):
+        for key, signal in self.signals.iteritems():
+            value = _get_data(struct, key)
+            signal.update(value)
 
 
 class NoEditDelegate(QtGui.QStyledItemDelegate):
@@ -114,6 +258,21 @@ class NoEditDelegate(QtGui.QStyledItemDelegate):
 
     def createEditor(self, parent, option, index):
         return None
+
+
+def _get_item_name(item):
+    name = item.text(0)
+    while item.parent():
+        name = item.parent().text(0) + '.' + name
+        item = item.parent()
+
+    return name
+
+
+def _get_item_root(item):
+    while item.parent():
+        item = item.parent()
+    return item.text(0)
 
 
 class TviewMainWindow(QtGui.QMainWindow):
@@ -152,6 +311,10 @@ class TviewMainWindow(QtGui.QMainWindow):
             self._handle_tree_expanded)
         self.ui.telemetryTreeWidget.itemCollapsed.connect(
             self._handle_tree_collapsed)
+        self.ui.telemetryTreeWidget.setContextMenuPolicy(
+            QtCore.Qt.CustomContextMenu)
+        self.ui.telemetryTreeWidget.customContextMenuRequested.connect(
+            self._handle_telemetry_context_menu)
 
         self.ui.configTreeWidget.setItemDelegateForColumn(
             0, NoEditDelegate(self))
@@ -164,6 +327,9 @@ class TviewMainWindow(QtGui.QMainWindow):
         self.console.ansi_codes = False
         self.console.line_input.connect(self._handle_user_input)
         self.ui.consoleDock.setWidget(self.console)
+
+        self.ui.plotWidget = PlotWidget()
+        self.setCentralWidget(self.ui.plotWidget)
 
         self._config_callback = None
 
@@ -376,6 +542,7 @@ class TviewMainWindow(QtGui.QMainWindow):
         record = self._telemetry_records[name]
         struct = record.archive.deserialize(data)
         _set_tree_widget_data(record.tree_item, struct)
+        record.update(struct)
 
         self._serial_state = self.STATE_LINE
 
@@ -436,17 +603,33 @@ class TviewMainWindow(QtGui.QMainWindow):
             name = item.text(0)
             self.write_line('tel rate %s 0\r\n' % name)
 
+    def _handle_telemetry_context_menu(self, pos):
+        item = self.ui.telemetryTreeWidget.itemAt(pos)
+        if item.childCount() > 0:
+            return
+
+        menu = QtGui.QMenu(self)
+        plot_action = menu.addAction('Plot')
+
+        requested = menu.exec_(self.ui.telemetryTreeWidget.mapToGlobal(pos))
+
+        if requested == plot_action:
+            name = _get_item_name(item)
+            root = _get_item_root(item)
+
+            record = self._telemetry_records[root]
+
+            leaf = name.split('.', 1)[1]
+            self.ui.plotWidget.add_plot(name, record.get_signal(leaf))
+
     def _handle_config_expanded(self, item):
         self.ui.configTreeWidget.resizeColumnToContents(0)
 
     def _handle_config_item_changed(self, item, column):
         if self._serial_state == self.STATE_CONFIG:
             return
-        name = item.text(0)
         value = item.text(1)
-        while item.parent():
-            name = item.parent().text(0) + '.' + name
-            item = item.parent()
+        name = _get_item_name(item)
 
         self.write_line('conf set %s %s\r\n' % (name, value))
 
