@@ -47,6 +47,9 @@ import telemetry_log
 import ui_tview_main_window
 
 
+LEGEND_LOC=3
+
+
 # TODO jpieper: Factor these out of tplot.py
 def _get_data(value, name):
     fields = name.split('.')
@@ -123,14 +126,20 @@ class PlotItem(object):
             self.plot_widget.next_color + 1) % len(self.plot_widget.COLORS)
 
         self.axis.add_line(line)
-        self.axis.legend()
+        self.axis.legend(loc=LEGEND_LOC)
 
         self.line = line
 
     def remove(self):
         self.line.remove()
-        self.plot_widget.canvas.draw()
         self.connection.remove()
+        # NOTE jpieper: matplotlib gives us no better way to remove a
+        # legend.
+        if len(self.axis.lines) == 0:
+            self.axis.legend_ = None
+        else:
+            self.axis.legend(loc=LEGEND_LOC)
+        self.plot_widget.canvas.draw()
 
     def _handle_update(self, value):
         if self.line is None:
@@ -157,7 +166,6 @@ class PlotItem(object):
 
         self.axis.relim()
         self.axis.autoscale_view()
-        self.plot_widget.canvas.draw()
 
 
 class PlotWidget(QtGui.QWidget):
@@ -166,15 +174,22 @@ class PlotWidget(QtGui.QWidget):
     def __init__(self, parent=None):
         QtGui.QWidget.__init__(self, parent)
 
-        self.history_s = 10.0
+        self.history_s = 20.0
         self.next_color = 0
 
         self.figure = matplotlib.figure.Figure()
         self.canvas = FigureCanvas(self.figure)
 
         self.left_axis = self.figure.add_subplot(111)
+        self.left_axis.grid()
 
         def draw():
+            # NOTE jpieper: For some reason, on the first repaint
+            # event, the height is negative, which throws spurious
+            # errors.  Paper over that here.
+            l, b, w, h = self.figure.bbox.bounds
+            if h < 0:
+                return
             FigureCanvas.draw(self.canvas)
             self.canvas.repaint()
 
@@ -190,6 +205,10 @@ class PlotWidget(QtGui.QWidget):
 
     def add_plot(self, name, signal):
         item = PlotItem(self.left_axis, self, name, signal)
+        return item
+
+    def remove_plot(self, item):
+        item.remove()
 
 
 class SizedTreeWidget(QtGui.QTreeWidget):
@@ -323,13 +342,26 @@ class TviewMainWindow(QtGui.QMainWindow):
         self.ui.configTreeWidget.itemChanged.connect(
             self._handle_config_item_changed)
 
+        self.ui.plotItemRemoveButton.clicked.connect(
+            self._handle_plot_item_remove)
+
         self.console = TviewConsoleWidget()
         self.console.ansi_codes = False
         self.console.line_input.connect(self._handle_user_input)
         self.ui.consoleDock.setWidget(self.console)
 
-        self.ui.plotWidget = PlotWidget()
-        self.setCentralWidget(self.ui.plotWidget)
+        self.tabifyDockWidget(self.ui.configDock, self.ui.telemetryDock)
+
+        layout = QtGui.QVBoxLayout(self.ui.plotHolderWidget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        self.ui.plotHolderWidget.setLayout(layout)
+        self.ui.plotWidget = PlotWidget(self.ui.plotHolderWidget)
+        layout.addWidget(self.ui.plotWidget)
+
+        def update_plotwidget(value):
+            self.ui.plotWidget.history_s = value
+        self.ui.historySpin.valueChanged.connect(update_plotwidget)
 
         self._config_callback = None
 
@@ -543,6 +575,7 @@ class TviewMainWindow(QtGui.QMainWindow):
         struct = record.archive.deserialize(data)
         _set_tree_widget_data(record.tree_item, struct)
         record.update(struct)
+        self.ui.plotWidget.canvas.draw()
 
         self._serial_state = self.STATE_LINE
 
@@ -620,7 +653,9 @@ class TviewMainWindow(QtGui.QMainWindow):
             record = self._telemetry_records[root]
 
             leaf = name.split('.', 1)[1]
-            self.ui.plotWidget.add_plot(name, record.get_signal(leaf))
+            plot_item = self.ui.plotWidget.add_plot(
+                name, record.get_signal(leaf))
+            self.ui.plotItemCombo.addItem(name, plot_item)
 
     def _handle_config_expanded(self, item):
         self.ui.configTreeWidget.resizeColumnToContents(0)
@@ -632,6 +667,16 @@ class TviewMainWindow(QtGui.QMainWindow):
         name = _get_item_name(item)
 
         self.write_line('conf set %s %s\r\n' % (name, value))
+
+    def _handle_plot_item_remove(self):
+        index = self.ui.plotItemCombo.currentIndex()
+
+        if index < 0:
+            return
+
+        item = self.ui.plotItemCombo.itemData(index)
+        self.ui.plotWidget.remove_plot(item)
+        self.ui.plotItemCombo.removeItem(index)
 
 
 def main():
