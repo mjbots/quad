@@ -162,12 +162,15 @@ class HerkuleXBase : boost::noncopyable {
 struct HerkuleXConstants {
   struct Register {
     constexpr Register(
-        const uint8_t position, const uint8_t length, const uint8_t bit_align=8)
-        : position(position), length(length), bit_align(bit_align) {}
+        const uint8_t position, const uint8_t length,
+        const uint8_t bit_align=8, bool sign=false)
+        : position(position), length(length),
+          bit_align(bit_align), sign(sign) {}
 
     uint8_t position;
     uint8_t length;
     uint8_t bit_align;
+    bool sign;
   };
 
   HerkuleXConstants();

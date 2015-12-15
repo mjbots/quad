@@ -150,6 +150,13 @@ const std::map<std::string, Command> g_commands = {
                           response.register_data[i]) << (i * reg.bit_align));
           }
 
+          if (reg.sign) {
+            const int most_positive = 1 << (reg.bit_align * reg.length - 1);
+            if (value >= most_positive) {
+              value = value - (1 << (reg.bit_align * reg.length));
+            }
+          }
+
           std::cout << boost::format(" (%d)") % value;
         }
         std::cout << "\n";
