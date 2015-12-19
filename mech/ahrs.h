@@ -34,8 +34,8 @@ class Ahrs : boost::noncopyable {
   Ahrs(Context& context,
        boost::signals2::signal<void (const ImuData*)>* imu_signal)
       : Ahrs(context.service) {
-    context.telemetry_registry.Register("ahrs", &ahrs_data_signal_);
-    context.telemetry_registry.Register("ahrs_debug", &ahrs_debug_signal_);
+    context.telemetry_registry->Register("ahrs", &ahrs_data_signal_);
+    context.telemetry_registry->Register("ahrs_debug", &ahrs_debug_signal_);
     imu_signal->connect(std::bind(&Ahrs::HandleImuData<ImuData>, this,
                                   std::placeholders::_1));
   }

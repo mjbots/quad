@@ -28,9 +28,9 @@ class Turret : boost::noncopyable {
   Turret(Context& context,
          Mech::ServoBase* servo)
       : Turret(context.service, servo) {
-    context.telemetry_registry.Register("turret",
+    context.telemetry_registry->Register("turret",
                                         &turret_data_signal_);
-    context.telemetry_registry.Register("turret_command",
+    context.telemetry_registry->Register("turret_command",
                                         &turret_command_signal_);
   }
 

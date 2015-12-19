@@ -31,7 +31,7 @@ class MjmechImuDriver : boost::noncopyable {
   template <typename Context>
   MjmechImuDriver(Context& context)
       : MjmechImuDriver(context.service,
-                        &context.telemetry_registry) {}
+                        context.telemetry_registry.get()) {}
 
   template <typename TelemetryRegistry>
   MjmechImuDriver(boost::asio::io_service& service,

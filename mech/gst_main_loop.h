@@ -65,7 +65,7 @@ class GstMainLoop : boost::noncopyable {
   template <typename Context>
     GstMainLoop(Context& context)
     : GstMainLoop(context.service,
-                   &context.telemetry_registry) {}
+                   context.telemetry_registry.get()) {}
 
   template <typename TelemetryRegistry>
     GstMainLoop(boost::asio::io_service& service,

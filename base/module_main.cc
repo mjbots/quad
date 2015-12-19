@@ -19,29 +19,29 @@
 #include <boost/format.hpp>
 #include <boost/program_options.hpp>
 
+#include "context_full.h"
 #include "fail.h"
 #include "handler_util.h"
 #include "logging.h"
 #include "program_options_archive.h"
-#include "telemetry_log.h"
-#include "telemetry_log_registrar.h"
-#include "telemetry_registry.h"
-#include "telemetry_remote_debug_registrar.h"
-#include "telemetry_remote_debug_server.h"
 
 namespace mjmech {
 
+namespace base {
+
+Context::Context()
+    : telemetry_log(new TelemetryLog),
+      remote_debug(new TelemetryRemoteDebugServer(service)),
+      telemetry_registry(new ConcreteTelemetryRegistry(
+                             telemetry_log.get(), remote_debug.get()))
+{};
+
+Context::~Context() {};
+
+}
+
 namespace {
 using namespace mjmech::base;
-
-struct Context {
-  boost::asio::io_service service;
-  TelemetryLog telemetry_log;
-  TelemetryRemoteDebugServer remote_debug{service};
-  TelemetryRegistry<TelemetryLogRegistrar,
-                    TelemetryRemoteDebugRegistrar> telemetry_registry{
-    &telemetry_log, &remote_debug};
-};
 
 int safe_main(int argc, char**argv) {
   namespace po = boost::program_options;
@@ -67,7 +67,7 @@ int safe_main(int argc, char**argv) {
 
   AddLoggingOptions(&desc);
   ProgramOptionsArchive(&desc, "remote_debug.").Accept(
-      context.remote_debug.parameters());
+      context.remote_debug->parameters());
   ProgramOptionsArchive(&desc).Accept(module.parameters());
 
   po::variables_map vm;
@@ -87,7 +87,7 @@ int safe_main(int argc, char**argv) {
   }
 
   if (!log_file.empty()) {
-    context.telemetry_log.SetRealtime(!debug);
+    context.telemetry_log->SetRealtime(!debug);
 
     // Make sure that the log file has a date and timestamp somewhere
     // in the name.
@@ -110,15 +110,15 @@ int safe_main(int argc, char**argv) {
          stem % datestamp % extension).str();
 
     if (log_short_name) {
-      context.telemetry_log.Open(log_file);
+      context.telemetry_log->Open(log_file);
     } else {
-      context.telemetry_log.Open(stamped_path.native());
+      context.telemetry_log->Open(stamped_path.native());
     }
   }
 
   // TODO theamk: move this to logging.cc
   TextLogMessageSignal log_signal_mt;
-  context.telemetry_registry.Register("text_log", &log_signal_mt);
+  context.telemetry_registry->Register("text_log", &log_signal_mt);
 
   // TODO theamk: should this marshalling be done by telemetry log
   // itself?
@@ -139,7 +139,7 @@ int safe_main(int argc, char**argv) {
             if (debug) { std::cout << "Started!\n"; }
           });
 
-  context.remote_debug.AsyncStart(joiner->Wrap("starting remote_debug"));
+  context.remote_debug->AsyncStart(joiner->Wrap("starting remote_debug"));
   module.AsyncStart(joiner->Wrap("starting main module"));
 
   context.service.run();

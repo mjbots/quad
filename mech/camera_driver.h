@@ -21,6 +21,7 @@
 #include <boost/signals2/signal.hpp>
 
 #include "base/comm.h"
+#include "base/context.h"
 #include "base/visitor.h"
 
 #include "gst_main_loop.h"
@@ -35,19 +36,7 @@ class CameraFrameConsumer;
 
 class CameraDriver : boost::noncopyable {
  public:
-  template <typename Context>
-    CameraDriver(Context& context)
-    : CameraDriver(context.service,
-                   &context.telemetry_registry) {}
-
-  template <typename TelemetryRegistry>
-    CameraDriver(boost::asio::io_service& service,
-                 TelemetryRegistry* telemetry_registry)
-    : CameraDriver(service) {
-    telemetry_registry->Register("camera_stats", &camera_stats_signal_);
-  }
-
-  CameraDriver(boost::asio::io_service&);
+  CameraDriver(base::Context& context);
   ~CameraDriver();
 
   void AsyncStart(base::ErrorHandler handler);

@@ -34,15 +34,9 @@ namespace mech {
 class VideoDisplay : boost::noncopyable {
  public:
   template <typename Context>
-    VideoDisplay(Context& context)
-    : VideoDisplay(context.service,
-                   &context.telemetry_registry) {}
-
-  template <typename TelemetryRegistry>
-    VideoDisplay(boost::asio::io_service& service,
-                 TelemetryRegistry* telemetry_registry)
-    : VideoDisplay(service) {
-    telemetry_registry->Register("video_stats", &stats_signal_);
+  VideoDisplay(Context& context)
+      : VideoDisplay(context.service) {
+    context.telemetry_registry->Register("video_stats", &stats_signal_);
   }
 
   VideoDisplay(boost::asio::io_service&);

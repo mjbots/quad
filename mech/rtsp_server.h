@@ -19,6 +19,7 @@
 #include <boost/signals2/signal.hpp>
 
 #include "base/comm.h"
+#include "base/context.h"
 #include "base/visitor.h"
 
 #include "camera_driver.h"
@@ -28,17 +29,9 @@ namespace mech {
 
 class RtspServer : boost::noncopyable {
  public:
-  template <typename Context>
-    RtspServer(Context& context)
-    : RtspServer(context.service,
-                   &context.telemetry_registry) {}
-
-  template <typename TelemetryRegistry>
-    RtspServer(boost::asio::io_service& service,
-                 TelemetryRegistry* telemetry_registry)
-    : RtspServer(service) {
+  RtspServer(base::Context& context)
+      : RtspServer(context.service) {
     // no stats -- we log to camera
-    //telemetry_registry->Register("rtsp_server_stats", &stats_signal_);
   }
 
   RtspServer(boost::asio::io_service&);

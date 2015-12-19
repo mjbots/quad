@@ -22,6 +22,7 @@
 #include <boost/format.hpp>
 
 #include "base/common.h"
+#include "base/context_full.h"
 #include "base/fail.h"
 #include "base/json_archive.h"
 #include "base/logging.h"
@@ -375,8 +376,11 @@ class CameraDriver::Impl : boost::noncopyable {
 };
 
 
-CameraDriver::CameraDriver(boost::asio::io_service& service)
-  : impl_(new Impl(this, service)) {};
+CameraDriver::CameraDriver(base::Context& context)
+    : impl_(new Impl(this, context.service)) {
+  context.telemetry_registry->Register(
+      "camera_stats", &camera_stats_signal_);
+}
 
 CameraDriver::~CameraDriver() {}
 

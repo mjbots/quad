@@ -43,7 +43,7 @@ class MechWarfare : boost::noncopyable {
     m_.imu.reset(new MjmechImuDriver(context));
     m_.ahrs.reset(new Ahrs(context, m_.imu->imu_data_signal()));
     m_.gait_driver.reset(new GaitDriver(service_,
-                                        &context.telemetry_registry,
+                                        context.telemetry_registry.get(),
                                         m_.servo.get(),
                                         m_.ahrs->ahrs_data_signal()));
     m_.servo_iface.reset(

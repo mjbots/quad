@@ -64,7 +64,7 @@ class ServoMonitor : boost::noncopyable {
   template <typename Context>
   ServoMonitor(Context& context,
                HerkuleXServo* servo) :
-      ServoMonitor(context.service, &context.telemetry_registry, servo) {}
+      ServoMonitor(context.service, context.telemetry_registry.get(), servo) {}
 
   template <typename TelemetryRegistry>
   ServoMonitor(boost::asio::io_service& service,
