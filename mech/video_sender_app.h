@@ -21,6 +21,7 @@
 #include "camera_driver.h"
 #include "gst_main_loop.h"
 #include "rtsp_server.h"
+#include "mcast_video_link.h"
 
 namespace mjmech {
 namespace mech {
@@ -33,6 +34,7 @@ class VideoSenderApp : boost::noncopyable {
     m_.gst_main.reset(new GstMainLoop(context));
     m_.camera.reset(new CameraDriver(context));
     m_.rtsp.reset(new RtspServer(context));
+    m_.video_link.reset(new McastVideoLinkTransmitter(context));
 
     m_.gst_main->ready_signal()->connect(
         std::bind(&CameraDriver::HandleGstReady, m_.camera.get(),
@@ -43,6 +45,7 @@ class VideoSenderApp : boost::noncopyable {
                   std::placeholders::_1));
 
     m_.camera->AddFrameConsumer(m_.rtsp->get_frame_consumer());
+    m_.camera->AddFrameConsumer(m_.video_link->get_frame_consumer());
 
     m_.camera->stats_signal()->connect(
        std::bind(&VideoSenderApp::HandleStats, this, std::placeholders::_1));
@@ -56,12 +59,14 @@ class VideoSenderApp : boost::noncopyable {
     std::unique_ptr<GstMainLoop> gst_main;
     std::unique_ptr<CameraDriver> camera;
     std::unique_ptr<RtspServer> rtsp;
+    std::unique_ptr<McastVideoLinkTransmitter> video_link;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(gst_main));
       a->Visit(MJ_NVP(camera));
       a->Visit(MJ_NVP(rtsp));
+      a->Visit(MJ_NVP(video_link));
     }
   };
 

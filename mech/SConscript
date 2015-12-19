@@ -80,6 +80,7 @@ GST_SOURCES = [
     'gst_main_loop.cc',
     'rtsp_server.cc',
     'video_display.cc',
+    'mcast_video_link.cc',
 ]
 
 GST_OBJECTS = [gsenv.SharedObject(name)
@@ -126,11 +127,13 @@ sender = ModuleMain(gsenv, 'video_sender_app', 'VideoSenderApp')
 gsenv.Command(
     'video_sender_test.passed', sender,
     '$SOURCE -t camera_driver.stats --max_stats=2 --require_stats_good=1 '
+    '--video_link_enable=0 '
     '--remote_debug.port=0 --camera.device=TEST --rtsp.port=0 && touch $TARGET')
 
 controller = ModuleMain(gsenv, 'video_controller_app', 'VideoControllerApp')
 gsenv.Command(
     'video_controller_test.passed', controller,
     '$SOURCE -t video_display.stats --max_stats=2 --require_stats_good=1 '
+    '--video_link_enable=0 '
     '--remote_debug.port=0 --display.source=TEST --display.hide_video=1 '
     ' && touch $TARGET')

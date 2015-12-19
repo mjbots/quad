@@ -20,6 +20,7 @@
 
 #include "gst_main_loop.h"
 #include "video_display.h"
+#include "mcast_video_link.h"
 
 namespace mjmech {
 namespace mech {
@@ -31,10 +32,15 @@ class VideoControllerApp : boost::noncopyable {
     : service_(context.service) {
     m_.gst_main.reset(new GstMainLoop(context));
     m_.display.reset(new VideoDisplay(context));
+    m_.video_link.reset(new McastVideoLinkReceiver(context));
 
     m_.gst_main->ready_signal()->connect(
         std::bind(&VideoDisplay::HandleGstReady, m_.display.get(),
                   std::placeholders::_1));
+
+    m_.video_link->frame_ready_signal()->connect(
+      std::bind(&VideoDisplay::HandleIncomingFrame, m_.display.get(),
+                std::placeholders::_1));
 
     m_.display->stats_signal()->connect(
        std::bind(&VideoControllerApp::HandleStats, this,
@@ -48,11 +54,13 @@ class VideoControllerApp : boost::noncopyable {
   struct Members {
     std::unique_ptr<GstMainLoop> gst_main;
     std::unique_ptr<VideoDisplay> display;
+    std::unique_ptr<McastVideoLinkReceiver> video_link;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(gst_main));
       a->Visit(MJ_NVP(display));
+      a->Visit(MJ_NVP(video_link));
     }
   };
 
@@ -111,5 +119,6 @@ class VideoControllerApp : boost::noncopyable {
   int stats_count_ = 0;
   base::LogRef log_ = base::GetLogInstance("video_controller_app");
 };
+
 }
 }
