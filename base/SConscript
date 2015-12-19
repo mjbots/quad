@@ -28,6 +28,7 @@ SOURCES = [
     'logging.cc',
     'telemetry_log.cc',
     'telemetry_remote_debug_server.cc',
+    'udp_data_link.cc',
     'udp_socket.cc',
     ]
 

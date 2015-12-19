@@ -37,19 +37,27 @@ class UdpSocket {
  public:
   typedef boost::asio::ip::udp::endpoint endpoint;
   struct Parameters;
+  struct ParseResult;
 
   // Creat an object. io_service is aliased, all other parameters
   // are copied. May raise.
   // @p listen_addr -- where to listen. If it contains multicast address,
   //    it subscribes to this address; else it overrides parameters.bind
   // @p server_mode -- what to do when neither listen_addr nor parameters.bind
-  //    contain port number:
+  //    contain port number, and we are not listening to multicast/broadcast:
   //       true = use parameters.default_port.
   //       false = use zero.
   UdpSocket(boost::asio::io_service&, LogRef&,
             const std::string& listen_addr,
             bool server_mode,
             const Parameters&);
+
+  // A version of the constructor when address is already parsed
+  UdpSocket(boost::asio::io_service&, LogRef&,
+            const ParseResult&,
+            bool server_mode,
+            const Parameters&);
+
   ~UdpSocket();
 
   // Parse address into endpoint. Uses parameters.default_port if no
@@ -67,6 +75,12 @@ class UdpSocket {
   void StartRead();
   // Get the data signal. Reading loop must be started first.
   DataSignal* data_signal();
+
+  // Return True if we are receiving multicast packets.
+  bool is_receiving_multicast() const;
+
+  // Return address we receive on (local / multicast)
+  endpoint local_endpoint() const;
 
   // Return link's MTU.
   //int get_mtu();
@@ -135,6 +149,7 @@ class UdpSocket {
   udp::socket socket_;
   char receive_buffer_[0x10000] = {};
   endpoint receive_endpoint_;
+  boost::optional<endpoint> rx_multicast_addr_;
 
   bool reading_loop_running_ = false;
   bool v4_multicast_ready_ = false;
@@ -144,79 +159,24 @@ class UdpSocket {
   int tx_pending_ = 0;
 };
 
-/*
-  An UDP link wrapper.
-
-Functionality:
-  - options on client and server sides may be set identically
-  - second socket for multicast
-  - maintain/log client list
-*/
-class UdpDataLink {
- public:
-  struct Parameters;
-
-  UdpDataLink(bool server_mode,
-              const Parameters& params);
-
-  // Describes a 'link'. This structure may be set to identical
-  // values (except for bind) on both server and clients, and it
-  // should work,
-  struct Parameters {
-    // Server address -- where client sends, server receives
-    // A string in IP, IP:PORT or :PORT format
-    // - missing port means use default one
-    // - address (on server):
-    //     empty -> bind to all interfaces
-    //     regular -> which IP to bind on
-    //     multicast/broadcast -> listen on this address
-    // - address (on client):
-    //     empty -> learn from server's response (port ignored)
-    //     other -> where to send. May be multicast/broadcast.
-    std::string server;
-
-    // Client address -- where server sends, client receives
-    // A string in IP, IP:PORT or :PORT format
-    // - missing port means use default one + 1 (unless address is empty)
-    // - address (on client):
-    //    empty -> bind a random port on all interfaces
-    //    regular -> which IP to bind on
-    //    multicast/broadcast -> listen on this address
-    // - address (on server)
-    //    empty -> send to address of last incoming packet (port ignored)
-    //    other -> where to send. May be multicast/broadcast.
-    std::string client;
-
-    // If 'client' is set to this, it uses address of server + 1. This
-    // is only useful if server is multicast.
-    //static const char* kClientAddrNext = "+1";
-
-    // If client address is specified, and there is a different one in the
-    // packet source, do we want to use it?
-    // (setting this to True on server means command responses will always go
-    // over unicast)
-    bool learn_address = false;
-
-    // The client is considered 'gone' if it sent no packets for that many
-    // seconds.
-    double gone_timeout_s = 10.0;
-
-    UdpSocket::Parameters socket_params;
-
-    template <typename Archive>
-    void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(server));
-      a->Visit(MJ_NVP(client));
-      a->Visit(MJ_NVP(learn_address));
-      socket_params.Serialize(a);
-    }
-  };
-
-  UdpSocket::DataSignal* data_signal();
-
-  void Send(const std::string& data);
-  void SendTo(const std::string& data, const UdpSocket::endpoint&);
-};
 
 }
+}
+
+// Hash function for udp endpoint, so we can place it in unordered_map
+namespace std {
+template<>
+struct hash<boost::asio::ip::udp::endpoint> {
+  size_t operator() (const boost::asio::ip::udp::endpoint& ep) const {
+    size_t ahash = -1;
+    if (ep.address().is_v4()) {
+      ahash = ep.address().to_v4().to_ulong();
+    } else {
+      // Not implemented.
+      BOOST_ASSERT(false);
+    }
+    // Mix-in port multiplied by 16-bit random prime
+    return ahash ^ (ep.port() * 56197);
+  }
+};
 }

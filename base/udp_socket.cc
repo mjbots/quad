@@ -24,6 +24,16 @@ UdpSocket::UdpSocket(boost::asio::io_service& service,
                      const std::string& listen_addr,
                      bool server_mode,
                      const Parameters& parameters)
+    : UdpSocket(service, log, ParseAddress(listen_addr),
+                server_mode, parameters) {
+};
+
+
+UdpSocket::UdpSocket(boost::asio::io_service& service,
+                     LogRef& log,
+                     const ParseResult& listen_p,
+                     bool server_mode,
+                     const Parameters& parameters)
     : service_(service),
       log_(log),
       parameters_(parameters),
@@ -31,7 +41,6 @@ UdpSocket::UdpSocket(boost::asio::io_service& service,
 
   PrepareSocket();
 
-  ParseResult listen_p = ParseAddress(listen_addr);
   ParseResult bind_p = ParseAddress(parameters.bind);
 
   endpoint bind_to;
@@ -69,6 +78,7 @@ UdpSocket::UdpSocket(boost::asio::io_service& service,
     if (bind_to.port() != 0) {
       socket_.set_option(boost::asio::socket_base::reuse_address(true));
     }
+    rx_multicast_addr_ = endpoint(addr, bind_to.port());
   } else {
     base::Fail("address family not supported");
   }
@@ -81,6 +91,10 @@ UdpSocket::UdpSocket(boost::asio::io_service& service,
   endpoint bound_to = socket_.local_endpoint();
   if (bound_to != bind_to) {
     log_.debugStream() << "Actually bound to " << bound_to;
+
+    if  (rx_multicast_addr_) {
+      rx_multicast_addr_->port(bound_to.port());
+    }
   }
 }
 
@@ -106,6 +120,9 @@ void UdpSocket::PrepareSocket() {
     log_.debug("Setting do-not-route option");
     socket_.set_option(boost::asio::socket_base::do_not_route(true));
   }
+
+  boost::asio::socket_base::non_blocking_io command(true);
+  socket_.io_control(command);
 }
 
 
@@ -201,6 +218,17 @@ void UdpSocket::StartNextRead() {
                 std::placeholders::_2));
 }
 
+bool UdpSocket::is_receiving_multicast() const {
+  return !!rx_multicast_addr_;
+}
+
+UdpSocket::endpoint UdpSocket::local_endpoint() const {
+  if (rx_multicast_addr_) {
+    return *rx_multicast_addr_;
+  };
+  return socket_.local_endpoint();
+}
+
 void UdpSocket::HandleRead(ErrorCode ec, std::size_t size) {
   FailIf(ec);
 
@@ -223,14 +251,28 @@ UdpSocket::ParseResult UdpSocket::ParseAddress(const std::string& address) {
     std::string port_str =  host.substr(colon + 1);
     host = host.substr(0, colon);
 
-    result.port = boost::lexical_cast<int>(port_str);
-    if (result.port < 0 || result.port > 0xffff) {
-      throw boost::bad_lexical_cast();
+    if (port_str != "") {
+      try {
+        result.port = boost::lexical_cast<int>(port_str);
+        if (result.port < 0 || result.port > 0xffff) {
+          throw boost::bad_lexical_cast();
+        }
+      } catch (boost::bad_lexical_cast) {
+        throw std::invalid_argument(
+            "Cannot parse port '" + port_str + "' from address '" +
+            address + "'");
+      }
     }
   }
 
   if (host != "") {
-    result.address = ip::address::from_string(host);
+    try {
+      result.address = ip::address::from_string(host);
+    } catch (boost::system::system_error& e) {
+      throw std::invalid_argument(
+          "Cannot parse IP '" + host + "' from address '" +
+          address + "': " + e.what());
+    }
   }
   return result;
 }

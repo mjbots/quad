@@ -132,13 +132,12 @@ If you have a new wireless card, you can check it as following:
 tools/odroid/push-tree.sh odroid-mjmech \
   scons base/build-armv7l/udp_manual_test '&&' \
    base/build-armv7l/udp_manual_test -v \
-      --socket1.send_addr 239.89.108.10:12720 --socket1.send_interval_s=0.005 \
-      --socket2.listen_addr 239.89.108.11:12721 --socket2.do_recv=1
+      --link1.send_interval_s 0.005 --link1.source 239.89.108.11
 
- - Make sure packets are being sent. We do not expect to recevie anything at
-   this time.
- INFO[socket1]: stats: tx_count=1968 tx_size=1968000
- INFO[socket2]: stats: (no data)
+ - The windows will print statistics every 10 seconds. Make sure packets are
+   being sent. We do not expect to recevie anything at this time. Make sure it
+   can maintain the send rate (there will be warnings if it cannot)
+  INFO[link1]: stats: tx_count=2000 tx_size=2000000
 
  - In horst, switch to 'Stats' ('a' key)
   - You may want to 'R'eset the stats
@@ -156,13 +155,11 @@ tools/odroid/push-tree.sh odroid-mjmech \
  - Window 1:
 scons -j4 base/build-x86_64/udp_manual_test && \
    base/build-x86_64/udp_manual_test -v \
-      --socket1.send_addr 239.89.108.11:12721 --socket1.send_interval_s=0.005 \
-      --socket2.listen_addr 239.89.108.10:12720 --socket2.do_recv=1
+       --link1.send_interval_s 0.005 --link1.dest 239.89.108.11
 
- - Both windows will print statistics every 10 seconds. Make sure the loss is
-   less <90%:
- INFO[socket1]: stats: tx_count=1967 tx_size=1967000
- INFO[socket2]: stats: rx[10.89.0.10:46963]=1936 rx_count=1936 rx_size=1936000
+ - Both windows will print statistics every 10 seconds. Make sure the packet
+   loss is not excessively high:
+  INFO[link1]: stats: rx[1]=1980 rx_count=1980 rx_size=1980000 tx_count=2000 tx_size=2000000
 
  - In horst, switch to 'Stats'.
   - Make sure rate and retries are still correct.
