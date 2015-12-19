@@ -2,6 +2,9 @@
 
 if ! test -d /sys/devices/platform/odroidu2-fan; then
     echo Error: this script is for odroid only
+    echo Try:
+    echo tools/odroid/push-tree.sh odroid-mjmech sudo tools/odroid/setup-system.sh
+    exit 1
 fi
 
 
@@ -95,7 +98,7 @@ auto wlink0
 iface wlink0 inet manual
         # running root script from user's homedir is icky, but
         # that user has passwordless sudo anyway
-        up mjmech-clean/tools/setup_wifi_link.py -i wlan0 up-boot
+        up /home/odroid/mjmech-clean/tools/setup_wifi_link.py up-boot
 EOF
 
 # Enable wpa_supplicant for any additional wifi cards

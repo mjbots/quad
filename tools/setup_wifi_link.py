@@ -15,13 +15,14 @@ Sample: monitor traffic
  sudo horst -i mon_r      # 'Stats' shows bitrates
 """
 
-import sys
-import os
-import optparse
 import errno
 import glob
-import subprocess
+import optparse
+import os
 import re
+import subprocess
+import sys
+import time
 
 #FREQ=2452   # channel 9
 FREQ=5200   # channel 40
@@ -158,15 +159,12 @@ class WifiSetup(object):
             self._bring_interface_up_legacy(force_reinit=force_reinit)
             return
 
-        # Destroy old interfaces one by one until we see ibss one.
+        # If reinit is requested, destroy old interfaces one by one.
         count = 0
-        while self.ifname is not None:
+        while force_reinit and (self.ifname is not None):
             itype = self._nl_get_interface_type()
-            if itype == 'IBSS' and not force_reinit:
-                break
-            force_reinit = False
-            self.debug(0, 'Destroying interface %r because it is of '
-                       'wrong type %r' % (self.ifname, itype))
+            self.debug(0, 'Destroying interface %r of type %r' % (
+                self.ifname, itype))
             self._exec('ip link set dev %s down' % self.ifname)
             self._exec('iw dev %s del' % self.ifname)
             self._find_interface(keep_phyname=True)
@@ -176,15 +174,17 @@ class WifiSetup(object):
 
         if self.ifname is None:
             # We have a bare phy. Create a new interface.
-            IFNAME = 'wlan_r'
-            self.debug(0, 'Creating new interface %r on %r' % (
-                IFNAME, self.phyname))
-            self._exec('iw phy %s interface add %s type ibss' % (
-                self.phyname, IFNAME))
+            self.debug(0, 'Creating new interface on %r' % (
+                self.phyname))
+            # New interface name will be mangled by udev, and it must have a
+            # number in it in case there is a udev rule which uses %n.
+            self._exec('iw phy %s interface add wlan_r1 type ibss' % (
+                self.phyname))
+            # Give udev time to settle
+            time.sleep(1.0)
             self._find_interface(keep_phyname=True)
 
-            assert self.ifname is not None
-            assert self._nl_get_interface_type() == 'IBSS'
+        assert self.ifname is not None
 
         reg = self._check_output('iw reg get')
         if not reg.startswith('country US'):
@@ -202,9 +202,11 @@ class WifiSetup(object):
 
         self.debug(2, 'Configuring ibss link')
 
-        #iw dev $devname set type ibss
-
         self.bring_interface_down()
+
+        self._exec('iw dev %s set type ibss' % self.ifname)
+
+        assert self._nl_get_interface_type() == 'IBSS'
 
         # bring it up before we can join
         self._exec('ip link set dev %s up' % self.ifname)
@@ -340,8 +342,7 @@ def main():
     if args[0] == 'info':
         ws.print_info()
     elif args[0] == 'up-boot':
-        # TODO theamk enable
-        pass
+        ws.bring_interface_up()
     elif args[0] == 'up':
         ws.bring_interface_up()
     elif args[0] == 'reinit':
