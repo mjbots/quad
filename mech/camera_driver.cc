@@ -32,6 +32,45 @@
 namespace mjmech {
 namespace mech {
 
+namespace {
+
+struct Preset {
+  double framerate;
+  double decoded_framerate;
+  double bitrate_mbps;
+  const char* h264_caps;
+  const char* decoded_caps;
+  const char* extra_uvch264;
+};
+
+// To get list of supported resolutions, use: v4l2-ctl --list-formats-ext
+const Preset kPresets[] = {{
+ framerate         : 30,
+ decoded_framerate : 0,
+ bitrate_mbps      : 3.0,
+ h264_caps         : "width=1920,height=1080",
+ decoded_caps      : "width=640,height=480",
+ extra_uvch264     : "",
+  }, {
+ framerate         : 30, // Actually 15-24 fps
+ decoded_framerate : 0,
+ bitrate_mbps      : 1.5,
+ h264_caps         : "width=1280,height=720",
+ decoded_caps      : "width=640,height=480",
+ extra_uvch264     : "",
+  }, {
+ framerate         : 30,  // Actually 15 fps
+ decoded_framerate : 0,
+ bitrate_mbps      : 0.75,
+ h264_caps         : "width=864,height=480",
+ decoded_caps      : "width=640,height=480",
+ extra_uvch264     : "",
+ // TODO theamk: figure out if we can decrease the framerate somehow (currenly,
+ // values other than 30 just prevent piepline from starting)
+}};
+
+};
+
 class CameraDriver::Impl : boost::noncopyable {
  public:
   Impl(CameraDriver* parent, boost::asio::io_service& service)
@@ -52,6 +91,41 @@ class CameraDriver::Impl : boost::noncopyable {
 
     started_ = true;
     parameters_ = parent_->parameters_;
+
+    // Apply presets
+    const int kMaxPresets = sizeof(kPresets) / sizeof(kPresets[0]) - 1;
+
+    int i_preset = parameters_.preset;
+    base::ErrorCode error;
+
+    if (i_preset < 0 || i_preset > kMaxPresets) {
+      std::string msg = (boost::format("Preset %d is not in the range 0..%d")
+                         % i_preset % kMaxPresets).str();
+      parent_service_.post(std::bind(handler, base::ErrorCode::einval(msg)));
+      return;
+    }
+    const Preset& preset = kPresets[i_preset];
+
+    if (parameters_.framerate < 0) {
+      parameters_.framerate = preset.framerate;
+    }
+    if (parameters_.decoded_framerate < 0) {
+      parameters_.decoded_framerate = preset.decoded_framerate;
+    }
+    if (parameters_.bitrate_mbps < 0) {
+      parameters_.bitrate_mbps = preset.bitrate_mbps;
+    }
+    if (!parameters_.h264_caps.size()) {
+      parameters_.h264_caps = preset.h264_caps;
+    }
+    if (!parameters_.decoded_caps.size()) {
+      parameters_.decoded_caps = preset.decoded_caps;
+    }
+    if (!parameters_.extra_uvch264.size()) {
+      parameters_.extra_uvch264 = preset.extra_uvch264;
+    }
+
+    parent_service_.post(std::bind(handler, base::ErrorCode()));
   }
 
   void AddFrameConsumer(std::weak_ptr<CameraFrameConsumer> c) {
@@ -82,6 +156,10 @@ class CameraDriver::Impl : boost::noncopyable {
     bool is_dumb = parameters_.dumb_camera || is_test;
     dumb_camera_ = is_dumb;
 
+    int bitrate_bps = static_cast<int>(
+        ::round(parameters_.bitrate_mbps * parameters_.bitrate_scale
+                * 1000 * 1000));
+
     if (is_test) {
       out << "videotestsrc is-live=1 pattern=ball ";
     } else if (is_dumb) {
@@ -94,11 +172,12 @@ class CameraDriver::Impl : boost::noncopyable {
         out << " iframe-period=" <<
             static_cast<int>(parameters_.iframe_interval_s * 1000.0);
       }
-      if (parameters_.bitrate_Bps > 0) {
-        int bps = (parameters_.bitrate_Bps * 8);
-        out << " average-bitrate=" << bps
-            << " initial-bitrate=" << bps
-            << " peak-bitrate=" << (bps * 1.5);
+      if (bitrate_bps > 0) {
+        int bitrate_peak_bps = static_cast<int>(
+            ::round(bitrate_bps * parameters_.peak_bitrate_scale));
+        out << " average-bitrate=" << bitrate_bps
+            << " initial-bitrate=" << bitrate_bps
+            << " peak-bitrate=" << bitrate_peak_bps;
       }
       out << " " << parameters_.extra_uvch264
           << " src.vfsrc ";
@@ -125,8 +204,8 @@ class CameraDriver::Impl : boost::noncopyable {
         int key_int = 0.5 + decoded_fps * parameters_.iframe_interval_s;
         out << "key-int-max=" << std::max(1, key_int) << " ";
       }
-      if (parameters_.bitrate_Bps > 0) {
-        out << "bitrate=" << (parameters_.bitrate_Bps * 8 / 1024) << " ";
+      if (bitrate_bps > 0) {
+        out << "bitrate=" << (bitrate_bps / 1000) << " ";
       }
       out << " ! video/x-h264,framerate="
           << gst::FormatFraction(parameters_.framerate) << " ";
