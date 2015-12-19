@@ -112,6 +112,10 @@ class VideoDisplay : boost::noncopyable {
 
   void HandleGstReady(GstMainLoopRef&);
 
+  // Process a frame with h264 data. The argument must contain raw data.
+  // WARNING: the argument to this function should never be changed afterwards!
+  void HandleIncomingFrame(std::shared_ptr<std::string>&);
+
  private:
   boost::signals2::signal<void (const Stats*)> stats_signal_;
   Parameters parameters_;

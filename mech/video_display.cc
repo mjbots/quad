@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2015 Mikhail Afanasyev.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -62,6 +62,10 @@ class VideoDisplay::Impl : boost::noncopyable {
       return;
     }
     SetupPipeline();
+  }
+
+  void HandleIncomingFrame(std::shared_ptr<std::string>&) {
+    BOOST_ASSERT(false); // not implemented
   }
 
  private:
@@ -226,6 +230,10 @@ void VideoDisplay::AsyncStart(base::ErrorHandler handler) {
 
 void VideoDisplay::HandleGstReady(GstMainLoopRef& loop_ref) {
   impl_->HandleGstReady(loop_ref);
+}
+
+void VideoDisplay::HandleIncomingFrame(std::shared_ptr<std::string>& data) {
+  impl_->HandleIncomingFrame(data);
 }
 
 }
