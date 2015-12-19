@@ -310,6 +310,8 @@ class CameraDriver::Impl : boost::noncopyable {
       std::lock_guard<std::mutex> guard(stats_mutex_);
       stats_->h264_frames++;
       stats_->h264_bytes += len;
+      stats_->h264_max_bytes = std::max(
+          stats_->h264_max_bytes, len);
       stats_->h264_max_interval_s = std::max(
           stats_->h264_max_interval_s, interval);
       if (key_frame) { stats_->h264_key_frames++; };
