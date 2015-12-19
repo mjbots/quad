@@ -42,6 +42,8 @@ typedef log4cpp::Category& LogRef;
 //  - set the first element to C++ file name (lowercase, _-separated)
 LogRef GetLogInstance(const std::string& name);
 
+LogRef GetSubLogger(LogRef parent, const std::string& name);
+
 
 //class TelemetryRegistry;
 //void WriteLogToTelemetryLog(TelemetryRegistry*);

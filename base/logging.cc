@@ -173,6 +173,12 @@ LogRef GetLogInstance(const std::string& name) {
   return log4cpp::Category::getInstance(name);
 }
 
+LogRef GetSubLogger(LogRef parent, const std::string& name) {
+  // Somehow log4cpp does not export this method
+  // (depite having logging hierarchy)
+  return GetLogInstance(parent.getName() + "." + name);
+}
+
 
 
 }
