@@ -143,6 +143,9 @@ class PlotItem(object):
         self.plot_widget.canvas.draw()
 
     def _handle_update(self, value):
+        if self.plot_widget.paused:
+            return
+
         if self.line is None:
             self._make_line()
 
@@ -177,6 +180,7 @@ class PlotWidget(QtGui.QWidget):
 
         self.history_s = 20.0
         self.next_color = 0
+        self.paused = False
 
         self.figure = matplotlib.figure.Figure()
         self.canvas = FigureCanvas(self.figure)
@@ -201,12 +205,19 @@ class PlotWidget(QtGui.QWidget):
         self.canvas.draw = draw
 
         self.toolbar = backend_qt4agg.NavigationToolbar2QT(self.canvas, self)
+        self.pause_action = QtGui.QAction(u'Pause', self)
+        self.pause_action.setCheckable(True)
+        self.pause_action.toggled.connect(self._handle_pause)
+        self.toolbar.addAction(self.pause_action)
 
         layout = QtGui.QVBoxLayout(self)
         layout.addWidget(self.toolbar, 0)
         layout.addWidget(self.canvas, 1)
 
         self.canvas.setFocusPolicy(QtCore.Qt.ClickFocus)
+
+    def _handle_pause(self, value):
+        self.paused = value
 
     def add_plot(self, name, signal, axis_number):
         axis = self.left_axis
