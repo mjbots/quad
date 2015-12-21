@@ -312,10 +312,11 @@ class TviewMainWindow(QtGui.QMainWindow):
     STATE_SCHEMA = 3
     STATE_DATA = 4
 
-    def __init__(self, port, parent=None):
+    def __init__(self, options, parent=None):
         QtGui.QMainWindow.__init__(self, parent)
 
-        self.port = port
+        self.options = options
+        self.port = None
         self.default_rate = 100
 
         self._buffer = ''
@@ -379,17 +380,47 @@ class TviewMainWindow(QtGui.QMainWindow):
 
         QtCore.QTimer.singleShot(0, self._handle_startup)
 
+    def _open(self):
+        self.port = serial.Serial(
+            port=self.options.serial,
+            baudrate=self.options.baudrate,
+            timeout=0.0)
+
+        # Stop the spew.
+        self.port.write('\r\n')
+        self.port.write('tel stop\r\n')
+
+        # Wait a short while, then eat everything we can.
+        time.sleep(0.1)
+        self.port.read(8192)
+
     def _handle_startup(self):
         self.console._control.setFocus()
 
+    def _setup_device(self, callback):
         # When we start, get a listing of all configuration options
         # and all available telemetry channels.
         def after_config():
-            self.update_telemetry(None)
+            self.update_telemetry(callback)
         self.update_config(after_config)
 
     def _poll_serial(self):
-        data = self.port.read(8192)
+        if self.port is None:
+            if os.path.exists(self.options.serial):
+                self._open()
+                self._setup_device(None)
+            else:
+                return
+
+        try:
+            data = self.port.read(8192)
+        except serial.serialutil.SerialException:
+            # We must have disconnected, close the port and try to
+            # re-open.
+            self.port.close()
+            self.port = None
+            return
+
         self._buffer += data
 
         while True:
@@ -399,7 +430,8 @@ class TviewMainWindow(QtGui.QMainWindow):
                 break
 
     def _handle_user_input(self, line):
-        self.port.write(line + '\n')
+        if self.port:
+            self.port.write(line + '\n')
 
     def _handle_serial_data(self):
         if self._serial_state == self.STATE_LINE:
@@ -447,7 +479,7 @@ class TviewMainWindow(QtGui.QMainWindow):
     def update_config(self, callback):
         # Clear out our config tree.
         self.ui.configTreeWidget.clear()
-        self._config_tree_times = {}
+        self._config_tree_items = {}
 
         self._config_callback = callback
         self.write_line('conf enumerate\r\n')
@@ -520,7 +552,8 @@ class TviewMainWindow(QtGui.QMainWindow):
 
     def write_line(self, line):
         self.console.add_text(line)
-        self.port.write(line)
+        if self.port:
+            self.port.write(line)
 
     def _handle_telemetry(self):
         line = self._get_serial_line()
@@ -715,15 +748,9 @@ def main():
     options, args = parser.parse_args()
     assert len(args) == 0
 
-    port = serial.Serial(port=options.serial, baudrate=options.baudrate,
-                         timeout=0.0)
-    # Stop the spew.
-    port.write('\r\n')
-    port.write('tel stop\r\n')
-
     app = QtGui.QApplication(sys.argv)
 
-    tv = TviewMainWindow(port)
+    tv = TviewMainWindow(options)
     tv.show()
 
     app.exec_()
