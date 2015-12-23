@@ -1,0 +1,200 @@
+#!/usr/bin/env python
+
+# Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+# Copyright 2015 Mikhail Afanasyev.  All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+'''%prog [options]
+
+Install packages necessary for mjmech.  Only tested currently on
+Ubuntu trusty x64.
+'''
+
+import optparse
+import os
+import re
+import subprocess
+import sys
+import time
+
+
+GS_MIN_REVISION = 1
+GSTREAMER_ROOT = '/opt/gstreamer-1.4.5'
+VERBOSE = False
+
+
+def split(val):
+    return [y for y in [x.strip() for x in re.split('\s+', val)]
+            if y != '']
+
+
+def call(*args, **kwargs):
+    if VERBOSE:
+        print 'call:', args
+    kwargs['shell'] = True
+    return subprocess.call(*args, **kwargs)
+
+
+def check_call(*args, **kwargs):
+    if VERBOSE:
+        print 'check_call:', args
+    kwargs['shell'] = True
+    return subprocess.check_call(*args, **kwargs)
+
+
+def check_output(*args, **kwargs):
+    if VERBOSE:
+        print 'check_output:', args
+    kwargs['shell'] = True
+    return subprocess.check_output(*args, **kwargs).strip()
+
+
+def do_install_gstreamer(options):
+    print 'Need to install gstreamer into', GSTREAMER_ROOT
+
+    if options.test:
+        sys.exit(1)
+
+    if not options.yes:
+        response = raw_input('Continue? (y/n) ')
+        if response != 'y':
+            print 'cancelled'
+            sys.exit(1)
+
+    tar_name = 'mj-' + os.path.basename(GSTREAMER_ROOT) + '-'
+    tar_name += (check_output('uname -m') + '-' +
+                 check_output('lsb_release -c -s') +
+                 '.tar.bz2')
+
+    # Note: if wget fails for some reason, just copy the tar file
+    # into /tmp
+    tmp_tar_name = os.path.join('/tmp', tar_name)
+    if not os.path.exists(tmp_tar_name):
+        print 'Fetching gstreamer tar...'
+        url = 'https://raw.githubusercontent.com/mjbots/mj-gstreamer-build'
+        url += '/master/tars/' + tar_name
+
+        wget_cmd = 'wget -O "%s.partial" "%s"' % (tmp_tar_name, url)
+        if call(wget_cmd) != 0:
+            # Sometimes, github fails with "503: backend read error"
+            # Wait a bit, then retry.
+            time.sleep(30)
+            check_call(wget_cmd)
+
+        os.rename(tmp_tar_name + '.partial', tmp_tar_name)
+
+    print 'Verifying gstreamer tar', tmp_tar_name
+    gstreamer_root_rel = GSTREAMER_ROOT[1:]
+    revision = check_output(
+        'tar xOf "%s" "%s/mj-gstreamer-revision"' % (
+            tmp_tar_name, gstreamer_root_rel))
+    print ' .. revision found:', revision
+    if int(revision) < GS_MIN_REVISION:
+        print 'Incorrect revision'
+        sys.exit(1)
+
+    print 'Unpacking gstreamer tar...'
+    # move old directory out-of-the-way
+    if os.path.exists(GSTREAMER_ROOT):
+        print 'renaming old directory'
+        os.rename(GSTREAMER_ROOT,
+                  GSTREAMER_ROOT + datetime.now().strftime('%Y-%H%M%S'))
+
+    # This .tar file starts at disk root, but we only extract files
+    # under GSTREAMER_ROOT for security.
+    call('sudo tar xf "%s" -C / "%s"' % (tmp_tar_name, gstreamer_root_rel))
+
+
+def do_install_gst_packages(options):
+    gst_pkglist = check_output("apt-get --dry-run install \
+            gstreamer1.0 gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
+            gstreamer1.0-plugins-base gstreamer1.0-libav | \
+            grep ^Inst | cut -d ' ' -f 2 | \
+            grep -v gstreamer | grep -v -- '-doc$' || true").strip()
+    if gst_pkglist != '':
+        print 'Need to install some gstreamer media driver packages'
+        if options.test:
+            sys.exit(1)
+
+        check_call('sudo apt-get install %s %s' % (
+                '-y' if options.yes else '',
+                ' '.join(gst_pgklist)))
+    else:
+        print 'All gstreamer media packages are up to date'
+
+
+def main():
+    usage, description = __doc__.split('\n\n', 1)
+    parser = optparse.OptionParser(usage=usage, description=description)
+
+    parser.add_option('--verbose', '-v', action='store_true',
+                      help='display additional debugging information')
+    parser.add_option('--yes', '-y', action='store_true',
+                      help='do not ask for confirmation')
+    parser.add_option('--system', action='store_true',
+                      help='also install system packages')
+    parser.add_option('--test', action='store_true',
+                      help='just test if anything needs installing')
+
+    options, args = parser.parse_args()
+
+    if options.verbose:
+        global VERBOSE
+        VERBOSE = True
+
+    PKGLIST = split('''
+    scons libeigen3-dev libsnappy-dev python-snappy libi2c-dev
+    pyside-tools liblog4cpp5-dev libboost1.55-dev
+    libboost-system1.55-dev libboost-program-options1.55-dev
+    libboost-coroutine1.55-dev libboost-context1.55-dev
+    libboost-test1.55-dev libboost-python1.55-dev
+    libboost-serialization1.55-dev
+    libboost-date-time1.55-dev libboost-filesystem1.55-dev
+''')
+
+    if options.system:
+        PKGLIST += split('''
+        ifplugd iw wireless-tools wpasupplicant git lsof
+        htop strace ltrace build-essential dkms tcpdump
+''')
+
+    if options.yes or call(
+        "apt-get install --dry-run %s |"
+        "egrep ' could not be installed|^Conf'" % ' '.join(PKGLIST)) == 0:
+        print
+        print 'Need to install some packages'
+
+        if options.test:
+            return
+        check_call('sudo apt-get install %s %s' % (
+                ('-y' if options.yes else ''),
+                ' '.join(PKGLIST)))
+    else:
+        print 'All packages up to date'
+
+    gstreamer_revision = os.path.join(GSTREAMER_ROOT, 'mj-gstreamer-revision')
+    revision = (open(gstreamer_revision).read() if
+                os.path.exists(gstreamer_revision) else 0)
+
+    if revision < GS_MIN_REVISION:
+        do_install_gstreamer(options)
+    else:
+        print 'gstreamer in %s is up to date' % GSTREAMER_ROOT
+
+    do_install_gst_packages(options)
+
+
+if __name__ == '__main__':
+    main()
