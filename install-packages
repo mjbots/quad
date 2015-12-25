@@ -245,6 +245,11 @@ def do_install_dart(options):
     # Thus we install from source all the packages we need.
 
     deps = [
+        {'name': 'danfis/libccd',
+         'rev': '2cd2f6b2b5533de370698ea460e4d3b902c45242',
+         'filetest': 'lib/x86_64-linux-gnu/pkgconfig/ccd.pc',
+         'verre': '^Version: (.*)$',
+         'minver': '2.0' },
         {'name': 'flexible-collision-library/fcl',
          'rev': '8d6d89910a6ef65991f3bd7550db1381e6da3ff4',
          'filetest': 'lib/pkgconfig/fcl.pc',
@@ -302,7 +307,7 @@ def main():
     libboost-test1.55-dev libboost-python1.55-dev
     libboost-serialization1.55-dev
     libboost-date-time1.55-dev libboost-filesystem1.55-dev
-    libccd-dev libassimp-dev libtinyxml2-dev libnlopt-dev
+    libassimp-dev libtinyxml2-dev libnlopt-dev
     freeglut3-dev libflann-dev
 ''')
 
