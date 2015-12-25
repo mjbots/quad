@@ -229,7 +229,7 @@ def ensure_dep(options, dep):
                 checkout_dir, dep['rev']))
         check_call('cd %s/build && sudo make install' % (checkout_dir))
     finally:
-        shutil.rmtree(tempdir)
+        shutil.rmtree(tempdir, ignore_errors=True)
 
     now_exists = dep_exists(options, dep)
     if now_exists:
