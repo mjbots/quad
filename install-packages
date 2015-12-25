@@ -63,7 +63,9 @@ def check_output(*args, **kwargs):
     if VERBOSE:
         print 'check_output:', args
     kwargs['shell'] = True
-    return subprocess.check_output(*args, **kwargs).strip()
+    result = subprocess.check_output(*args, **kwargs).strip()
+    print 'check_output_result:', result
+    return result
 
 
 def do_install_gstreamer(options):
@@ -136,7 +138,7 @@ def do_install_gst_packages(options):
 
         check_call('sudo apt-get install %s %s' % (
                 '-y' if options.yes else '',
-                ' '.join(gst_pkglist)))
+                gst_pkglist.replace('\n', ' ')))
     else:
         print 'All gstreamer media packages are up to date'
 
@@ -275,6 +277,8 @@ def do_install_dart(options):
 
 
 def main():
+    global VERBOSE
+
     usage, description = __doc__.split('\n\n', 1)
     parser = optparse.OptionParser(usage=usage, description=description)
 
@@ -292,11 +296,9 @@ def main():
     options, args = parser.parse_args()
 
     if options.quiet:
-        global VERBOSE
         VERBOSE = False
 
     if options.verbose:
-        global VERBOSE
         VERBOSE = True
 
     PKGLIST = split('''
