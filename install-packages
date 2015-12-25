@@ -318,6 +318,7 @@ def main():
     libboost-atomic1.55-dev libboost-test1.55-dev
     libassimp-dev libtinyxml-dev libtinyxml2-dev libnlopt-dev
     freeglut3-dev libflann-dev libxmu-dev libxi-dev
+    libopenscenegraph-dev libopenthreads-dev
 ''')
 
     if options.system:
