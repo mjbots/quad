@@ -136,7 +136,7 @@ def do_install_gst_packages(options):
 
         check_call('sudo apt-get install %s %s' % (
                 '-y' if options.yes else '',
-                ' '.join(gst_pgklist)))
+                ' '.join(gst_pkglist)))
     else:
         print 'All gstreamer media packages are up to date'
 
