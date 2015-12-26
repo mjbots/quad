@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import subprocess
+
 Import('canonenv')
 Import('libbase')
 Import('libmech')
@@ -19,7 +21,30 @@ Import('libmech')
 env = canonenv.Clone()
 env.Append(CPPPATH=['.'])
 
-env.Append(LIBS=['dart', 'assimp', 'glut'])
+PKGS = [
+    'dart',
+    'assimp',
+    ]
+
+
+rpaths = set()
+
+
+for pkg in PKGS:
+    env.ParseConfig('pkg-config --cflags-only-I --libs %s' % pkg)
+    libdirs = subprocess.check_output(
+        'pkg-config --libs-only-L %s' % pkg, shell=True).strip()
+    for libdir in libdirs.split(' '):
+        if libdir == '':
+            continue
+        assert libdir.startswith('-L')
+        rpaths.add(libdir.split('-L', 1)[1])
+
+for rpath in rpaths:
+    env.Append(LINKFLAGS=['-Wl,-rpath=%s' % rpath])
+
+
+env.Append(LIBS=['dart-core', 'glut'])
 
 SOURCES = [
     ]

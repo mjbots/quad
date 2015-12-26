@@ -12,19 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <boost/program_options.hpp>
+#pragma once
 
-#include <dart/dart.h>
+namespace mjmech {
+namespace simulator {
 
-#include "simulator_window.h"
+class SimulatorWindow : public dart::gui::SimWindow {
+ public:
 
-using namespace mjmech::simulator;
+  SimulatorWindow(const dart::simulation::WorldPtr& world) {
+    setWorld(world);
+  }
 
-int main(int argc, char** argv) {
-  auto world = std::make_shared<dart::simulation::World>();
-  SimulatorWindow window(world);
+  void keyboard(unsigned char key, int x, int y) override {
+    SimulatorWindow::keyboard(key, x, y);
+  }
 
-  glutInit(&argc, argv);
-  window.initWindow(640, 480, "Mech Simulator");
-  glutMainLoop();
+  void timeStepping() override {
+    SimWindow::timeStepping();
+  }
+};
+
+}
 }
