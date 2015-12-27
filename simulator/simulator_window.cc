@@ -12,6 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
+// TODO jpieper:
+// * Set correct masses for each joint and element.
+// * Make tibias be correctly narrow with ball for foot.
+// * Link in mech C++ class
+// * Simulate servos with PD controller
+// * Implement HerkuleX protocol simulator
+
 #include "simulator_window.h"
 
 using namespace dart::dynamics;
@@ -58,13 +66,15 @@ void setShape(const BodyNodePtr& bn, const BoxShapePtr& box,
   // Set the location of the Box
   Eigen::Isometry3d box_tf(Eigen::Isometry3d::Identity());
   auto size = box->getSize();
-  Eigen::Vector3d center = 0.5 * size.cwiseProduct(axis);
-  box_tf.translation() = center;
+  const Eigen::Vector3d ref_point = 0.5 * size.cwiseProduct(axis);
+  box_tf.translation() = ref_point;
   box->setLocalTransform(box_tf);
 
   // Add it as a visualization and collision shape
   bn->addVisualizationShape(box);
   bn->addCollisionShape(box);
+
+  const Eigen::Vector3d center = 0.5 * size;
 
   // Move the center of mass to the center of the object
   bn->setLocalCOM(center);
@@ -74,10 +84,12 @@ BodyNodePtr makeLegJoint(SkeletonPtr skel, BodyNodePtr parent,
                          const std::string& name,
                          const Eigen::Vector3d& shape,
                          const Eigen::Vector3d& axis,
+                         const Eigen::Vector3d& rotation_axis,
                          const Eigen::Vector3d& offset) {
   RevoluteJoint::Properties properties;
   properties.mName = name + "_joint";
   properties.mT_ParentBodyToJoint.translation() = offset;
+  properties.mAxis = rotation_axis;
 
   auto joint = skel->createJointAndBodyNodePair<RevoluteJoint>(
       parent, properties,
@@ -95,26 +107,29 @@ BodyNodePtr makeLeg(SkeletonPtr skel, BodyNodePtr parent,
   auto coxa = makeLegJoint(skel, parent, name + "_coxa",
                            Eigen::Vector3d(0.04, 0.02, 0.02),
                            Eigen::Vector3d(0., -1. * left, 0.),
+                           Eigen::Vector3d(1.0, 0.0, 0.0),
                            offset);
   auto femur = makeLegJoint(skel, coxa, name + "_femur",
                             Eigen::Vector3d(0.025, 0.041, 0.095),
                             Eigen::Vector3d(0.0, 0.0, 1.0),
+                            Eigen::Vector3d(0.0, 1.0, 0.0),
                             Eigen::Vector3d(0.00, -0.04 * left, 0.015));
   auto tibia = makeLegJoint(skel, femur, name + "_tibia",
                             Eigen::Vector3d(0.025, 0.041, 0.105),
                             Eigen::Vector3d(0.0, 0.0, 1.0),
+                            Eigen::Vector3d(0.0, 1.0, 0.0),
                             Eigen::Vector3d(0.0, 0.0, 0.095));
 
   return coxa;
 }
 
 SkeletonPtr createMech() {
-  BallJoint::Properties properties;
+  FreeJoint::Properties properties;
   properties.mName = "mech_joint";
 
   SkeletonPtr result = Skeleton::create("mech");
 
-  auto body = result->createJointAndBodyNodePair<BallJoint>(
+  auto body = result->createJointAndBodyNodePair<FreeJoint>(
       nullptr, properties,
       BodyNode::Properties(std::string("body"))).second;
 
@@ -131,6 +146,11 @@ SkeletonPtr createMech() {
       result, body, Eigen::Vector3d(-0.09, -0.062, 0.0), 1, "lr");
   auto leg_rr = makeLeg(
       result, body, Eigen::Vector3d(-0.09, 0.062, 0.0), -1, "rr");
+
+  Eigen::Isometry3d tf = Eigen::Isometry3d::Identity();
+  tf.rotate(Eigen::AngleAxisd(M_PI, Eigen::Vector3d(1., 0., 0.)));
+  tf.translation() = Eigen::Vector3d(0, 0, .4);
+  result->getJoint(0)->setTransformFromParentBodyNode(tf);
 
   return result;
 }
@@ -151,6 +171,26 @@ SimulatorWindow::SimulatorWindow() {
 }
 
 SimulatorWindow::~SimulatorWindow() {}
+
+void SimulatorWindow::keyboard(unsigned char key, int x, int y) {
+  auto move_joint = [&](double val) {
+    mech_->setPosition(current_joint_,
+                       mech_->getPosition(current_joint_) + val);
+    glutPostRedisplay();
+  };
+  if ((key >= '0' && key <= '9') ||
+      (key >= 'a' && key <= 'h')) {
+    const int joint =
+        (key >= 'a' && key <= 'h') ? (key - 'a' + 10) : (key - '0');
+    current_joint_ = joint;
+  } else if (key == 'z') {
+    move_joint(0.1);
+  } else if (key == 'x') {
+    move_joint(-0.1);
+  } else {
+    SimWindow::keyboard(key, x, y);
+  }
+}
 
 }
 }

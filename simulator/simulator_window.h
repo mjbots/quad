@@ -24,9 +24,7 @@ class SimulatorWindow : public dart::gui::SimWindow {
   SimulatorWindow();
   ~SimulatorWindow();
 
-  void keyboard(unsigned char key, int x, int y) override {
-    SimulatorWindow::keyboard(key, x, y);
-  }
+  void keyboard(unsigned char key, int x, int y) override;
 
   void timeStepping() override {
     SimWindow::timeStepping();
@@ -34,6 +32,7 @@ class SimulatorWindow : public dart::gui::SimWindow {
 
  private:
   dart::dynamics::SkeletonPtr mech_;
+  int current_joint_ = 0;
 };
 
 }
