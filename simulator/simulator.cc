@@ -21,8 +21,7 @@
 using namespace mjmech::simulator;
 
 int main(int argc, char** argv) {
-  auto world = std::make_shared<dart::simulation::World>();
-  SimulatorWindow window(world);
+  SimulatorWindow window;
 
   glutInit(&argc, argv);
   window.initWindow(640, 480, "Mech Simulator");

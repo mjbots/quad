@@ -14,15 +14,15 @@
 
 #pragma once
 
+#include <dart/dart.h>
+
 namespace mjmech {
 namespace simulator {
 
 class SimulatorWindow : public dart::gui::SimWindow {
  public:
-
-  SimulatorWindow(const dart::simulation::WorldPtr& world) {
-    setWorld(world);
-  }
+  SimulatorWindow();
+  ~SimulatorWindow();
 
   void keyboard(unsigned char key, int x, int y) override {
     SimulatorWindow::keyboard(key, x, y);
@@ -31,6 +31,9 @@ class SimulatorWindow : public dart::gui::SimWindow {
   void timeStepping() override {
     SimWindow::timeStepping();
   }
+
+ private:
+  dart::dynamics::SkeletonPtr mech_;
 };
 
 }

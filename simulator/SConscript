@@ -47,6 +47,7 @@ for rpath in rpaths:
 env.Append(LIBS=['dart-core', 'glut'])
 
 SOURCES = [
+    'simulator_window.cc',
     ]
 
 sim_objects = env.Object(SOURCES)
