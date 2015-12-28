@@ -33,7 +33,11 @@ import time
 
 GS_MIN_REVISION = 1
 GSTREAMER_ROOT = '/opt/gstreamer-1.4.5'
-VERBOSE = True
+
+# Verbosity level:
+#  0 - print summaries and all commands which change state ('sudo' commands)
+#  1 - print every command executed
+g_verbosity = 0
 
 
 def split(val):
@@ -42,16 +46,19 @@ def split(val):
 
 
 def call(*args, **kwargs):
-    if VERBOSE:
+    if g_verbosity >= 1:
         print 'call:', args
         kwargs['stdout'] = sys.stdout
         kwargs['stderr'] = sys.stderr
     kwargs['shell'] = True
-    return subprocess.call(*args, **kwargs)
-
+    rv = subprocess.call(*args, **kwargs)
+    if g_verbosity >= 1:
+        print 'call result:', rv
+    return rv
 
 def check_call(*args, **kwargs):
-    if VERBOSE:
+    sudo_command = kwargs.pop('is_sudo', None)
+    if g_verbosity >= 1 or sudo_command:
         print 'check_call:', args
         kwargs['stdout'] = sys.stdout
         kwargs['stderr'] = sys.stderr
@@ -60,11 +67,16 @@ def check_call(*args, **kwargs):
 
 
 def check_output(*args, **kwargs):
-    if VERBOSE:
+    if g_verbosity >= 1:
         print 'check_output:', args
     kwargs['shell'] = True
     result = subprocess.check_output(*args, **kwargs).strip()
-    print 'check_output_result:', result
+    if g_verbosity >= 1:
+        print 'check_output_result:'
+        if result == '':
+            print '', '(empty string)'
+        else:
+            print result
     return result
 
 
@@ -121,7 +133,9 @@ def do_install_gstreamer(options):
 
     # This .tar file starts at disk root, but we only extract files
     # under GSTREAMER_ROOT for security.
-    call('sudo tar xf "%s" -C / "%s"' % (tmp_tar_name, gstreamer_root_rel))
+    check_call(
+        'sudo tar xf "%s" -C / "%s"' % (tmp_tar_name, gstreamer_root_rel),
+        is_sudo=True)
 
 
 def do_install_gst_packages(options):
@@ -136,9 +150,11 @@ def do_install_gst_packages(options):
         if options.test:
             sys.exit(1)
 
-        check_call('sudo apt-get install %s %s' % (
-                '-y' if options.yes else '',
-                gst_pkglist.replace('\n', ' ')))
+        cmd = 'sudo apt-get install %s %s' % (
+            '-y' if options.yes else '',
+            gst_pkglist.replace('\n', ' '))
+        check_call(cmd, is_sudo=True)
+
     else:
         print 'All gstreamer media packages are up to date'
 
@@ -227,7 +243,8 @@ def ensure_dep(options, dep):
                 dep['name'], checkout_dir))
         check_call('cd %s && git checkout %s && mkdir build && cd build && cmake .. && make -j2' % (
                 checkout_dir, dep['rev']))
-        check_call('cd %s/build && sudo make install' % (checkout_dir))
+        check_call('cd %s/build && sudo make install' % (checkout_dir),
+                   is_sudo=True)
     finally:
         shutil.rmtree(tempdir, ignore_errors=True)
 
@@ -282,14 +299,14 @@ def do_install_dart(options):
 
 
 def main():
-    global VERBOSE
+    global g_verbosity
 
     usage, description = __doc__.split('\n\n', 1)
     parser = optparse.OptionParser(usage=usage, description=description)
 
-    parser.add_option('--verbose', '-v', action='store_true',
+    parser.add_option('--verbose', '-v', action='count', default=0,
                       help='display additional debugging information')
-    parser.add_option('--quiet', '-q', action='store_true',
+    parser.add_option('--quiet', '-q', action='count', default=0,
                       help='do not be verbose')
     parser.add_option('--yes', '-y', action='store_true',
                       help='do not ask for confirmation')
@@ -297,14 +314,12 @@ def main():
                       help='also install system packages')
     parser.add_option('--test', '-t', action='store_true',
                       help='just test if anything needs installing')
-
+    parser.add_option('--dart5', '-D', type='int', metavar='[0|1]',
+                      help='Enable dart5 compilation (default %default)',
+                      default=int(not os.uname()[4].startswith('arm')))
     options, args = parser.parse_args()
 
-    if options.quiet:
-        VERBOSE = False
-
-    if options.verbose:
-        VERBOSE = True
+    g_verbosity += options.verbose - options.quiet
 
     PKGLIST = split('''
     scons libeigen3-dev libsnappy-dev python-snappy libi2c-dev
@@ -335,10 +350,10 @@ def main():
         print 'Need to install some packages'
 
         if options.test:
-            return
-        check_call('sudo apt-get install %s %s' % (
-                ('-y' if options.yes else ''),
-                ' '.join(PKGLIST)))
+            sys.exit(1)
+        cmd = ('sudo apt-get install %s %s' % (
+            ('-y' if options.yes else ''), ' '.join(PKGLIST)))
+        check_call(cmd, is_sudo=True)
     else:
         print 'All packages up to date'
 
@@ -352,7 +367,8 @@ def main():
         print 'gstreamer in %s is up to date' % GSTREAMER_ROOT
 
     do_install_gst_packages(options)
-    do_install_dart(options)
+    if options.dart5:
+        do_install_dart(options)
 
 
 if __name__ == '__main__':
