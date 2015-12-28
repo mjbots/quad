@@ -40,6 +40,15 @@ inline double GetSign(double value) {
   else { return 0.0; }
 }
 
+inline double WrapNegPiToPi(double value) {
+  if (value >= -kPi && value <= kPi) { return value; }
+  if (value > 0.0) {
+    return std::fmod(value + kPi, 2 * kPi) - kPi;
+  } else {
+    return std::fmod(value - kPi, 2 * kPi) + kPi;
+  }
+}
+
 #ifndef MJMECH_DISABLE_BOOST
 inline boost::posix_time::time_duration
 ConvertSecondsToDuration(double time_s) {

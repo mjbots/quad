@@ -21,10 +21,44 @@
 
 #include "simulator_window.h"
 
+#include "base/common.h"
+
 using namespace dart::dynamics;
 using namespace dart::simulation;
+using namespace mjmech;
 
 namespace {
+const double kServo_kp = 200.0;
+const double kServo_kd = 20.0;
+
+class ServoController {
+ public:
+  ServoController(const SkeletonPtr& skel,
+                  int joint_number) :
+      skeleton_(skel),
+      joint_number_(joint_number) {
+  }
+
+  void SetPosition(double angle_rad) {
+    desired_rad_ = angle_rad;
+  }
+
+  void Update() {
+    const double position = skeleton_->getPosition(joint_number_);
+    const double velocity = skeleton_->getVelocity(joint_number_);
+
+    const double error = base::WrapNegPiToPi(position - desired_rad_);
+    const double control = error * kServo_kp + velocity * kServo_kd;
+
+    skeleton_->setForce(joint_number_, control);
+  }
+
+ private:
+  SkeletonPtr skeleton_;
+  const int joint_number_;
+  double desired_rad_ = 0.0;
+};
+
 SkeletonPtr createFloor() {
   SkeletonPtr floor = Skeleton::create("floor");
 
@@ -172,13 +206,19 @@ SkeletonPtr createMech() {
 namespace mjmech {
 namespace simulator {
 
-SimulatorWindow::SimulatorWindow() {
+class SimulatorWindow::Impl {
+ public:
+  dart::dynamics::SkeletonPtr mech_;
+  int current_joint_ = 0;
+};
+
+SimulatorWindow::SimulatorWindow() : impl_(new Impl()) {
   auto world = std::make_shared<World>();
 
   world->addSkeleton(createFloor());
 
-  mech_ = createMech();
-  world->addSkeleton(mech_);
+  impl_->mech_ = createMech();
+  world->addSkeleton(impl_->mech_);
 
   setWorld(world);
 }
@@ -187,15 +227,16 @@ SimulatorWindow::~SimulatorWindow() {}
 
 void SimulatorWindow::keyboard(unsigned char key, int x, int y) {
   auto move_joint = [&](double val) {
-    mech_->setPosition(current_joint_,
-                       mech_->getPosition(current_joint_) + val);
+    impl_->mech_->setPosition(
+        impl_->current_joint_,
+        impl_->mech_->getPosition(impl_->current_joint_) + val);
     glutPostRedisplay();
   };
   if ((key >= '0' && key <= '9') ||
       (key >= 'a' && key <= 'h')) {
     const int joint =
         (key >= 'a' && key <= 'h') ? (key - 'a' + 10) : (key - '0');
-    current_joint_ = joint;
+    impl_->current_joint_ = joint;
   } else if (key == 'z') {
     move_joint(0.1);
   } else if (key == 'x') {

@@ -31,8 +31,8 @@ class SimulatorWindow : public dart::gui::SimWindow {
   }
 
  private:
-  dart::dynamics::SkeletonPtr mech_;
-  int current_joint_ = 0;
+  class Impl;
+  std::unique_ptr<Impl> impl_;
 };
 
 }
