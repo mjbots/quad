@@ -15,7 +15,6 @@
 
 // TODO jpieper:
 // * Set correct masses for each joint and element.
-// * Make tibias be correctly narrow with ball for foot.
 // * Link in mech C++ class
 // * Simulate servos with PD controller
 // * Implement HerkuleX protocol simulator
@@ -51,7 +50,7 @@ SkeletonPtr createFloor() {
   return floor;
 }
 
-void setShape(const BodyNodePtr& bn, const BoxShapePtr& box,
+void setShape(const BodyNodePtr& bn, const ShapePtr& box,
               const Eigen::Vector3d& axis) {
   // Always create a visualization shape with no local transform so we
   // can figure out where things are.
@@ -65,7 +64,7 @@ void setShape(const BodyNodePtr& bn, const BoxShapePtr& box,
 
   // Set the location of the Box
   Eigen::Isometry3d box_tf(Eigen::Isometry3d::Identity());
-  auto size = box->getSize();
+  auto size = box->getBoundingBoxDim();
   const Eigen::Vector3d ref_point = 0.5 * size.cwiseProduct(axis);
   box_tf.translation() = ref_point;
   box->setLocalTransform(box_tf);
@@ -82,7 +81,7 @@ void setShape(const BodyNodePtr& bn, const BoxShapePtr& box,
 
 BodyNodePtr makeLegJoint(SkeletonPtr skel, BodyNodePtr parent,
                          const std::string& name,
-                         const Eigen::Vector3d& shape,
+                         const ShapePtr& shape,
                          const Eigen::Vector3d& axis,
                          const Eigen::Vector3d& rotation_axis,
                          const Eigen::Vector3d& offset) {
@@ -95,8 +94,7 @@ BodyNodePtr makeLegJoint(SkeletonPtr skel, BodyNodePtr parent,
       parent, properties,
       BodyNode::Properties(name)).second;
 
-  auto box = std::make_shared<BoxShape>(shape);
-  setShape(joint, box, axis);
+  setShape(joint, shape, axis);
 
   return joint;
 }
@@ -104,21 +102,36 @@ BodyNodePtr makeLegJoint(SkeletonPtr skel, BodyNodePtr parent,
 BodyNodePtr makeLeg(SkeletonPtr skel, BodyNodePtr parent,
                     const Eigen::Vector3d& offset,
                     int left, const std::string& name) {
-  auto coxa = makeLegJoint(skel, parent, name + "_coxa",
-                           Eigen::Vector3d(0.04, 0.02, 0.02),
-                           Eigen::Vector3d(0., -1. * left, 0.),
-                           Eigen::Vector3d(1.0, 0.0, 0.0),
-                           offset);
-  auto femur = makeLegJoint(skel, coxa, name + "_femur",
-                            Eigen::Vector3d(0.025, 0.041, 0.095),
-                            Eigen::Vector3d(0.0, 0.0, 1.0),
-                            Eigen::Vector3d(0.0, 1.0, 0.0),
-                            Eigen::Vector3d(0.00, -0.04 * left, 0.015));
-  auto tibia = makeLegJoint(skel, femur, name + "_tibia",
-                            Eigen::Vector3d(0.025, 0.041, 0.105),
-                            Eigen::Vector3d(0.0, 0.0, 1.0),
-                            Eigen::Vector3d(0.0, 1.0, 0.0),
-                            Eigen::Vector3d(0.0, 0.0, 0.095));
+  auto coxa = makeLegJoint(
+      skel, parent, name + "_coxa",
+      std::make_shared<BoxShape>(Eigen::Vector3d(0.04, 0.02, 0.02)),
+      Eigen::Vector3d(0., -1. * left, 0.),
+      Eigen::Vector3d(1.0, 0.0, 0.0),
+      offset);
+  auto femur = makeLegJoint(
+      skel, coxa, name + "_femur",
+      std::make_shared<BoxShape>(Eigen::Vector3d(0.025, 0.041, 0.095)),
+      Eigen::Vector3d(0.0, 0.0, 1.0),
+      Eigen::Vector3d(0.0, 1.0, 0.0),
+      Eigen::Vector3d(0.00, -0.04 * left, 0.015));
+  auto tibia = makeLegJoint(
+      skel, femur, name + "_tibia",
+      std::make_shared<BoxShape>(Eigen::Vector3d(0.01, 0.01, 0.090)),
+      Eigen::Vector3d(0.0, 0.0, 1.0),
+      Eigen::Vector3d(0.0, 1.0, 0.0),
+      Eigen::Vector3d(0.0, 0.0, 0.095));
+
+  WeldJoint::Properties weld_properties;
+  weld_properties.mName = name + "_foot_joint";
+  weld_properties.mT_ParentBodyToJoint.translation() =
+      Eigen::Vector3d(0., 0., 0.090);
+
+  auto foot = skel->createJointAndBodyNodePair<WeldJoint>(
+      tibia, weld_properties, BodyNode::Properties(name + "_foot")).second;
+  setShape(
+      foot,
+      std::make_shared<EllipsoidShape>(Eigen::Vector3d(0.03, 0.03, 0.03)),
+      Eigen::Vector3d(0., 0., 0.));
 
   return coxa;
 }
