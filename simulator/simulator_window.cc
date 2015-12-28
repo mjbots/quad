@@ -22,6 +22,7 @@
 #include "simulator_window.h"
 
 #include "base/common.h"
+#include "base/context.h"
 
 using namespace dart::dynamics;
 using namespace dart::simulation;

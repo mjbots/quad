@@ -26,21 +26,6 @@
 #include "program_options_archive.h"
 
 namespace mjmech {
-
-namespace base {
-
-Context::Context()
-    : telemetry_log(new TelemetryLog),
-      remote_debug(new TelemetryRemoteDebugServer(service)),
-      telemetry_registry(new ConcreteTelemetryRegistry(
-                             telemetry_log.get(), remote_debug.get())),
-      factory(new ConcreteStreamFactory(service))
-{}
-
-Context::~Context() {}
-
-}
-
 namespace {
 using namespace mjmech::base;
 
