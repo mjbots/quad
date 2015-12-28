@@ -28,8 +28,8 @@ using namespace dart::simulation;
 using namespace mjmech;
 
 namespace {
-const double kServo_kp = 200.0;
-const double kServo_kd = 20.0;
+const double kServo_kp = 100.0;
+const double kServo_kd = 10.0;
 
 class ServoController {
  public:
@@ -50,7 +50,7 @@ class ServoController {
     const double error = base::WrapNegPiToPi(position - desired_rad_);
     const double control = error * kServo_kp + velocity * kServo_kd;
 
-    skeleton_->setForce(joint_number_, control);
+    skeleton_->setForce(joint_number_, -control);
   }
 
  private:
@@ -58,6 +58,8 @@ class ServoController {
   const int joint_number_;
   double desired_rad_ = 0.0;
 };
+
+typedef std::shared_ptr<ServoController> ServoControllerPtr;
 
 SkeletonPtr createFloor() {
   SkeletonPtr floor = Skeleton::create("floor");
@@ -133,74 +135,6 @@ BodyNodePtr makeLegJoint(SkeletonPtr skel, BodyNodePtr parent,
   return joint;
 }
 
-BodyNodePtr makeLeg(SkeletonPtr skel, BodyNodePtr parent,
-                    const Eigen::Vector3d& offset,
-                    int left, const std::string& name) {
-  auto coxa = makeLegJoint(
-      skel, parent, name + "_coxa",
-      std::make_shared<BoxShape>(Eigen::Vector3d(0.04, 0.02, 0.02)),
-      Eigen::Vector3d(0., -1. * left, 0.),
-      Eigen::Vector3d(1.0, 0.0, 0.0),
-      offset);
-  auto femur = makeLegJoint(
-      skel, coxa, name + "_femur",
-      std::make_shared<BoxShape>(Eigen::Vector3d(0.025, 0.041, 0.095)),
-      Eigen::Vector3d(0.0, 0.0, 1.0),
-      Eigen::Vector3d(0.0, 1.0, 0.0),
-      Eigen::Vector3d(0.00, -0.04 * left, 0.015));
-  auto tibia = makeLegJoint(
-      skel, femur, name + "_tibia",
-      std::make_shared<BoxShape>(Eigen::Vector3d(0.01, 0.01, 0.090)),
-      Eigen::Vector3d(0.0, 0.0, 1.0),
-      Eigen::Vector3d(0.0, 1.0, 0.0),
-      Eigen::Vector3d(0.0, 0.0, 0.095));
-
-  WeldJoint::Properties weld_properties;
-  weld_properties.mName = name + "_foot_joint";
-  weld_properties.mT_ParentBodyToJoint.translation() =
-      Eigen::Vector3d(0., 0., 0.090);
-
-  auto foot = skel->createJointAndBodyNodePair<WeldJoint>(
-      tibia, weld_properties, BodyNode::Properties(name + "_foot")).second;
-  setShape(
-      foot,
-      std::make_shared<EllipsoidShape>(Eigen::Vector3d(0.03, 0.03, 0.03)),
-      Eigen::Vector3d(0., 0., 0.));
-
-  return coxa;
-}
-
-SkeletonPtr createMech() {
-  FreeJoint::Properties properties;
-  properties.mName = "mech_joint";
-
-  SkeletonPtr result = Skeleton::create("mech");
-
-  auto body = result->createJointAndBodyNodePair<FreeJoint>(
-      nullptr, properties,
-      BodyNode::Properties(std::string("body"))).second;
-
-  auto box = std::make_shared<BoxShape>(
-      Eigen::Vector3d(0.210, 0.128, .0332));
-
-  setShape(body, box, Eigen::Vector3d(0., 0., 0.));
-
-  auto leg_lf = makeLeg(
-      result, body, Eigen::Vector3d(0.09, -0.062, 0.0), 1, "lf");
-  auto leg_rf = makeLeg(
-      result, body, Eigen::Vector3d(0.09, 0.062, 0.0), -1, "rf");
-  auto leg_lr = makeLeg(
-      result, body, Eigen::Vector3d(-0.09, -0.062, 0.0), 1, "lr");
-  auto leg_rr = makeLeg(
-      result, body, Eigen::Vector3d(-0.09, 0.062, 0.0), -1, "rr");
-
-  Eigen::Isometry3d tf = Eigen::Isometry3d::Identity();
-  tf.rotate(Eigen::AngleAxisd(M_PI, Eigen::Vector3d(1., 0., 0.)));
-  tf.translation() = Eigen::Vector3d(0, 0, .4);
-  result->getJoint(0)->setTransformFromParentBodyNode(tf);
-
-  return result;
-}
 }
 
 namespace mjmech {
@@ -208,8 +142,94 @@ namespace simulator {
 
 class SimulatorWindow::Impl {
  public:
+  BodyNodePtr MakeLeg(SkeletonPtr skel, BodyNodePtr parent,
+                      const Eigen::Vector3d& offset,
+                      int left, const std::string& name) {
+    auto coxa = makeLegJoint(
+        skel, parent, name + "_coxa",
+        std::make_shared<BoxShape>(Eigen::Vector3d(0.04, 0.02, 0.02)),
+        Eigen::Vector3d(0., -1. * left, 0.),
+        Eigen::Vector3d(1.0, 0.0, 0.0),
+        offset);
+    auto femur = makeLegJoint(
+        skel, coxa, name + "_femur",
+        std::make_shared<BoxShape>(Eigen::Vector3d(0.025, 0.041, 0.095)),
+        Eigen::Vector3d(0.0, 0.0, 1.0),
+        Eigen::Vector3d(0.0, 1.0, 0.0),
+        Eigen::Vector3d(0.00, -0.04 * left, 0.015));
+    auto tibia = makeLegJoint(
+        skel, femur, name + "_tibia",
+        std::make_shared<BoxShape>(Eigen::Vector3d(0.01, 0.01, 0.090)),
+        Eigen::Vector3d(0.0, 0.0, 1.0),
+        Eigen::Vector3d(0.0, 1.0, 0.0),
+        Eigen::Vector3d(0.0, 0.0, 0.095));
+
+    WeldJoint::Properties weld_properties;
+    weld_properties.mName = name + "_foot_joint";
+    weld_properties.mT_ParentBodyToJoint.translation() =
+        Eigen::Vector3d(0., 0., 0.090);
+
+    auto foot = skel->createJointAndBodyNodePair<WeldJoint>(
+        tibia, weld_properties, BodyNode::Properties(name + "_foot")).second;
+    setShape(
+        foot,
+        std::make_shared<EllipsoidShape>(Eigen::Vector3d(0.03, 0.03, 0.03)),
+        Eigen::Vector3d(0., 0., 0.));
+
+    const std::size_t count = skel->getNumDofs();
+    BOOST_ASSERT(count >= 3);
+    const std::size_t snum_start = servos_.size();
+    servos_[snum_start + 0] =
+        std::make_shared<ServoController>(skel, count - 3);
+    servos_[snum_start + 1] =
+        std::make_shared<ServoController>(skel, count - 2);
+    servos_[snum_start + 2] =
+        std::make_shared<ServoController>(skel, count - 1);
+
+    return coxa;
+  }
+
+  void CreateMech() {
+    FreeJoint::Properties properties;
+    properties.mName = "mech_joint";
+
+    SkeletonPtr result = Skeleton::create("mech");
+
+    auto body = result->createJointAndBodyNodePair<FreeJoint>(
+        nullptr, properties,
+        BodyNode::Properties(std::string("body"))).second;
+
+    auto box = std::make_shared<BoxShape>(
+        Eigen::Vector3d(0.210, 0.128, .0332));
+
+    setShape(body, box, Eigen::Vector3d(0., 0., 0.));
+
+    auto leg_lf = MakeLeg(
+        result, body, Eigen::Vector3d(0.09, -0.062, 0.0), 1, "lf");
+    auto leg_rf = MakeLeg(
+        result, body, Eigen::Vector3d(0.09, 0.062, 0.0), -1, "rf");
+    auto leg_lr = MakeLeg(
+        result, body, Eigen::Vector3d(-0.09, -0.062, 0.0), 1, "lr");
+    auto leg_rr = MakeLeg(
+        result, body, Eigen::Vector3d(-0.09, 0.062, 0.0), -1, "rr");
+
+    Eigen::Isometry3d tf = Eigen::Isometry3d::Identity();
+    tf.rotate(Eigen::AngleAxisd(M_PI, Eigen::Vector3d(1., 0., 0.)));
+    tf.translation() = Eigen::Vector3d(0, 0, .4);
+    result->getJoint(0)->setTransformFromParentBodyNode(tf);
+
+    mech_ = result;
+  }
+
+  void timeStepping() {
+    for (auto& pair: servos_) {
+      pair.second->Update();
+    }
+  }
+
   dart::dynamics::SkeletonPtr mech_;
   int current_joint_ = 0;
+  std::map<int, ServoControllerPtr> servos_;
 };
 
 SimulatorWindow::SimulatorWindow() : impl_(new Impl()) {
@@ -217,7 +237,7 @@ SimulatorWindow::SimulatorWindow() : impl_(new Impl()) {
 
   world->addSkeleton(createFloor());
 
-  impl_->mech_ = createMech();
+  impl_->CreateMech();
   world->addSkeleton(impl_->mech_);
 
   setWorld(world);
@@ -244,6 +264,11 @@ void SimulatorWindow::keyboard(unsigned char key, int x, int y) {
   } else {
     SimWindow::keyboard(key, x, y);
   }
+}
+
+void SimulatorWindow::timeStepping() {
+  impl_->timeStepping();
+  SimWindow::timeStepping();
 }
 
 }

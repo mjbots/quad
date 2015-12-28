@@ -25,10 +25,7 @@ class SimulatorWindow : public dart::gui::SimWindow {
   ~SimulatorWindow();
 
   void keyboard(unsigned char key, int x, int y) override;
-
-  void timeStepping() override {
-    SimWindow::timeStepping();
-  }
+  void timeStepping() override;
 
  private:
   class Impl;
