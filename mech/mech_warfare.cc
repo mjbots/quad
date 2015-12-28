@@ -23,7 +23,6 @@ namespace mech {
 
 MechWarfare::MechWarfare(boost::asio::io_service& service)
     : service_(service),
-      factory_(service),
       server_(service) {
 }
 

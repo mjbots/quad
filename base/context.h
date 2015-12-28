@@ -22,6 +22,7 @@
 namespace mjmech {
 namespace base {
 
+class ConcreteStreamFactory;
 class TelemetryLog;
 class TelemetryLogRegistrar;
 
@@ -42,6 +43,7 @@ struct Context : boost::noncopyable {
                             TelemetryRemoteDebugRegistrar
                             > ConcreteTelemetryRegistry;
   std::unique_ptr<ConcreteTelemetryRegistry> telemetry_registry;
+  std::unique_ptr<ConcreteStreamFactory> factory;
 };
 
 }

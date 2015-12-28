@@ -33,10 +33,11 @@ Context::Context()
     : telemetry_log(new TelemetryLog),
       remote_debug(new TelemetryRemoteDebugServer(service)),
       telemetry_registry(new ConcreteTelemetryRegistry(
-                             telemetry_log.get(), remote_debug.get()))
-{};
+                             telemetry_log.get(), remote_debug.get())),
+      factory(new ConcreteStreamFactory(service))
+{}
 
-Context::~Context() {};
+Context::~Context() {}
 
 }
 

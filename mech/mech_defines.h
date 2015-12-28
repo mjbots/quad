@@ -14,15 +14,12 @@
 
 #pragma once
 
-#include "base/concrete_comm_factory.h"
-
 #include "herkulex.h"
 #include "herkulex_servo_interface.h"
 
 namespace mjmech {
 namespace mech {
 struct Mech {
-  typedef base::ConcreteStreamFactory Factory;
   typedef HerkuleX ServoBase;
   typedef HerkuleXServoInterface<ServoBase> Servo;
 };

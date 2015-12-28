@@ -24,9 +24,9 @@ namespace mech {
 class ServoMonitorApp : boost::noncopyable {
  public:
   template <typename Context>
-  ServoMonitorApp(Context& context)
-    : factory_(context.service) {
-    m_.servo_base.reset(new Mech::ServoBase(context.service, factory_));
+  ServoMonitorApp(Context& context) {
+    m_.servo_base.reset(new Mech::ServoBase(
+                            context.service, *context.factory));
     m_.servo_iface.reset(
         new ServoMonitor::HerkuleXServoConcrete<Mech::ServoBase>(
             m_.servo_base.get()));
@@ -63,8 +63,6 @@ class ServoMonitorApp : boost::noncopyable {
   Parameters* parameters() { return &parameters_; }
 
  private:
-  Mech::Factory factory_;
-
   Members m_;
   Parameters parameters_{&m_};
 };

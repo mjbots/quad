@@ -16,6 +16,7 @@
 
 #include "context.h"
 
+#include "concrete_comm_factory.h"
 #include "telemetry_log.h"
 #include "telemetry_log_registrar.h"
 #include "telemetry_registry.h"

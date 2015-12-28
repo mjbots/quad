@@ -38,7 +38,7 @@ class MechWarfare : boost::noncopyable {
  public:
   template <typename Context>
   MechWarfare(Context& context) : MechWarfare(context.service) {
-    m_.servo_base.reset(new Mech::ServoBase(service_, factory_));
+    m_.servo_base.reset(new Mech::ServoBase(service_, *context.factory));
     m_.servo.reset(new Mech::Servo(m_.servo_base.get()));
     m_.imu.reset(new MjmechImuDriver(context));
     m_.ahrs.reset(new Ahrs(context, m_.imu->imu_data_signal()));
@@ -109,8 +109,6 @@ class MechWarfare : boost::noncopyable {
   void HandleMessageTurret(const boost::property_tree::ptree&);
 
   boost::asio::io_service& service_;
-
-  Mech::Factory factory_;
 
   Members m_;
   Parameters parameters_{&m_};

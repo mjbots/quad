@@ -14,9 +14,9 @@
 
 
 // TODO jpieper:
-// * Set correct masses for each joint and element.
+// * Set correct masses for each joint and element, along with
+//   appropriate servo constants.
 // * Link in mech C++ class
-// * Simulate servos with PD controller
 // * Implement HerkuleX protocol simulator
 
 #include "simulator_window.h"
