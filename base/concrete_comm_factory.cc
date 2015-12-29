@@ -25,6 +25,7 @@ typedef base::StreamFactory<
   base::StdioGenerator,
   base::SerialPortGenerator,
   base::TcpClientGenerator,
+  base::TcpServerGenerator,
   base::PipeGenerator> Factory;
 }
 
@@ -36,7 +37,8 @@ class ConcreteStreamFactory::Parameters::Impl : boost::noncopyable {
 
 ConcreteStreamFactory::Parameters::Parameters()
     : impl_(new Impl()) {
-  ProgramOptionsArchive(&impl_->options_description_).Accept(&impl_->parameters_);
+  ProgramOptionsArchive(&impl_->options_description_).Accept(
+      &impl_->parameters_);
 }
 
 ConcreteStreamFactory::Parameters::~Parameters() {}

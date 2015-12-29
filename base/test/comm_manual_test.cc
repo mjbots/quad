@@ -41,7 +41,8 @@ const auto transfer = [](const boost::system::error_code& ec,
 int work(int argc, char** argv) {
   typedef StreamFactory<StdioGenerator,
                         SerialPortGenerator,
-                        TcpClientGenerator> Factory;
+                        TcpClientGenerator,
+                        TcpServerGenerator> Factory;
 
   boost::asio::io_service service;
 
@@ -69,7 +70,8 @@ int work(int argc, char** argv) {
 
       std::cout << "Connected!\n";
 
-      boost::asio::spawn(yield, [stdio, stream](boost::asio::yield_context yield) {
+      boost::asio::spawn(yield, [stdio, stream](
+                             boost::asio::yield_context yield) {
           boost::asio::streambuf streambuf;
           while (true) {
             boost::asio::async_read(*stdio, streambuf, transfer, yield);
@@ -77,7 +79,8 @@ int work(int argc, char** argv) {
           }
         });
 
-      boost::asio::spawn(yield, [stdio, stream](boost::asio::yield_context yield) {
+      boost::asio::spawn(yield, [stdio, stream](
+                             boost::asio::yield_context yield) {
           boost::asio::streambuf streambuf;
           while (true) {
             boost::asio::async_read(*stream, streambuf, transfer, yield);

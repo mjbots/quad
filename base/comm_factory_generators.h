@@ -75,7 +75,7 @@ class TcpClientGenerator : boost::noncopyable {
  public:
   struct Parameters {
     std::string host;
-    int port;
+    int port = 0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -90,6 +90,27 @@ class TcpClientGenerator : boost::noncopyable {
       boost::asio::io_service&,
       const Parameters&,
       StreamHandler handler);
+};
+
+/// A Generate to make TCP server backed streams.
+class TcpServerGenerator : boost::noncopyable {
+ public:
+  struct Parameters {
+    int port = 0;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(port));
+    }
+  };
+
+  static const char* type() { return "tcp_server"; }
+
+  static void AsyncCreate(
+      boost::asio::io_service&,
+      const Parameters&,
+      StreamHandler handler);
+
 };
 
 /// Serves up bi-direction synthetic streams.  The AsyncCreate method

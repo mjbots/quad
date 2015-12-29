@@ -204,6 +204,154 @@ void TcpClientGenerator::AsyncCreate(
 }
 
 namespace {
+class TcpServerStream : public AsyncStream {
+ public:
+  TcpServerStream(boost::asio::io_service& service,
+                  const TcpServerGenerator::Parameters& parameters)
+      : service_(service),
+        parameters_(parameters),
+        acceptor_(service),
+        socket_(service) {
+    tcp::endpoint endpoint(tcp::v4(), parameters_.port);
+    acceptor_.open(endpoint.protocol());
+    acceptor_.set_option(tcp::acceptor::reuse_address(true));
+    acceptor_.bind(endpoint);
+    acceptor_.listen();
+
+    Accept();
+  }
+
+  void Accept() {
+    acceptor_.async_accept(
+        socket_,
+        std::bind(&TcpServerStream::HandleAccept, this, _1));
+  }
+
+  virtual boost::asio::io_service& get_io_service() { return service_; }
+
+  virtual void virtual_async_read_some(MutableBufferSequence buffers,
+                                       ReadHandler handler) {
+    BOOST_ASSERT(started_);
+
+    read_buffers_ = buffers;
+    read_handler_ = handler;
+
+    if (connected_) {
+      socket_.async_read_some(
+          buffers, std::bind(&TcpServerStream::HandleRead, this, _1, _2));
+    } else {
+      read_queued_ = true;
+    }
+  }
+
+  virtual void virtual_async_write_some(ConstBufferSequence buffers,
+                                        WriteHandler handler) {
+    BOOST_ASSERT(started_);
+
+    write_buffers_ = buffers;
+    write_handler_ = handler;
+
+    if (connected_) {
+      socket_.async_write_some(
+          buffers, std::bind(&TcpServerStream::HandleWrite, this, _1, _2));
+    } else {
+      write_queued_ = true;
+    }
+  }
+
+  virtual void cancel() {
+    BOOST_ASSERT(started_);
+
+    if (connected_) {
+      socket_.cancel();
+    } else {
+      if (read_queued_) {
+        read_queued_ = false;
+        service_.post(
+            std::bind(read_handler_,
+                      boost::asio::error::operation_aborted, 0));
+      }
+      if (write_queued_) {
+        write_queued_ = false;
+        service_.post(
+            std::bind(write_handler_,
+                      boost::asio::error::operation_aborted, 0));
+      }
+    }
+  }
+
+  ErrorHandler start_handler_;
+
+ private:
+  void HandleAccept(const boost::system::error_code& ec) {
+    if (!started_) {
+      service_.post(std::bind(start_handler_, ec));
+      started_ = true;
+    }
+    connected_ = true;
+
+    if (read_queued_) {
+      read_queued_ = false;
+      virtual_async_read_some(read_buffers_, read_handler_);
+    }
+    if (write_queued_) {
+      write_queued_ = false;
+      virtual_async_write_some(write_buffers_, write_handler_);
+    }
+  }
+
+  void HandleRead(const boost::system::error_code& ec,
+                  std::size_t size) {
+    if (ec == boost::asio::error::eof) {
+      read_queued_ = true;
+      connected_ = false;
+      socket_.close();
+      Accept();
+    } else {
+      service_.post(std::bind(read_handler_, ec, size));
+    }
+  }
+
+  void HandleWrite(const boost::system::error_code& ec,
+                   std::size_t size) {
+    if (ec == boost::asio::error::eof) {
+      write_queued_ = true;
+      connected_ = false;
+      socket_.close();
+      Accept();
+    } else {
+      service_.post(std::bind(write_handler_, ec, size));
+    }
+  }
+
+  boost::asio::io_service& service_;
+  const TcpServerGenerator::Parameters parameters_;
+  tcp::acceptor acceptor_;
+  tcp::socket socket_;
+  bool started_ = false;
+  bool connected_ = false;
+
+  MutableBufferSequence read_buffers_;
+  ReadHandler read_handler_;
+  bool read_queued_ = false;
+
+  ConstBufferSequence write_buffers_;
+  WriteHandler write_handler_;
+  bool write_queued_ = false;
+};
+}
+
+void TcpServerGenerator::AsyncCreate(
+    boost::asio::io_service& service,
+    const Parameters& parameters,
+    StreamHandler handler) {
+  TcpServerStream* server_stream = nullptr;
+  std::shared_ptr<AsyncStream> stream(
+      (server_stream = new TcpServerStream(service, parameters)));
+  server_stream->start_handler_ = std::bind(handler, _1, stream);
+}
+
+namespace {
 class HalfPipe : public AsyncStream {
  public:
   HalfPipe(boost::asio::io_service& service)
