@@ -22,7 +22,9 @@
 #include "simulator_window.h"
 
 #include "base/common.h"
+#include "base/concrete_comm_factory.h"
 #include "base/context.h"
+#include "base/fail.h"
 
 using namespace dart::dynamics;
 using namespace dart::simulation;
@@ -136,13 +138,25 @@ BodyNodePtr makeLegJoint(SkeletonPtr skel, BodyNodePtr parent,
   return joint;
 }
 
+mjmech::simulator::SimulatorWindow::Impl* g_impl = nullptr;
+
 }
+
+static void HandleGlutTimer(int);
 
 namespace mjmech {
 namespace simulator {
 
 class SimulatorWindow::Impl {
  public:
+  Impl() {
+    g_impl = this;
+  }
+
+  ~Impl() {
+    g_impl = nullptr;
+  }
+
   BodyNodePtr MakeLeg(SkeletonPtr skel, BodyNodePtr parent,
                       const Eigen::Vector3d& offset,
                       int left, const std::string& name) {
@@ -228,9 +242,53 @@ class SimulatorWindow::Impl {
     }
   }
 
+  void Start() {
+    base::StreamHandler handler =
+        std::bind(&Impl::HandleStart, this,
+                  std::placeholders::_1, std::placeholders::_2);
+    context_.factory->AsyncCreate(stream_config_, handler);
+  }
+
+  void StartGlutTimer() {
+    glutTimerFunc(50, &HandleGlutTimer, 0);
+  }
+
+  void Timer() {
+    StartGlutTimer();
+    context_.service.poll();
+  }
+
+  void HandleStart(base::ErrorCode ec,
+                   base::SharedStream stream) {
+    base::FailIf(ec);
+
+    stream_ = stream;
+    StartRead();
+  }
+
+  void StartRead() {
+    stream_->async_read_some(
+        boost::asio::buffer(buffer_),
+        std::bind(
+            &Impl::HandleRead, this,
+            std::placeholders::_1, std::placeholders::_2));
+  }
+
+  void HandleRead(const boost::system::error_code& ec,
+                  std::size_t size) {
+    std::cout << std::string(buffer_, size);
+    StartRead();
+  }
+
   dart::dynamics::SkeletonPtr mech_;
   int current_joint_ = 0;
   std::map<int, ServoControllerPtr> servos_;
+
+  base::Context context_;
+  base::ConcreteStreamFactory::Parameters stream_config_;
+  base::SharedStream stream_;
+
+  char buffer_[256] = {};
 };
 
 SimulatorWindow::SimulatorWindow() : impl_(new Impl()) {
@@ -272,5 +330,23 @@ void SimulatorWindow::timeStepping() {
   SimWindow::timeStepping();
 }
 
+void SimulatorWindow::render() {
+  SimWindow::render();
 }
+
+boost::program_options::options_description*
+SimulatorWindow::options_description() {
+  return impl_->stream_config_.options_description();
+}
+
+void SimulatorWindow::Start() {
+  impl_->Start();
+  impl_->StartGlutTimer();
+}
+
+}
+}
+
+static void HandleGlutTimer(int value) {
+  g_impl->Timer();
 }

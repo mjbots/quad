@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <boost/program_options.hpp>
+
 #include <dart/dart.h>
 
 namespace mjmech {
@@ -26,9 +28,14 @@ class SimulatorWindow : public dart::gui::SimWindow {
 
   void keyboard(unsigned char key, int x, int y) override;
   void timeStepping() override;
+  void render() override;
+
+  boost::program_options::options_description* options_description();
+  void Start();
+
+  class Impl;
 
  private:
-  class Impl;
   std::unique_ptr<Impl> impl_;
 };
 
