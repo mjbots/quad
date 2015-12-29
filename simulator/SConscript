@@ -29,11 +29,15 @@ PKGS = [
 
 rpaths = set()
 
+env['PKG_CONFIG_PATH'] = '/opt/dart-5/lib/pkgconfig'
 
 for pkg in PKGS:
-    env.ParseConfig('pkg-config --cflags-only-I --libs %s' % pkg)
+    env.ParseConfig('PKG_CONFIG_PATH=$PKG_CONFIG_PATH '
+                    'pkg-config --cflags-only-I --libs %s' % pkg)
+    # TODO theamk: is there a more scons'y way to do this?
     libdirs = subprocess.check_output(
-        'pkg-config --libs-only-L %s' % pkg, shell=True).strip()
+        'PKG_CONFIG_PATH=%s pkg-config --libs-only-L %s' % (
+            env['PKG_CONFIG_PATH'], pkg), shell=True).strip()
     for libdir in libdirs.split(' '):
         if libdir == '':
             continue
@@ -42,6 +46,9 @@ for pkg in PKGS:
 
 for rpath in rpaths:
     env.Append(LINKFLAGS=['-Wl,-rpath=%s' % rpath])
+
+# TODO theamk: can the block above be simply replaced by line below?
+#  env.append(RPATH="/opt/dart-5/lib")
 
 
 env.Append(LIBS=['dart-core', 'glut'])

@@ -33,6 +33,7 @@ import time
 
 GS_MIN_REVISION = 1
 GSTREAMER_ROOT = '/opt/gstreamer-1.4.5'
+DART5_ROOT = '/opt/dart-5'
 
 # Verbosity level:
 #  0 - print summaries and all commands which change state ('sudo' commands)
@@ -47,6 +48,7 @@ def split(val):
 
 def call(*args, **kwargs):
     if g_verbosity >= 1:
+        assert 'cwd' not in kwargs, 'not implemented'
         print 'call:', args
         kwargs['stdout'] = sys.stdout
         kwargs['stderr'] = sys.stderr
@@ -56,14 +58,21 @@ def call(*args, **kwargs):
         print 'call result:', rv
     return rv
 
-def check_call(*args, **kwargs):
-    sudo_command = kwargs.pop('is_sudo', None)
-    if g_verbosity >= 1 or sudo_command:
-        print 'check_call:', args
+def check_call(cmd, **kwargs):
+    # always show 'sudo' commands so user knows what he types password for
+    is_sudo = kwargs.pop('is_sudo', None)
+    # if command generates lots of output we might as well show the command
+    # itself
+    is_chatty = kwargs.pop('is_chatty', None)
+    if g_verbosity >= 1 or is_sudo or is_chatty:
+        cmd_v = cmd
+        if 'cwd' in kwargs:
+            cmd_v = 'cd %s && %s' % (kwargs['cwd'], cmd_v)
+        print 'check_call:', cmd_v
         kwargs['stdout'] = sys.stdout
         kwargs['stderr'] = sys.stderr
     kwargs['shell'] = True
-    return subprocess.check_call(*args, **kwargs)
+    return subprocess.check_call(cmd, **kwargs)
 
 
 def check_output(*args, **kwargs):
@@ -144,7 +153,7 @@ def do_install_gst_packages(options):
             gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
             gstreamer1.0-plugins-base gstreamer1.0-libav | \
             grep ^Inst | cut -d ' ' -f 2 | \
-            grep -v gstreamer | grep -v -- '-doc$' || true").strip()
+            egrep -v 'gstreamer|-gst-' | grep -v -- '-doc$' || true").strip()
     if gst_pkglist != '':
         print 'Need to install some gstreamer media driver packages'
         if options.test:
@@ -157,14 +166,6 @@ def do_install_gst_packages(options):
 
     else:
         print 'All gstreamer media packages are up to date'
-
-
-def find_file(filename, pathlist):
-    for path in pathlist:
-        maybe_path = os.path.join(path, filename)
-        if os.path.exists(maybe_path):
-            return maybe_path
-    return None
 
 
 def find_version(dep, filetest):
@@ -195,12 +196,12 @@ def version_compare(ver1, ver2):
     return 0
 
 
-def dep_exists(options, dep):
-    # Start by finding the file at all.
-    filetest = find_file(dep['filetest'],
-                         ['/usr/local', '/usr'])
+def dart_dep_exists(options, dep):
+    # Check if the file is present in our install directory (we do not
+    # want to use system-wide files -- we do not know which version is it)
+    filetest = os.path.join(DART5_ROOT, dep['filetest'])
 
-    if filetest is None:
+    if not os.path.exists(filetest):
         print 'Could not find:', dep['filetest']
         return False
 
@@ -220,10 +221,10 @@ def dep_exists(options, dep):
     return True
 
 
-def ensure_dep(options, dep):
+def ensure_dart_dep(options, dep):
     print 'Checking dart package:', dep['name']
 
-    exists = dep_exists(options, dep)
+    exists = dart_dep_exists(options, dep)
 
     if exists:
         return
@@ -234,21 +235,38 @@ def ensure_dep(options, dep):
 
     print 'Installing new version of:', dep['name']
 
+    if not os.path.exists(DART5_ROOT):
+        check_call('sudo install -d -o %s %s' % (os.getuid(), DART5_ROOT),
+                   is_sudo=True)
+
     checkout_name = dep['name'].rsplit('/', 1)[1]
-    tempdir = tempfile.mkdtemp()
+    tempdir = tempfile.mkdtemp(prefix='dartbuild-' + checkout_name + '-')
     checkout_dir = os.path.join(tempdir, checkout_name)
+    build_dir = os.path.join(checkout_dir, 'build')
 
     try:
+        # We would like to only fetch one revision for speed and to reduce
+        # network load, but this seems impossible:
+        # http://git.661346.n2.nabble.com/Fetch-by-SHA-missing-td5604552.html
         check_call('git clone https://github.com/%s.git %s' % (
-                dep['name'], checkout_dir))
-        check_call('cd %s && git checkout %s && mkdir build && cd build && cmake .. && make -j2' % (
-                checkout_dir, dep['rev']))
-        check_call('cd %s/build && sudo make install' % (checkout_dir),
-                   is_sudo=True)
+            dep['name'], checkout_dir),
+            is_chatty=True)
+        check_call('git checkout --detach %s' % (dep['rev']),
+                   cwd=checkout_dir, is_chatty=True)
+        os.mkdir(build_dir)
+        check_call('PKG_CONFIG_PATH=%s/lib/pkgconfig '
+                   'cmake -DCMAKE_INSTALL_PREFIX:PATH=%s %s .. && make -j2' % (
+                       DART5_ROOT, DART5_ROOT, dep.get('cmake_flags', '')),
+                   cwd=build_dir, is_chatty=True)
+        check_call('make install',
+                   cwd=build_dir, is_chatty=True)
     finally:
-        shutil.rmtree(tempdir, ignore_errors=True)
+        if options.keep_temp:
+            print 'NOT deleting tempdir', tempdir
+        else:
+            shutil.rmtree(tempdir, ignore_errors=True)
 
-    now_exists = dep_exists(options, dep)
+    now_exists = dart_dep_exists(options, dep)
     if now_exists:
         print 'Package "%s" installed successfully' % dep['name']
     else:
@@ -266,7 +284,8 @@ def do_install_dart(options):
     deps = [
         {'name': 'danfis/libccd',
          'rev': '2cd2f6b2b5533de370698ea460e4d3b902c45242',
-         'filetest': 'lib/x86_64-linux-gnu/pkgconfig/ccd.pc',
+         'filetest': 'lib/pkgconfig/ccd.pc',
+         'cmake_flags': '-DCMAKE_INSTALL_LIBDIR:PATH=lib',
          'verre': '^Version: (.*)$',
          'minver': '2.0' },
         {'name': 'flexible-collision-library/fcl',
@@ -281,7 +300,8 @@ def do_install_dart(options):
          'minver': '0.4.0' },
         {'name': 'dartsim/console_bridge',
          'rev': '2fbb56a17a1e2e689983e32486ed219f19f732f3',
-         'filetest': 'include/console_bridge/console.h' },
+         'filetest': 'include/console_bridge/console.h',
+         'cmake_flags': '-DCMAKE_INSTALL_LIBDIR:PATH=lib'},
         {'name': 'ros/urdfdom',
          'rev': '0e20f330fa2a9fd51e6de555ad2124222c50f31d',
          'filetest': 'lib/pkgconfig/urdfdom.pc',
@@ -295,7 +315,7 @@ def do_install_dart(options):
         ]
 
     for dep in deps:
-        ensure_dep(options, dep)
+        ensure_dart_dep(options, dep)
 
 
 def main():
@@ -314,9 +334,11 @@ def main():
                       help='also install system packages')
     parser.add_option('--test', '-t', action='store_true',
                       help='just test if anything needs installing')
-    parser.add_option('--dart5', '-D', type='int', metavar='[0|1]',
-                      help='Enable dart5 compilation (default %default)',
+    parser.add_option('--dart', '-D', type='int', metavar='[0|1]',
+                      help='Enable dart compilation (default %default)',
                       default=int(not os.uname()[4].startswith('arm')))
+    parser.add_option('--keep-temp', action='store_true',
+                      help='Do not delete temporary files')
     options, args = parser.parse_args()
 
     g_verbosity += options.verbose - options.quiet
@@ -367,7 +389,7 @@ def main():
         print 'gstreamer in %s is up to date' % GSTREAMER_ROOT
 
     do_install_gst_packages(options)
-    if options.dart5:
+    if options.dart:
         do_install_dart(options)
 
 
