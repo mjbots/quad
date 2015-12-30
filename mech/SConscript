@@ -46,7 +46,7 @@ def SetupGStreamer(gsenv):
         sys.exit(1)
 
     gsenv['GS_LIB'] = gstreamer_root + '/lib'
-    gsenv['RPATH'] = '$GS_LIB'
+    gsenv.Append(RPATH = ['$GS_LIB'])
 
     for lib in [
             'gstreamer-rtsp-server-1.0', 'gstreamer-rtsp-1.0',
@@ -86,8 +86,8 @@ GST_SOURCES = [
 GST_OBJECTS = [gsenv.SharedObject(name)
                for name in GST_SOURCES]
 
-libmech = env.StaticLibrary('mech', SOURCES + GST_OBJECTS)
-libmech_so = env.SharedLibrary('mech', SOURCES + GST_OBJECTS)
+libmech = gsenv.StaticLibrary('mech', SOURCES + GST_OBJECTS)
+libmech_so = gsenv.SharedLibrary('mech', SOURCES + GST_OBJECTS)
 
 Export('libmech')
 Export('libmech_so')
