@@ -26,6 +26,8 @@
 #include "base/context.h"
 #include "base/fail.h"
 
+#include "herkulex_protocol.h"
+
 using namespace dart::dynamics;
 using namespace dart::simulation;
 using namespace mjmech;
@@ -43,7 +45,11 @@ class ServoController {
   }
 
   void SetPosition(double angle_rad) {
-    desired_rad_ = angle_rad;
+    desired_rad_ = angle_rad * sign_;
+  }
+
+  void SetSign(double sign) {
+    sign_ = sign;
   }
 
   void Update() {
@@ -60,6 +66,7 @@ class ServoController {
   SkeletonPtr skeleton_;
   const int joint_number_;
   double desired_rad_ = 0.0;
+  double sign_ = 1.0;
 };
 
 typedef std::shared_ptr<ServoController> ServoControllerPtr;
@@ -219,14 +226,32 @@ class SimulatorWindow::Impl {
 
     setShape(body, box, Eigen::Vector3d(0., 0., 0.));
 
-    auto leg_lf = MakeLeg(
-        result, body, Eigen::Vector3d(0.09, -0.062, 0.0), 1, "lf");
     auto leg_rf = MakeLeg(
         result, body, Eigen::Vector3d(0.09, 0.062, 0.0), -1, "rf");
-    auto leg_lr = MakeLeg(
-        result, body, Eigen::Vector3d(-0.09, -0.062, 0.0), 1, "lr");
     auto leg_rr = MakeLeg(
         result, body, Eigen::Vector3d(-0.09, 0.062, 0.0), -1, "rr");
+    auto leg_lr = MakeLeg(
+        result, body, Eigen::Vector3d(-0.09, -0.062, 0.0), 1, "lr");
+    auto leg_lf = MakeLeg(
+        result, body, Eigen::Vector3d(0.09, -0.062, 0.0), 1, "lf");
+
+    // Fix up some signs so that the servos match what the actual mech
+    // does.
+    servos_[0]->SetSign(1.0);
+    servos_[1]->SetSign(1.0);
+    servos_[2]->SetSign(-1.0);
+
+    servos_[3]->SetSign(-1.0);
+    servos_[4]->SetSign(1.0);
+    servos_[5]->SetSign(-1.0);
+
+    servos_[6]->SetSign(-1.0);
+    servos_[7]->SetSign(-1.0);
+    servos_[8]->SetSign(1.0);
+
+    servos_[9]->SetSign(1.0);
+    servos_[10]->SetSign(-1.0);
+    servos_[11]->SetSign(1.0);
 
     Eigen::Isometry3d tf = Eigen::Isometry3d::Identity();
     tf.rotate(Eigen::AngleAxisd(M_PI, Eigen::Vector3d(1., 0., 0.)));
@@ -263,22 +288,45 @@ class SimulatorWindow::Impl {
     base::FailIf(ec);
 
     stream_ = stream;
-    StartRead();
+    herkulex_protocol_.reset(new HerkulexProtocol(*stream_, operations_));
+    herkulex_protocol_->AsyncStart([](base::ErrorCode ec) {
+        FailIf(ec);
+      });
   }
 
-  void StartRead() {
-    stream_->async_read_some(
-        boost::asio::buffer(buffer_),
-        std::bind(
-            &Impl::HandleRead, this,
-            std::placeholders::_1, std::placeholders::_2));
-  }
+  class HerkulexOperations : public HerkulexProtocol::Operations {
+   public:
+    HerkulexOperations(Impl* parent) : parent_(parent) {}
+    virtual ~HerkulexOperations() {}
 
-  void HandleRead(const boost::system::error_code& ec,
-                  std::size_t size) {
-    std::cout << std::string(buffer_, size);
-    StartRead();
-  }
+    bool address_valid(int) const override { return true; }
+
+    void SJog(const std::vector<ServoAngle>& angles) override {
+      for (const auto& angle: angles) {
+        auto it = parent_->servos_.find(angle.first);
+        if (it != parent_->servos_.end()) {
+          const double angle_deg = (angle.second - 512) * 0.325;
+          const double angle_rad = base::Radians(angle_deg);
+          it->second->SetPosition(angle_rad);
+        }
+      }
+    }
+
+    void Reboot(int servo) override {
+      // Noop.
+    }
+
+    void WriteRam(int servo, uint8_t addr, uint8_t data) override {
+      // Noop
+    }
+
+    uint8_t ReadRam(int servo, uint8_t addr) override {
+      return 0;
+    }
+
+   private:
+    Impl* const parent_;
+  };
 
   dart::dynamics::SkeletonPtr mech_;
   int current_joint_ = 0;
@@ -289,6 +337,8 @@ class SimulatorWindow::Impl {
   base::SharedStream stream_;
 
   char buffer_[256] = {};
+  HerkulexOperations operations_{this};
+  std::unique_ptr<HerkulexProtocol> herkulex_protocol_;
 };
 
 SimulatorWindow::SimulatorWindow() : impl_(new Impl()) {
