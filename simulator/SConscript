@@ -47,6 +47,7 @@ for rpath in rpaths:
 env.Append(LIBS=['dart-core', 'glut'])
 
 SOURCES = [
+    'herkulex_protocol.cc',
     'simulator_window.cc',
     ]
 

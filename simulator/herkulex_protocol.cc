@@ -14,7 +14,8 @@
 
 #include "herkulex_protocol.h"
 
-#include "async_stream.h"
+#include <boost/asio/read.hpp>
+#include <boost/asio/write.hpp>
 
 namespace {
 const auto u8 = [](char c) { return static_cast<uint8_t>(c); };
@@ -40,9 +41,12 @@ enum {
   kPacketCmd = 4,
   kPacketCs1 = 5,
   kPacketCs2 = 6,
+  kPacketHeaderSize = 7,
   kPacketAddress = 7,
   kPacketDataLength = 8,
   kPacketData = 9,
+  kPacketSJogTime = 7,
+  kPacketSJogData = 8,
 };
 
 uint8_t CalculateCs1(const char* buf, uint8_t len) {
@@ -63,34 +67,46 @@ uint8_t CalculateCs1(const char* buf, uint8_t len) {
 }
 }
 
+namespace mjmech {
+namespace simulator {
+
 class HerkulexProtocol::Impl {
  public:
-  Impl(AsyncStream& stream, Operations& operations)
+  Impl(base::AsyncStream& stream, Operations& operations)
       : stream_(stream), operations_(operations) {}
 
   void StartReadHeader() {
-    AsyncRead(stream_, gsl::string_span(buffer_, 1),
-              [this](int error) { this->HandleReadHeader1(error); });
+    boost::asio::async_read(
+        stream_, boost::asio::buffer(buffer_, 1),
+        [this](base::ErrorCode error, std::size_t) {
+          this->HandleReadHeader1(error);
+        });
   }
 
-  void HandleReadHeader1(int error) {
+  void HandleReadHeader1(base::ErrorCode error) {
     if (error) { HandleError(error); return; }
 
     if (u8(buffer_[0]) != 0xff) { StartReadHeader(); return; }
 
-    AsyncRead(stream_, gsl::string_span(buffer_ + 1, buffer_ + 2),
-              [this](int error) { this->HandleReadHeader2(error); });
+    boost::asio::async_read(
+        stream_, boost::asio::buffer(buffer_ + 1, 1),
+        [this](base::ErrorCode error, std::size_t) {
+          this->HandleReadHeader2(error);
+        });
   }
 
-  void HandleReadHeader2(int error) {
+  void HandleReadHeader2(base::ErrorCode error) {
     if (error) { HandleError(error); return; }
     if (u8(buffer_[1]) != 0xff) { StartReadHeader(); return; }
 
-    AsyncRead(stream_, gsl::string_span(buffer_ + 2, buffer_ + 7),
-              [this](int error) { this->HandleReadHeader3(error); });
+    boost::asio::async_read(
+        stream_, boost::asio::buffer(buffer_ + 2, 5),
+        [this](base::ErrorCode error, std::size_t) {
+          this->HandleReadHeader3(error);
+        });
   }
 
-  void HandleReadHeader3(int error) {
+  void HandleReadHeader3(base::ErrorCode error) {
     if (error) { HandleError(error); return; }
 
     const uint8_t packet_size = u8(buffer_[kPacketSize]);
@@ -98,16 +114,18 @@ class HerkulexProtocol::Impl {
     if (packet_size < 7) {
       status_error_ = kErrorInvalidPacket;
       status_detail_ = kDetailGarbageDetected;
-      HandleError(1);
+      HandleError(base::ErrorCode::einval("invalid packet"));
       return;
     }
 
-    AsyncRead(
-        stream_, gsl::string_span(buffer_ + 7, buffer_ + packet_size),
-        [this](int error) { this->HandleReadData(error); });
+    boost::asio::async_read(
+        stream_, boost::asio::buffer(buffer_ + 7, packet_size - 7),
+        [this](base::ErrorCode error, std::size_t) {
+          this->HandleReadData(error);
+        });
   }
 
-  void HandleReadData(int error) {
+  void HandleReadData(base::ErrorCode error) {
     if (error) { HandleError(error); return; }
 
     ProcessPacket();
@@ -115,7 +133,7 @@ class HerkulexProtocol::Impl {
     StartReadHeader();
   }
 
-  void HandleError(int error) {
+  void HandleError(base::ErrorCode error) {
     // TODO jpieper: Log this in some way.
     StartReadHeader();
   }
@@ -146,8 +164,7 @@ class HerkulexProtocol::Impl {
 
     const uint8_t id = u8(buffer_[kPacketID]);
 
-    if (id != operations_.address() &&
-        id != kBroadcast) {
+    if (!operations_.address_valid(id)) {
       // They aren't talking to us.
       return;
     }
@@ -155,15 +172,17 @@ class HerkulexProtocol::Impl {
     const uint8_t cmd = u8(buffer_[kPacketCmd]);
 
     if (cmd == 0x09) { // REBOOT
-      operations_.Reboot();
+      operations_.Reboot(id);
     } else if (cmd == 0x07) {
-      HandleStat();
+      // For now, we'll handle replying to all STAT messages ourselves.
+      HandleStat(id);
     } else if (cmd == 0x03) {
-      HandleRamWrite();
+      HandleRamWrite(id);
     } else if (cmd == 0x04) {
-      HandleRamRead();
+      HandleRamRead(id);
+    } else if (cmd == 0x06) {
+      HandleSJog();
     } else if (cmd == 0x05 || // I_JOG
-               cmd == 0x06 || // S_JOG
                cmd == 0x08) { // ROLLBACK
       // silently ignore
     } else {
@@ -172,16 +191,16 @@ class HerkulexProtocol::Impl {
     }
   }
 
-  void HandleStat() {
+  void HandleStat(uint8_t servo) {
     if (write_outstanding_) { return; }
 
     tx_buffer_[kPacketData] = status_error_;
     tx_buffer_[kPacketData + 1] = status_detail_;
 
-    SendData(0x47, 2); // STAT_ACK
+    SendData(servo, 0x47, 2); // STAT_ACK
   }
 
-  void HandleRamWrite() {
+  void HandleRamWrite(int servo) {
     const uint8_t size = u8(buffer_[kPacketSize]);
     if (size < 9) {
       status_error_ = kErrorInvalidPacket;
@@ -199,11 +218,11 @@ class HerkulexProtocol::Impl {
     }
 
     for (uint8_t i = 0; i < len; i++) {
-      operations_.WriteRam(addr + i, u8(buffer_[kPacketData + i]));
+      operations_.WriteRam(servo, addr + i, u8(buffer_[kPacketData + i]));
     }
   }
 
-  void HandleRamRead() {
+  void HandleRamRead(int servo) {
     if (write_outstanding_) { return; }
 
     const uint8_t size = u8(buffer_[kPacketSize]);
@@ -219,19 +238,37 @@ class HerkulexProtocol::Impl {
     tx_buffer_[kPacketAddress] = address;
     tx_buffer_[kPacketDataLength] = len;
     for (uint8_t i = 0; i < len; i++) {
-      tx_buffer_[kPacketData + i] = operations_.ReadRam(address + i);
+      tx_buffer_[kPacketData + i] = operations_.ReadRam(servo, address + i);
     }
     tx_buffer_[kPacketData + 0 + len] = status_error_;
     tx_buffer_[kPacketData + 1 + len] = status_detail_;
 
-    SendData(0x44, len + 4);
+    SendData(servo, 0x44, len + 4);
   }
 
-  void SendData(uint8_t cmd, std::size_t size) {
+  void HandleSJog() {
+    // TODO jpieper: For now, we don't expose this.
+    //const uint8_t int_time = u8(buffer_[kPacketSJogTime]);
+    BOOST_ASSERT(u8(buffer_[kPacketSize]) >= kPacketHeaderSize);
+    const uint8_t len = u8(buffer_[kPacketSize]) - kPacketHeaderSize;
+    std::vector<Operations::ServoAngle> angles;
+    for (int i = 0; (i + 3) < len; i+= 4) {
+      Operations::ServoAngle angle;
+      angle.first = u8(buffer_[kPacketSJogData + i + 3]);
+      angle.second = (
+          u8(buffer_[kPacketSJogData + i + 0]) |
+          (u8(buffer_[kPacketSJogData + i + 1]) << 8));
+      angles.push_back(angle);
+    }
+
+    operations_.SJog(angles);
+  }
+
+  void SendData(uint8_t from_servo, uint8_t cmd, std::size_t size) {
     tx_buffer_[0] = 0xff;
     tx_buffer_[1] = 0xff;
     tx_buffer_[kPacketSize] = size + 7;
-    tx_buffer_[kPacketID] = operations_.address();
+    tx_buffer_[kPacketID] = from_servo;
     tx_buffer_[kPacketCmd] = cmd;
     tx_buffer_[kPacketCs1] =
         CalculateCs1(reinterpret_cast<const char*>(tx_buffer_), size + 7);
@@ -239,16 +276,19 @@ class HerkulexProtocol::Impl {
 
     const char* const cbuf = reinterpret_cast<const char*>(tx_buffer_);
     write_outstanding_ = true;
-    AsyncWrite(stream_, gsl::cstring_span(cbuf, cbuf + size + 7),
-               [this](int error) { this->HandleWriteData(error); });
+    boost::asio::async_write(
+        stream_, boost::asio::buffer(cbuf, size + 7),
+        [this](base::ErrorCode error, std::size_t) {
+          this->HandleWriteData(error);
+        });
   }
 
-  void HandleWriteData(int error) {
+  void HandleWriteData(base::ErrorCode error) {
     // TODO jpieper: Log some kind of error if necessary.
     write_outstanding_ = false;
   }
 
-  AsyncStream& stream_;
+  base::AsyncStream& stream_;
   Operations& operations_;
 
   char buffer_[256] = {};
@@ -259,12 +299,15 @@ class HerkulexProtocol::Impl {
 };
 
 HerkulexProtocol::HerkulexProtocol(
-    Pool& pool, AsyncStream& stream, Operations& operations)
-    : impl_(&pool, stream, operations) {}
+    base::AsyncStream& stream, Operations& operations)
+    : impl_(new Impl(stream, operations)) {}
 
 HerkulexProtocol::~HerkulexProtocol() {}
 
-void HerkulexProtocol::AsyncStart(ErrorCallback callback) {
+void HerkulexProtocol::AsyncStart(base::ErrorHandler callback) {
   impl_->StartReadHeader();
-  callback(0);
+  callback(base::ErrorCode());
+}
+
+}
 }

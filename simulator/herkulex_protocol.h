@@ -14,10 +14,10 @@
 
 #pragma once
 
-#include "async_types.h"
-#include "pool_ptr.h"
+#include "base/comm.h"
 
-class AsyncStream;
+namespace mjmech {
+namespace simulator {
 
 class HerkulexProtocol {
  public:
@@ -25,18 +25,25 @@ class HerkulexProtocol {
    public:
     virtual ~Operations() {}
 
-    virtual uint8_t address() const = 0;
-    virtual void WriteRam(uint8_t addr, uint8_t val) = 0;
-    virtual uint8_t ReadRam(uint8_t addr) = 0;
-    virtual void Reboot() = 0;
+    virtual bool address_valid(int) const = 0;
+
+    typedef std::pair<int, double> ServoAngle;
+    virtual void SJog(const std::vector<ServoAngle>&) = 0;
+
+    virtual void Reboot(int servo) = 0;
+    virtual void WriteRam(int servo, uint8_t addr, uint8_t data) = 0;
+    virtual uint8_t ReadRam(int servo, uint8_t addr) = 0;
   };
 
-  HerkulexProtocol(Pool& pool, AsyncStream&, Operations&);
+  HerkulexProtocol(base::AsyncStream&, Operations&);
   ~HerkulexProtocol();
 
-  void AsyncStart(ErrorCallback);
+  void AsyncStart(base::ErrorHandler);
 
  private:
   class Impl;
-  PoolPtr<Impl> impl_;
+  std::unique_ptr<Impl> impl_;
 };
+
+}
+}
