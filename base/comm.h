@@ -21,11 +21,11 @@
 #include <boost/asio/io_service.hpp>
 #include <boost/system/error_code.hpp>
 
+#include "async_types.h"
 #include "error_code.h"
 
 namespace mjmech {
 namespace base {
-typedef std::function<void (ErrorCode)> ErrorHandler;
 typedef std::function<void (ErrorCode, std::size_t)> SizeHandler;
 typedef SizeHandler ReadHandler;
 typedef SizeHandler WriteHandler;
