@@ -14,10 +14,11 @@
 
 
 // TODO jpieper:
-// * Set correct masses for each joint and element, along with
-//   appropriate servo constants.
 // * Link in mech C++ class
-// * Implement HerkuleX protocol simulator
+//    * connect up servos
+//    * simulate IMU
+// * Add turret model
+// * Refine mass and moment of inertia of each joint with real robot
 
 #include "simulator_window.h"
 
@@ -33,15 +34,25 @@ using namespace dart::simulation;
 using namespace mjmech;
 
 namespace {
-const double kServo_kp = 100.0;
-const double kServo_kd = 10.0;
+const double kConvert_kgf_cm_to_N_m = 10.197162;
+const double kServo_kp = 10.0;
+const double kServo_kd = 0.1;
+
+double Limit(double value, double limit) {
+  return (value > limit) ? limit : ((value < -limit) ? -limit : value);
+}
 
 class ServoController {
  public:
   ServoController(const SkeletonPtr& skel,
-                  int joint_number) :
+                  Joint* joint,
+                  int dof_number) :
       skeleton_(skel),
-      joint_number_(joint_number) {
+      dof_number_(dof_number) {
+
+    joint->setVelocityUpperLimit(0, base::Radians(360));
+    joint->setDampingCoefficient(0, 0.2);
+    joint->setCoulombFriction(0, 0.2);
   }
 
   void SetPosition(double angle_rad) {
@@ -53,23 +64,49 @@ class ServoController {
   }
 
   void Update() {
-    const double position = skeleton_->getPosition(joint_number_);
-    const double velocity = skeleton_->getVelocity(joint_number_);
+    const double position = skeleton_->getPosition(dof_number_);
+    const double velocity = skeleton_->getVelocity(dof_number_);
 
     const double error = base::WrapNegPiToPi(position - desired_rad_);
-    const double control = error * kServo_kp + velocity * kServo_kd;
+    const double kMaxForce_kgf_cm = 16.0;
+    const double kLimit = kMaxForce_kgf_cm / kConvert_kgf_cm_to_N_m;
+    const double control =
+        Limit(error * kServo_kp + velocity * kServo_kd, kLimit);
 
-    skeleton_->setForce(joint_number_, -control);
+    skeleton_->setForce(dof_number_, -control);
   }
 
  private:
   SkeletonPtr skeleton_;
-  const int joint_number_;
+  const int dof_number_;
   double desired_rad_ = 0.0;
   double sign_ = 1.0;
 };
 
 typedef std::shared_ptr<ServoController> ServoControllerPtr;
+
+void SetMass(BodyNodePtr body, double mass_kg) {
+  BOOST_ASSERT(body->getNumCollisionShapes() == 1);
+
+  Inertia inertia;
+  inertia.setMass(mass_kg);
+
+  auto shape = body->getCollisionShape(0);
+  auto size = shape->getBoundingBoxDim();
+  const Eigen::Vector3d center = 0.5 * size;
+
+  inertia.setLocalCOM(center);
+
+  // TODO jpieper: Most of our solids are actually hollow inside, or
+  // have uneven weight distribution because they have a heavy servo
+  // at one end.  Rather than actually model that at the moment, just
+  // add a fudge factor.
+  const double kFudge = 5.0;
+
+  inertia.setMoment(kFudge * shape->computeInertia(inertia.getMass()));
+
+  body->setInertia(inertia);
+}
 
 SkeletonPtr createFloor() {
   SkeletonPtr floor = Skeleton::create("floor");
@@ -97,7 +134,8 @@ SkeletonPtr createFloor() {
 }
 
 void setShape(const BodyNodePtr& bn, const ShapePtr& box,
-              const Eigen::Vector3d& axis) {
+              const Eigen::Vector3d& axis,
+              double mass_kg) {
   // Always create a visualization shape with no local transform so we
   // can figure out where things are.
   auto joint = std::make_shared<BoxShape>(
@@ -119,10 +157,7 @@ void setShape(const BodyNodePtr& bn, const ShapePtr& box,
   bn->addVisualizationShape(box);
   bn->addCollisionShape(box);
 
-  const Eigen::Vector3d center = 0.5 * size;
-
-  // Move the center of mass to the center of the object
-  bn->setLocalCOM(center);
+  SetMass(bn, mass_kg);
 }
 
 BodyNodePtr makeLegJoint(SkeletonPtr skel, BodyNodePtr parent,
@@ -130,7 +165,8 @@ BodyNodePtr makeLegJoint(SkeletonPtr skel, BodyNodePtr parent,
                          const ShapePtr& shape,
                          const Eigen::Vector3d& axis,
                          const Eigen::Vector3d& rotation_axis,
-                         const Eigen::Vector3d& offset) {
+                         const Eigen::Vector3d& offset,
+                         double mass_kg) {
   RevoluteJoint::Properties properties;
   properties.mName = name + "_joint";
   properties.mT_ParentBodyToJoint.translation() = offset;
@@ -140,7 +176,7 @@ BodyNodePtr makeLegJoint(SkeletonPtr skel, BodyNodePtr parent,
       parent, properties,
       BodyNode::Properties(name)).second;
 
-  setShape(joint, shape, axis);
+  setShape(joint, shape, axis, mass_kg);
 
   return joint;
 }
@@ -172,19 +208,22 @@ class SimulatorWindow::Impl {
         std::make_shared<BoxShape>(Eigen::Vector3d(0.04, 0.02, 0.02)),
         Eigen::Vector3d(0., -1. * left, 0.),
         Eigen::Vector3d(1.0, 0.0, 0.0),
-        offset);
+        offset,
+        0.02);
     auto femur = makeLegJoint(
         skel, coxa, name + "_femur",
         std::make_shared<BoxShape>(Eigen::Vector3d(0.025, 0.041, 0.095)),
         Eigen::Vector3d(0.0, 0.0, 1.0),
         Eigen::Vector3d(0.0, 1.0, 0.0),
-        Eigen::Vector3d(0.00, -0.04 * left, 0.015));
+        Eigen::Vector3d(0.00, -0.04 * left, 0.015),
+        0.09);
     auto tibia = makeLegJoint(
         skel, femur, name + "_tibia",
         std::make_shared<BoxShape>(Eigen::Vector3d(0.01, 0.01, 0.090)),
         Eigen::Vector3d(0.0, 0.0, 1.0),
         Eigen::Vector3d(0.0, 1.0, 0.0),
-        Eigen::Vector3d(0.0, 0.0, 0.095));
+        Eigen::Vector3d(0.0, 0.0, 0.095),
+        0.09);
 
     WeldJoint::Properties weld_properties;
     weld_properties.mName = name + "_foot_joint";
@@ -196,17 +235,23 @@ class SimulatorWindow::Impl {
     setShape(
         foot,
         std::make_shared<EllipsoidShape>(Eigen::Vector3d(0.03, 0.03, 0.03)),
-        Eigen::Vector3d(0., 0., 0.));
+        Eigen::Vector3d(0., 0., 0.),
+        0.02);
+    foot->setRestitutionCoeff(0.4);
+    foot->setFrictionCoeff(0.5);
 
     const std::size_t count = skel->getNumDofs();
     BOOST_ASSERT(count >= 3);
     const std::size_t snum_start = servos_.size();
     servos_[snum_start + 0] =
-        std::make_shared<ServoController>(skel, count - 3);
+        std::make_shared<ServoController>(
+            skel, coxa->getParentJoint(), count - 3);
     servos_[snum_start + 1] =
-        std::make_shared<ServoController>(skel, count - 2);
+        std::make_shared<ServoController>(
+            skel, femur->getParentJoint(), count - 2);
     servos_[snum_start + 2] =
-        std::make_shared<ServoController>(skel, count - 1);
+        std::make_shared<ServoController>(
+            skel, tibia->getParentJoint(), count - 1);
 
     return coxa;
   }
@@ -224,7 +269,7 @@ class SimulatorWindow::Impl {
     auto box = std::make_shared<BoxShape>(
         Eigen::Vector3d(0.210, 0.128, .0332));
 
-    setShape(body, box, Eigen::Vector3d(0., 0., 0.));
+    setShape(body, box, Eigen::Vector3d(0., 0., 0.), 1.0);
 
     auto leg_rf = MakeLeg(
         result, body, Eigen::Vector3d(0.09, 0.062, 0.0), -1, "rf");
@@ -255,7 +300,7 @@ class SimulatorWindow::Impl {
 
     Eigen::Isometry3d tf = Eigen::Isometry3d::Identity();
     tf.rotate(Eigen::AngleAxisd(M_PI, Eigen::Vector3d(1., 0., 0.)));
-    tf.translation() = Eigen::Vector3d(0, 0, .4);
+    tf.translation() = Eigen::Vector3d(0, 0, .3);
     result->getJoint(0)->setTransformFromParentBodyNode(tf);
 
     mech_ = result;
