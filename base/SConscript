@@ -43,6 +43,7 @@ Export('libbase_so')
 TESTS = ['test/' + x for x in [
         'attitude_estimator_test.cc',
         'comm_test.cc',
+        'debug_deadline_service_test.cc',
         'json_archive_test.cc',
         'now_test.cc',
         'property_tree_archive_test.cc',

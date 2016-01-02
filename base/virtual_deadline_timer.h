@@ -17,13 +17,14 @@
 #include <boost/asio/basic_deadline_timer.hpp>
 #include <boost/asio/io_service.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
+#include <boost/noncopyable.hpp>
 
 #include "async_types.h"
 
 namespace mjmech {
 namespace base {
 
-class VirtualDeadlineTimerImpl {
+class VirtualDeadlineTimerImpl : boost::noncopyable {
  public:
   virtual ~VirtualDeadlineTimerImpl() {}
 };
@@ -31,6 +32,8 @@ class VirtualDeadlineTimerImpl {
 class VirtualDeadlineTimerService {
  public:
   typedef VirtualDeadlineTimerImpl* implementation_type;
+
+  virtual ~VirtualDeadlineTimerService() {}
 
   virtual void construct(implementation_type&) = 0;
   virtual void destroy(implementation_type&) = 0;
@@ -70,6 +73,7 @@ class AsioTimerService : public VirtualDeadlineTimerService {
   void destroy(implementation_type& impl) override {
     base().destroy(data(impl));
     delete impl;
+    impl = nullptr;
   }
 
   std::size_t cancel(implementation_type& impl,
@@ -126,6 +130,7 @@ class AsioTimerService : public VirtualDeadlineTimerService {
 
   class Impl : public VirtualDeadlineTimerImpl {
    public:
+    virtual ~Impl() {}
     Base::implementation_type data;
   };
 
@@ -164,6 +169,10 @@ class VirtualDeadlineTimerServiceHolder
     child_ = std::move(child);
   }
 
+  VirtualDeadlineTimerService* Get() {
+    return child_.get();
+  }
+
   void construct(implementation_type& impl) {
     child_->construct(impl);
   }
@@ -185,6 +194,16 @@ class VirtualDeadlineTimerServiceHolder
                                const duration_type& duration,
                                boost::system::error_code& ec) {
     return child_->expires_from_now(impl, duration, ec);
+  }
+
+  time_type expires_at(const implementation_type& impl) {
+    return child_->expires_at(impl);
+  }
+
+  std::size_t expires_at(implementation_type& impl,
+                         const time_type& timestamp,
+                         boost::system::error_code& ec) {
+    return child_->expires_at(impl, timestamp, ec);
   }
 
   boost::system::error_code wait(implementation_type& impl,
