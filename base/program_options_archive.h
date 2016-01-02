@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 #include "visitor.h"
 #include "visit_archive.h"
 
+#include "program_options.h"
 #include "program_options_archive_detail.h"
 
 namespace mjmech {
@@ -44,12 +45,9 @@ class ProgramOptionsArchive : public VisitArchive<ProgramOptionsArchive> {
   template <typename NameValuePair>
   auto VisitOptions(const NameValuePair& pair, int) ->
       decltype(pair.value()->options_description()) {
-    for (auto option: pair.value()->options_description()->options()) {
-      (*description_).add_options()(
-          (prefix_ + option->long_name()).c_str(),
-          new detail::ProgramOptionsArchiveWrapValue(option->semantic()),
-          option->description().c_str());
-    }
+    MergeProgramOptions(pair.value()->options_description(),
+                        prefix_ + pair.name() + ".",
+                        description_);
     return 0;
   }
 

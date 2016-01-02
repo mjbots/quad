@@ -51,37 +51,6 @@ class ProgramOptionsArchiveValue : public boost::program_options::value_semantic
   NameValuePair nvp_;
 };
 
-class ProgramOptionsArchiveWrapValue :
-      public boost::program_options::value_semantic {
- public:
-  ProgramOptionsArchiveWrapValue(
-      boost::shared_ptr<const boost::program_options::value_semantic> base)
-      : base_(base) {}
-
-  virtual ~ProgramOptionsArchiveWrapValue() {}
-
-  virtual std::string name() const override { return base_->name(); }
-  virtual unsigned min_tokens() const override { return base_->min_tokens(); }
-  virtual unsigned max_tokens() const override { return base_->max_tokens(); }
-  virtual bool is_composing() const override { return base_->is_composing(); }
-  virtual bool is_required() const override { return base_->is_required(); }
-  virtual void parse(boost::any& value_store,
-                     const std::vector<std::string>& new_tokens,
-                     bool utf8) const override {
-    base_->parse(value_store, new_tokens, utf8);
-  }
-
-  virtual bool apply_default(boost::any& value) const override {
-    return base_->apply_default(value);
-  }
-
-  virtual void notify(const boost::any& value_store) const override {
-    base_->notify(value_store);
-  }
-
- private:
-  const boost::shared_ptr<const boost::program_options::value_semantic> base_;
-};
 }
 
 }
