@@ -26,6 +26,7 @@
 #include "base/concrete_comm_factory.h"
 #include "base/context.h"
 #include "base/fail.h"
+#include "base/program_options.h"
 
 #include "herkulex_protocol.h"
 
@@ -194,6 +195,10 @@ class SimulatorWindow::Impl {
  public:
   Impl() {
     g_impl = this;
+
+    base::MergeProgramOptions(stream_config_.options_description(),
+                              "stream.",
+                              &options_description_);
   }
 
   ~Impl() {
@@ -384,6 +389,8 @@ class SimulatorWindow::Impl {
   char buffer_[256] = {};
   HerkulexOperations operations_{this};
   std::unique_ptr<HerkulexProtocol> herkulex_protocol_;
+
+  boost::program_options::options_description options_description_;
 };
 
 SimulatorWindow::SimulatorWindow() : impl_(new Impl()) {
@@ -431,7 +438,7 @@ void SimulatorWindow::render() {
 
 boost::program_options::options_description*
 SimulatorWindow::options_description() {
-  return impl_->stream_config_.options_description();
+  return &impl_->options_description_;
 }
 
 void SimulatorWindow::Start() {

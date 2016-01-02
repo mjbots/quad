@@ -16,22 +16,12 @@
 
 #include <dart/dart.h>
 
-#include "base/program_options_archive.h"
+#include "base/program_options.h"
 #include "base/visitor.h"
 #include "simulator_window.h"
 
+using namespace mjmech;
 using namespace mjmech::simulator;
-
-namespace {
-struct Options {
-  SimulatorWindow window;
-
-  template <typename Archive>
-  void Serialize(Archive* a) {
-    a->Visit(MJ_NVP(window));
-  }
-};
-}
 
 int main(int argc, char** argv) {
   namespace po = boost::program_options;
@@ -41,8 +31,10 @@ int main(int argc, char** argv) {
       ("help,h", "display usage message")
       ;
 
-  Options options;
-  mjmech::base::ProgramOptionsArchive(&desc).Accept(&options);
+  SimulatorWindow window;
+  base::MergeProgramOptions(window.options_description(),
+                            "",
+                            &desc);
 
   po::variables_map vm;
   po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -54,7 +46,7 @@ int main(int argc, char** argv) {
   }
 
   glutInit(&argc, argv);
-  options.window.Start();
-  options.window.initWindow(640, 480, "Mech Simulator");
+  window.Start();
+  window.initWindow(640, 480, "Mech Simulator");
   glutMainLoop();
 }
