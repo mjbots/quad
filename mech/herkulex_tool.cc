@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -109,7 +109,7 @@ void DoStdio(CommandContext&);
 const std::map<std::string, Command> g_commands = {
   { "stdio", { kNoArgs, DoStdio } },
   { "sleep", { kArg, [](CommandContext& ctx) {
-        boost::asio::deadline_timer timer(ctx.service);
+        DeadlineTimer timer(ctx.service);
         double delay_s = std::stod(ctx.args);
         timer.expires_from_now(ConvertSecondsToDuration(delay_s));
         timer.async_wait(ctx.yield);

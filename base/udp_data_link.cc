@@ -1,7 +1,22 @@
+// Copyright 2015-2016 Mikhail Afanasyev.  All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "udp_data_link.h"
 
 #include "common.h"
 #include "fail.h"
+#include "now.h"
 
 /*
 Precise semantics:
@@ -29,7 +44,8 @@ namespace base {
 UdpDataLink::UdpDataLink(boost::asio::io_service& service,
                          LogRef& log,
                          const Parameters& params)
-    : periodic_timer_(service),
+    : service_(service),
+      periodic_timer_(service),
       params_(params),
       log_(log) {
 
@@ -153,8 +169,7 @@ void UdpDataLink::HandleUdpPacket(
         << "Peer " << new_peer.id << " appeared, address " << new_peer.name;
   }
   iter->second.packet_count++;
-  iter->second.last_rx_time =
-      boost::posix_time::microsec_clock::universal_time();
+  iter->second.last_rx_time = Now(service_);
   data_signal_(data, iter->second);
 }
 
@@ -162,8 +177,7 @@ void UdpDataLink::HandlePeriodicTimer() {
   if (params_.peer_timeout_s <= 0) {
     return;
   }
-  const boost::posix_time::ptime now =
-      boost::posix_time::microsec_clock::universal_time();
+  const boost::posix_time::ptime now = Now(service_);
   const boost::posix_time::time_duration timeout =
       ConvertSecondsToDuration(params_.peer_timeout_s);
 

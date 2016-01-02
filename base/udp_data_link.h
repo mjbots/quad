@@ -1,4 +1,4 @@
-// Copyright 2015 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2015-2016 Mikhail Afanasyev.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,8 +16,7 @@
 
 #include <unordered_map>
 
-#include <boost/asio/deadline_timer.hpp>
-
+#include "deadline_timer.h"
 #include "udp_socket.h"
 
 namespace mjmech {
@@ -112,7 +111,8 @@ class UdpDataLink : boost::noncopyable {
   void HandleUdpPacket(const std::string&, const UdpSocket::endpoint&);
   void HandlePeriodicTimer();
 
-  boost::asio::deadline_timer periodic_timer_;
+  boost::asio::io_service& service_;
+  DeadlineTimer periodic_timer_;
   const Parameters params_;
   LogRef log_;
   std::unordered_map<UdpSocket::endpoint, PeerInfo> peers_;

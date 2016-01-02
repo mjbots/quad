@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@
 #include <boost/program_options.hpp>
 #include <boost/property_tree/json_parser.hpp>
 
+#include "base/deadline_timer.h"
 #include "base/fail.h"
 #include "base/json_archive.h"
 #include "base/linux_input.h"
@@ -353,7 +354,7 @@ class Commander {
   const udp::endpoint target_;
   LinuxInput* const linux_input_;
   udp::socket* const socket_;
-  boost::asio::deadline_timer timer_;
+  DeadlineTimer timer_;
   const AxisMapping mapping_;
 
   bool laser_on_ = false;

@@ -12,15 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "base/deadline_timer.h"
+#pragma once
 
-#include <boost/test/auto_unit_test.hpp>
+#include "virtual_deadline_timer.h"
 
-using namespace mjmech;
+namespace mjmech {
+namespace base {
 
-BOOST_AUTO_TEST_CASE(BasicVirtualDeadlineTimer) {
-  boost::asio::io_service service;
-  base::DeadlineTimer timer(service);
-  timer.expires_from_now(boost::posix_time::milliseconds(1));
-  timer.wait();
+typedef boost::asio::basic_deadline_timer<
+  boost::posix_time::ptime,
+  boost::asio::time_traits<boost::posix_time::ptime>,
+  VirtualDeadlineTimerServiceHolder> DeadlineTimer;
+
+}
 }

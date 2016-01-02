@@ -1,4 +1,4 @@
-// Copyright 2015 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2015-2016 Mikhail Afanasyev.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@
 #include "base/common.h"
 #include "base/fail.h"
 #include "base/logging.h"
+#include "base/now.h"
 
 #include "gst_helpers.h"
 
@@ -153,7 +154,7 @@ class VideoDisplay::Impl : boost::noncopyable {
           std::lock_guard<std::mutex> guard(stats_mutex_);
           stats_->decoded_frames++;
 
-          const auto now = boost::posix_time::microsec_clock::universal_time();
+          const auto now = base::Now(parent_service_);
           if (last_decoded_time_) {
             stats_->decoded_max_interval_s = std::max(
                 stats_->decoded_max_interval_s,
@@ -181,7 +182,7 @@ class VideoDisplay::Impl : boost::noncopyable {
       std::swap(stats_, other);
     }
 
-    other->timestamp = boost::posix_time::microsec_clock::universal_time();
+    other->timestamp = base::Now(parent_service_);
 
     parent_service_.post(std::bind(&VideoDisplay::Impl::HandleStatsMainThread,
                                    this, other));

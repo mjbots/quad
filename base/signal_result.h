@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,9 +16,9 @@
 
 #include <boost/signals2/signal.hpp>
 #include <boost/signals2/connection.hpp>
-#include <boost/asio/deadline_timer.hpp>
 
 #include "common.h"
+#include "deadline_timer.h"
 
 namespace mjmech {
 namespace base {
@@ -47,7 +47,7 @@ class SignalResult : boost::noncopyable {
           BOOST_ASIO_MOVE_CAST(Handler)(handler));
 
     struct Context {
-      boost::asio::deadline_timer timer;
+      base::DeadlineTimer timer;
       bool active = true;
       boost::signals2::connection connection;
 

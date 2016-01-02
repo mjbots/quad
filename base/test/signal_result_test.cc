@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -67,7 +67,7 @@ BOOST_AUTO_TEST_CASE(TestSignalResultCoroutine2) {
       BOOST_CHECK_EQUAL(done, false);
       BOOST_CHECK_EQUAL(timeout, false);
 
-      boost::asio::deadline_timer timer(service);
+      DeadlineTimer timer(service);
       timer.expires_from_now(boost::posix_time::milliseconds(900));
       timer.async_wait(yield);
       BOOST_CHECK_EQUAL(timeout, false);
@@ -105,7 +105,7 @@ BOOST_AUTO_TEST_CASE(TestSignalResultCallback1) {
   BOOST_CHECK_EQUAL(done, false);
   BOOST_CHECK_EQUAL(value, 0);
 
-  boost::asio::deadline_timer timer1(service);
+  DeadlineTimer timer1(service);
   timer1.expires_from_now(boost::posix_time::milliseconds(500));
   timer1.async_wait([&](const boost::system::error_code& ec) {
       BOOST_CHECK(!ec);
@@ -140,7 +140,7 @@ BOOST_AUTO_TEST_CASE(TestSignalResultCallback2) {
                        count++;
                      });
 
-  boost::asio::deadline_timer timer1(service);
+  DeadlineTimer timer1(service);
   timer1.expires_from_now(boost::posix_time::milliseconds(1500));
   timer1.async_wait([&](const boost::system::error_code& ec) {
       BOOST_CHECK(!ec);

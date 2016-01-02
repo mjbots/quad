@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2014-2016 Mikhail Afanasyev.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@
 #include "base/fail.h"
 #include "base/json_archive.h"
 #include "base/logging.h"
+#include "base/now.h"
 
 #include "gst_helpers.h"
 
@@ -380,7 +381,7 @@ class CameraDriver::Impl : boost::noncopyable {
     }
 
     double interval = 0;
-    const auto now = boost::posix_time::microsec_clock::universal_time();
+    const auto now = base::Now(parent_service_);
     if (last_h264_time_) {
       interval = base::ConvertDurationToSeconds(now - *last_h264_time_);
     }
@@ -407,7 +408,7 @@ class CameraDriver::Impl : boost::noncopyable {
       std::swap(stats_, other);
     }
 
-    other->timestamp = boost::posix_time::microsec_clock::universal_time();
+    other->timestamp = base::Now(parent_service_);
 
     for (std::weak_ptr<CameraFrameConsumer>& c_weak: consumers_) {
       std::shared_ptr<CameraFrameConsumer> c = c_weak.lock();

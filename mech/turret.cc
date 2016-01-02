@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,10 +14,10 @@
 
 #include "turret.h"
 
-#include <boost/asio/deadline_timer.hpp>
-
 #include "base/common.h"
+#include "base/deadline_timer.h"
 #include "base/fail.h"
+#include "base/now.h"
 
 namespace mjmech {
 namespace mech {
@@ -232,7 +232,7 @@ class Turret::Impl : boost::noncopyable {
   }
 
   void Emit() {
-    data_.timestamp = boost::posix_time::microsec_clock::universal_time();
+    data_.timestamp = base::Now(service_);
     parent_->turret_data_signal_(&data_);
   }
 
@@ -278,7 +278,7 @@ class Turret::Impl : boost::noncopyable {
       std::cerr << boost::format(
           "Turret: Device unresponsive, disabling for %d seconds.\n") %
           parameters_.disable_period_s;
-      disable_until_ = boost::posix_time::microsec_clock::universal_time() +
+      disable_until_ = base::Now(service_) +
           base::ConvertSecondsToDuration(parameters_.disable_period_s);
     }
   }
@@ -289,14 +289,14 @@ class Turret::Impl : boost::noncopyable {
 
   bool is_disabled() const {
     if (disable_until_.is_not_a_date_time()) { return false; }
-    const auto now = boost::posix_time::microsec_clock::universal_time();
+    const auto now = base::Now(service_);
     return now < disable_until_;
   }
 
   Turret* const parent_;
   boost::asio::io_service& service_;
   Mech::ServoBase* const servo_;
-  boost::asio::deadline_timer timer_;
+  base::DeadlineTimer timer_;
   Parameters parameters_;
   boost::posix_time::ptime disable_until_;
   int poll_count_ = 0;
@@ -319,7 +319,7 @@ void Turret::AsyncStart(base::ErrorHandler handler) {
 
 void Turret::SetCommand(const TurretCommand& command) {
   CommandLog log;
-  log.timestamp = boost::posix_time::microsec_clock::universal_time();
+  log.timestamp = base::Now(impl_->service_);
   log.command = command;
 
   turret_command_signal_(&log);

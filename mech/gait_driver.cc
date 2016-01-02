@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,9 +14,9 @@
 
 #include "gait_driver.h"
 
-#include <boost/asio/deadline_timer.hpp>
-
+#include "base/deadline_timer.h"
 #include "base/fail.h"
+#include "base/now.h"
 
 #include "ripple.h"
 #include "servo_interface.h"
@@ -48,7 +48,7 @@ class GaitDriver::Impl : boost::noncopyable {
 
   void SetCommand(const Command& command) {
     CommandData data;
-    data.timestamp = boost::posix_time::microsec_clock::universal_time();
+    data.timestamp = base::Now(service_);
     data.command = command;
 
     last_command_timestamp_ = data.timestamp;
@@ -103,7 +103,7 @@ class GaitDriver::Impl : boost::noncopyable {
   void HandleTimer(const boost::system::error_code& ec) {
     if (ec == boost::asio::error::operation_aborted) { return; }
 
-    auto now = boost::posix_time::microsec_clock::universal_time();
+    auto now = base::Now(service_);
     auto elapsed = now - last_command_timestamp_;
     if (elapsed > base::ConvertSecondsToDuration(
             parent_->parameters_.command_timeout_s)) {
@@ -136,7 +136,7 @@ class GaitDriver::Impl : boost::noncopyable {
     const auto& state = gait_->state();
 
     GaitData data;
-    data.timestamp = boost::posix_time::microsec_clock::universal_time();
+    data.timestamp = base::Now(service_);
 
     data.state = state_;
     data.command = gait_commands;
@@ -159,7 +159,7 @@ class GaitDriver::Impl : boost::noncopyable {
   std::unique_ptr<RippleGait> gait_;
   ServoInterface* const servo_;
 
-  boost::asio::deadline_timer timer_;
+  base::DeadlineTimer timer_;
   bool timer_started_ = false;
   State state_ = kUnpowered;
   boost::posix_time::ptime last_command_timestamp_;

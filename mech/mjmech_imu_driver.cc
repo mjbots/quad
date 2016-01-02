@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@
 
 #include "base/common.h"
 #include "base/fail.h"
+#include "base/now.h"
 #include "base/quaternion.h"
 
 namespace mjmech {
@@ -86,9 +87,6 @@ class MjmechImuDriver::Impl : boost::noncopyable {
       // Verify we can talk to the accelerometer.
       uint8_t ignored[1] = {};
       ReadAccel(0x20, 1, ignored, sizeof(ignored));
-
-      imu_config_.timestamp =
-          boost::posix_time::microsec_clock::universal_time();
 
       // Configure the gyroscope.
       const uint8_t fs = [this]() {
@@ -296,8 +294,6 @@ class MjmechImuDriver::Impl : boost::noncopyable {
       }
 
       ImuData imu_data;
-      imu_data.timestamp =
-          boost::posix_time::microsec_clock::universal_time();
 
       uint8_t gdata[10] = {};
       ReadGyro(0x22, 7, gdata, sizeof(gdata));
@@ -340,14 +336,18 @@ class MjmechImuDriver::Impl : boost::noncopyable {
 
   void SendData(const ImuData& imu_data) {
     BOOST_ASSERT(std::this_thread::get_id() == parent_id_);
+    ImuData copy = imu_data;
+    copy.timestamp = base::Now(service_);
 
-    parent_->imu_data_signal_(&imu_data);
+    parent_->imu_data_signal_(&copy);
   }
 
   void SendConfig(const ImuConfig& imu_config) {
     BOOST_ASSERT(std::this_thread::get_id() == parent_id_);
+    ImuConfig copy = imu_config;
+    copy.timestamp = base::Now(service_);
 
-    parent_->imu_config_signal_(&imu_config);
+    parent_->imu_config_signal_(&copy);
   }
 
   void WriteGyro(uint8_t reg, const std::vector<uint8_t>& data) {

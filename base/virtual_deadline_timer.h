@@ -211,9 +211,22 @@ class VirtualDeadlineTimerServiceHolder
     return child_->wait(impl, ec);
   }
 
-  void async_wait(implementation_type& impl,
-                  ErrorHandler handler) {
-    child_->async_wait(impl, handler);
+  template <typename Handler>
+  BOOST_ASIO_INITFN_RESULT_TYPE(Handler,
+                                void(boost::system::error_code))
+  async_wait(implementation_type& impl, Handler handler) {
+    boost::asio::detail::async_result_init<
+      Handler,
+      void (boost::system::error_code)> init(
+          BOOST_ASIO_MOVE_CAST(Handler)(handler));
+
+    this->child_->async_wait(
+        impl,
+        [init](ErrorCode ec) mutable {
+          init.handler(ec.error_code());
+        });
+
+    return init.result.get();
   }
 
   void shutdown_service() override {
@@ -229,10 +242,5 @@ class VirtualDeadlineTimerServiceHolder
  private:
   std::unique_ptr<VirtualDeadlineTimerService> child_;
 };
-
-typedef boost::asio::basic_deadline_timer<
-  boost::posix_time::ptime,
-  boost::asio::time_traits<boost::posix_time::ptime>,
-  VirtualDeadlineTimerServiceHolder> DeadlineTimer;
 }
 }

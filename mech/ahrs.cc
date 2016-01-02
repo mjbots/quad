@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 #include "base/attitude_estimator.h"
 #include "base/common.h"
+#include "base/now.h"
 
 namespace mjmech {
 namespace mech {
@@ -75,8 +76,7 @@ class Ahrs::Impl : boost::noncopyable {
 
     data_.state = kInitializing;
     if (data_debug_.init_start.is_not_a_date_time()) {
-      data_debug_.init_start =
-          boost::posix_time::microsec_clock::universal_time();
+      data_debug_.init_start = base::Now(service_);
     }
 
     Point3D body_total_deg_s =
@@ -99,7 +99,7 @@ class Ahrs::Impl : boost::noncopyable {
     data_.attitude =
         base::AttitudeEstimator::AccelToOrientation(a_g.x, a_g.y, a_g.z);
 
-    const auto now = boost::posix_time::microsec_clock::universal_time();
+    const auto now = base::Now(service_);
     auto elapsed = (now - data_debug_.init_start);
 
     if (elapsed >
@@ -144,7 +144,7 @@ class Ahrs::Impl : boost::noncopyable {
 
   void Emit(const Point3D& accel_mps2,
             const Point3D& body_rate_deg_s) {
-    data_.timestamp = boost::posix_time::microsec_clock::universal_time();
+    data_.timestamp = base::Now(service_);
     data_debug_.timestamp = data_.timestamp;
 
     data_.valid = (data_.state == kOperational);

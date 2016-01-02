@@ -1,4 +1,4 @@
-// Copyright 2015 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2015-2016 Mikhail Afanasyev.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,15 +14,15 @@
 
 #pragma once
 
-#include <boost/asio/deadline_timer.hpp>
 #include <boost/format.hpp>
 
-#include "common.h"
-#include "component_archives.h"
-#include "error_code.h"
-#include "fail.h"
-#include "logging.h"
-#include "visitor.h"
+#include "base/common.h"
+#include "base/component_archives.h"
+#include "base/deadline_timer.h"
+#include "base/error_code.h"
+#include "base/fail.h"
+#include "base/logging.h"
+#include "base/visitor.h"
 
 #include "udp_socket.h"
 #include "udp_data_link.h"
@@ -162,8 +162,8 @@ class SocketTesterBase : boost::noncopyable {
 
  private:
   const BaseParameters& base_parameters_;
-  boost::asio::deadline_timer send_timer_;
-  boost::asio::deadline_timer stats_timer_;
+  DeadlineTimer send_timer_;
+  DeadlineTimer stats_timer_;
   boost::posix_time::ptime last_send_time_;
   int send_count_ = 0;
   int recv_count_ = 0;
@@ -385,7 +385,7 @@ class UdpManualTest : boost::noncopyable {
   typedef std::shared_ptr<SocketTesterBase> TesterPtr;
   std::vector<TesterPtr> testers_;
   base::LogRef log_ = base::GetLogInstance("manual_test");
-  boost::asio::deadline_timer exit_timer_;
+  DeadlineTimer exit_timer_;
 
 };
 }

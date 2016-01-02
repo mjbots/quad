@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,10 +16,11 @@
 
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
-#include <boost/asio/deadline_timer.hpp>
 
 #include "base/common.h"
+#include "base/deadline_timer.h"
 #include "base/fail.h"
+#include "base/now.h"
 
 #include "servo_interface.h"
 
@@ -123,7 +124,7 @@ class ServoMonitor::Impl : boost::noncopyable {
     BOOST_ASSERT(outstanding_);
     outstanding_ = false;
 
-    const auto now = boost::posix_time::microsec_clock::universal_time();
+    const auto now = base::Now(service_);
     if (ec == boost::asio::error::operation_aborted) {
       UpdateServoTimeout(requested_servo, now);
       return;
@@ -153,7 +154,7 @@ class ServoMonitor::Impl : boost::noncopyable {
     BOOST_ASSERT(outstanding_);
     outstanding_ = false;
 
-    const auto now = boost::posix_time::microsec_clock::universal_time();
+    const auto now = base::Now(service_);
     if (ec == boost::asio::error::operation_aborted) {
       UpdateServoTimeout(requested_servo, now);
       return;
@@ -207,7 +208,7 @@ class ServoMonitor::Impl : boost::noncopyable {
   }
 
   boost::optional<int> FindNext() const {
-    const auto now = boost::posix_time::microsec_clock::universal_time();
+    const auto now = base::Now(service_);
 
     int start = state_.last_servo;
     int current = start;
@@ -235,7 +236,7 @@ class ServoMonitor::Impl : boost::noncopyable {
 
   void EmitData() {
     ServoData data;
-    data.timestamp = boost::posix_time::microsec_clock::universal_time();
+    data.timestamp = base::Now(service_);
 
     for (const auto& pair: servo_data_) {
       ServoData::Servo servo;
@@ -295,7 +296,7 @@ class ServoMonitor::Impl : boost::noncopyable {
   boost::asio::io_service& service_;
   HerkuleXServo* const servo_;
 
-  boost::asio::deadline_timer timer_;
+  base::DeadlineTimer timer_;
 
   struct Servo {
     boost::posix_time::ptime last_update;

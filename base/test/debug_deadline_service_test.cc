@@ -13,10 +13,12 @@
 // limitations under the License.
 
 #include "base/debug_deadline_service.h"
-#include "base/now.h"
 
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/test/auto_unit_test.hpp>
+
+#include "base/deadline_timer.h"
+#include "base/now.h"
 
 using namespace mjmech;
 
