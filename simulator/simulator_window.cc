@@ -15,7 +15,6 @@
 
 // TODO jpieper:
 // * Link in mech C++ class
-//    * start by default with everything linked up the way we want it
 //    * simulate IMU
 // * The simulated robot seems to need to lean back a lot more than
 //   the real one does... something is probably off with the mass
@@ -24,6 +23,8 @@
 // * Refine mass and moment of inertia of each joint with real robot
 
 #include "simulator_window.h"
+
+#include <boost/filesystem.hpp>
 
 #include "base/common.h"
 #include "base/concrete_comm_factory.h"
@@ -225,6 +226,21 @@ class SimulatorWindow::Impl {
                               &options_description_);
     base::ProgramOptionsArchive archive(&options_description_, "mech.");
     archive.Accept(mech_warfare_->parameters());
+
+    // Prepare our default configuration.
+    auto key = [&](const std::string& value) {
+      return options_description_.find(value, false).semantic();
+    };
+
+    key("stream.type")->notify(std::string("pipe"));
+    key("stream.pipe.key")->notify(std::string("bus"));
+    key("stream.pipe.mode")->notify(1u);
+    key("mech.servo_base.stream.type")->notify(std::string("pipe"));
+    key("mech.servo_base.stream.pipe.key")->notify(std::string("bus"));
+    boost::filesystem::path this_file(__FILE__);
+    boost::filesystem::path root = this_file.parent_path().parent_path();
+    key("mech.gait_config")->notify((root / "configs" / "real.cfg").string());
+    key("mech.imu_enable")->notify(false);
   }
 
   ~Impl() {
