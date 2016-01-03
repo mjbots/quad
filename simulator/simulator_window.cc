@@ -14,13 +14,12 @@
 
 
 // TODO jpieper:
+// * Start with simulation active
 // * Link in mech C++ class
 //    * simulate IMU
-// * The simulated robot seems to need to lean back a lot more than
-//   the real one does... something is probably off with the mass
-//   distribution.
 // * Add turret model
 // * Refine mass and moment of inertia of each joint with real robot
+// * Simulate torque on/off for each servo
 
 #include "simulator_window.h"
 
@@ -318,6 +317,12 @@ class SimulatorWindow::Impl {
 
     setShape(body, box, Eigen::Vector3d(0., 0., 0.), 1.0);
 
+    // TODO jpieper: This is just a random fudge for the center of
+    // mass of the mech, it kind of makes things work in simulation,
+    // but I don't know how accurate it is in real life.
+    auto center = 0.5 * box->getBoundingBoxDim();
+    body->setLocalCOM(center + Eigen::Vector3d(-0.08, 0.0, 0.0));
+
     auto leg_rf = MakeLeg(
         result, body, Eigen::Vector3d(0.09, 0.062, 0.0), -1, "rf");
     auto leg_rr = MakeLeg(
@@ -347,7 +352,7 @@ class SimulatorWindow::Impl {
 
     Eigen::Isometry3d tf = Eigen::Isometry3d::Identity();
     tf.rotate(Eigen::AngleAxisd(M_PI, Eigen::Vector3d(1., 0., 0.)));
-    tf.translation() = Eigen::Vector3d(0, 0, .3);
+    tf.translation() = Eigen::Vector3d(0, 0, .21);
     result->getJoint(0)->setTransformFromParentBodyNode(tf);
 
     mech_ = result;
