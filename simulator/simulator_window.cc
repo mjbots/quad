@@ -14,12 +14,13 @@
 
 
 // TODO jpieper:
-// * Start with simulation active
 // * Link in mech C++ class
 //    * simulate IMU
 // * Add turret model
 // * Refine mass and moment of inertia of each joint with real robot
 // * Simulate torque on/off for each servo
+// * Strip out the unecessary tutorial-level SimWindow save/replay
+//   functionality.
 
 #include "simulator_window.h"
 
@@ -217,7 +218,9 @@ class SimulatorWindow::Impl {
 
     options_description_.add_options()
         ("disable-mech", po::bool_switch(&disable_mech_),
-         "do not start the linked in mech instance")
+         "do not start the mech instance")
+        ("start-disabled", po::bool_switch(&start_disabled_),
+         "begin in paused mode")
         ;
 
     base::MergeProgramOptions(stream_config_.options_description(),
@@ -455,6 +458,7 @@ class SimulatorWindow::Impl {
 
   std::unique_ptr<mech::MechWarfare> mech_warfare_;
   bool disable_mech_ = false;
+  bool start_disabled_ = false;
 };
 
 SimulatorWindow::SimulatorWindow() : impl_(new Impl()) {
@@ -466,7 +470,8 @@ SimulatorWindow::SimulatorWindow() : impl_(new Impl()) {
   setWorld(impl_->world_);
 }
 
-SimulatorWindow::~SimulatorWindow() {}
+SimulatorWindow::~SimulatorWindow() {
+}
 
 void SimulatorWindow::keyboard(unsigned char key, int x, int y) {
   auto move_joint = [&](double val) {
@@ -506,6 +511,11 @@ SimulatorWindow::options_description() {
 void SimulatorWindow::Start() {
   impl_->Start();
   impl_->StartGlutTimer();
+
+  if (!impl_->start_disabled_) {
+    // Send a space bar to get us simulating.
+    SimWindow::keyboard(' ', 0, 0);
+  }
 }
 
 }

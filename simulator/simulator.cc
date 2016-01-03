@@ -46,7 +46,7 @@ int main(int argc, char** argv) {
   }
 
   glutInit(&argc, argv);
-  window.Start();
   window.initWindow(640, 480, "Mech Simulator");
+  window.Start();
   glutMainLoop();
 }
