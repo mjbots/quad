@@ -56,8 +56,13 @@ int safe_main(int argc, char**argv) {
       context.remote_debug->parameters());
   ProgramOptionsArchive(&desc).Accept(module.parameters());
 
+  // Do not accept any positional arguments.
+  const po::positional_options_description empty_po;
+
   po::variables_map vm;
-  po::store(po::parse_command_line(argc, argv, desc), vm);
+  po::store(
+      po::command_line_parser(argc, argv).options(desc).
+      positional(empty_po).run(), vm);
   po::notify(vm);
 
   InitLogging();
