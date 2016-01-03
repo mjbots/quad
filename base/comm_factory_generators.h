@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,6 +13,8 @@
 // limitations under the License.
 
 #pragma once
+
+#include <map>
 
 #include <boost/asio/io_service.hpp>
 
@@ -118,12 +120,26 @@ class TcpServerGenerator : boost::noncopyable {
 /// streams of either direction.
 class PipeGenerator : boost::noncopyable {
  public:
+  enum class Mode {
+    kDirectionA,
+    kDirectionB,
+  };
+
+  static std::map<Mode, const char*> ModeMapper() {
+    return std::map<Mode, const char*>{
+      {Mode::kDirectionA, "kDirectionA"},
+      {Mode::kDirectionB, "kDirectionB"},
+          };
+  }
+
   struct Parameters {
     std::string key;
+    Mode mode = Mode::kDirectionA;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(key));
+      a->Visit(MJ_ENUM(mode, &PipeGenerator::ModeMapper));
     }
   };
 
@@ -136,10 +152,6 @@ class PipeGenerator : boost::noncopyable {
                    const Parameters&,
                    StreamHandler handler);
 
-  enum class Mode {
-    kDirectionA,
-    kDirectionB,
-  };
 
   SharedStream GetStream(boost::asio::io_service&,
                          const std::string& key,

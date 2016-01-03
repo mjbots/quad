@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -502,7 +502,7 @@ PipeGenerator::~PipeGenerator() {}
 void PipeGenerator::AsyncCreate(boost::asio::io_service& service,
                                 const Parameters& parameters,
                                 StreamHandler handler) {
-  SharedStream stream = GetStream(service, parameters.key, Mode::kDirectionA);
+  SharedStream stream = GetStream(service, parameters.key, parameters.mode);
   service.post(std::bind(handler, ErrorCode(), stream));
 }
 
