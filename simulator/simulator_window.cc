@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,8 +15,11 @@
 
 // TODO jpieper:
 // * Link in mech C++ class
-//    * connect up servos
+//    * start by default with everything linked up the way we want it
 //    * simulate IMU
+// * The simulated robot seems to need to lean back a lot more than
+//   the real one does... something is probably off with the mass
+//   distribution.
 // * Add turret model
 // * Refine mass and moment of inertia of each joint with real robot
 
@@ -24,15 +27,21 @@
 
 #include "base/common.h"
 #include "base/concrete_comm_factory.h"
-#include "base/context.h"
+#include "base/context_full.h"
+#include "base/debug_deadline_service.h"
 #include "base/fail.h"
+#include "base/now.h"
 #include "base/program_options.h"
+#include "base/program_options_archive.h"
+
+#include "mech/mech_warfare.h"
 
 #include "herkulex_protocol.h"
 
 using namespace dart::dynamics;
 using namespace dart::simulation;
 using namespace mjmech;
+namespace po = boost::program_options;
 
 namespace {
 const double kConvert_kgf_cm_to_N_m = 10.197162;
@@ -193,12 +202,29 @@ namespace simulator {
 
 class SimulatorWindow::Impl {
  public:
-  Impl() {
+  Impl()
+      : context_(),
+        debug_deadline_service_(
+            base::DebugDeadlineService::Install(context_.service)) {
+
+    world_ = std::make_shared<World>();
+
+    debug_deadline_service_->SetTime(
+        boost::posix_time::microsec_clock::universal_time());
     g_impl = this;
+
+    mech_warfare_.reset(new mech::MechWarfare(context_));
+
+    options_description_.add_options()
+        ("disable-mech", po::bool_switch(&disable_mech_),
+         "do not start the linked in mech instance")
+        ;
 
     base::MergeProgramOptions(stream_config_.options_description(),
                               "stream.",
                               &options_description_);
+    base::ProgramOptionsArchive archive(&options_description_, "mech.");
+    archive.Accept(mech_warfare_->parameters());
   }
 
   ~Impl() {
@@ -315,6 +341,12 @@ class SimulatorWindow::Impl {
     for (auto& pair: servos_) {
       pair.second->Update();
     }
+
+    debug_deadline_service_->SetTime(
+        base::Now(context_.service) +
+        base::ConvertSecondsToDuration(world_->getTimeStep()));
+    context_.service.poll();
+    context_.service.reset();
   }
 
   void Start() {
@@ -322,6 +354,12 @@ class SimulatorWindow::Impl {
         std::bind(&Impl::HandleStart, this,
                   std::placeholders::_1, std::placeholders::_2);
     context_.factory->AsyncCreate(stream_config_, handler);
+
+    if (!disable_mech_) {
+      mech_warfare_->AsyncStart([](base::ErrorCode ec) {
+          base::FailIf(ec);
+        });
+    }
   }
 
   void StartGlutTimer() {
@@ -378,11 +416,13 @@ class SimulatorWindow::Impl {
     Impl* const parent_;
   };
 
+  std::shared_ptr<dart::simulation::World> world_;
   dart::dynamics::SkeletonPtr mech_;
   int current_joint_ = 0;
   std::map<int, ServoControllerPtr> servos_;
 
   base::Context context_;
+  base::DebugDeadlineService* const debug_deadline_service_;
   base::ConcreteStreamFactory::Parameters stream_config_;
   base::SharedStream stream_;
 
@@ -391,17 +431,18 @@ class SimulatorWindow::Impl {
   std::unique_ptr<HerkulexProtocol> herkulex_protocol_;
 
   boost::program_options::options_description options_description_;
+
+  std::unique_ptr<mech::MechWarfare> mech_warfare_;
+  bool disable_mech_ = false;
 };
 
 SimulatorWindow::SimulatorWindow() : impl_(new Impl()) {
-  auto world = std::make_shared<World>();
-
-  world->addSkeleton(createFloor());
+  impl_->world_->addSkeleton(createFloor());
 
   impl_->CreateMech();
-  world->addSkeleton(impl_->mech_);
+  impl_->world_->addSkeleton(impl_->mech_);
 
-  setWorld(world);
+  setWorld(impl_->world_);
 }
 
 SimulatorWindow::~SimulatorWindow() {}
