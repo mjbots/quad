@@ -157,11 +157,11 @@ void setShape(const BodyNodePtr& bn, const ShapePtr& box,
 
   box->setColor(dart::Color::Blue());
 
-  // Set the location of the Box
-  Eigen::Isometry3d box_tf(Eigen::Isometry3d::Identity());
-  auto size = box->getBoundingBoxDim();
+  // Set the location of the Shape.
+  Eigen::Isometry3d box_tf = box->getLocalTransform();
+  auto size = box_tf.rotation() * box->getBoundingBoxDim();
   const Eigen::Vector3d ref_point = 0.5 * size.cwiseProduct(axis);
-  box_tf.translation() = ref_point;
+  box_tf.translation() += ref_point;
   box->setLocalTransform(box_tf);
 
   // Add it as a visualization and collision shape
@@ -221,6 +221,8 @@ class SimulatorWindow::Impl {
          "do not start the mech instance")
         ("start-disabled", po::bool_switch(&start_disabled_),
          "begin in paused mode")
+        ("turret-enabled", po::bool_switch(&turret_enabled_),
+         "include turret model")
         ;
 
     base::MergeProgramOptions(stream_config_.options_description(),
@@ -305,6 +307,66 @@ class SimulatorWindow::Impl {
     return coxa;
   }
 
+  void CreateTurret(SkeletonPtr skeleton, BodyNodePtr body) {
+    auto turret_yaw =
+        makeLegJoint(skeleton, body, "turret_yaw",
+                     std::make_shared<CylinderShape>(0.021, 0.021),
+                     Eigen::Vector3d(0.0, 0.0, -1.0),
+                     Eigen::Vector3d(0.0, 0.0, 1.0),
+                     Eigen::Vector3d(0.0, 0.0, -0.0157),
+                     0.02);
+
+    const std::size_t snum_start = servos_.size();
+    servos_[snum_start + 0] =
+        std::make_shared<ServoController>(
+            skeleton, turret_yaw->getParentJoint(),
+            skeleton->getNumDofs() - 1);
+
+    auto gimbal_base =
+        std::make_shared<BoxShape>(Eigen::Vector3d(0.040, 0.0695, 0.003));
+    gimbal_base->setLocalTransform(
+        Eigen::Isometry3d(
+            Eigen::Translation3d(
+                Eigen::Vector3d(0.0, 0.0, -0.021 - 0.5 * 0.003))));
+
+    turret_yaw->addVisualizationShape(gimbal_base);
+
+    auto add_arm = [&](double side) {
+      auto arm = std::make_shared<BoxShape>(Eigen::Vector3d(0.040, 0.003, 0.117));
+      arm->setLocalTransform(
+          Eigen::Isometry3d(
+              Eigen::Translation3d(
+                  Eigen::Vector3d(
+                      0.0, side * 0.5 * 0.0695, -0.0225 - 0.003 - 0.5 * .117))));
+      turret_yaw->addVisualizationShape(arm);
+    };
+
+    add_arm(-1.0);
+    add_arm(1.0);
+
+    auto pitch_cylinder =
+        std::make_shared<CylinderShape>(0.021, 0.021);
+    Eigen::Isometry3d tf = pitch_cylinder->getLocalTransform();
+    tf.rotate(Eigen::AngleAxisd(0.5 * M_PI, Eigen::Vector3d(1., 0., 0.)));
+    pitch_cylinder->setLocalTransform(tf);
+    auto turret_pitch =
+        makeLegJoint(skeleton, turret_yaw, "turret_pitch",
+                     pitch_cylinder,
+                     Eigen::Vector3d(0.0, -1.0, 0.0),
+                     Eigen::Vector3d(0.0, 1.0, 0.0),
+                     Eigen::Vector3d(0.0, -0.5 * 0.0695, -0.128),
+                     0.02);
+
+    // TODO jpieper: Put the turret mass at the correct location,
+    // rather than off to the side and make it be the correct
+    // magnitude.
+
+    servos_[snum_start + 1] =
+        std::make_shared<ServoController>(
+            skeleton, turret_pitch->getParentJoint(),
+            skeleton->getNumDofs() - 1);
+  }
+
   void CreateMech() {
     FreeJoint::Properties properties;
     properties.mName = "mech_joint";
@@ -334,6 +396,10 @@ class SimulatorWindow::Impl {
         result, body, Eigen::Vector3d(-0.09, -0.062, 0.0), 1, "lr");
     auto leg_lf = MakeLeg(
         result, body, Eigen::Vector3d(0.09, -0.062, 0.0), 1, "lf");
+
+    if (turret_enabled_) {
+      CreateTurret(result, body);
+    }
 
     // Fix up some signs so that the servos match what the actual mech
     // does.
@@ -459,13 +525,11 @@ class SimulatorWindow::Impl {
   std::unique_ptr<mech::MechWarfare> mech_warfare_;
   bool disable_mech_ = false;
   bool start_disabled_ = false;
+  bool turret_enabled_ = false;
 };
 
 SimulatorWindow::SimulatorWindow() : impl_(new Impl()) {
   impl_->world_->addSkeleton(createFloor());
-
-  impl_->CreateMech();
-  impl_->world_->addSkeleton(impl_->mech_);
 
   setWorld(impl_->world_);
 }
@@ -509,6 +573,9 @@ SimulatorWindow::options_description() {
 }
 
 void SimulatorWindow::Start() {
+  impl_->CreateMech();
+  impl_->world_->addSkeleton(impl_->mech_);
+
   impl_->Start();
   impl_->StartGlutTimer();
 
