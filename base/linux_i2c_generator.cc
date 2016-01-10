@@ -85,7 +85,22 @@ class LinuxI2C : public AsyncI2C {
   }
 
   void AsyncWrite(uint8_t device, uint8_t address,
-                  ConstBufferSequence buffers, WriteHandler) override {
+                  ConstBufferSequence buffers,
+                  WriteHandler handler) override {
+    if (!ErrWrap(::ioctl(fd_, I2C_SLAVE, static_cast<int>(device)),
+                 "when selecting device", handler)) { return; }
+
+    union i2c_smbus_data i2c_data;
+    auto size = boost::asio::buffer_size(buffers);
+    BOOST_ASSERT(size <= 32);
+    i2c_data.block[0] = size;
+    boost::asio::buffer_copy(
+        boost::asio::buffer(&i2c_data.block[1], size), buffers);
+    if (!ErrWrap(::i2c_smbus_access(fd_, I2C_SMBUS_WRITE, address,
+                                    I2C_SMBUS_I2C_BLOCK_BROKEN, &i2c_data),
+                 "during transfer", handler)) { return; }
+
+    service_.post(std::bind(handler, ErrorCode(), size));
   }
 
  private:

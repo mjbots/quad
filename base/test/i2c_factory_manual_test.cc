@@ -62,6 +62,20 @@ class I2CInterface {
       const int length = std::stoi(tokenizer.next(), 0, 0);
       i2c_->AsyncRead(device, address, boost::asio::buffer(buffer_, length),
                       std::bind(&I2CInterface::HandleRead, this, _1, _2));
+    } else if (cmd == "write") {
+      const int device = std::stoi(tokenizer.next(), 0, 0);
+      const int address = std::stoi(tokenizer.next(), 0, 0);
+      int position = 0;
+      while (true) {
+        std::string item = tokenizer.next();
+        if (item.empty()) { break; }
+        buffer_[position] = static_cast<uint8_t>(std::stoi(item, 0, 0));
+        position++;
+      }
+
+      i2c_->AsyncWrite(device, address,
+                       boost::asio::buffer(buffer_, position),
+                       std::bind(&I2CInterface::HandleWrite, this, _1, _2));
     }
 
     std::cout << "got line: " << line << "\n";
@@ -75,6 +89,11 @@ class I2CInterface {
       std::cout << boost::format(" %02X") % static_cast<int>(buffer_[i]);
     }
     std::cout << "\n";
+  }
+
+  void HandleWrite(ErrorCode ec, std::size_t length) {
+    FailIf(ec);
+    std::cout << "tx complete\n";
   }
 
   boost::asio::io_service& service_;
