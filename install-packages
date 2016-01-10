@@ -21,6 +21,7 @@ Install packages necessary for mjmech.  Only tested currently on
 Ubuntu trusty x64.
 '''
 
+import datetime
 import optparse
 import os
 import re
@@ -138,7 +139,7 @@ def do_install_gstreamer(options):
     if os.path.exists(GSTREAMER_ROOT):
         print 'renaming old directory'
         os.rename(GSTREAMER_ROOT,
-                  GSTREAMER_ROOT + datetime.now().strftime('%Y-%H%M%S'))
+                  GSTREAMER_ROOT + datetime.datetime.now().strftime('%Y-%H%M%S'))
 
     # This .tar file starts at disk root, but we only extract files
     # under GSTREAMER_ROOT for security.
