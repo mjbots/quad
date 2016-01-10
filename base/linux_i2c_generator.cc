@@ -16,6 +16,8 @@
 
 #include <linux/i2c-dev.h>
 
+#include <thread>
+
 #include <boost/format.hpp>
 
 #include "program_options_archive.h"
@@ -37,24 +39,44 @@ class LinuxI2C : public AsyncI2C {
  public:
   LinuxI2C(boost::asio::io_service& service,
            const std::string& device)
-      : service_(service),
+      : parent_id_(std::this_thread::get_id()),
+        parent_service_(service),
         fd_(::open(device.c_str(), O_RDWR)) {
     if (fd_ < 0) {
       throw base::SystemError(
           errno, boost::system::generic_category(),
           "error opening '" + device + "'");
     }
+
+    child_ = std::thread(std::bind(&LinuxI2C::Run, this));
   }
 
-  virtual ~LinuxI2C() {}
+  virtual ~LinuxI2C() {
+    BOOST_ASSERT(std::this_thread::get_id() == parent_id_);
+
+    child_service_.post(std::bind(&LinuxI2C::Stop, this));
+    child_.join();
+  }
 
   boost::asio::io_service& get_io_service() override {
-    return service_;
+    BOOST_ASSERT(std::this_thread::get_id() == parent_id_);
+    return parent_service_;
   }
 
   void AsyncRead(uint8_t device, uint8_t address,
                  MutableBufferSequence buffers,
                  ReadHandler handler) override {
+    BOOST_ASSERT(std::this_thread::get_id() == parent_id_);
+    child_service_.post(
+        std::bind(&LinuxI2C::ChildRead, this,
+                  device, address, buffers, handler));
+  }
+
+  void ChildRead(uint8_t device, uint8_t address,
+                 MutableBufferSequence buffers,
+                 ReadHandler handler) {
+    BOOST_ASSERT(std::this_thread::get_id() == child_.get_id());
+
     if (!ErrWrap(::ioctl(fd_, I2C_SLAVE, static_cast<int>(device)),
                  "when selecting device", handler)) { return; }
 
@@ -67,7 +89,7 @@ class LinuxI2C : public AsyncI2C {
                  "during transfer", handler)) { return; }
 
     if (data.block[0] != size) {
-      service_.post(
+      parent_service_.post(
           std::bind(
               handler,
               ErrorCode::einval(
@@ -81,12 +103,23 @@ class LinuxI2C : public AsyncI2C {
     boost::asio::buffer_copy(
         buffers, boost::asio::buffer(&data.block[1], size));
 
-    service_.post(std::bind(handler, ErrorCode(), size));
+    parent_service_.post(std::bind(handler, ErrorCode(), size));
   }
 
   void AsyncWrite(uint8_t device, uint8_t address,
                   ConstBufferSequence buffers,
                   WriteHandler handler) override {
+    BOOST_ASSERT(std::this_thread::get_id() == parent_id_);
+    child_service_.post(
+        std::bind(&LinuxI2C::ChildWrite, this,
+                  device, address, buffers, handler));
+  }
+
+  void ChildWrite(uint8_t device, uint8_t address,
+                  ConstBufferSequence buffers,
+                  WriteHandler handler) {
+    BOOST_ASSERT(std::this_thread::get_id() == child_.get_id());
+
     if (!ErrWrap(::ioctl(fd_, I2C_SLAVE, static_cast<int>(device)),
                  "when selecting device", handler)) { return; }
 
@@ -100,21 +133,38 @@ class LinuxI2C : public AsyncI2C {
                                     I2C_SMBUS_I2C_BLOCK_BROKEN, &i2c_data),
                  "during transfer", handler)) { return; }
 
-    service_.post(std::bind(handler, ErrorCode(), size));
+    parent_service_.post(std::bind(handler, ErrorCode(), size));
   }
 
  private:
+  void Run() {
+    BOOST_ASSERT(std::this_thread::get_id() == child_.get_id());
+
+    boost::asio::io_service::work work(child_service_);
+    child_service_.run();
+  }
+
+  void Stop() {
+    BOOST_ASSERT(std::this_thread::get_id() == child_.get_id());
+    child_service_.stop();
+  }
+
   template <typename Handler>
   bool ErrWrap(int value,
                const std::string& message,
                Handler handler) {
+    BOOST_ASSERT(std::this_thread::get_id() == child_.get_id());
+
     if (value == 0) { return true; }
-    service_.post(std::bind(handler, ErrorCode::einval(message), 0));
+    parent_service_.post(std::bind(handler, ErrorCode::einval(message), 0));
     return false;
   }
 
-  boost::asio::io_service& service_;
+  const std::thread::id parent_id_;
+  boost::asio::io_service& parent_service_;
   const int fd_;
+  std::thread child_;
+  boost::asio::io_service child_service_;
 };
 }
 
