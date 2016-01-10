@@ -25,6 +25,8 @@ SOURCES = [
     'context.cc',
     'error_code.cc',
     'fail.cc',
+    'i2c_factory.cc',
+    'linux_i2c_generator.cc',
     'linux_input.cc',
     'logging.cc',
     'program_options.cc',
@@ -82,6 +84,10 @@ telemetry_log_test = crenv.Program(
 linux_input_manual_test = crenv.Program(
     'linux_input_manual_test',
     ['test/linux_input_manual_test.cc'] + libbase)
+
+i2c_factory_manual_test = env.Program(
+    'i2c_factory_manual_test',
+    ['test/i2c_factory_manual_test.cc'] + libbase)
 
 
 module_main_file = File('module_main.cc')

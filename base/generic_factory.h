@@ -14,36 +14,15 @@
 
 #pragma once
 
-#include "meta/meta.hpp"
-
-#include "comm.h"
-#include "comm_factory_generators.h"
-#include "visitor.h"
-
-// TODO jpieper:
-//
-//  * Support generators which have constructors that take arguments.
-//  * Support changing parameters after a stream has been created
-//    (mostly for serial baud rate).
-
 namespace mjmech {
 namespace base {
 
-SharedStream MakeStdioDebugStream(SharedStream);
-
-/// This provides a dynamic mechanism for creating streams at
-/// run-time.  It can be instantiated with any number of unique
-/// Generators.  Each Generator must provide:
-///
-///  1) Serialize-able Parameters sub-type
-///  2) static const char* type()
-///  3) AsyncCreate
-template <typename... StreamGenerators>
-class StreamFactory : boost::noncopyable {
+template <typename Derived, typename ResultType, typename... Generators>
+class GenericFactory : boost::noncopyable {
  public:
-  StreamFactory(boost::asio::io_service& service) : service_(service) {}
+  GenericFactory(boost::asio::io_service& service) : service_(service) {}
 
-  using Types = meta::list<StreamGenerators...>;
+  using Types = meta::list<Generators...>;
 
   struct ExtractParameter {
     template <typename T>
@@ -57,7 +36,6 @@ class StreamFactory : boost::noncopyable {
   // accessed programmatically through the "Get" member function.
   struct Parameters {
     std::string type;
-    bool stdio_debug = false;
 
     meta::apply_list<meta::quote<std::tuple>, GeneratorParameters> generators;
 
@@ -93,7 +71,6 @@ class StreamFactory : boost::noncopyable {
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(type));
-      a->Visit(MJ_NVP(stdio_debug));
 
       VisitGenerator<Archive> visit_generator(a, this);
       meta::for_each(
@@ -117,54 +94,44 @@ class StreamFactory : boost::noncopyable {
 
   /// Create a new stream given the current set of configuration.
   template <typename Handler>
-  BOOST_ASIO_INITFN_RESULT_TYPE(Handler,
-                                void(boost::system::error_code, SharedStream))
-  AsyncCreate(const Parameters& parameters,
-              Handler handler) {
-    boost::asio::detail::async_result_init<
-      Handler,
-      void (boost::system::error_code, SharedStream)> init(
-          BOOST_ASIO_MOVE_CAST(Handler)(handler));
-
+  void AsyncCreate(const Parameters& parameters,
+                   Handler handler) {
     try {
       bool visited = false;
       TryCreate try_create(
           this,
           parameters,
-          [init](ErrorCode ec, SharedStream stream) mutable {
-            init.handler(ec.error_code(), stream);
+          [handler](ErrorCode ec, ResultType result) mutable {
+            handler(ec.error_code(), result);
           },
           &visited);
       meta::for_each(Types{}, try_create);
       if (!visited) {
         throw SystemError::einval(
-            "Unknown stream type: '" + parameters.type + "'");
+            "Unknown type: '" + parameters.type + "'");
       }
     } catch (SystemError& e) {
-      init.handler(e.error_code(), SharedStream());
+      handler(e.error_code(), ResultType());
     }
-
-    return init.result.get();
   }
 
  private:
+  template <typename Handler>
   void HandleCreate(ErrorCode ec,
-                    SharedStream stream,
+                    ResultType stream,
                     const Parameters& parameters,
-                    StreamHandler handler) {
+                    Handler handler) {
     if (ec) {
-      handler(ec, SharedStream());
-    } else if (parameters.stdio_debug) {
-      handler(ec, MakeStdioDebugStream(stream));
+      handler(ec, ResultType());
     } else {
       handler(ec, stream);
     }
   }
 
   struct TryCreate {
-    TryCreate(StreamFactory* f,
+    TryCreate(GenericFactory* f,
               const Parameters& p,
-              StreamHandler h,
+              std::function<void (ErrorCode, ResultType)> h,
               bool* v)
         : factory(f), parameters(p), handler(h), visited(v) {}
     template <typename Generator>
@@ -183,13 +150,12 @@ class StreamFactory : boost::noncopyable {
     }
     StreamFactory* const factory;
     const Parameters& parameters;
-    StreamHandler handler;
-    bool* visited;
+    std::function<void (ErrorCode, ResultType)> handler;
+    bool* const visited;
   };
 
   boost::asio::io_service& service_;
-  std::tuple<StreamGenerators...> generators_;
+  std::tuple<Generators...> generators_;
 };
-
 }
 }
