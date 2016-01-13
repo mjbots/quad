@@ -217,6 +217,8 @@ class SimulatorWindow::Impl {
     mech_warfare_.reset(new mech::MechWarfare(context_));
 
     options_description_.add_options()
+        ("log,l", po::value(&log_file_),
+         "record a log file")
         ("disable-mech", po::bool_switch(&disable_mech_),
          "do not start the mech instance")
         ("start-disabled", po::bool_switch(&start_disabled_),
@@ -440,6 +442,11 @@ class SimulatorWindow::Impl {
   }
 
   void Start() {
+    if (!log_file_.empty()) {
+      context_.telemetry_log->SetRealtime(false);
+      context_.telemetry_log->Open(log_file_);
+    }
+
     base::StreamHandler handler =
         std::bind(&Impl::HandleStart, this,
                   std::placeholders::_1, std::placeholders::_2);
@@ -523,6 +530,7 @@ class SimulatorWindow::Impl {
   boost::program_options::options_description options_description_;
 
   std::unique_ptr<mech::MechWarfare> mech_warfare_;
+  std::string log_file_;
   bool disable_mech_ = false;
   bool start_disabled_ = false;
   bool turret_enabled_ = false;
