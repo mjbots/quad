@@ -12,85 +12,109 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#define BOOST_BIND_NO_PLACEHOLDERS
+
 #include "mjmech_imu_driver.h"
-
-#include <linux/i2c-dev.h>
-
-#include <thread>
 
 #include "base/common.h"
 #include "base/fail.h"
+#include "base/i2c_factory.h"
 #include "base/now.h"
 #include "base/quaternion.h"
+
+using namespace std::placeholders;
 
 namespace mjmech {
 namespace mech {
 
 namespace {
-int ErrWrap(int value) {
-  if (value < 0) {
-    throw base::SystemError(errno, boost::system::generic_category());
-  }
-  return value;
-}
+auto to_int16 = [](uint8_t msb, uint8_t lsb) {
+  int32_t result = msb * 256 + lsb;
+  if (result > 32767) { result = result - 65536; }
+  return static_cast<int16_t>(result);
+};
+
+const double kGravity = 9.80665;
 }
 
 class MjmechImuDriver::Impl : boost::noncopyable {
  public:
-  Impl(MjmechImuDriver* parent, boost::asio::io_service& service)
+  Impl(MjmechImuDriver* parent, boost::asio::io_service& service,
+       base::I2CFactory* i2c_factory)
       : parent_(parent),
         service_(service),
-        work_(service_),
-        parent_id_(std::this_thread::get_id()) {}
+        i2c_factory_(i2c_factory) {}
 
   ~Impl() {
-    done_ = true;
-    if (child_.joinable()) { child_.join(); }
   }
 
   void AsyncStart(base::ErrorHandler handler) {
-    BOOST_ASSERT(std::this_thread::get_id() == parent_id_);
+    const auto& parameters = parent_->parameters_;
 
-    // Capture our parent's parameters before starting our thread.
-    parameters_ = parent_->parameters_;
+    transform_ = base::Quaternion::FromEuler(
+        base::Radians(parameters.roll_deg),
+        base::Radians(parameters.pitch_deg),
+        base::Radians(parameters.yaw_deg));
 
-    child_ = std::thread(std::bind(&Impl::Run, this, handler));
+    i2c_factory_->AsyncCreate(
+        *parameters.i2c,
+        std::bind(&Impl::HandleStart, this, handler, _1, _2));
   }
 
  private:
-  void Run(base::ErrorHandler handler) {
-    BOOST_ASSERT(std::this_thread::get_id() == child_.get_id());
+  void HandleStart(base::ErrorHandler handler,
+                   base::ErrorCode ec,
+                   base::SharedI2C i2c) {
+    if (ec) {
+      ec.Append("when starting imu i2c");
+      service_.post(std::bind(handler, ec));
+      return;
+    }
 
-    transform_ = base::Quaternion::FromEuler(
-        base::Radians(parameters_.roll_deg),
-        base::Radians(parameters_.pitch_deg),
-        base::Radians(parameters_.yaw_deg));
+    i2c_ = i2c;
+
+    InitializeImu(handler);
+  }
+
+  void InitializeImu(base::ErrorHandler handler) {
+    ReadGyro(0x20, 1, std::bind(&Impl::HandleWhoAmI, this, handler, _1, _2));
+  }
+
+  void HandleWhoAmI(base::ErrorHandler handler,
+                    base::ErrorCode ec, std::size_t) {
+    if (ec) {
+      ec.Append("when requesting gyro whoami");
+      service_.post(std::bind(handler, ec));
+      return;
+    }
+
+    const uint8_t whoami = buffer_[0];
+    if (whoami != 0xb1) {
+      auto error = base::ErrorCode::einval(
+          (boost::format("Incorrect whoami got 0x%02X expected 0xb1") %
+           static_cast<int>(whoami)).str());
+      service_.post(std::bind(handler, error));
+      return;
+    }
+
+    ReadAccel(0x20, 1,
+              std::bind(&Impl::HandleInitAccelRead, this, handler, _1, _2));
+  }
+
+  void HandleInitAccelRead(base::ErrorHandler handler,
+                           base::ErrorCode ec, std::size_t) {
+    if (ec) {
+      ec.Append("when discovering accelerometer");
+      service_.post(std::bind(handler, ec));
+      return;
+    }
+
+    const auto& parameters = parent_->parameters_;
 
     try {
-      // Open the I2C device and configure it.
-      fd_ = ::open(parameters_.i2c_device.c_str(), O_RDWR);
-      if (fd_ < 0) {
-        throw base::SystemError(
-            errno, boost::system::generic_category(),
-            "error opening '" + parameters_.i2c_device + "'");
-      }
-
-      // Verify we can talk to the gyro.
-      uint8_t whoami[1] = {};
-      ReadGyro(0x20, 1, whoami, sizeof(whoami));
-      if (whoami[0] != 0xb1) {
-        throw base::SystemError::einval(
-            (boost::format("Incorrect whoami got 0x%02X expected 0xb1") %
-             static_cast<int>(whoami[0])).str());
-      }
-
-      // Verify we can talk to the accelerometer.
-      uint8_t ignored[1] = {};
-      ReadAccel(0x20, 1, ignored, sizeof(ignored));
-
       // Configure the gyroscope.
-      const uint8_t fs = [this]() {
-        const double scale = parameters_.rotation_deg_s;
+      const uint8_t fs = [&parameters]() {
+        const double scale = parameters.rotation_deg_s;
         if (scale <= 250) { return 3; }
         else if (scale <= 500) { return 2; }
         else if (scale <= 1000) { return 1; }
@@ -109,11 +133,11 @@ class MjmechImuDriver::Impl : boost::noncopyable {
       }();
 
       // FS=XX PWR=Normal XYZ=EN
-      WriteGyro(0x00, {static_cast<uint8_t>(0x0f | (fs << 6))});
+      buffer_[0] = static_cast<uint8_t>(0x0f | (fs << 6));
 
       // Pick a bandwidth which is less than half the desired rate.
-      const uint8_t bw = [this]() {
-        const double rate = parameters_.rate_hz;
+      const uint8_t bw = [&parameters]() {
+        const double rate = parameters.rate_hz;
         if (rate < 8) { return 0; } // 2 Hz
         else if (rate < 12) { return 1; } // 4 Hz
         else if (rate < 16) { return 2; } // 6 Hz
@@ -154,7 +178,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
         throw base::SystemError::einval("invalid state");
       }();
 
-      WriteGyro(0x01, {static_cast<uint8_t>(0x00 | (bw << 2))}); // BW=X
+      buffer_[1] = static_cast<uint8_t>(0x00 | (bw << 2)); // BW=X
 
       auto limit = [](double value) -> uint8_t {
         if (value < 0) { return 0; }
@@ -162,8 +186,8 @@ class MjmechImuDriver::Impl : boost::noncopyable {
         return static_cast<uint8_t>(value);
       };
 
-      const uint8_t odr = limit([this]() {
-          const double rate = parameters_.rate_hz;
+      const uint8_t odr = limit([&parameters]() {
+          const double rate = parameters.rate_hz;
           if (rate < 4.95) {
             throw base::SystemError::einval("IMU rate too small");
           } else if (rate < 20) {
@@ -176,7 +200,8 @@ class MjmechImuDriver::Impl : boost::noncopyable {
             throw base::SystemError::einval("IMU rate too large");
           }
         }());
-      WriteGyro(0x02, {odr}); // ODR=100Hz
+
+      buffer_[2] = odr; // ODR=100Hz
 
       imu_config_.rate_hz = [odr]() {
         if (odr <= 99) { return 10000.0 / (odr + 1); }
@@ -184,12 +209,45 @@ class MjmechImuDriver::Impl : boost::noncopyable {
         else if (odr <= 255) { return 10000.0 / (500 + 20 * (odr - 179)); }
         throw base::SystemError::einval("invalid state");
       }();
+    } catch (base::SystemError& se) {
+      ec.Append("when configuring gyro");
+      service_.post(std::bind(handler, se.error_code()));
+      return;
+    }
 
-      // Configure the accelerometer.
-      WriteAccel(0x2a, {0x18}); // Turn it off so we can change settings.
+    WriteGyro(0x00, 3,
+              std::bind(&Impl::HandleGyroConfig, this, handler, _1, _2));
+  }
 
-      const uint8_t fsg = [this]() {
-        const double scale = parameters_.accel_g;
+  void HandleGyroConfig(base::ErrorHandler handler,
+                        base::ErrorCode ec, std::size_t) {
+    if (ec) {
+      ec.Append("when configuring gyro");
+      service_.post(std::bind(handler, ec));
+      return;
+    }
+
+    // Configure the accelerometer.
+    // Turn it off so we can change settings.
+    buffer_[0] = 0x18;
+    WriteAccel(0x2a, 1,
+               std::bind(&Impl::HandleAccelDisable, this, handler, _1, _2));
+  }
+
+  void HandleAccelDisable(base::ErrorHandler handler,
+                          base::ErrorCode ec, std::size_t) {
+    if (ec) {
+      ec.Append("when disabling accelerometer");
+      service_.post(std::bind(handler, ec));
+      return;
+    }
+
+    const auto& parameters = parent_->parameters_;
+
+    try {
+
+      const uint8_t fsg = [&parameters]() {
+        const double scale = parameters.accel_g;
         if (scale <= 2.0) { return 0; }
         else if (scale <= 4.0) { return 1; }
         else if (scale <= 8.0) { return 2; }
@@ -205,10 +263,29 @@ class MjmechImuDriver::Impl : boost::noncopyable {
         throw base::SystemError::einval("invalid state");
       }();
 
-      WriteAccel(0x0e, {fsg}); // FS=2G
+      buffer_[0] = fsg;
+    } catch (base::SystemError& se) {
+      service_.post(std::bind(handler, se.error_code()));
+      return;
+    }
 
-      const uint8_t dr = [this]() {
-        const double rate = parameters_.rate_hz;
+    WriteAccel(0x0e, 1,
+               std::bind(&Impl::HandleAccelFS, this, handler, _1, _2));
+  }
+
+  void HandleAccelFS(base::ErrorHandler handler,
+                     base::ErrorCode ec, std::size_t) {
+    if (ec) {
+      ec.Append("when setting acclerometer scale");
+      service_.post(std::bind(handler, ec));
+      return;
+    }
+
+    const auto& parameters = parent_->parameters_;
+
+    try {
+      const uint8_t dr = [&parameters]() {
+        const double rate = parameters.rate_hz;
         if (rate <= 1.56) { return 7; }
         else if (rate <= 6.25) { return 6; }
         else if (rate <= 12.5) { return 5; }
@@ -219,239 +296,204 @@ class MjmechImuDriver::Impl : boost::noncopyable {
         else if (rate <= 800) { return 0; }
         throw base::SystemError::einval("accel rate too large");
       }();
-      const uint8_t lnoise = [this]() {
-        if (parameters_.accel_g <= 4) { return 1; }
+      const uint8_t lnoise = [&parameters]() {
+        if (parameters.accel_g <= 4) { return 1; }
         return 0;
       }();
 
       // 2A 0b00011000 ASLP=0 ODR=XXHz LNOISE=0 F_READ=0 ACTIVE=0
       // 2B 0b00000010 ST=0 RST=0 SMODS=0 SLPE=0 MODS=2
-      WriteAccel(0x2a, {
-          static_cast<uint8_t>(0x00 | (dr << 3) | (lnoise << 2)),
-              0x02});
+      buffer_[0] = static_cast<uint8_t>(0x00 | (dr << 3) | (lnoise << 2));
+      buffer_[1] = 0x02;
+    } catch (base::SystemError& se) {
+      service_.post(std::bind(handler, se.error_code()));
+      return;
+    }
+    WriteAccel(0x2a, 1,
+               std::bind(&Impl::HandleAccelConfig, this, handler, _1, _2));
+  }
 
-      // Turn it back on.
-      WriteAccel(0x2a, {0x19});
-
-      imu_config_.roll_deg = parameters_.roll_deg;
-      imu_config_.pitch_deg = parameters_.pitch_deg;
-      imu_config_.yaw_deg = parameters_.yaw_deg;
-      imu_config_.gyro_scale = parameters_.gyro_scale;
-      imu_config_.accel_scale = parameters_.accel_scale;
-
-      service_.post(std::bind(&Impl::SendConfig, this, imu_config_));
-
-    } catch (base::SystemError& e) {
-      e.error_code().Append("when initializing IMU");
-      service_.post(std::bind(handler, e.error_code()));
+  void HandleAccelConfig(base::ErrorHandler handler,
+                         base::ErrorCode ec, std::size_t) {
+    if (ec) {
+      ec.Append("when configuring accelerometer");
+      service_.post(std::bind(handler, ec));
       return;
     }
 
-    service_.post(std::bind(handler, base::ErrorCode()));
-
-    try {
-      DataLoop();
-    } catch (base::SystemError& e) {
-      // TODO jpieper: We should somehow log this or do something
-      // useful.  For now, just re-raise.
-      throw;
-    }
+    // Turn it back on.
+    buffer_[0] = 0x19;
+    WriteAccel(0x2a, 1,
+               std::bind(&Impl::HandleAccelEnable, this, handler, _1, _2));
   }
 
-  void DataLoop() {
-    BOOST_ASSERT(std::this_thread::get_id() == child_.get_id());
+  void HandleAccelEnable(base::ErrorHandler handler,
+                         base::ErrorCode ec, std::size_t) {
+    if (ec) {
+      ec.Append("when enabling accelerometer");
+      service_.post(std::bind(handler, ec));
+      return;
+    }
 
-    auto to_int16 = [](uint8_t msb, uint8_t lsb) {
-      int32_t result = msb * 256 + lsb;
-      if (result > 32767) { result = result - 65536; }
-      return static_cast<int16_t>(result);
-    };
+    const auto& parameters = parent_->parameters_;
 
-    const double kAccelSensitivity = [this]() {
+    imu_config_.roll_deg = parameters.roll_deg;
+    imu_config_.pitch_deg = parameters.pitch_deg;
+    imu_config_.yaw_deg = parameters.yaw_deg;
+    imu_config_.gyro_scale = parameters.gyro_scale;
+    imu_config_.accel_scale = parameters.accel_scale;
+
+    // Emit our config.
+    parent_->imu_config_signal_(&imu_config_);
+
+    service_.post(std::bind(handler, base::ErrorCode()));
+
+    accel_sensitivity_ = [this]() {
       const double fs = imu_config_.accel_g;
       if (fs == 2.0) { return 1.0 / 4096 / 4; }
       else if (fs == 4.0) { return 1.0 / 2048 / 4; }
       else if (fs == 8.0) { return 1.0 / 1024 / 4; }
-      throw base::SystemError::einval("invalid configured accel range");
+      base::Fail("invalid configured accel range");
     }();
 
-    const double kGyroSensitivity = [this]() {
+    gyro_sensitivity_ = [this]() {
       const double fs = imu_config_.rotation_deg_s;
       if (fs == 250.0) { return 1.0 / 120.0; }
       else if (fs == 500.0) { return 1.0 / 60.0; }
       else if (fs == 1000.0) { return 1.0 / 30.0; }
       else if (fs == 2000.0) { return 1.0 / 15.0; }
-      throw base::SystemError::einval("invalid configured gyro rate");
+      base::Fail("invalid configured gyro rate");
     }();
 
-    // Loop reading things and emitting data.
-    while (!done_) {
-      // Read gyro values until we get a new one.
-      uint8_t data[10] = {};
-      for (int i = 0; i < 15; i++) {
-        ReadGyro(0x22, 1, data, sizeof(data));
-        if ((data[0] & 0x01) != 0) { break; }
-      }
+    StartDataLoop();
+  }
 
-      ImuData imu_data;
+  void StartDataLoop() {
+    ReadGyro(0x22, 1, std::bind(&Impl::HandleGyroPoll, this, _1, _2));
+  }
 
-      uint8_t gdata[10] = {};
-      ReadGyro(0x22, 7, gdata, sizeof(gdata));
-
-      uint8_t adata[10] = {};
-      ReadAccel(0x00, 7, adata, sizeof(adata));
-
-      const double kGravity = 9.80665;
-
-      base::Point3D accel_mps2;
-
-      accel_mps2.x =
-          to_int16(adata[1], adata[2]) * kAccelSensitivity * kGravity *
-          parameters_.accel_scale.x;
-      accel_mps2.y =
-          to_int16(adata[3], adata[4]) * kAccelSensitivity * kGravity *
-          parameters_.accel_scale.y;
-      accel_mps2.z =
-          to_int16(adata[5], adata[6]) * kAccelSensitivity * kGravity *
-          parameters_.accel_scale.z;
-
-      imu_data.accel_mps2 = transform_.Rotate(accel_mps2);
-
-      base::Point3D body_rate_deg_s;
-      body_rate_deg_s.x =
-          to_int16(gdata[1], gdata[2]) * kGyroSensitivity *
-          parameters_.gyro_scale.x;
-      body_rate_deg_s.y =
-          to_int16(gdata[3], gdata[4]) * kGyroSensitivity *
-          parameters_.gyro_scale.y;
-      body_rate_deg_s.z =
-          to_int16(gdata[5], gdata[6]) * kGyroSensitivity *
-          parameters_.gyro_scale.z;
-
-      imu_data.body_rate_deg_s = transform_.Rotate(body_rate_deg_s);
-
-      service_.post(std::bind(&Impl::SendData, this, imu_data));
+  void HandleGyroPoll(base::ErrorCode ec, std::size_t) {
+    base::FailIf(ec);
+    if ((buffer_[0] & 0x01) == 0) {
+      StartDataLoop();
+    } else {
+      StartDataRead();
     }
   }
 
-  void SendData(const ImuData& imu_data) {
-    BOOST_ASSERT(std::this_thread::get_id() == parent_id_);
-    ImuData copy = imu_data;
-    copy.timestamp = base::Now(service_);
-
-    parent_->imu_data_signal_(&copy);
+  void StartDataRead() {
+    ReadGyro(0x22, 7, std::bind(&Impl::HandleGyroRead, this, _1, _2));
   }
 
-  void SendConfig(const ImuConfig& imu_config) {
-    BOOST_ASSERT(std::this_thread::get_id() == parent_id_);
-    ImuConfig copy = imu_config;
-    copy.timestamp = base::Now(service_);
+  void HandleGyroRead(base::ErrorCode ec, std::size_t) {
+    base::FailIf(ec);
 
-    parent_->imu_config_signal_(&copy);
+
+    const auto& gdata = buffer_;
+    const auto& parameters = parent_->parameters_;
+
+    base::Point3D body_rate_deg_s;
+    body_rate_deg_s.x =
+        to_int16(gdata[1], gdata[2]) * gyro_sensitivity_ *
+        parameters.gyro_scale.x;
+    body_rate_deg_s.y =
+        to_int16(gdata[3], gdata[4]) * gyro_sensitivity_ *
+        parameters.gyro_scale.y;
+    body_rate_deg_s.z =
+        to_int16(gdata[5], gdata[6]) * gyro_sensitivity_ *
+        parameters.gyro_scale.z;
+
+    auto rate_deg_s = transform_.Rotate(body_rate_deg_s);
+
+    ReadAccel(0x00, 7,
+              std::bind(&Impl::HandleAccelRead, this, rate_deg_s, _1, _2));
   }
 
-  void WriteGyro(uint8_t reg, const std::vector<uint8_t>& data) {
-    WriteData(parameters_.gyro_address, reg, data);
+  void HandleAccelRead(base::Point3D rate_deg_s,
+                       base::ErrorCode ec, std::size_t) {
+    base::FailIf(ec);
+
+    ImuData imu_data;
+    imu_data.timestamp = base::Now(service_);
+
+    const auto& parameters = parent_->parameters_;
+    const auto& adata = buffer_;
+    base::Point3D accel_mps2;
+
+    accel_mps2.x =
+        to_int16(adata[1], adata[2]) * accel_sensitivity_ * kGravity *
+        parameters.accel_scale.x;
+    accel_mps2.y =
+          to_int16(adata[3], adata[4]) * accel_sensitivity_ * kGravity *
+        parameters.accel_scale.y;
+    accel_mps2.z =
+          to_int16(adata[5], adata[6]) * accel_sensitivity_ * kGravity *
+        parameters.accel_scale.z;
+
+    imu_data.accel_mps2 = transform_.Rotate(accel_mps2);
+
+    imu_data.body_rate_deg_s = rate_deg_s;
+
+    parent_->imu_data_signal_(&imu_data);
+
+    StartDataLoop();
   }
 
-  void WriteAccel(uint8_t reg, const std::vector<uint8_t>& data) {
-    WriteData(parameters_.accel_address, reg, data);
+  void WriteGyro(uint8_t reg, std::size_t length,
+                 base::WriteHandler handler) {
+    WriteData(parent_->parameters_.gyro_address, reg, length, handler);
+  }
+
+  void WriteAccel(uint8_t reg, std::size_t length,
+                  base::WriteHandler handler) {
+    WriteData(parent_->parameters_.accel_address, reg, length, handler);
   }
 
   void ReadGyro(uint8_t reg, std::size_t length,
-                uint8_t* buffer, std::size_t buffer_size) {
-    ReadData(parameters_.gyro_address, reg, length,
-             buffer, buffer_size);
+                base::ReadHandler handler) {
+    ReadData(parent_->parameters_.gyro_address, reg, length, handler);
   }
 
   void ReadAccel(uint8_t reg, std::size_t length,
-                uint8_t* buffer, std::size_t buffer_size) {
-    ReadData(parameters_.accel_address, reg, length,
-             buffer, buffer_size);
+                 base::ReadHandler handler) {
+    ReadData(parent_->parameters_.accel_address, reg, length, handler);
   }
 
-  void WriteData(uint8_t address, uint8_t reg,
-                 const std::vector<uint8_t>& data) {
-    BOOST_ASSERT(std::this_thread::get_id() == child_.get_id());
+  void WriteData(uint8_t address, uint8_t reg, std::size_t length,
+                 base::WriteHandler handler) {
 
-    try {
-      ErrWrap(::ioctl(fd_, I2C_SLAVE, static_cast<int>(address)));
-
-      union i2c_smbus_data i2c_data;
-      BOOST_ASSERT(data.size() <= 32);
-      i2c_data.block[0] = data.size();
-      for (size_t i = 0; i < data.size(); ++i) {
-        i2c_data.block[i + 1] = data[i];
-      }
-      ErrWrap(::i2c_smbus_access(fd_, I2C_SMBUS_WRITE, reg,
-                                 I2C_SMBUS_I2C_BLOCK_BROKEN, &i2c_data));
-    } catch (base::SystemError& se) {
-      se.error_code().Append(boost::format("WriteData(0x%02x, 0x%02x, ...)") %
-                             static_cast<int>(address) %
-                             static_cast<int>(reg));
-      throw;
-    }
+    i2c_->AsyncWrite(address, reg, boost::asio::buffer(buffer_, length),
+                     handler);
   }
 
   void ReadData(uint8_t address, uint8_t reg, std::size_t length,
-                uint8_t* buffer, std::size_t buffer_length) {
-    BOOST_ASSERT(std::this_thread::get_id() == child_.get_id());
-    BOOST_ASSERT(buffer_length >= length);
+                base::ReadHandler handler) {
 
-    try {
-      try {
-        ErrWrap(::ioctl(fd_, I2C_SLAVE, static_cast<int>(address)));
-      } catch (base::SystemError& se) {
-        se.error_code().Append("when setting address");
-        throw;
-      }
-
-      union i2c_smbus_data data;
-      BOOST_ASSERT(length <= 255);
-      data.block[0] = length;
-      try {
-        ErrWrap(::i2c_smbus_access(fd_, I2C_SMBUS_READ, reg,
-                                   I2C_SMBUS_I2C_BLOCK_DATA, &data));
-      } catch (base::SystemError& se) {
-        se.error_code().Append("during transfer");
-        throw;
-      }
-
-      if (data.block[0] != length) {
-        throw base::SystemError(
-            EINVAL, boost::system::generic_category(),
-            (boost::format("asked for length %d got %d") %
-             length % static_cast<int>(data.block[0])).str());
-      }
-      std::memcpy(buffer, &data.block[1], length);
-    } catch (base::SystemError& se) {
-      se.error_code().Append(boost::format("ReadData(0x%02x, 0x%02x, %d)") %
-                             static_cast<int>(address) %
-                             static_cast<int>(reg) %
-                             length);
-      throw;
-    }
+    i2c_->AsyncRead(address, reg, boost::asio::buffer(buffer_, length),
+                    handler);
   }
-
 
   // From both.
   MjmechImuDriver* const parent_;
   boost::asio::io_service& service_;
-  boost::asio::io_service::work work_;
-  Parameters parameters_;
+  base::I2CFactory* const i2c_factory_;
+  base::SharedI2C i2c_;
 
-  const std::thread::id parent_id_;
-  std::thread child_;
-  bool done_ = false;
+  uint8_t buffer_[256] = {};
 
-  // From child only.
-  int fd_ = -1;
   ImuConfig imu_config_;
   base::Quaternion transform_;
+
+  double accel_sensitivity_ = 0.0;
+  double gyro_sensitivity_ = 0.0;
 };
 
-MjmechImuDriver::MjmechImuDriver(boost::asio::io_service& service)
-    : impl_(new Impl(this, service)) {}
+MjmechImuDriver::MjmechImuDriver(boost::asio::io_service& service,
+                                 base::I2CFactory* i2c_factory)
+    : impl_(new Impl(this, service, i2c_factory)) {
+  parameters_.i2c = i2c_factory->MakeParameters();
+}
+
 MjmechImuDriver::~MjmechImuDriver() {}
 
 void MjmechImuDriver::AsyncStart(base::ErrorHandler handler) {

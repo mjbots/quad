@@ -52,6 +52,16 @@ class ProgramOptionsArchive : public VisitArchive<ProgramOptionsArchive> {
   }
 
   template <typename NameValuePair>
+  auto VisitOptions(const NameValuePair& pair, int) ->
+      decltype((*pair.value())->options_description()) {
+    BOOST_ASSERT(*pair.value());
+    MergeProgramOptions((*pair.value())->options_description(),
+                        prefix_ + pair.name() + ".",
+                        description_);
+    return 0;
+  }
+
+  template <typename NameValuePair>
   void VisitOptions(const NameValuePair& pair, long) {
     (*description_).add_options()(
         (prefix_ + pair.name()).c_str(),

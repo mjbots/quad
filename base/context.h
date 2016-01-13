@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ namespace mjmech {
 namespace base {
 
 class ConcreteStreamFactory;
+class I2CFactory;
 class TelemetryLog;
 class TelemetryLogRegistrar;
 
@@ -44,6 +45,7 @@ struct Context : boost::noncopyable {
                             > ConcreteTelemetryRegistry;
   std::unique_ptr<ConcreteTelemetryRegistry> telemetry_registry;
   std::unique_ptr<ConcreteStreamFactory> factory;
+  std::unique_ptr<I2CFactory> i2c_factory;
 };
 
 }

@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@
 #include <boost/signals2/signal.hpp>
 
 #include "base/comm.h"
+#include "base/i2c_factory.h"
 #include "base/point3d.h"
 #include "base/visitor.h"
 
@@ -31,23 +32,26 @@ class MjmechImuDriver : boost::noncopyable {
   template <typename Context>
   MjmechImuDriver(Context& context)
       : MjmechImuDriver(context.service,
-                        context.telemetry_registry.get()) {}
+                        context.telemetry_registry.get(),
+                        context.i2c_factory.get()) {}
 
   template <typename TelemetryRegistry>
   MjmechImuDriver(boost::asio::io_service& service,
-                  TelemetryRegistry* telemetry_registry)
-      : MjmechImuDriver(service) {
+                  TelemetryRegistry* telemetry_registry,
+                  base::I2CFactory* i2c_factory)
+      : MjmechImuDriver(service, i2c_factory) {
     telemetry_registry->Register("imu", &imu_data_signal_);
     telemetry_registry->Register("imu_config", &imu_config_signal_);
   }
 
-  MjmechImuDriver(boost::asio::io_service&);
+  MjmechImuDriver(boost::asio::io_service&,
+                  base::I2CFactory*);
   ~MjmechImuDriver();
 
   void AsyncStart(base::ErrorHandler handler);
 
   struct Parameters {
-    std::string i2c_device;
+    std::unique_ptr<base::I2CFactory::Parameters> i2c;
     int gyro_address = 0x59;
     int accel_address = 0x1d;
 
@@ -63,7 +67,7 @@ class MjmechImuDriver : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(i2c_device));
+      a->Visit(MJ_NVP(i2c));
       a->Visit(MJ_NVP(gyro_address));
       a->Visit(MJ_NVP(accel_address));
       a->Visit(MJ_NVP(accel_g));

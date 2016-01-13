@@ -1,4 +1,4 @@
-// Copyright 2015 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2015-2016 Mikhail Afanasyev.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 #include "context.h"
 
 #include "concrete_comm_factory.h"
+#include "i2c_factory.h"
 #include "telemetry_log.h"
 #include "telemetry_log_registrar.h"
 #include "telemetry_registry.h"

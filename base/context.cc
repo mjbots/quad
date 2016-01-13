@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,6 +14,8 @@
 
 #include "context_full.h"
 
+#include "linux_i2c_generator.h"
+
 namespace mjmech {
 namespace base {
 
@@ -22,8 +24,13 @@ Context::Context()
       remote_debug(new TelemetryRemoteDebugServer(service)),
       telemetry_registry(new ConcreteTelemetryRegistry(
                              telemetry_log.get(), remote_debug.get())),
-      factory(new ConcreteStreamFactory(service))
-{}
+      factory(new ConcreteStreamFactory(service)),
+      i2c_factory(new I2CFactory(service))
+{
+  i2c_factory->Register(
+      std::unique_ptr<I2CFactory::Generator>(
+          new LinuxI2CGenerator(service)));
+}
 
 Context::~Context() {}
 
