@@ -33,8 +33,6 @@ LinuxI2CGenerator::Parameters::Parameters() {
 
 namespace {
 
-// TODO jpieper: For now, this uses the blocking Linux APIs.  It
-// should be updated to do its work in a background thread.
 class LinuxI2C : public AsyncI2C {
  public:
   LinuxI2C(boost::asio::io_service& service,
