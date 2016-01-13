@@ -21,6 +21,7 @@
 namespace mjmech {
 namespace base {
 
+typedef std::function<void ()> NullHandler;
 typedef std::function<void (ErrorCode)> ErrorHandler;
 
 }

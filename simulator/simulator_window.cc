@@ -30,6 +30,7 @@
 #include "base/concrete_comm_factory.h"
 #include "base/context_full.h"
 #include "base/debug_deadline_service.h"
+#include "base/debug_i2c_generator.h"
 #include "base/fail.h"
 #include "base/now.h"
 #include "base/program_options.h"
@@ -194,6 +195,52 @@ BodyNodePtr makeLegJoint(SkeletonPtr skel, BodyNodePtr parent,
 
 mjmech::simulator::SimulatorWindow::Impl* g_impl = nullptr;
 
+class I2CDevice {
+ public:
+  virtual uint8_t address() const = 0;
+  virtual uint8_t Read(uint8_t reg) = 0;
+  virtual void Write(uint8_t reg, uint8_t value) = 0;
+};
+
+class MAX21000 : public I2CDevice {
+ public:
+  MAX21000(dart::dynamics::Frame* frame) : frame_(frame) {}
+
+  uint8_t address() const override { return 0x59; }
+
+  uint8_t Read(uint8_t reg) {
+    switch (reg) {
+      case 0x20: { return 0xb1; }
+    }
+    return 0;
+  }
+
+  void Write(uint8_t reg, uint8_t value) {
+  }
+
+ private:
+  dart::dynamics::Frame* const frame_;
+};
+
+class MMA8451Q : public I2CDevice {
+ public:
+  MMA8451Q(dart::dynamics::Frame* frame,
+           const Eigen::Vector3d& offset)
+      : frame_(frame), offset_(offset) {}
+
+  uint8_t address() const override { return 0x1d; }
+
+  uint8_t Read(uint8_t reg) {
+    return 0;
+  }
+
+  void Write(uint8_t reg, uint8_t value) {
+  }
+
+ private:
+  dart::dynamics::Frame* const frame_;
+  const Eigen::Vector3d offset_;
+};
 }
 
 static void HandleGlutTimer(int);
@@ -203,10 +250,70 @@ namespace simulator {
 
 class SimulatorWindow::Impl {
  public:
+  class ImuI2C : public base::AsyncI2C {
+   public:
+    ImuI2C(Impl* parent) : parent_(parent) {}
+    virtual ~ImuI2C() {}
+
+    boost::asio::io_service& get_io_service() override {
+      return parent_->context_.service;
+    }
+
+    void AsyncRead(uint8_t address, uint8_t reg,
+                   base::MutableBufferSequence buffers,
+                   base::ReadHandler handler) override {
+      for (const auto& device: parent_->i2c_devices_) {
+        if (device->address() == address) {
+          const auto size = boost::asio::buffer_size(buffers);
+          auto it = boost::asio::buffers_begin(buffers);
+          for (std::size_t i = 0; i < size; i++) {
+            *it = device->Read(reg + i);
+            ++it;
+          }
+          parent_->PostDelayed(std::bind(handler, base::ErrorCode(), size),
+                               boost::posix_time::milliseconds(1));
+          return;
+        }
+      }
+      get_io_service().post(
+          std::bind(handler,
+                    base::ErrorCode::einval("unknown I2C address"), 0));
+    }
+
+    void AsyncWrite(uint8_t address, uint8_t reg,
+                    base::ConstBufferSequence buffers,
+                    base::WriteHandler handler) override {
+      for (const auto& device: parent_->i2c_devices_) {
+        if (device->address() == address) {
+          const auto size = boost::asio::buffer_size(buffers);
+          auto it = boost::asio::buffers_begin(buffers);
+          for (std::size_t i = 0; i < size; i++) {
+            device->Write(reg + i, *it);
+            ++it;
+          }
+          parent_->PostDelayed(std::bind(handler, base::ErrorCode(), size),
+                               boost::posix_time::milliseconds(1));
+          return;
+        }
+      }
+      get_io_service().post(
+          std::bind(handler,
+                    base::ErrorCode::einval("unknown I2C address"), 0));
+    }
+
+    Impl* const parent_;
+  };
+
   Impl()
       : context_(),
         debug_deadline_service_(
             base::DebugDeadlineService::Install(context_.service)) {
+
+    debug_i2c_generator_ = new base::DebugI2CGenerator(context_.service);
+    context_.i2c_factory->Register(
+        std::unique_ptr<base::I2CFactory::Generator>(debug_i2c_generator_));
+    imu_i2c_ = std::make_shared<ImuI2C>(this);
+    debug_i2c_generator_->InstallHandler("imu", imu_i2c_);
 
     world_ = std::make_shared<World>();
 
@@ -334,12 +441,15 @@ class SimulatorWindow::Impl {
     turret_yaw->addVisualizationShape(gimbal_base);
 
     auto add_arm = [&](double side) {
-      auto arm = std::make_shared<BoxShape>(Eigen::Vector3d(0.040, 0.003, 0.117));
+      auto arm = std::make_shared<BoxShape>(
+          Eigen::Vector3d(0.040, 0.003, 0.117));
       arm->setLocalTransform(
           Eigen::Isometry3d(
               Eigen::Translation3d(
                   Eigen::Vector3d(
-                      0.0, side * 0.5 * 0.0695, -0.0225 - 0.003 - 0.5 * .117))));
+                      0.0,
+                      side * 0.5 * 0.0695,
+                      -0.0225 - 0.003 - 0.5 * .117))));
       turret_yaw->addVisualizationShape(arm);
     };
 
@@ -427,6 +537,10 @@ class SimulatorWindow::Impl {
     result->getJoint(0)->setTransformFromParentBodyNode(tf);
 
     mech_ = result;
+
+    i2c_devices_.push_back(std::make_shared<MAX21000>(body));
+    i2c_devices_.push_back(
+        std::make_shared<MMA8451Q>(body, Eigen::Vector3d(0., 0., 0.)));
   }
 
   void timeStepping() {
@@ -513,6 +627,35 @@ class SimulatorWindow::Impl {
     Impl* const parent_;
   };
 
+  void PostDelayed(base::NullHandler handler,
+                   boost::posix_time::time_duration delay) {
+    auto next = base::Now(context_.service) + delay;
+    if (callbacks_.empty() || next < callbacks_.begin()->first) {
+      // This will be our new first item.
+      callback_timer_.expires_at(next);
+      callback_timer_.async_wait(
+          std::bind(&Impl::HandleCallbackTimer, this));
+    } else {
+      // We already should have a timer going when we want it.
+    }
+
+    callbacks_.insert(std::make_pair(next, handler));
+  }
+
+  void HandleCallbackTimer() {
+    auto now = base::Now(context_.service);
+    while (!callbacks_.empty() && callbacks_.begin()->first <= now) {
+      context_.service.post(callbacks_.begin()->second);
+      callbacks_.erase(callbacks_.begin());
+    }
+
+    if (!callbacks_.empty()) {
+      callback_timer_.expires_at(callbacks_.begin()->first);
+      callback_timer_.async_wait(
+          std::bind(&Impl::HandleCallbackTimer, this));
+    }
+  }
+
   std::shared_ptr<dart::simulation::World> world_;
   dart::dynamics::SkeletonPtr mech_;
   int current_joint_ = 0;
@@ -522,6 +665,9 @@ class SimulatorWindow::Impl {
   base::DebugDeadlineService* const debug_deadline_service_;
   base::ConcreteStreamFactory::Parameters stream_config_;
   base::SharedStream stream_;
+
+  base::DebugI2CGenerator* debug_i2c_generator_ = nullptr;
+  base::SharedI2C imu_i2c_;
 
   char buffer_[256] = {};
   HerkulexOperations operations_{this};
@@ -534,6 +680,10 @@ class SimulatorWindow::Impl {
   bool disable_mech_ = false;
   bool start_disabled_ = false;
   bool turret_enabled_ = false;
+
+  std::list<std::shared_ptr<I2CDevice> > i2c_devices_;
+  std::multimap<boost::posix_time::ptime, base::NullHandler> callbacks_;
+  base::DeadlineTimer callback_timer_{context_.service};
 };
 
 SimulatorWindow::SimulatorWindow() : impl_(new Impl()) {

@@ -23,6 +23,7 @@ SOURCES = [
     'comm_factory.cc',
     'concrete_comm_factory.cc',
     'context.cc',
+    'debug_i2c_generator.cc',
     'error_code.cc',
     'fail.cc',
     'i2c_factory.cc',
