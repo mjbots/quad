@@ -343,6 +343,8 @@ class MjmechImuDriver::Impl : boost::noncopyable {
     imu_config_.gyro_scale = parameters.gyro_scale;
     imu_config_.accel_scale = parameters.accel_scale;
 
+    imu_config_.timestamp = base::Now(service_);
+
     // Emit our config.
     parent_->imu_config_signal_(&imu_config_);
 
