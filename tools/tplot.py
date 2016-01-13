@@ -376,6 +376,8 @@ class Tplot(QtGui.QMainWindow):
         # Look through all the records for those which have a
         # "timestamp" field.  Find the minimum and maximum of each.
         for record, exemplar in self.log.records.iteritems():
+            if record not in self.log.all:
+                continue
             if not 'timestamp' in [x['name'] for x in exemplar['fields']]:
                 continue
 
@@ -453,6 +455,8 @@ class Tplot(QtGui.QMainWindow):
     def update_tree_view(self, time):
         for item in self.tree_items:
             name = item.text(0)
+            if name not in self.log.all:
+                continue
             all_data = self.log.all[name]
 
             this_data_index = _bisect(all_data, time,
