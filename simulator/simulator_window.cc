@@ -39,6 +39,7 @@
 #include "mech/mech_warfare.h"
 
 #include "herkulex_protocol.h"
+#include "imu_simulation.h"
 
 using namespace dart::dynamics;
 using namespace dart::simulation;
@@ -194,53 +195,6 @@ BodyNodePtr makeLegJoint(SkeletonPtr skel, BodyNodePtr parent,
 }
 
 mjmech::simulator::SimulatorWindow::Impl* g_impl = nullptr;
-
-class I2CDevice {
- public:
-  virtual uint8_t address() const = 0;
-  virtual uint8_t Read(uint8_t reg) = 0;
-  virtual void Write(uint8_t reg, uint8_t value) = 0;
-};
-
-class MAX21000 : public I2CDevice {
- public:
-  MAX21000(dart::dynamics::Frame* frame) : frame_(frame) {}
-
-  uint8_t address() const override { return 0x59; }
-
-  uint8_t Read(uint8_t reg) {
-    switch (reg) {
-      case 0x20: { return 0xb1; }
-    }
-    return 0;
-  }
-
-  void Write(uint8_t reg, uint8_t value) {
-  }
-
- private:
-  dart::dynamics::Frame* const frame_;
-};
-
-class MMA8451Q : public I2CDevice {
- public:
-  MMA8451Q(dart::dynamics::Frame* frame,
-           const Eigen::Vector3d& offset)
-      : frame_(frame), offset_(offset) {}
-
-  uint8_t address() const override { return 0x1d; }
-
-  uint8_t Read(uint8_t reg) {
-    return 0;
-  }
-
-  void Write(uint8_t reg, uint8_t value) {
-  }
-
- private:
-  dart::dynamics::Frame* const frame_;
-  const Eigen::Vector3d offset_;
-};
 }
 
 static void HandleGlutTimer(int);
@@ -538,9 +492,11 @@ class SimulatorWindow::Impl {
 
     mech_ = result;
 
-    i2c_devices_.push_back(std::make_shared<MAX21000>(body));
     i2c_devices_.push_back(
-        std::make_shared<MMA8451Q>(body, Eigen::Vector3d(0., 0., 0.)));
+        std::make_shared<MAX21000>(context_.service, body));
+    i2c_devices_.push_back(
+        std::make_shared<MMA8451Q>(context_.service,
+                                   body, Eigen::Vector3d(0., 0., 0.)));
   }
 
   void timeStepping() {
