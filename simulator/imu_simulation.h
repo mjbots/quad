@@ -40,6 +40,12 @@ class MAX21000 : public I2CDevice {
   uint8_t address() const override { return 0x59; }
 
   uint8_t Read(uint8_t reg) {
+    const auto convert = [this](double value) {
+      return std::max(-32768,
+                      std::min(32767,
+                               static_cast<int>(value / sensitivity_)));
+    };
+
     switch (reg) {
       case 0x20: { return 0xb1; }
       case 0x22: {
@@ -47,6 +53,35 @@ class MAX21000 : public I2CDevice {
         data_ = false;
         return result;
       }
+
+      case 0x23: {
+        const int16_t value = convert(angular_rate_dps_.x);
+        return value >> 8;
+      }
+      case 0x24: {
+        const int16_t value = convert(angular_rate_dps_.x);
+        return value & 0xff;
+      }
+
+      case 0x25: {
+        const int16_t value = convert(angular_rate_dps_.y);
+        return value >> 8;
+      }
+      case 0x26: {
+        const int16_t value = convert(angular_rate_dps_.y);
+        return value & 0xff;
+      }
+
+      case 0x27: {
+        const int16_t value = convert(angular_rate_dps_.z);
+        return value >> 8;
+      }
+      case 0x28: {
+        const int16_t value = convert(angular_rate_dps_.z);
+        return value & 0xff;
+      }
+
+
     }
     return 0;
   }
@@ -56,12 +91,12 @@ class MAX21000 : public I2CDevice {
       case 0x00: {
         enabled_ = (value & 0x0f) == 0x0f;
         const int fs = value >> 6;
-        full_scale_dps_ = [&]() {
+        sensitivity_ = [&]() {
           switch (fs) {
-            case 0: { return 2000.0; }
-            case 1: { return 1000.0; }
-            case 2: { return 500.0; }
-            case 3: { return 250.0; }
+            case 0: { return 1.0 / 15.0; }
+            case 1: { return 1.0 / 30.0; }
+            case 2: { return 1.0 / 60.0; }
+            case 3: { return 1.0 / 120.0; }
           }
           return 0.0;
         }();
@@ -107,17 +142,22 @@ class MAX21000 : public I2CDevice {
 
   void Sample() {
     data_ = true;
+    const auto rate = frame_->getAngularVelocity();
+    angular_rate_dps_.x = base::Degrees(rate[0]);
+    angular_rate_dps_.y = base::Degrees(rate[1]);
+    angular_rate_dps_.z = base::Degrees(rate[2]);
   }
 
  private:
   boost::asio::io_service& service_;
   base::DeadlineTimer timer_;
   dart::dynamics::Frame* const frame_;
-  double full_scale_dps_ = 0.0;
+  double sensitivity_ = 0.0;
   bool enabled_ = false;
   double rate_hz_ = 0.0;
 
   bool data_ = false;
+  base::Point3D angular_rate_dps_;
 };
 
 class MMA8451Q : public I2CDevice {
@@ -232,9 +272,19 @@ class MMA8451Q : public I2CDevice {
 
   void Sample() {
     data_ = true;
-    measurement_g_.x = 0.0;
-    measurement_g_.y = 0.0;
-    measurement_g_.z = 1.0;
+    Eigen::Isometry3d flip = Eigen::Isometry3d::Identity();
+    flip.rotate(Eigen::AngleAxisd(M_PI, Eigen::Vector3d(1., 0., 0.)));
+
+    const auto accel = flip * frame_->getLinearAcceleration(
+        offset_, dart::dynamics::Frame::World(), frame_);
+    const auto tform = flip * frame_->getWorldTransform();
+
+    const double kGravity = 9.8065;
+
+    auto gravity = tform * Eigen::Vector3d(0.0, 0.0, kGravity);
+    measurement_g_.x = (gravity[0] + accel[0]) / kGravity;
+    measurement_g_.y = (gravity[1] + accel[1]) / kGravity;
+    measurement_g_.z = (gravity[2] + accel[2]) / kGravity;
   }
 
  private:
