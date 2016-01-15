@@ -143,8 +143,8 @@ class MAX21000 : public I2CDevice {
   void Sample() {
     data_ = true;
     const auto rate = frame_->getAngularVelocity();
-    angular_rate_dps_.x = base::Degrees(rate[0]);
-    angular_rate_dps_.y = base::Degrees(rate[1]);
+    angular_rate_dps_.x = -base::Degrees(rate[1]);
+    angular_rate_dps_.y = base::Degrees(rate[0]);
     angular_rate_dps_.z = base::Degrees(rate[2]);
   }
 
@@ -281,9 +281,12 @@ class MMA8451Q : public I2CDevice {
 
     const double kGravity = 9.8065;
 
+    // TODO jpieper: I have no idea why the linear acceleration has
+    // the sign that it does for the x axis.  This was just
+    // empirically measured in the simulator.
     auto gravity = tform * Eigen::Vector3d(0.0, 0.0, kGravity);
-    measurement_g_.x = (gravity[0] + accel[0]) / kGravity;
-    measurement_g_.y = (gravity[1] + accel[1]) / kGravity;
+    measurement_g_.x = (gravity[1] - accel[1]) / kGravity;
+    measurement_g_.y = (gravity[0] + accel[0]) / kGravity;
     measurement_g_.z = (gravity[2] + accel[2]) / kGravity;
   }
 
@@ -300,7 +303,6 @@ class MMA8451Q : public I2CDevice {
 
   base::Point3D measurement_g_;
 };
-
 
 }
 }
