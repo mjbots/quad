@@ -68,20 +68,16 @@ class AttitudeEstimator {
     return { "w", "x", "y", "z", "gx", "gy", "gz" };
   }
 
-  void SetInitialGyroBias(
-      double yaw_rps, double pitch_rps, double roll_rps) {
-    filter_.state()(4) = yaw_rps;
-    filter_.state()(5) = pitch_rps;
-    filter_.state()(6) = roll_rps;
+  void SetInitialGyroBias(const Point3D& body_rate_rps) {
+    filter_.state()(4) = body_rate_rps.x;
+    filter_.state()(5) = body_rate_rps.y;
+    filter_.state()(6) = body_rate_rps.z;
   }
 
-  void SetInitialAccel(double x_g, double y_g, double z_g) {
-    double norm = std::sqrt(x_g * x_g + y_g * y_g + z_g * z_g);
-    x_g /= norm;
-    y_g /= norm;
-    z_g /= norm;
+  void SetInitialAccel(const Point3D& accel_g) {
+    Point3D normalized = accel_g.scaled(accel_g.length());
 
-    Quaternion a = AccelToOrientation(x_g, y_g, z_g);
+    Quaternion a = AccelToOrientation(normalized);
     filter_.state()(0) = a.w();
     filter_.state()(1) = a.x();
     filter_.state()(2) = a.y();
@@ -116,22 +112,22 @@ class AttitudeEstimator {
   double pitch_rad() const { return attitude().euler().pitch_rad; }
   double roll_rad() const { return attitude().euler().roll_rad; }
 
-  double yaw_rps() const {
-    return current_gyro_.yaw_rps + filter_.state()(4);
-  }
-
   double pitch_rps() const {
-    return current_gyro_.pitch_rps + filter_.state()(5);
+    return current_gyro_rps_.x + filter_.state()(4);
   }
 
   double roll_rps() const {
-    return current_gyro_.roll_rps + filter_.state()(6);
+    return current_gyro_rps_.y + filter_.state()(5);
+  }
+
+  double yaw_rps() const {
+    return -(current_gyro_rps_.z + filter_.state()(6));
   }
 
   Point3D gyro_bias_rps() const {
-    return Point3D(filter_.state()(5, 0),
-                   filter_.state()(4, 0),
-                   -filter_.state()(6, 0));
+    return Point3D(filter_.state()(4, 0),
+                   filter_.state()(5, 0),
+                   filter_.state()(6, 0));
   }
 
   Quaternion attitude() const {
@@ -150,9 +146,7 @@ class AttitudeEstimator {
     Quaternion delta;
 
     Quaternion advanced = Quaternion::IntegrateRotationRate(
-        current_gyro_.roll_rps + result(6),
-        current_gyro_.pitch_rps + result(5),
-        current_gyro_.yaw_rps + result(4),
+        current_gyro_rps_ + Point3D(result(4), result(5), result(6)),
         dt_s);
     delta = delta * advanced;
 
@@ -180,19 +174,17 @@ class AttitudeEstimator {
 
   Eigen::Matrix<double, 1, 1> MeasureRotation(
       const Filter::State& s) const {
-    Point3D rotation(
-        current_gyro_.pitch_rps + s(5),
-        current_gyro_.roll_rps + s(6),
-        current_gyro_.yaw_rps + s(4));
+    Point3D bias_rps(s(4), s(5), s(6));
+    Point3D rotation = current_gyro_rps_ + bias_rps;
     return (Eigen::Matrix<double, 1, 1>() << rotation.length()).finished();
   }
 
-  static Quaternion AccelToOrientation(
-      double x, double y, double z) {
-    double roll = std::atan2(-x, z);
-    double pitch = std::atan2(y, std::sqrt(x * x + z * z));
+  static Quaternion AccelToOrientation(const Point3D& n) {
+    Quaternion::Euler euler;
+    euler.roll_rad = std::atan2(-n.x, n.z);
+    euler.pitch_rad = std::atan2(n.y, std::sqrt(n.x * n.x + n.z * n.z));
 
-    return Quaternion::FromEuler(roll, pitch, 0.0);
+    return Quaternion::FromEuler(euler);
   }
 
   void ProcessStationary() {
@@ -207,19 +199,15 @@ class AttitudeEstimator {
 
   void ProcessMeasurement(
       double delta_t_s,
-      double yaw_rps, double pitch_rps, double roll_rps,
-      double x_g, double y_g, double z_g) {
-    current_gyro_ = Gyro(yaw_rps, pitch_rps, roll_rps);
+      const Point3D& body_rate_rps,
+      const Point3D& accel_g) {
+    current_gyro_rps_ = body_rate_rps;
 
-    double norm = std::sqrt(x_g * x_g + y_g * y_g + z_g * z_g);
-
-    x_g /= norm;
-    y_g /= norm;
-    z_g /= norm;
+    const Point3D norm_g = accel_g.scaled(1.0 / accel_g.length());
 
     if (!initialized_) {
       initialized_ = true;
-      Quaternion start = AccelToOrientation(x_g, y_g, z_g);
+      Quaternion start = AccelToOrientation(norm_g);
       filter_.state()(0) = start.w();
       filter_.state()(1) = start.x();
       filter_.state()(2) = start.y();
@@ -233,7 +221,8 @@ class AttitudeEstimator {
                   std::placeholders::_1, std::placeholders::_2));
     filter_.UpdateMeasurement(
         MeasureAccel,
-        (Eigen::Matrix<double, 3, 1>() << x_g, y_g, z_g).finished(),
+        (Eigen::Matrix<double, 3, 1>() <<
+         norm_g.x, norm_g.y, norm_g.z).finished(),
         (Eigen::DiagonalMatrix<double, 3, 3>(
             (Eigen::Matrix<double, 3, 1>() <<
              measurement_noise_accel_,
@@ -248,17 +237,7 @@ class AttitudeEstimator {
   double measurement_noise_stationary_;
   double initial_bias_uncertainty_;
 
-  struct Gyro {
-    double yaw_rps;
-    double pitch_rps;
-    double roll_rps;
-
-    Gyro(double yaw_rps, double pitch_rps, double roll_rps)
-        : yaw_rps(yaw_rps), pitch_rps(pitch_rps), roll_rps(roll_rps) {}
-    Gyro() : yaw_rps(0.), pitch_rps(0.), roll_rps(0.) {}
-  };
-
-  Gyro current_gyro_;
+  Point3D current_gyro_rps_;
 };
 }
 }

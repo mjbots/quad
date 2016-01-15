@@ -96,8 +96,7 @@ class Ahrs::Impl : boost::noncopyable {
     // Make an initial guess of pitch and roll, use that to populate
     // attitude while we are initializing.
     const auto a_g = data_debug_.init_accel_mps2.scaled(1.0 / kGravity);
-    data_.attitude =
-        base::AttitudeEstimator::AccelToOrientation(a_g.x, a_g.y, a_g.z);
+    data_.attitude = base::AttitudeEstimator::AccelToOrientation(a_g);
 
     const auto now = base::Now(service_);
     auto elapsed = (now - data_debug_.init_start);
@@ -109,13 +108,10 @@ class Ahrs::Impl : boost::noncopyable {
 
       // TODO jpieper: Tell the estimator our initial stuff.
       Point3D filter_bias_rps = data_debug_.bias_body_deg_s.scaled(Radians(1));
-      estimator_->SetInitialGyroBias(
-          -filter_bias_rps.z,
-          filter_bias_rps.x,
-          filter_bias_rps.y);
+      estimator_->SetInitialGyroBias(filter_bias_rps);
 
       Point3D accel_g = data_debug_.init_accel_mps2.scaled(1.0 / kGravity);
-      estimator_->SetInitialAccel(accel_g.x, accel_g.y, accel_g.z);
+      estimator_->SetInitialAccel(accel_g);
     }
   }
 
@@ -129,12 +125,8 @@ class Ahrs::Impl : boost::noncopyable {
     const Point3D filter_accel_g = accel_mps2.scaled(1.0 / kGravity);
     estimator_->ProcessMeasurement(
         delta_t_s,
-        -filter_rate_rps.z,
-        filter_rate_rps.x,
-        filter_rate_rps.y,
-        filter_accel_g.x,
-        filter_accel_g.y,
-        filter_accel_g.z);
+        filter_rate_rps,
+        filter_accel_g);
 
     // Update our output attitude and bias.
     data_.attitude = estimator_->attitude();

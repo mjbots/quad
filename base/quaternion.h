@@ -123,6 +123,10 @@ class Quaternion {
             Quaternion::FromAxisAngle(roll_rad, 0, 1, 0));
   }
 
+  static Quaternion FromEuler(Euler euler) {
+    return FromEuler(euler.roll_rad, euler.pitch_rad, euler.yaw_rad);
+  }
+
   static Quaternion FromAxisAngle(
       double angle_rad, double x, double y, double z) {
     double c = std::cos(angle_rad / 2.0);
@@ -132,20 +136,20 @@ class Quaternion {
   }
 
   static Quaternion IntegrateRotationRate(
-      double roll_rate_rps, double pitch_rate_rps, double yaw_rate_rps,
+      const Point3D& rate_rps,
       double dt_s) {
     // This simple technique will yield terrible results if the total
     // delta is too large.
     const double kMaxIntegrationAngle = 0.5;
 
-    BOOST_ASSERT(roll_rate_rps * dt_s < kMaxIntegrationAngle);
-    BOOST_ASSERT(pitch_rate_rps * dt_s < kMaxIntegrationAngle);
-    BOOST_ASSERT(yaw_rate_rps * dt_s < kMaxIntegrationAngle);
+    BOOST_ASSERT(rate_rps.x * dt_s < kMaxIntegrationAngle);
+    BOOST_ASSERT(rate_rps.y * dt_s < kMaxIntegrationAngle);
+    BOOST_ASSERT(rate_rps.z * dt_s < kMaxIntegrationAngle);
 
     return Quaternion(1.0,
-                      0.5 * pitch_rate_rps * dt_s,
-                      0.5 * roll_rate_rps * dt_s,
-                      -0.5 * yaw_rate_rps * dt_s).normalized();
+                      0.5 * rate_rps.x * dt_s,
+                      0.5 * rate_rps.y * dt_s,
+                      0.5 * rate_rps.z * dt_s).normalized();
   }
 
   double w() const { return w_; }

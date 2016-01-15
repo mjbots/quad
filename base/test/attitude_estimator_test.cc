@@ -16,8 +16,10 @@
 
 #include <boost/test/auto_unit_test.hpp>
 
+using namespace mjmech;
+
 BOOST_AUTO_TEST_CASE(BasicAttitudeEstimator) {
-  mjmech::base::AttitudeEstimator estimator(
+  base::AttitudeEstimator estimator(
       0.0008 * 0.0008,
       0.0512 * 0.0512,
       1.0 * 1.0,
@@ -27,8 +29,8 @@ BOOST_AUTO_TEST_CASE(BasicAttitudeEstimator) {
 
   for (int i = 0; i < 1000; i++) {
     estimator.ProcessMeasurement(0.01,
-                                 0.0, 0., 0.,
-                                 0., 0.4794, 0.8776);
+                                 base::Point3D(0., 0., 0.),
+                                 base::Point3D(0., 0.4794, 0.8776));
   }
 
   BOOST_CHECK_SMALL(estimator.pitch_rad() - 0.5, 1e-2);
