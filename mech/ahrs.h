@@ -48,20 +48,24 @@ class Ahrs : boost::noncopyable {
     double process_noise_attitude_dps = 0.01;
     double process_noise_bias_dps = 0.0256;
     double measurement_noise_accel_mps2 = 0.5;
-    double measurement_noise_stationary_mps2 = 0.5;
+    double measurement_noise_stationary_dps = 0.1;
     double initial_noise_attitude_deg = 2.0;
     double initial_noise_bias_dps = 0.2;
     double init_time_s = 1.0;
+    double stationary_threshold_dps = 1.0;
+    double stationary_threshold_delay_s = 1.0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(process_noise_attitude_dps));
       a->Visit(MJ_NVP(process_noise_bias_dps));
       a->Visit(MJ_NVP(measurement_noise_accel_mps2));
-      a->Visit(MJ_NVP(measurement_noise_stationary_mps2));
+      a->Visit(MJ_NVP(measurement_noise_stationary_dps));
       a->Visit(MJ_NVP(initial_noise_attitude_deg));
       a->Visit(MJ_NVP(initial_noise_bias_dps));
       a->Visit(MJ_NVP(init_time_s));
+      a->Visit(MJ_NVP(stationary_threshold_dps));
+      a->Visit(MJ_NVP(stationary_threshold_delay_s));
     }
   };
 
@@ -126,6 +130,7 @@ class Ahrs : boost::noncopyable {
     int init_count = 0;
     boost::posix_time::ptime init_start;
     boost::posix_time::ptime last_measurement;
+    boost::posix_time::ptime last_movement;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -137,6 +142,7 @@ class Ahrs : boost::noncopyable {
       a->Visit(MJ_NVP(init_count));
       a->Visit(MJ_NVP(init_start));
       a->Visit(MJ_NVP(last_measurement));
+      a->Visit(MJ_NVP(last_movement));
     }
   };
 

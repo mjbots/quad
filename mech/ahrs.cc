@@ -39,7 +39,7 @@ class Ahrs::Impl : boost::noncopyable {
             Radians(parameters_.process_noise_attitude_dps),
             Radians(parameters_.process_noise_bias_dps),
             parameters_.measurement_noise_accel_mps2 / kGravity,
-            parameters_.measurement_noise_accel_mps2 / kGravity,
+            Radians(parameters_.measurement_noise_stationary_dps),
             Radians(parameters_.initial_noise_attitude_deg),
             Radians(parameters_.initial_noise_bias_dps)));
   }
@@ -106,7 +106,7 @@ class Ahrs::Impl : boost::noncopyable {
       // We have sufficient bias.
       data_.state = kOperational;
 
-      // TODO jpieper: Tell the estimator our initial stuff.
+      // Tell the estimator our initial stuff.
       Point3D filter_bias_rps = data_debug_.bias_body_deg_s.scaled(Radians(1));
       estimator_->SetInitialGyroBias(filter_bias_rps);
 
@@ -127,6 +127,15 @@ class Ahrs::Impl : boost::noncopyable {
         delta_t_s,
         filter_rate_rps,
         filter_accel_g);
+
+    if (body_rate_deg_s.length() > parameters_.stationary_threshold_dps) {
+      data_debug_.last_movement = timestamp;
+    }
+    const double stationary_s = base::ConvertDurationToSeconds(
+        timestamp - data_debug_.last_movement);
+    if (stationary_s > parameters_.stationary_threshold_delay_s) {
+      estimator_->ProcessStationary();
+    }
 
     // Update our output attitude and bias.
     data_.attitude = estimator_->attitude();
