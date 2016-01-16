@@ -48,16 +48,16 @@ class Ahrs::Impl : boost::noncopyable {
                   const base::Point3D& accel_mps2,
                   const base::Point3D& body_rate_deg_s) {
     switch (data_.state) {
-      case kUninitialized: // fall-through
-      case kInitializing: {
+      case AhrsData::kUninitialized: // fall-through
+      case AhrsData::kInitializing: {
         DoInitializing(accel_mps2, body_rate_deg_s);
         break;
       }
-      case kOperational: {
+      case AhrsData::kOperational: {
         DoOperational(timestamp, accel_mps2, body_rate_deg_s);
         break;
       }
-      case kFault: {
+      case AhrsData::kFault: {
         break;
       }
     }
@@ -74,7 +74,7 @@ class Ahrs::Impl : boost::noncopyable {
       return;
     }
 
-    data_.state = kInitializing;
+    data_.state = AhrsData::kInitializing;
     if (data_debug_.init_start.is_not_a_date_time()) {
       data_debug_.init_start = base::Now(service_);
     }
@@ -104,7 +104,7 @@ class Ahrs::Impl : boost::noncopyable {
     if (elapsed >
         base::ConvertSecondsToDuration(parameters_.init_time_s)) {
       // We have sufficient bias.
-      data_.state = kOperational;
+      data_.state = AhrsData::kOperational;
 
       // Tell the estimator our initial stuff.
       Point3D filter_bias_rps = data_debug_.bias_body_deg_s.scaled(Radians(1));
@@ -148,7 +148,7 @@ class Ahrs::Impl : boost::noncopyable {
     data_.timestamp = base::Now(service_);
     data_debug_.timestamp = data_.timestamp;
 
-    data_.valid = (data_.state == kOperational);
+    data_.valid = (data_.state == AhrsData::kOperational);
 
     auto euler = data_.attitude.euler();
 

@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,6 +23,8 @@
 #include "base/point3d.h"
 #include "base/quaternion.h"
 #include "base/visitor.h"
+
+#include "ahrs_data.h"
 
 namespace mjmech {
 namespace mech {
@@ -70,51 +72,6 @@ class Ahrs : boost::noncopyable {
   };
 
   Parameters* parameters();
-
-  enum State : int {
-    kUninitialized,
-    kInitializing,
-    kOperational,
-    kFault,
-  };
-
-  static std::map<State, const char*> StateMapper() {
-    return std::map<State, const char*>{
-      { kUninitialized, "kUninitialized" },
-      { kInitializing, "kInitializing" },
-      { kOperational, "kOperational" },
-      { kFault, "kFault" },
-    };
-  };
-
-  struct AhrsData {
-    boost::posix_time::ptime timestamp;
-
-    State state = kUninitialized;
-    bool valid = false;
-    base::Quaternion attitude;
-    double yaw_deg = 0.0;
-    double pitch_deg = 0.0;
-    double roll_deg = 0.0;
-
-    base::Point3D body_rate_deg_s;
-    base::Point3D body_accel_mps2;
-    base::Point3D world_accel_mps2;
-
-    template <typename Archive>
-    void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(timestamp));
-      a->Visit(MJ_ENUM(state, StateMapper));
-      a->Visit(MJ_NVP(valid));
-      a->Visit(MJ_NVP(attitude));
-      a->Visit(MJ_NVP(yaw_deg));
-      a->Visit(MJ_NVP(pitch_deg));
-      a->Visit(MJ_NVP(roll_deg));
-      a->Visit(MJ_NVP(body_rate_deg_s));
-      a->Visit(MJ_NVP(body_accel_mps2));
-      a->Visit(MJ_NVP(world_accel_mps2));
-    }
-  };
 
   struct AhrsDebugData {
     enum {
