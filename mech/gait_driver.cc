@@ -78,17 +78,15 @@ class GaitDriver::Impl : boost::noncopyable {
   void ProcessBodyAhrs(boost::posix_time::ptime timestamp,
                        bool valid,
                        const base::Quaternion& world_attitude,
-                       const base::Point3D& body_rate_deg_s) {
+                       const base::Point3D& body_rate_dps) {
     if (!valid) {
       attitude_ = base::Quaternion();
-      body_rate_deg_s_ = base::Point3D();
+      body_rate_dps_ = base::Point3D();
       return;
     }
 
-    const auto euler = world_attitude.euler();
-    attitude_ =
-        base::Quaternion::FromEuler(0., 0., -euler.yaw_rad) * world_attitude;
-    body_rate_deg_s_ = body_rate_deg_s;
+    attitude_ = world_attitude;
+    body_rate_dps_ = body_rate_dps;
   }
 
  private:
@@ -145,7 +143,7 @@ class GaitDriver::Impl : boost::noncopyable {
     data.body_world = state.body_frame.TransformToFrame(&state.world_frame);
     data.robot_world = state.robot_frame.TransformToFrame(&state.world_frame);
     data.attitude = attitude_;
-    data.body_rate_deg_s = body_rate_deg_s_;
+    data.body_rate_dps = body_rate_dps_;
     BOOST_ASSERT(state.legs.size() == 4);
     for (size_t i = 0; i < state.legs.size(); i++) {
       data.legs[i] = state.robot_frame.MapFromFrame(
@@ -164,7 +162,7 @@ class GaitDriver::Impl : boost::noncopyable {
   State state_ = kUnpowered;
   boost::posix_time::ptime last_command_timestamp_;
   base::Quaternion attitude_;
-  base::Point3D body_rate_deg_s_;
+  base::Point3D body_rate_dps_;
 };
 
 GaitDriver::GaitDriver(boost::asio::io_service& service,
@@ -188,8 +186,8 @@ void GaitDriver::SetFree() {
 void GaitDriver::ProcessBodyAhrs(boost::posix_time::ptime timestamp,
                                  bool valid,
                                  const base::Quaternion& attitude,
-                                 const base::Point3D& body_rate_deg_s) {
-  impl_->ProcessBodyAhrs(timestamp, valid, attitude, body_rate_deg_s);
+                                 const base::Point3D& body_rate_dps) {
+  impl_->ProcessBodyAhrs(timestamp, valid, attitude, body_rate_dps);
 }
 
 }

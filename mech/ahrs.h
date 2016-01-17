@@ -82,7 +82,7 @@ class Ahrs : boost::noncopyable {
 
     std::array<double, kFilterSize> ukf_state = {};
     std::array<double, kFilterSize * kFilterSize> ukf_covariance = {};
-    base::Point3D bias_body_deg_s;
+    base::Point3D bias_body_dps;
     base::Point3D init_accel_mps2;
     int init_count = 0;
     boost::posix_time::ptime init_start;
@@ -94,7 +94,7 @@ class Ahrs : boost::noncopyable {
       a->Visit(MJ_NVP(timestamp));
       a->Visit(MJ_NVP(ukf_state));
       a->Visit(MJ_NVP(ukf_covariance));
-      a->Visit(MJ_NVP(bias_body_deg_s));
+      a->Visit(MJ_NVP(bias_body_dps));
       a->Visit(MJ_NVP(init_accel_mps2));
       a->Visit(MJ_NVP(init_count));
       a->Visit(MJ_NVP(init_start));
@@ -115,12 +115,12 @@ class Ahrs : boost::noncopyable {
 
   template <typename ImuData>
   void HandleImuData(const ImuData* data) {
-    ProcessImu(data->timestamp, data->accel_mps2, data->body_rate_deg_s);
+    ProcessImu(data->timestamp, data->accel_mps2, data->body_rate_dps);
   }
 
   void ProcessImu(boost::posix_time::ptime timestamp,
                   const base::Point3D& accel_mps2,
-                  const base::Point3D& body_rate_deg_s);
+                  const base::Point3D& body_rate_dps);
 
   class Impl;
   std::unique_ptr<Impl> impl_;

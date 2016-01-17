@@ -88,13 +88,13 @@ class GaitDriver : boost::noncopyable {
   void HandleBodyAhrs(const AhrsData* data) {
     ProcessBodyAhrs(
         data->timestamp, data->valid,
-        data->attitude, data->body_rate_deg_s);
+        data->attitude, data->body_rate_dps);
   }
 
   void ProcessBodyAhrs(boost::posix_time::ptime timestamp,
                        bool valid,
                        const base::Quaternion& attitude,
-                       const base::Point3D& body_rate_deg_s);
+                       const base::Point3D& body_rate_dps);
 
   enum State : int {
     kUnpowered,
@@ -118,7 +118,7 @@ class GaitDriver : boost::noncopyable {
     base::Transform robot_world;
 
     base::Quaternion attitude;
-    base::Point3D body_rate_deg_s;
+    base::Point3D body_rate_dps;
 
     std::array<base::Point3D, 4> legs;
     JointCommand command;
@@ -132,7 +132,7 @@ class GaitDriver : boost::noncopyable {
       a->Visit(MJ_NVP(body_world));
       a->Visit(MJ_NVP(robot_world));
       a->Visit(MJ_NVP(attitude));
-      a->Visit(MJ_NVP(body_rate_deg_s));
+      a->Visit(MJ_NVP(body_rate_dps));
       a->Visit(MJ_NVP(legs));
       a->Visit(MJ_NVP(command));
     }

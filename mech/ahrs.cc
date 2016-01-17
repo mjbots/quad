@@ -46,15 +46,15 @@ class Ahrs::Impl : boost::noncopyable {
 
   void ProcessImu(boost::posix_time::ptime timestamp,
                   const base::Point3D& accel_mps2,
-                  const base::Point3D& body_rate_deg_s) {
+                  const base::Point3D& body_rate_dps) {
     switch (data_.state) {
       case AhrsData::kUninitialized: // fall-through
       case AhrsData::kInitializing: {
-        DoInitializing(accel_mps2, body_rate_deg_s);
+        DoInitializing(accel_mps2, body_rate_dps);
         break;
       }
       case AhrsData::kOperational: {
-        DoOperational(timestamp, accel_mps2, body_rate_deg_s);
+        DoOperational(timestamp, accel_mps2, body_rate_dps);
         break;
       }
       case AhrsData::kFault: {
@@ -64,11 +64,11 @@ class Ahrs::Impl : boost::noncopyable {
 
     data_debug_.last_measurement = timestamp;
 
-    Emit(accel_mps2, body_rate_deg_s);
+    Emit(accel_mps2, body_rate_dps);
   }
 
   void DoInitializing(const base::Point3D& accel_mps2,
-                      const base::Point3D& body_rate_deg_s) {
+                      const base::Point3D& body_rate_dps) {
     if (!estimator_) {
       // We aren't started yet.
       return;
@@ -79,17 +79,17 @@ class Ahrs::Impl : boost::noncopyable {
       data_debug_.init_start = base::Now(service_);
     }
 
-    Point3D body_total_deg_s =
-        data_debug_.bias_body_deg_s.scaled(data_debug_.init_count);
-    body_total_deg_s = body_total_deg_s - body_rate_deg_s;
+    Point3D body_total_dps =
+        data_debug_.bias_body_dps.scaled(data_debug_.init_count);
+    body_total_dps = body_total_dps - body_rate_dps;
 
     Point3D total_accel_mps2 =
         data_debug_.init_accel_mps2.scaled(data_debug_.init_count);
     total_accel_mps2 = total_accel_mps2 + accel_mps2;
 
     data_debug_.init_count++;
-    data_debug_.bias_body_deg_s =
-        body_total_deg_s.scaled(1.0 / data_debug_.init_count);
+    data_debug_.bias_body_dps =
+        body_total_dps.scaled(1.0 / data_debug_.init_count);
     data_debug_.init_accel_mps2 =
         total_accel_mps2.scaled(1.0 / data_debug_.init_count);
 
@@ -107,7 +107,7 @@ class Ahrs::Impl : boost::noncopyable {
       data_.state = AhrsData::kOperational;
 
       // Tell the estimator our initial stuff.
-      Point3D filter_bias_rps = data_debug_.bias_body_deg_s.scaled(Radians(1));
+      Point3D filter_bias_rps = data_debug_.bias_body_dps.scaled(Radians(1));
       estimator_->SetInitialGyroBias(filter_bias_rps);
 
       Point3D accel_g = data_debug_.init_accel_mps2.scaled(1.0 / kGravity);
@@ -117,18 +117,18 @@ class Ahrs::Impl : boost::noncopyable {
 
   void DoOperational(boost::posix_time::ptime timestamp,
                      const Point3D& accel_mps2,
-                     const Point3D& body_rate_deg_s) {
+                     const Point3D& body_rate_dps) {
     const double delta_t_s =
         base::ConvertDurationToSeconds(
             timestamp - data_debug_.last_measurement);
-    const Point3D filter_rate_rps = body_rate_deg_s.scaled(Radians(1));
+    const Point3D filter_rate_rps = body_rate_dps.scaled(Radians(1));
     const Point3D filter_accel_g = accel_mps2.scaled(1.0 / kGravity);
     estimator_->ProcessMeasurement(
         delta_t_s,
         filter_rate_rps,
         filter_accel_g);
 
-    if (body_rate_deg_s.length() > parameters_.stationary_threshold_dps) {
+    if (body_rate_dps.length() > parameters_.stationary_threshold_dps) {
       data_debug_.last_movement = timestamp;
     }
     const double stationary_s = base::ConvertDurationToSeconds(
@@ -139,12 +139,12 @@ class Ahrs::Impl : boost::noncopyable {
 
     // Update our output attitude and bias.
     data_.attitude = estimator_->attitude();
-    data_debug_.bias_body_deg_s =
+    data_debug_.bias_body_dps =
         estimator_->gyro_bias_rps().scaled(Degrees(1));
   }
 
   void Emit(const Point3D& accel_mps2,
-            const Point3D& body_rate_deg_s) {
+            const Point3D& body_rate_dps) {
     data_.timestamp = base::Now(service_);
     data_debug_.timestamp = data_.timestamp;
 
@@ -156,8 +156,8 @@ class Ahrs::Impl : boost::noncopyable {
     data_.pitch_deg = base::Degrees(euler.pitch_rad);
     data_.roll_deg = base::Degrees(euler.roll_rad);
 
-    data_.body_rate_deg_s =
-        body_rate_deg_s + data_debug_.bias_body_deg_s;
+    data_.body_rate_dps =
+        body_rate_dps + data_debug_.bias_body_dps;
 
     // Find our nominal accel given our current attitude.
     auto body_gravity_g =
@@ -210,8 +210,8 @@ Ahrs::Parameters* Ahrs::parameters() { return &impl_->parameters_; }
 
 void Ahrs::ProcessImu(boost::posix_time::ptime timestamp,
                       const base::Point3D& accel_mps2,
-                      const base::Point3D& body_rate_deg_s) {
-  impl_->ProcessImu(timestamp, accel_mps2, body_rate_deg_s);
+                      const base::Point3D& body_rate_dps) {
+  impl_->ProcessImu(timestamp, accel_mps2, body_rate_dps);
 }
 
 }

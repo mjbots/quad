@@ -114,7 +114,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
     try {
       // Configure the gyroscope.
       const uint8_t fs = [&parameters]() {
-        const double scale = parameters.rotation_deg_s;
+        const double scale = parameters.rotation_dps;
         if (scale <= 250) { return 3; }
         else if (scale <= 500) { return 2; }
         else if (scale <= 1000) { return 1; }
@@ -122,7 +122,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
         throw base::SystemError::einval("scale too large");
       }();
 
-      imu_config_.rotation_deg_s = [fs]() {
+      imu_config_.rotation_dps = [fs]() {
         switch (fs) {
           case 0: { return 2000.0; }
           case 1: { return 1000.0; }
@@ -359,7 +359,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
     }();
 
     gyro_sensitivity_ = [this]() {
-      const double fs = imu_config_.rotation_deg_s;
+      const double fs = imu_config_.rotation_dps;
       if (fs == 250.0) { return 1.0 / 120.0; }
       else if (fs == 500.0) { return 1.0 / 60.0; }
       else if (fs == 1000.0) { return 1.0 / 30.0; }
@@ -394,24 +394,24 @@ class MjmechImuDriver::Impl : boost::noncopyable {
     const auto& gdata = buffer_;
     const auto& parameters = parent_->parameters_;
 
-    base::Point3D body_rate_deg_s;
-    body_rate_deg_s.x =
+    base::Point3D body_rate_dps;
+    body_rate_dps.x =
         to_int16(gdata[1], gdata[2]) * gyro_sensitivity_ *
         parameters.gyro_scale.x;
-    body_rate_deg_s.y =
+    body_rate_dps.y =
         to_int16(gdata[3], gdata[4]) * gyro_sensitivity_ *
         parameters.gyro_scale.y;
-    body_rate_deg_s.z =
+    body_rate_dps.z =
         to_int16(gdata[5], gdata[6]) * gyro_sensitivity_ *
         parameters.gyro_scale.z;
 
-    auto rate_deg_s = transform_.Rotate(body_rate_deg_s);
+    auto rate_dps = transform_.Rotate(body_rate_dps);
 
     ReadAccel(0x00, 7,
-              std::bind(&Impl::HandleAccelRead, this, rate_deg_s, _1, _2));
+              std::bind(&Impl::HandleAccelRead, this, rate_dps, _1, _2));
   }
 
-  void HandleAccelRead(base::Point3D rate_deg_s,
+  void HandleAccelRead(base::Point3D rate_dps,
                        base::ErrorCode ec, std::size_t) {
     base::FailIf(ec);
 
@@ -434,7 +434,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
 
     imu_data.accel_mps2 = transform_.Rotate(accel_mps2);
 
-    imu_data.body_rate_deg_s = rate_deg_s;
+    imu_data.body_rate_dps = rate_dps;
 
     parent_->imu_data_signal_(&imu_data);
 

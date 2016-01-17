@@ -56,7 +56,7 @@ class MjmechImuDriver : boost::noncopyable {
     int accel_address = 0x1d;
 
     double accel_g = 4.0;
-    double rotation_deg_s = 500.0;
+    double rotation_dps = 500.0;
     double rate_hz = 100.0;
 
     double roll_deg = 0;
@@ -71,7 +71,7 @@ class MjmechImuDriver : boost::noncopyable {
       a->Visit(MJ_NVP(gyro_address));
       a->Visit(MJ_NVP(accel_address));
       a->Visit(MJ_NVP(accel_g));
-      a->Visit(MJ_NVP(rotation_deg_s));
+      a->Visit(MJ_NVP(rotation_dps));
       a->Visit(MJ_NVP(rate_hz));
       a->Visit(MJ_NVP(roll_deg));
       a->Visit(MJ_NVP(pitch_deg));
@@ -94,13 +94,13 @@ class MjmechImuDriver : boost::noncopyable {
   struct ImuData {
     boost::posix_time::ptime timestamp;
     base::Point3D accel_mps2;
-    base::Point3D body_rate_deg_s;
+    base::Point3D body_rate_dps;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(timestamp));
       a->Visit(MJ_NVP(accel_mps2));
-      a->Visit(MJ_NVP(body_rate_deg_s));
+      a->Visit(MJ_NVP(body_rate_dps));
     }
   };
 
@@ -109,7 +109,7 @@ class MjmechImuDriver : boost::noncopyable {
     double rate_hz = 0.0;
     double gyro_bw_hz = 0.0;
     double accel_g = 0.0;
-    double rotation_deg_s = 0.0;
+    double rotation_dps = 0.0;
 
     double roll_deg = 0;
     double pitch_deg = 0;
@@ -124,7 +124,7 @@ class MjmechImuDriver : boost::noncopyable {
       a->Visit(MJ_NVP(rate_hz));
       a->Visit(MJ_NVP(gyro_bw_hz));
       a->Visit(MJ_NVP(accel_g));
-      a->Visit(MJ_NVP(rotation_deg_s));
+      a->Visit(MJ_NVP(rotation_dps));
       a->Visit(MJ_NVP(roll_deg));
       a->Visit(MJ_NVP(pitch_deg));
       a->Visit(MJ_NVP(yaw_deg));

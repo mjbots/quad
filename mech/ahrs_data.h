@@ -45,7 +45,7 @@ struct AhrsData {
   double pitch_deg = 0.0;
   double roll_deg = 0.0;
 
-  base::Point3D body_rate_deg_s;
+  base::Point3D body_rate_dps;
   base::Point3D body_accel_mps2;
   base::Point3D world_accel_mps2;
 
@@ -58,7 +58,7 @@ struct AhrsData {
     a->Visit(MJ_NVP(yaw_deg));
     a->Visit(MJ_NVP(pitch_deg));
     a->Visit(MJ_NVP(roll_deg));
-    a->Visit(MJ_NVP(body_rate_deg_s));
+    a->Visit(MJ_NVP(body_rate_dps));
     a->Visit(MJ_NVP(body_accel_mps2));
     a->Visit(MJ_NVP(world_accel_mps2));
   }
