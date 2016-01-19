@@ -24,6 +24,12 @@
 namespace mjmech {
 namespace mech {
 namespace {
+double Limit(double val, double max) {
+  if (val > max) { return max; }
+  else if (val < -max) { return -max; }
+  return val;
+}
+
 class FailHandler {
  public:
   void operator()(base::ErrorCode ec) const {
@@ -46,14 +52,21 @@ class GaitDriver::Impl : boost::noncopyable {
     gait_ = std::move(gait);
   }
 
-  void SetCommand(const Command& command) {
+  void SetCommand(const Command& input_command) {
+    input_command_ = input_command;
+
+    const double old_translate_x_mm_s = gait_command_.translate_x_mm_s;
+    const double old_translate_y_mm_s = gait_command_.translate_y_mm_s;
+    gait_command_ = input_command;
+    gait_command_.translate_x_mm_s = old_translate_x_mm_s;
+    gait_command_.translate_y_mm_s = old_translate_y_mm_s;
+
     CommandData data;
     data.timestamp = base::Now(service_);
-    data.command = command;
+    data.command = input_command_;
+    parent_->command_data_signal_(&data);
 
     last_command_timestamp_ = data.timestamp;
-
-    parent_->command_data_signal_(&data);
 
     if (state_ != kActive) {
       servo_->EnablePower(ServoInterface::kPowerEnable, {}, FailHandler());
@@ -67,7 +80,7 @@ class GaitDriver::Impl : boost::noncopyable {
       StartTimer();
     }
 
-    gait_->SetCommand(command);
+    gait_->SetCommand(gait_command_);
   }
 
   void SetFree() {
@@ -112,12 +125,42 @@ class GaitDriver::Impl : boost::noncopyable {
 
     StartTimer();
 
+    auto update_axis_accel = [&](double input_mm_s,
+                                 double* gait_mm_s,
+                                 double accel_mm_s2) {
+      // Update the translational velocities.
+      if ((input_mm_s * (*gait_mm_s)) >= 0.0) {
+        // Same sign or one is zero.
+        if (std::abs(input_mm_s) > std::abs(*gait_mm_s)) {
+          double delta_mm_s = input_mm_s - *gait_mm_s;
+          const double max_step_mm_s =
+            parent_->parameters_.period_s * accel_mm_s2;
+          const double step_mm_s = Limit(delta_mm_s, max_step_mm_s);
+          *gait_mm_s += step_mm_s;
+        } else {
+          *gait_mm_s = input_mm_s;
+        }
+      } else {
+        // Opposite signs.
+        *gait_mm_s = 0;
+      }
+    };
+
+    update_axis_accel(input_command_.translate_x_mm_s,
+                      &gait_command_.translate_x_mm_s,
+                      parent_->parameters_.max_acceleration_mm_s2.x);
+    update_axis_accel(input_command_.translate_y_mm_s,
+                      &gait_command_.translate_y_mm_s,
+                      parent_->parameters_.max_acceleration_mm_s2.y);
+
     if (elapsed > (base::ConvertSecondsToDuration(
                        parent_->parameters_.command_timeout_s -
                        parent_->parameters_.idle_time_s))) {
       Command idle_command;
       idle_command.lift_height_percent = 0.0;
       gait_->SetCommand(idle_command);
+    } else {
+      gait_->SetCommand(gait_command_);
     }
 
     // Advance our gait, then send the requisite servo commands out.
@@ -149,6 +192,8 @@ class GaitDriver::Impl : boost::noncopyable {
       data.legs[i] = state.robot_frame.MapFromFrame(
           state.legs[i].frame, state.legs[i].point);
     }
+    data.input_command = input_command_;
+    data.gait_command = gait_command_;
     parent_->gait_data_signal_(&data);
   }
 
@@ -163,6 +208,9 @@ class GaitDriver::Impl : boost::noncopyable {
   boost::posix_time::ptime last_command_timestamp_;
   base::Quaternion attitude_;
   base::Point3D body_rate_dps_;
+
+  Command input_command_;
+  Command gait_command_;
 };
 
 GaitDriver::GaitDriver(boost::asio::io_service& service,

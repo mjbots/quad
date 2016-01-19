@@ -70,11 +70,16 @@ class GaitDriver : boost::noncopyable {
     /// idle pose.
     double idle_time_s = 1.0;
 
+    /// The maximum amount that the gait engine can accelerate in each
+    /// axis.  Deceleration is currently unlimited.
+    base::Point3D max_acceleration_mm_s2 = base::Point3D(200., 200., 200.);
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(period_s));
       a->Visit(MJ_NVP(command_timeout_s));
       a->Visit(MJ_NVP(idle_time_s));
+      a->Visit(MJ_NVP(max_acceleration_mm_s2));
     }
   };
 
@@ -121,7 +126,12 @@ class GaitDriver : boost::noncopyable {
     base::Point3D body_rate_dps;
 
     std::array<base::Point3D, 4> legs;
+    // The command as sent by the user.
     JointCommand command;
+
+    // The command as given to the gait engine.
+    Command input_command;
+    Command gait_command;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -135,6 +145,8 @@ class GaitDriver : boost::noncopyable {
       a->Visit(MJ_NVP(body_rate_dps));
       a->Visit(MJ_NVP(legs));
       a->Visit(MJ_NVP(command));
+      a->Visit(MJ_NVP(input_command));
+      a->Visit(MJ_NVP(gait_command));
     }
   };
 
