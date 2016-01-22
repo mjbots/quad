@@ -126,7 +126,7 @@ AxisMapping GetAxisMapping(const LinuxInput* input) {
 
 struct Options {
   double period_s = 0.1;
-  double deadband = 0.15;
+  double deadband = 0.18;
   double max_translate_x_mm_s = 300.0;
   double max_translate_y_mm_s = 300.0;
   double max_rotate_deg_s = 100.0;
@@ -185,12 +185,14 @@ class Commander {
             boost::asio::io_service& service,
             const udp::endpoint& target,
             LinuxInput* linux_input,
-            udp::socket* socket)
+            udp::socket* socket,
+            const Command& command)
       : options_(options),
         service_(service),
         target_(target),
         linux_input_(linux_input),
         socket_(socket),
+        command_(command),
         timer_(service),
         mapping_(GetAxisMapping(linux_input)) {
   }
@@ -202,7 +204,8 @@ class Commander {
 
   void StartRead() {
     linux_input_->AsyncRead(
-        &event_, std::bind(&Commander::HandleRead, this, std::placeholders::_1));
+        &event_, std::bind(&Commander::HandleRead, this,
+                           std::placeholders::_1));
   }
 
   void StartTimer() {
@@ -231,8 +234,10 @@ class Commander {
     MechMessage message;
     Command& command = message.gait;
 
+    command = command_;
+
     auto maybe_map = [this](double* destination, int mapping, int sign,
-                            double minval, double maxval) {
+                            double center, double minval, double maxval) {
       if (mapping < 0) { return; }
 
       double scaled = linux_input_->abs_info(mapping).scaled();
@@ -245,32 +250,38 @@ class Commander {
         scaled = (scaled + options_.deadband) / (1.0 - options_.deadband);
       }
 
-      const double value = ((scaled < 0) ? minval : maxval) * std::abs(scaled);
+      const double abs_scaled = std::abs(scaled);
+      const double value = (
+          (scaled < 0) ?
+          (abs_scaled * (minval - center) + center) :
+          (abs_scaled * (maxval - center) + center));
 
       *destination = value;
     };
 
     if (key_map_[mapping_.body]) {
       maybe_map(&command.body_x_mm, mapping_.body_x,
-                mapping_.sign_body_x,
+                mapping_.sign_body_x, command_.body_x_mm,
                 -options_.max_body_x_mm, options_.max_body_x_mm);
       maybe_map(&command.body_y_mm, mapping_.body_y,
-                mapping_.sign_body_y,
+                mapping_.sign_body_y, command_.body_y_mm,
                 -options_.max_body_y_mm, options_.max_body_y_mm);
       maybe_map(&command.body_pitch_deg, mapping_.body_pitch,
-                mapping_.sign_body_pitch,
+                mapping_.sign_body_pitch, command_.body_pitch_deg,
                 -options_.max_body_pitch_deg, options_.max_body_pitch_deg);
       maybe_map(&command.body_roll_deg, mapping_.body_roll,
-                mapping_.sign_body_roll,
+                mapping_.sign_body_roll, command_.body_roll_deg,
                 -options_.max_body_roll_deg, options_.max_body_roll_deg);
     } else if (key_map_[mapping_.turret]) {
       message.turret.rate = TurretCommand::Rate();
       maybe_map(&(message.turret.rate->x_deg_s),
                 mapping_.turret_x, mapping_.sign_turret_x,
+                0,
                 -options_.max_turret_rate_deg_s,
                 options_.max_turret_rate_deg_s);
       maybe_map(&(message.turret.rate->y_deg_s),
                 mapping_.turret_y, mapping_.sign_turret_y,
+                0,
                 -options_.max_turret_rate_deg_s,
                 options_.max_turret_rate_deg_s);
 
@@ -282,15 +293,19 @@ class Commander {
     } else {
       maybe_map(&command.translate_x_mm_s, mapping_.translate_x,
                 mapping_.sign_translate_x,
+                command_.translate_x_mm_s,
                 -options_.max_translate_x_mm_s, options_.max_translate_x_mm_s);
       maybe_map(&command.translate_y_mm_s, mapping_.translate_y,
                 mapping_.sign_translate_y,
+                command_.translate_y_mm_s,
                 -options_.max_translate_y_mm_s, options_.max_translate_y_mm_s);
       maybe_map(&command.rotate_deg_s, mapping_.rotate,
                 mapping_.sign_rotate,
+                command_.rotate_deg_s,
                 -options_.max_rotate_deg_s, options_.max_rotate_deg_s);
       maybe_map(&command.body_z_mm, mapping_.body_z,
                 mapping_.sign_body_z,
+                command_.body_z_mm,
                 options_.min_body_z_mm, options_.max_body_z_mm);
     }
 
@@ -354,6 +369,7 @@ class Commander {
   const udp::endpoint target_;
   LinuxInput* const linux_input_;
   udp::socket* const socket_;
+  const Command command_;
   DeadlineTimer timer_;
   const AxisMapping mapping_;
 
@@ -416,7 +432,7 @@ int work(int argc, char** argv) {
   } else {
     LinuxInput input(service, joystick);
 
-    Commander commander(options, service, *it, &input, &socket);
+    Commander commander(options, service, *it, &input, &socket, command);
 
     commander.Start();
 
