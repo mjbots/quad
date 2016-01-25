@@ -190,6 +190,7 @@ class PlotWidget(QtGui.QWidget):
 
         self.left_axis = self.figure.add_subplot(111)
         self.left_axis.grid()
+        self.left_axis.fmt_xdata = lambda x: '%.3f' % x
 
         self.left_axis.legend_loc = LEFT_LEGEND_LOC
 
