@@ -169,7 +169,7 @@ class PlotItem(object):
         self.line.set_data(self.xdata, self.ydata)
 
         self.axis.relim()
-        self.axis.autoscale_view()
+        self.axis.autoscale()
 
 
 class PlotWidget(QtGui.QWidget):
