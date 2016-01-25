@@ -56,10 +56,10 @@ struct AxisMapping {
   int sign_body_y = 1;
 
   int turret_x = -1;
-  int sign_turret_x = 1;
+  int sign_turret_x = -1;
 
   int turret_y = -1;
-  int sign_turret_y = 1;
+  int sign_turret_y = -1;
 
   int fire = -1;
   int laser = -1;
@@ -100,7 +100,7 @@ AxisMapping GetAxisMapping(const LinuxInput* input) {
     result.sign_body_roll = 1;
 
     result.turret_x = ABS_RX;
-    result.sign_turret_x = -1;
+    result.sign_turret_x = 1;
   }
   if (features.capabilities.test(ABS_RY)) {
     result.body_z = ABS_RY;
@@ -110,7 +110,7 @@ AxisMapping GetAxisMapping(const LinuxInput* input) {
     result.sign_body_pitch = 1;
 
     result.turret_y = ABS_RY;
-    result.sign_turret_y = 1;
+    result.sign_turret_y = -1;
   }
 
   result.crouch = BTN_A;
