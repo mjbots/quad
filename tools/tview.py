@@ -185,6 +185,9 @@ class PlotWidget(QtGui.QWidget):
         self.figure = matplotlib.figure.Figure()
         self.canvas = FigureCanvas(self.figure)
 
+        self.canvas.mpl_connect('key_press_event', self.handle_key_press)
+        self.canvas.mpl_connect('key_release_event', self.handle_key_release)
+
         self.left_axis = self.figure.add_subplot(111)
         self.left_axis.grid()
 
@@ -231,6 +234,28 @@ class PlotWidget(QtGui.QWidget):
 
     def remove_plot(self, item):
         item.remove()
+
+    def _get_axes_keys(self):
+        result = []
+        result.append(('1', self.left_axis))
+        if self.right_axis:
+            result.append(('2', self.right_axis))
+        return result
+
+    def handle_key_press(self, event):
+        if event.key not in ['1', '2']:
+            return
+        for key, axis in self._get_axes_keys():
+            if key == event.key:
+                axis.set_navigate(True)
+            else:
+                axis.set_navigate(False)
+
+    def handle_key_release(self, event):
+        if event.key not in ['1', '2']:
+            return
+        for key, axis in self._get_axes_keys():
+            axis.set_navigate(True)
 
 
 class SizedTreeWidget(QtGui.QTreeWidget):
