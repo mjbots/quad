@@ -55,22 +55,22 @@ struct AbsoluteYaw {
 };
 
 struct LedControl {
-  const int position = 0x35;
+  const int position = 0x73;
   const int length = 1;
 };
 
 struct FireTime {
-  const int position = 80;
+  const int position = 0x70;
   const int length = 1;
 };
 
 struct FirePwm {
-  const int position = 81;
+  const int position = 0x71;
   const int length = 1;
 };
 
 struct AgitatorPwm {
-  const int position = 82;
+  const int position = 0x72;
   const int length = 1;
 };
 
@@ -212,10 +212,9 @@ class Turret::Impl : boost::noncopyable {
     data_.absolute.x_deg = (absolute_int - 0x3fff) / (0x7fff * 360.0);
 
     // Now read from the fire control board.
-    const int kAddressFirePwm = 81;
     servo_->MemRead(
-        servo_->RAM_READ, parameters_.fire_control_address,
-        kAddressFirePwm, 2,
+        servo_->RAM_READ, parameters_.gimbal_address,
+        FirePwm().position, 2,
         [this](base::ErrorCode ec, Mech::ServoBase::MemReadResponse response) {
           HandleFireControl(ec, response);
         });
@@ -381,7 +380,7 @@ void Turret::SetCommand(const TurretCommand& command) {
   // Update the laser status.
   uint8_t leds = (command.laser_on ? 1 : 0) << 2;
   impl_->servo_->RamWrite(
-      impl_->parameters_.fire_control_address, LedControl(), leds,
+      impl_->parameters_.gimbal_address, LedControl(), leds,
       std::bind(&Impl::HandleWrite, impl_.get(), std::placeholders::_1));
 
   const auto u8 = [](int val) {
@@ -406,7 +405,7 @@ void Turret::SetCommand(const TurretCommand& command) {
     }() * 255);
 
   impl_->servo_->RamWrite(
-      impl_->parameters_.fire_control_address, AgitatorPwm(), agitator_pwm,
+      impl_->parameters_.gimbal_address, AgitatorPwm(), agitator_pwm,
       std::bind(&Impl::HandleWrite, impl_.get(), std::placeholders::_1));
 
 
@@ -447,7 +446,7 @@ void Turret::SetCommand(const TurretCommand& command) {
                               sizeof(fire_data));
     impl_->servo_->MemWrite(
         impl_->servo_->RAM_WRITE,
-        impl_->parameters_.fire_control_address,
+        impl_->parameters_.gimbal_address,
         FireTime().position,
         fire_data_str,
         std::bind(&Impl::HandleWrite, impl_.get(),

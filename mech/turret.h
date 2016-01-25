@@ -42,7 +42,6 @@ class Turret : boost::noncopyable {
 
   struct Parameters {
     int gimbal_address = 98;
-    int fire_control_address = 99;
     double period_s = 0.1;
     int command_update_decimate = 10;
     int error_disable_count = 3;
@@ -60,7 +59,6 @@ class Turret : boost::noncopyable {
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(gimbal_address));
-      a->Visit(MJ_NVP(fire_control_address));
       a->Visit(MJ_NVP(period_s));
       a->Visit(MJ_NVP(command_update_decimate));
       a->Visit(MJ_NVP(error_disable_count));
