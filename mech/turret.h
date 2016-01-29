@@ -88,9 +88,9 @@ class Turret : boost::noncopyable {
 
     TurretCommand::Imu imu;
     TurretCommand::Absolute absolute;
-    boost::optional<TurretCommand::Imu> imu_command;
+
     int last_sequence = -1;
-    TurretCommand::Rate rate;
+    bool last_rate = false;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -100,9 +100,8 @@ class Turret : boost::noncopyable {
       a->Visit(MJ_NVP(fire_count));
       a->Visit(MJ_NVP(imu));
       a->Visit(MJ_NVP(absolute));
-      a->Visit(MJ_NVP(imu_command));
       a->Visit(MJ_NVP(last_sequence));
-      a->Visit(MJ_NVP(rate));
+      a->Visit(MJ_NVP(last_rate));
     }
   };
 

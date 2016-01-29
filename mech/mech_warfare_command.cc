@@ -388,6 +388,9 @@ int work(int argc, char** argv) {
   std::string joystick;
   MechMessage message;
   Command& command = message.gait;
+  TurretCommand& turret = message.turret;
+  double turret_pitch_rate_dps = 0.0;
+  double turret_yaw_rate_dps = 0.0;
   Options options;
 
   po::options_description desc("Allowable options");
@@ -396,6 +399,8 @@ int work(int argc, char** argv) {
       ("target,t", po::value(&target), "destination of commands")
       ("joystick,j", po::value(&joystick),
        "send live commands from joystick at this device")
+      ("turret.pitch_rate_dps", po::value(&turret_pitch_rate_dps), "")
+      ("turret.yaw_rate_dps", po::value(&turret_yaw_rate_dps), "")
       ;
 
   ProgramOptionsArchive(&desc, "cmd.").Accept(&command);
@@ -408,6 +413,13 @@ int work(int argc, char** argv) {
   if (vm.count("help")) {
     std::cerr << desc;
     return 0;
+  }
+
+  if (turret_pitch_rate_dps != 0.0 ||
+      turret_yaw_rate_dps != 0.0) {
+    turret.rate = TurretCommand::Rate();
+    turret.rate->x_deg_s = turret_yaw_rate_dps;
+    turret.rate->y_deg_s = turret_pitch_rate_dps;
   }
 
   std::string host;

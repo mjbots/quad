@@ -717,9 +717,9 @@ class HerkuleX : public HerkuleXProtocol {
 
     std::ostringstream ostr;
     for (int i = 0; i < field.length; i++) {
-      uint8_t byte = value & 0xff;
+      const uint8_t byte = value & ((1 << field.bit_align) - 1);
       ostr.write(reinterpret_cast<const char*>(&byte), 1);
-      value = value >> 8;
+      value = value >> field.bit_align;
     }
 
     MemWrite(command, servo, field.position, ostr.str(),
