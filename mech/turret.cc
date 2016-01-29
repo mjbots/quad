@@ -55,22 +55,22 @@ struct AbsoluteYaw {
 };
 
 struct LedControl {
-  const int position = 0x73;
+  const int position = 0x7f;
   const int length = 1;
 };
 
 struct FireTime {
-  const int position = 0x70;
+  const int position = 0x7c;
   const int length = 1;
 };
 
 struct FirePwm {
-  const int position = 0x71;
+  const int position = 0x7d;
   const int length = 1;
 };
 
 struct AgitatorPwm {
-  const int position = 0x72;
+  const int position = 0x7e;
   const int length = 1;
 };
 

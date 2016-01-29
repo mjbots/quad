@@ -47,12 +47,10 @@ HerkuleXConstants::HerkuleXConstants()
   { "gimbal_yaw", Register{0x54, 4, 7, true} },
   { "gimbal_imu_pitch", Register{0x58, 4, 7, true} },
   { "gimbal_imu_yaw", Register{0x5c, 4, 7, true} },
-  { "gimbal_encoder_yaw", Register{0x60, 2, 7, false} },
-  { "gimbal_encoder_agc", Register{0x62, 2, 7} },
-  { "gimbal_encoder_flags", Register{0x64, 2, 7} },
-  { "gimbal_encoder_mag", Register{0x66, 2, 7} },
-  { "gimbal_absolute", Register{0x68, 2, 7} },
-  { "gimbal_gyro_cal", Register{0x6a, 1} },
+  { "gimbal_absolute", Register{0x68, 4, 7, true} },
+  { "gimbal_pitch_rate", Register{0x6c, 4, 7, true} },
+  { "gimbal_yaw_rate", Register{0x70, 4, 7, true } },
+  { "gimbal_gyro_cal", Register{0x7b, 1} },
       }
 {
 }
