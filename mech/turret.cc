@@ -173,13 +173,7 @@ class Turret::Impl : boost::noncopyable {
 
   void HandleCommand(base::ErrorCode ec,
                      Mech::ServoBase::MemReadResponse response) {
-    if (ec == boost::asio::error::operation_aborted ||
-        ec == herkulex_error::synchronization_error) {
-      TemporarilyDisableTurret(ec);
-      return;
-    } else {
-      MarkCommunicationsActive();
-    }
+    if (CheckTemporaryError(ec)) { return; }
     FailIf(ec);
 
     Parser parser = response;
@@ -191,15 +185,20 @@ class Turret::Impl : boost::noncopyable {
     Emit();
   }
 
-  void HandleCurrent(base::ErrorCode ec,
-                     Mech::ServoBase::MemReadResponse response) {
+  bool CheckTemporaryError(const base::ErrorCode& ec) {
     if (ec == boost::asio::error::operation_aborted ||
         ec == herkulex_error::synchronization_error) {
       TemporarilyDisableTurret(ec);
-      return;
+      return true;
     } else {
       MarkCommunicationsActive();
     }
+    return false;
+  }
+
+  void HandleCurrent(base::ErrorCode ec,
+                     Mech::ServoBase::MemReadResponse response) {
+    if (CheckTemporaryError(ec)) { return; }
     FailIf(ec);
 
     Parser parser = response;
@@ -222,6 +221,7 @@ class Turret::Impl : boost::noncopyable {
 
   void HandleFireControl(base::ErrorCode ec,
                          Mech::ServoBase::MemReadResponse response) {
+    if (CheckTemporaryError(ec)) { return; }
     FailIf(ec);
 
     data_.fire_enabled = response.register_data.at(0) != 0;
