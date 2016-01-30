@@ -206,16 +206,26 @@ class Turret::Impl : boost::noncopyable {
     error_count_++;
 
     if (error_count_ >= parameters_.error_disable_count) {
+      if (data_.disable_period_s == 0.0) {
+        data_.disable_period_s = parameters_.initial_disable_period_s;
+      } else {
+        data_.disable_period_s = std::min(parameters_.max_disable_period_s,
+                                          data_.disable_period_s * 2);
+      }
       std::cerr << boost::format(
           "Turret: Device unresponsive, disabling for %d seconds.\n") %
-          parameters_.disable_period_s;
+          data_.disable_period_s;
       disable_until_ = base::Now(service_) +
-          base::ConvertSecondsToDuration(parameters_.disable_period_s);
+          base::ConvertSecondsToDuration(data_.disable_period_s);
     }
   }
 
   void MarkCommunicationsActive() {
+    if (error_count_ >= parameters_.error_disable_count) {
+      std::cerr << "Turret: connection re-established\n";
+    }
     error_count_ = 0;
+    data_.disable_period_s = 0.0;
   }
 
   bool is_disabled() const {

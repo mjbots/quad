@@ -45,7 +45,8 @@ class Turret : boost::noncopyable {
     double period_s = 0.1;
     int command_update_decimate = 10;
     int error_disable_count = 3;
-    double disable_period_s = 60.0;
+    double initial_disable_period_s = 1.0;
+    double max_disable_period_s = 60.0;
     double auto_agitator_time_s = 2.0;
     double min_x_deg = -120;
     double max_x_deg = 120;
@@ -62,7 +63,8 @@ class Turret : boost::noncopyable {
       a->Visit(MJ_NVP(period_s));
       a->Visit(MJ_NVP(command_update_decimate));
       a->Visit(MJ_NVP(error_disable_count));
-      a->Visit(MJ_NVP(disable_period_s));
+      a->Visit(MJ_NVP(initial_disable_period_s));
+      a->Visit(MJ_NVP(max_disable_period_s));
       a->Visit(MJ_NVP(auto_agitator_time_s));
       a->Visit(MJ_NVP(min_x_deg));
       a->Visit(MJ_NVP(max_x_deg));
@@ -91,6 +93,7 @@ class Turret : boost::noncopyable {
 
     int last_sequence = -1;
     bool last_rate = false;
+    double disable_period_s = 0.0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -102,6 +105,7 @@ class Turret : boost::noncopyable {
       a->Visit(MJ_NVP(absolute));
       a->Visit(MJ_NVP(last_sequence));
       a->Visit(MJ_NVP(last_rate));
+      a->Visit(MJ_NVP(disable_period_s));
     }
   };
 
