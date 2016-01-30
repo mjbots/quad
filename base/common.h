@@ -49,6 +49,10 @@ inline double WrapNegPiToPi(double value) {
   }
 }
 
+inline double WrapNeg180To180(double value) {
+  return Degrees(WrapNegPiToPi(Radians(value)));
+}
+
 #ifndef MJMECH_DISABLE_BOOST
 inline boost::posix_time::time_duration
 ConvertSecondsToDuration(double time_s) {
