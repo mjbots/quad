@@ -17,6 +17,7 @@
 #include "base/common.h"
 #include "base/deadline_timer.h"
 #include "base/fail.h"
+#include "base/logging.h"
 #include "base/now.h"
 
 namespace mjmech {
@@ -202,7 +203,7 @@ class Turret::Impl : boost::noncopyable {
   }
 
   void TemporarilyDisableTurret(const base::ErrorCode& ec) {
-    std::cerr << "error reading turret: " << ec.message() << "\n";
+    log_.warn("error reading turret: " + ec.message());
     error_count_++;
 
     if (error_count_ >= parameters_.error_disable_count) {
@@ -212,9 +213,10 @@ class Turret::Impl : boost::noncopyable {
         data_.disable_period_s = std::min(parameters_.max_disable_period_s,
                                           data_.disable_period_s * 2);
       }
-      std::cerr << boost::format(
-          "Turret: Device unresponsive, disabling for %d seconds.\n") %
-          data_.disable_period_s;
+      log_.warn(
+          (boost::format(
+              "device unresponsive, disabling for %d seconds") %
+           data_.disable_period_s).str());
       disable_until_ = base::Now(service_) +
           base::ConvertSecondsToDuration(data_.disable_period_s);
     }
@@ -222,7 +224,7 @@ class Turret::Impl : boost::noncopyable {
 
   void MarkCommunicationsActive() {
     if (error_count_ >= parameters_.error_disable_count) {
-      std::cerr << "Turret: connection re-established\n";
+      log_.warn("connection re-established");
     }
     error_count_ = 0;
     data_.disable_period_s = 0.0;
@@ -234,6 +236,7 @@ class Turret::Impl : boost::noncopyable {
     return now < disable_until_;
   }
 
+  base::LogRef log_ = base::GetLogInstance("turret");
   Turret* const parent_;
   boost::asio::io_service& service_;
   Mech::ServoBase* const servo_;
