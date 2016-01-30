@@ -150,11 +150,11 @@ class Ahrs::Impl : boost::noncopyable {
 
     data_.valid = (data_.state == AhrsData::kOperational);
 
-    auto euler = data_.attitude.euler();
+    auto euler_rad = data_.attitude.euler_rad();
 
-    data_.yaw_deg = base::Degrees(euler.yaw_rad);
-    data_.pitch_deg = base::Degrees(euler.pitch_rad);
-    data_.roll_deg = base::Degrees(euler.roll_rad);
+    data_.yaw_deg = base::Degrees(euler_rad.yaw);
+    data_.pitch_deg = base::Degrees(euler_rad.pitch);
+    data_.roll_deg = base::Degrees(euler_rad.roll);
 
     data_.body_rate_dps =
         body_rate_dps + data_debug_.bias_body_dps;

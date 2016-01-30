@@ -105,12 +105,12 @@ class AttitudeEstimator {
   double pitch_error(double pitch) const {
     return (attitude() *
             Quaternion::FromEuler(0., pitch, 0).
-            conjugated()).euler().pitch_rad;
+            conjugated()).euler_rad().pitch;
   }
 
-  double yaw_rad() const { return attitude().euler().yaw_rad; }
-  double pitch_rad() const { return attitude().euler().pitch_rad; }
-  double roll_rad() const { return attitude().euler().roll_rad; }
+  double yaw_rad() const { return attitude().euler_rad().yaw; }
+  double pitch_rad() const { return attitude().euler_rad().pitch; }
+  double roll_rad() const { return attitude().euler_rad().roll; }
 
   double pitch_rps() const {
     return current_gyro_rps_.x + filter_.state()(4);
@@ -180,11 +180,11 @@ class AttitudeEstimator {
   }
 
   static Quaternion AccelToOrientation(const Point3D& n) {
-    Quaternion::Euler euler;
-    euler.roll_rad = std::atan2(-n.x, n.z);
-    euler.pitch_rad = std::atan2(n.y, std::sqrt(n.x * n.x + n.z * n.z));
+    Euler euler_rad;
+    euler_rad.roll = std::atan2(-n.x, n.z);
+    euler_rad.pitch = std::atan2(n.y, std::sqrt(n.x * n.x + n.z * n.z));
 
-    return Quaternion::FromEuler(euler);
+    return Quaternion::FromEuler(euler_rad);
   }
 
   void ProcessStationary() {

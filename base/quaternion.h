@@ -21,6 +21,7 @@
 
 #include <Eigen/Core>
 
+#include "euler.h"
 #include "point3d.h"
 
 namespace mjmech {
@@ -78,40 +79,28 @@ class Quaternion {
     return r;
   }
 
-  /// Euler angles are in roll, pitch, then yaw.
-  ///  +roll -> right side down
-  ///  +pitch -> forward edge up
-  ///  +yaw -> clockwise looking down
-  struct Euler {
-    double roll_rad;
-    double pitch_rad;
-    double yaw_rad;
-
-    Euler() : roll_rad(0.), pitch_rad(0.), yaw_rad(0.) {}
-  };
-
-  Euler euler() const {
+  Euler euler_rad() const {
     double sp = 2 * (w_ * x_ + y_ * z_);
-    Euler result;
+    Euler result_rad;
     if (std::abs(sp - 1.0) < 1e-8) { // north pole
-      result.pitch_rad = M_PI_2;
-      result.roll_rad = 0;
-      result.yaw_rad = -std::atan2((w_ * y_ + x_ * z_),
+      result_rad.pitch = M_PI_2;
+      result_rad.roll = 0;
+      result_rad.yaw = -std::atan2((w_ * y_ + x_ * z_),
                                    -(y_ * z_ - w_ * x_));
     } else if (std::abs(sp + 1.0) < 1e-8) { // south pole
-      result.pitch_rad = -M_PI_2;
-      result.roll_rad = 0;
-      result.yaw_rad = std::atan2((w_ * y_ + x_ * z_),
+      result_rad.pitch = -M_PI_2;
+      result_rad.roll = 0;
+      result_rad.yaw = std::atan2((w_ * y_ + x_ * z_),
                                   (y_ * z_ - w_ * x_));
     } else {
-      result.pitch_rad = std::asin(sp);
-      result.roll_rad = -std::atan2(2 * (x_ * z_ - w_ * y_),
+      result_rad.pitch = std::asin(sp);
+      result_rad.roll = -std::atan2(2 * (x_ * z_ - w_ * y_),
                                     1.0 - 2 * x_ * x_ - 2 * y_ * y_);
-      result.yaw_rad = std::atan2(2 * (x_ * y_ - w_ * z_),
+      result_rad.yaw = std::atan2(2 * (x_ * y_ - w_ * z_),
                                   1 - 2 * x_ * x_ - 2 * z_ * z_);
     }
 
-    return result;
+    return result_rad;
   }
 
   static Quaternion FromEuler(
@@ -123,8 +112,8 @@ class Quaternion {
             Quaternion::FromAxisAngle(roll_rad, 0, 1, 0));
   }
 
-  static Quaternion FromEuler(Euler euler) {
-    return FromEuler(euler.roll_rad, euler.pitch_rad, euler.yaw_rad);
+  static Quaternion FromEuler(Euler euler_rad) {
+    return FromEuler(euler_rad.roll, euler_rad.pitch, euler_rad.yaw);
   }
 
   static Quaternion FromAxisAngle(

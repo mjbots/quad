@@ -12,14 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "base/quaternion.h"
+
 #include <boost/test/auto_unit_test.hpp>
 
-#include "quaternion.h"
+#include "base/euler.h"
 
 namespace {
-typedef mjmech::base::Quaternion Quaternion;
-typedef mjmech::base::Point3D Point3D;
-typedef Quaternion::Euler Euler;
+using namespace mjmech;
+typedef base::Euler Euler;
+typedef base::Quaternion Quaternion;
+typedef base::Point3D Point3D;
 
 void CheckVectorClose(const Point3D& lhs,
                       double x, double y, double z) {
@@ -58,13 +61,13 @@ BOOST_AUTO_TEST_CASE(BasicQuaternion) {
 }
 
 namespace {
-void CheckEuler(Euler euler,
+void CheckEuler(Euler euler_rad,
                 double roll_rad,
                 double pitch_rad,
                 double yaw_rad) {
-  BOOST_CHECK_SMALL(euler.roll_rad - roll_rad, 1e-5);
-  BOOST_CHECK_SMALL(euler.pitch_rad - pitch_rad, 1e-5);
-  BOOST_CHECK_SMALL(euler.yaw_rad - yaw_rad, 1e-5);
+  BOOST_CHECK_SMALL(euler_rad.roll - roll_rad, 1e-5);
+  BOOST_CHECK_SMALL(euler_rad.pitch - pitch_rad, 1e-5);
+  BOOST_CHECK_SMALL(euler_rad.yaw - yaw_rad, 1e-5);
 }
 }
 
@@ -89,11 +92,11 @@ BOOST_AUTO_TEST_CASE(QuaternionEulerAndBack) {
   };
 
   for (const auto& x: tests) {
-    Euler result = Quaternion::FromEuler(
+    Euler result_rad = Quaternion::FromEuler(
         x.roll_deg / 180 * M_PI,
         x.pitch_deg / 180 * M_PI,
-        x.yaw_deg / 180 * M_PI).euler();
-    CheckEuler(result,
+        x.yaw_deg / 180 * M_PI).euler_rad();
+    CheckEuler(result_rad,
                x.roll_deg / 180 * M_PI,
                x.pitch_deg / 180 *M_PI,
                x.yaw_deg / 180 * M_PI);
@@ -112,10 +115,10 @@ BOOST_AUTO_TEST_CASE(QuaternionMultiply1) {
 
   Quaternion initial = Quaternion::FromEuler(0, 0, 0.5 * M_PI_2);
   initial = Quaternion::FromEuler(0, 0, 0.5 * M_PI_2) * initial;
-  CheckEuler(initial.euler(), 0, 0, M_PI_2);
+  CheckEuler(initial.euler_rad(), 0, 0, M_PI_2);
 
   initial = Quaternion::FromEuler(0, 10 / 180. * M_PI, 0) * initial;
   vector = initial.Rotate(vector);
   CheckVectorClose(vector, 0, -0.9848078, -0.17364818);
-  CheckEuler(initial.euler(), 10 / 180.0 * M_PI, 0, M_PI_2);
+  CheckEuler(initial.euler_rad(), 10 / 180.0 * M_PI, 0, M_PI_2);
 }
