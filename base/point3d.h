@@ -63,6 +63,10 @@ struct Point3D {
     return x == other.x && y == other.y && z == other.z;
   }
 
+  bool operator!=(const Point3D& other) const {
+    return !(*this == other);
+  }
+
   double length() const {
     return std::sqrt(length_squared());
   }
