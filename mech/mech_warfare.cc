@@ -27,6 +27,12 @@ namespace mjmech {
 namespace mech {
 
 namespace {
+double Limit(double value, double max) {
+  if (value > max) { return max; }
+  if (value < -max) { return -max; }
+  return value;
+}
+
 struct Data {
   boost::posix_time::ptime timestamp;
 
@@ -205,11 +211,37 @@ class MechWarfare::Impl : boost::noncopyable {
         base::Radians(parent_->m_.turret->data().absolute.x_deg)).Rotate(
             data_.current_drive.drive_mm_s);
 
-    gait.translate_x_mm_s = body_mm_s.x;
-    gait.translate_y_mm_s = body_mm_s.y;
-
     const bool active = (data_.current_drive.drive_mm_s != base::Point3D());
     gait.lift_height_percent = active ? 100.0 : 0.0;
+
+    if (active) {
+      const double heading_deg = body_mm_s.heading_deg();
+      const double forward_error_deg = base::WrapNeg180To180(heading_deg);
+      const double drive_heading_deg =
+          data_.current_drive.drive_mm_s.heading_deg();
+      double correction_dps = 0.0;
+      if (std::abs(forward_error_deg) < 145 &&
+          std::abs(drive_heading_deg) < 135) {
+        // Work to end up being forward.
+        correction_dps =
+            forward_error_deg * parent_->parameters_.drive_rotate_factor;
+      } else {
+        // Work to end up being backward.
+        const double reverse_error_deg =
+            base::WrapNeg180To180(heading_deg - 180.0);
+        correction_dps =
+            reverse_error_deg * parent_->parameters_.drive_rotate_factor;
+      }
+      correction_dps = Limit(correction_dps,
+                             parent_->parameters_.drive_max_rotate_dps);
+      gait.rotate_deg_s += correction_dps;
+
+      // TODO jpieper: Maybe limit the magnitude of the body velocity
+      // based on the error?
+    }
+
+    gait.translate_x_mm_s = body_mm_s.x;
+    gait.translate_y_mm_s = body_mm_s.y;
 
     // Give the commands to our members.
     parent_->m_.turret->SetCommand(turret);
