@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -55,7 +55,7 @@ class MechWarfare : boost::noncopyable {
   }
 
   MechWarfare(boost::asio::io_service&);
-  ~MechWarfare() {}
+  ~MechWarfare();
 
   void AsyncStart(base::ErrorHandler handler);
 
@@ -100,21 +100,13 @@ class MechWarfare : boost::noncopyable {
   Parameters* parameters() { return &parameters_; }
 
  private:
-  RippleConfig LoadRippleConfig();
-  void NetworkListen();
-  void StartRead();
-  void HandleRead(base::ErrorCode, std::size_t);
-  void HandleMessage(const boost::property_tree::ptree&);
-  void HandleMessageGait(const boost::property_tree::ptree&);
-  void HandleMessageTurret(const boost::property_tree::ptree&);
-
   boost::asio::io_service& service_;
 
   Members m_;
   Parameters parameters_{&m_};
-  boost::asio::ip::udp::socket server_;
-  char receive_buffer_[3000] = {};
-  boost::asio::ip::udp::endpoint receive_endpoint_;
+  class Impl;
+  std::unique_ptr<Impl> impl_;
+
 };
 }
 }

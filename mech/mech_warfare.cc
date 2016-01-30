@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,132 +21,154 @@
 namespace mjmech {
 namespace mech {
 
-MechWarfare::MechWarfare(boost::asio::io_service& service)
-    : service_(service),
-      server_(service) {
-}
+class MechWarfare::Impl : boost::noncopyable {
+ public:
+  Impl(MechWarfare* parent,
+       boost::asio::io_service& service)
+      : parent_(parent),
+        service_(service),
+        server_(service) {}
 
-void MechWarfare::AsyncStart(base::ErrorHandler handler) {
-  try {
-    RippleConfig ripple_config;
-    ripple_config = LoadRippleConfig();
+  void AsyncStart(base::ErrorHandler handler) {
+    try {
+      RippleConfig ripple_config;
+      ripple_config = LoadRippleConfig();
 
-    m_.gait_driver->SetGait(std::unique_ptr<RippleGait>(
-                                new RippleGait(ripple_config)));
+      parent_->m_.gait_driver->SetGait(std::unique_ptr<RippleGait>(
+                                           new RippleGait(ripple_config)));
 
-    NetworkListen();
-  } catch (base::SystemError& se) {
-    service_.post(std::bind(handler, se.error_code()));
-    return;
+      NetworkListen();
+    } catch (base::SystemError& se) {
+      service_.post(std::bind(handler, se.error_code()));
+      return;
+    }
+
+    parent_->parameters_.children.Start(handler);
   }
 
-  parameters_.children.Start(handler);
-}
+  RippleConfig LoadRippleConfig() {
+    RippleConfig ripple_config;
+    try {
+      std::ifstream inf(parent_->parameters_.gait_config);
+      if (!inf.is_open()) {
+        throw base::SystemError::syserrno("error opening config");
+      }
 
-RippleConfig MechWarfare::LoadRippleConfig() {
-  RippleConfig ripple_config;
-  try {
-    std::ifstream inf(parameters_.gait_config);
-    if (!inf.is_open()) {
-      throw base::SystemError::syserrno("error opening config");
+      boost::property_tree::ptree tree;
+      boost::property_tree::read_json(inf, tree);
+      auto optional_child = tree.get_child_optional("gaitconfig.ripple");
+      if (!optional_child) {
+        throw base::SystemError::einval("could not find ripple config in file");
+      }
+
+      base::PropertyTreeReadArchive(
+          *optional_child,
+          base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&ripple_config);
+
+      std::string type = tree.get<std::string>("ikconfig.iktype");
+      auto& leg_configs = ripple_config.mechanical.leg_config;
+      for (size_t i = 0; i < leg_configs.size(); i++) {
+        if (type == "Mammal") {
+          MammalIK::Config config;
+
+          std::string field = (boost::format("ikconfig.leg.%d") % i).str();
+          auto optional_child = tree.get_child_optional(field);
+          if (!optional_child) {
+            throw base::SystemError::einval("could not locate field: " + field);
+          }
+
+          base::PropertyTreeReadArchive(
+              *optional_child,
+              base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&config);
+          leg_configs[i].leg_ik =
+              boost::shared_ptr<IKSolver>(new MammalIK(config));
+        } else {
+          throw base::SystemError::einval("unknown iktype: " + type);
+        }
+      }
+    } catch (base::SystemError& se) {
+      se.error_code().Append(
+          "while opening config: '" + parent_->parameters_.gait_config + "'");
+      throw;
     }
+
+    return ripple_config;
+  }
+
+  void NetworkListen() {
+    boost::asio::ip::udp::endpoint endpoint(
+        boost::asio::ip::udp::v4(), parent_->parameters_.port);
+    server_.open(boost::asio::ip::udp::v4());
+    server_.bind(endpoint);
+    StartRead();
+  }
+
+  void StartRead() {
+    server_.async_receive_from(
+        boost::asio::buffer(receive_buffer_),
+        receive_endpoint_,
+        std::bind(&Impl::HandleRead, this,
+                  std::placeholders::_1,
+                  std::placeholders::_2));
+  }
+
+  void HandleRead(base::ErrorCode ec, std::size_t size) {
+    FailIf(ec);
+
+    std::string data(receive_buffer_, size);
+    StartRead();
 
     boost::property_tree::ptree tree;
-    boost::property_tree::read_json(inf, tree);
-    auto optional_child = tree.get_child_optional("gaitconfig.ripple");
-    if (!optional_child) {
-      throw base::SystemError::einval("could not find ripple config in file");
+    try {
+      std::istringstream inf(data);
+      boost::property_tree::read_json(inf, tree);
+    } catch (std::exception& e) {
+      std::cerr << "error reading network command: " << e.what() << "\n";
+      return;
     }
 
+    HandleMessage(tree);
+  }
+
+  void HandleMessage(const boost::property_tree::ptree& tree) {
+    auto optional_gait = tree.get_child_optional("gait");
+    if (optional_gait) { HandleMessageGait(*optional_gait); }
+
+    auto optional_turret = tree.get_child_optional("turret");
+    if (optional_turret) { HandleMessageTurret(*optional_turret); }
+  }
+
+  void HandleMessageGait(const boost::property_tree::ptree& tree) {
+    Command command;
     base::PropertyTreeReadArchive(
-        *optional_child,
-        base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&ripple_config);
-
-    std::string type = tree.get<std::string>("ikconfig.iktype");
-    auto& leg_configs = ripple_config.mechanical.leg_config;
-    for (size_t i = 0; i < leg_configs.size(); i++) {
-      if (type == "Mammal") {
-        MammalIK::Config config;
-
-        std::string field = (boost::format("ikconfig.leg.%d") % i).str();
-        auto optional_child = tree.get_child_optional(field);
-        if (!optional_child) {
-          throw base::SystemError::einval("could not locate field: " + field);
-        }
-
-        base::PropertyTreeReadArchive(
-            *optional_child,
-            base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&config);
-        leg_configs[i].leg_ik =
-            boost::shared_ptr<IKSolver>(new MammalIK(config));
-      } else {
-        throw base::SystemError::einval("unknown iktype: " + type);
-      }
-    }
-  } catch (base::SystemError& se) {
-    se.error_code().Append(
-        "while opening config: '" + parameters_.gait_config + "'");
-    throw;
+        tree, base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&command);
+    parent_->m_.gait_driver->SetCommand(command);
   }
 
-  return ripple_config;
-}
-
-void MechWarfare::NetworkListen() {
-  boost::asio::ip::udp::endpoint endpoint(
-      boost::asio::ip::udp::v4(), parameters_.port);
-  server_.open(boost::asio::ip::udp::v4());
-  server_.bind(endpoint);
-  StartRead();
-}
-
-void MechWarfare::StartRead() {
-  server_.async_receive_from(
-      boost::asio::buffer(receive_buffer_),
-      receive_endpoint_,
-      std::bind(&MechWarfare::HandleRead, this,
-                std::placeholders::_1,
-                std::placeholders::_2));
-}
-
-void MechWarfare::HandleRead(base::ErrorCode ec, std::size_t size) {
-  FailIf(ec);
-
-  std::string data(receive_buffer_, size);
-  StartRead();
-
-  boost::property_tree::ptree tree;
-  try {
-    std::istringstream inf(data);
-    boost::property_tree::read_json(inf, tree);
-  } catch (std::exception& e) {
-    std::cerr << "error reading network command: " << e.what() << "\n";
-    return;
+  void HandleMessageTurret(const boost::property_tree::ptree& tree) {
+    TurretCommand command;
+    base::PropertyTreeReadArchive(
+        tree, base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&command);
+    parent_->m_.turret->SetCommand(command);
   }
 
-  HandleMessage(tree);
+  MechWarfare* const parent_;
+  boost::asio::io_service& service_;
+
+  boost::asio::ip::udp::socket server_;
+  char receive_buffer_[3000] = {};
+  boost::asio::ip::udp::endpoint receive_endpoint_;
+};
+
+MechWarfare::MechWarfare(boost::asio::io_service& service)
+    : service_(service),
+      impl_(new Impl(this, service)) {
 }
 
-void MechWarfare::HandleMessage(const boost::property_tree::ptree& tree) {
-  auto optional_gait = tree.get_child_optional("gait");
-  if (optional_gait) { HandleMessageGait(*optional_gait); }
+MechWarfare::~MechWarfare() {}
 
-  auto optional_turret = tree.get_child_optional("turret");
-  if (optional_turret) { HandleMessageTurret(*optional_turret); }
-}
-
-void MechWarfare::HandleMessageGait(const boost::property_tree::ptree& tree) {
-  Command command;
-  base::PropertyTreeReadArchive(
-      tree, base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&command);
-  m_.gait_driver->SetCommand(command);
-}
-
-void MechWarfare::HandleMessageTurret(const boost::property_tree::ptree& tree) {
-  TurretCommand command;
-  base::PropertyTreeReadArchive(
-      tree, base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&command);
-  m_.turret->SetCommand(command);
+void MechWarfare::AsyncStart(base::ErrorHandler handler) {
+  impl_->AsyncStart(handler);
 }
 
 }
