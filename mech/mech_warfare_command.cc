@@ -26,6 +26,7 @@
 #include "base/program_options_archive.h"
 #include "base/property_tree_archive.h"
 
+#include "drive_command.h"
 #include "gait.h"
 #include "turret_command.h"
 
@@ -66,6 +67,7 @@ struct AxisMapping {
   int agitator = -1;
 
   int crouch = -1;
+  int manual = -1;
   int body = -1;
   int turret = -1;
 };
@@ -114,7 +116,8 @@ AxisMapping GetAxisMapping(const LinuxInput* input) {
   }
 
   result.crouch = BTN_A;
-  result.body = BTN_TR;
+  result.manual = BTN_TR;
+  result.body = ABS_Z;
   result.turret = BTN_TL;
 
   result.laser = BTN_WEST;
@@ -174,8 +177,18 @@ struct MechMessage {
   }
 };
 
-std::string SerializeCommand(const MechMessage& message_in) {
-  MechMessage message = message_in;
+struct MechDriveMessage {
+  DriveCommand drive;
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(MJ_NVP(drive));
+  }
+};
+
+template <typename T>
+std::string SerializeCommand(const T& message_in) {
+  T message = message_in;
   return mjmech::base::JsonWriteArchive::Write(&message);
 }
 
@@ -227,17 +240,8 @@ class Commander {
     }
   }
 
-  void HandleTimeout(ErrorCode ec) {
-    FailIf(ec);
-    StartTimer();
-
-    MechMessage message;
-    Command& command = message.gait;
-
-    command = command_;
-
-    auto maybe_map = [this](double* destination, int mapping, int sign,
-                            double center, double minval, double maxval) {
+  void MaybeMap(double* destination, int mapping, int sign,
+                double center, double minval, double maxval) const {
       if (mapping < 0) { return; }
 
       double scaled = linux_input_->abs_info(mapping).scaled();
@@ -257,33 +261,74 @@ class Commander {
           (abs_scaled * (maxval - center) + center));
 
       *destination = value;
-    };
+  };
 
-    if (key_map_[mapping_.body]) {
-      maybe_map(&command.body_x_mm, mapping_.body_x,
-                mapping_.sign_body_x, command_.body_x_mm,
-                -options_.max_body_x_mm, options_.max_body_x_mm);
-      maybe_map(&command.body_y_mm, mapping_.body_y,
-                mapping_.sign_body_y, command_.body_y_mm,
-                -options_.max_body_y_mm, options_.max_body_y_mm);
-      maybe_map(&command.body_pitch_deg, mapping_.body_pitch,
-                mapping_.sign_body_pitch, command_.body_pitch_deg,
-                -options_.max_body_pitch_deg, options_.max_body_pitch_deg);
-      maybe_map(&command.body_roll_deg, mapping_.body_roll,
-                mapping_.sign_body_roll, command_.body_roll_deg,
-                -options_.max_body_roll_deg, options_.max_body_roll_deg);
-    } else if (key_map_[mapping_.turret]) {
+  bool body_enabled() const {
+    return linux_input_->abs_info(mapping_.body).scaled() > 0.0;
+  }
+
+  bool turret_enabled() const {
+    auto it = key_map_.find(mapping_.turret);
+    if (it == key_map_.end()) { return false; }
+    return it->second;
+  }
+
+  bool manual_enabled() const {
+    auto it = key_map_.find(mapping_.manual);
+    if (it == key_map_.end()) { return false; }
+    return it->second;
+  }
+
+  bool drive_enabled() const {
+    return !body_enabled() && !turret_enabled() && !manual_enabled();
+  }
+
+  void HandleTimeout(ErrorCode ec) {
+    FailIf(ec);
+    StartTimer();
+
+    // The body mode acts independently of anything else and updates
+    // the persistent body pose.
+    if (body_enabled()) {
+      MaybeMap(&command_.body_x_mm, mapping_.body_x,
+               mapping_.sign_body_x, 0.0,
+               -options_.max_body_x_mm, options_.max_body_x_mm);
+      MaybeMap(&command_.body_y_mm, mapping_.body_y,
+               mapping_.sign_body_y, 0.0,
+               -options_.max_body_y_mm, options_.max_body_y_mm);
+      MaybeMap(&command_.body_pitch_deg, mapping_.body_pitch,
+               mapping_.sign_body_pitch, 0.0,
+               -options_.max_body_pitch_deg, options_.max_body_pitch_deg);
+      MaybeMap(&command_.body_roll_deg, mapping_.body_roll,
+               mapping_.sign_body_roll, 0.0,
+               -options_.max_body_roll_deg, options_.max_body_roll_deg);
+    }
+
+    if (!drive_enabled()) {
+      DoManual();
+    } else {
+      DoDrive();
+    }
+  }
+
+  void DoManual() {
+    MechMessage message;
+    Command& command = message.gait;
+
+    command = command_;
+
+    if (turret_enabled()) {
       message.turret.rate = TurretCommand::Rate();
-      maybe_map(&(message.turret.rate->x_deg_s),
-                mapping_.turret_x, mapping_.sign_turret_x,
-                0,
-                -options_.max_turret_rate_deg_s,
-                options_.max_turret_rate_deg_s);
-      maybe_map(&(message.turret.rate->y_deg_s),
-                mapping_.turret_y, mapping_.sign_turret_y,
-                0,
-                -options_.max_turret_rate_deg_s,
-                options_.max_turret_rate_deg_s);
+      MaybeMap(&(message.turret.rate->x_deg_s),
+               mapping_.turret_x, mapping_.sign_turret_x,
+               0,
+               -options_.max_turret_rate_deg_s,
+               options_.max_turret_rate_deg_s);
+      MaybeMap(&(message.turret.rate->y_deg_s),
+               mapping_.turret_y, mapping_.sign_turret_y,
+               0,
+               -options_.max_turret_rate_deg_s,
+               options_.max_turret_rate_deg_s);
 
       const bool do_fire =
           linux_input_->abs_info(mapping_.fire).scaled() > 0.0;
@@ -291,22 +336,22 @@ class Commander {
       using FM = TurretCommand::Fire::Mode;
       message.turret.fire_control.fire.command = do_fire ? FM::kCont : FM::kOff;
     } else {
-      maybe_map(&command.translate_x_mm_s, mapping_.translate_x,
-                mapping_.sign_translate_x,
-                command_.translate_x_mm_s,
-                -options_.max_translate_x_mm_s, options_.max_translate_x_mm_s);
-      maybe_map(&command.translate_y_mm_s, mapping_.translate_y,
-                mapping_.sign_translate_y,
-                command_.translate_y_mm_s,
-                -options_.max_translate_y_mm_s, options_.max_translate_y_mm_s);
-      maybe_map(&command.rotate_deg_s, mapping_.rotate,
-                mapping_.sign_rotate,
-                command_.rotate_deg_s,
-                -options_.max_rotate_deg_s, options_.max_rotate_deg_s);
-      maybe_map(&command.body_z_mm, mapping_.body_z,
-                mapping_.sign_body_z,
-                command_.body_z_mm,
-                options_.min_body_z_mm, options_.max_body_z_mm);
+      MaybeMap(&command.translate_x_mm_s, mapping_.translate_x,
+               mapping_.sign_translate_x,
+               command_.translate_x_mm_s,
+               -options_.max_translate_x_mm_s, options_.max_translate_x_mm_s);
+      MaybeMap(&command.translate_y_mm_s, mapping_.translate_y,
+               mapping_.sign_translate_y,
+               command_.translate_y_mm_s,
+               -options_.max_translate_y_mm_s, options_.max_translate_y_mm_s);
+      MaybeMap(&command.rotate_deg_s, mapping_.rotate,
+               mapping_.sign_rotate,
+               command_.rotate_deg_s,
+               -options_.max_rotate_deg_s, options_.max_rotate_deg_s);
+      MaybeMap(&command.body_z_mm, mapping_.body_z,
+               mapping_.sign_body_z,
+               command_.body_z_mm,
+               options_.min_body_z_mm, options_.max_body_z_mm);
     }
 
     if (key_map_[mapping_.crouch]) {
@@ -359,6 +404,51 @@ class Commander {
       std::cout.flush();
     }
 
+    std::string message_str = SerializeCommand(message);
+    socket_->send_to(boost::asio::buffer(message_str), target_);
+  }
+
+  void DoDrive() {
+    MechDriveMessage message;
+    auto& command = message.drive;
+
+    command.body_offset_mm.x = command_.body_x_mm;
+    command.body_offset_mm.y = command_.body_y_mm;
+    command.body_attitude_deg.pitch = command_.body_pitch_deg;
+    command.body_attitude_deg.roll = command_.body_roll_deg;
+
+    MaybeMap(&command.drive_mm_s.x, mapping_.translate_x,
+             mapping_.sign_translate_x,
+             command_.translate_x_mm_s,
+             -options_.max_translate_x_mm_s, options_.max_translate_x_mm_s);
+    MaybeMap(&command.drive_mm_s.y, mapping_.translate_y,
+             mapping_.sign_translate_y,
+             command_.translate_y_mm_s,
+             -options_.max_translate_y_mm_s, options_.max_translate_y_mm_s);
+    MaybeMap(&command.turret_rate_dps.yaw, mapping_.turret_x,
+             mapping_.sign_turret_x,
+             0,
+             -options_.max_turret_rate_deg_s,
+             options_.max_turret_rate_deg_s);
+    MaybeMap(&command.turret_rate_dps.pitch, mapping_.turret_y,
+             mapping_.sign_turret_y,
+             0,
+             -options_.max_turret_rate_deg_s,
+             options_.max_turret_rate_deg_s);
+
+    if (key_map_[mapping_.crouch]) {
+      command.body_offset_mm.z = options_.min_body_z_mm;
+    }
+
+    const bool do_fire =
+        linux_input_->abs_info(mapping_.fire).scaled() > 0.0;
+    command.fire_control.fire.sequence = sequence_++;
+    using FM = TurretCommand::Fire::Mode;
+    command.fire_control.fire.command = do_fire ? FM::kCont : FM::kOff;
+    command.fire_control.laser_on = laser_on_;
+    command.fire_control.agitator =
+        key_map_[mapping_.agitator] ?
+        TurretCommand::AgitatorMode::kOn : TurretCommand::AgitatorMode::kOff;
 
     std::string message_str = SerializeCommand(message);
     socket_->send_to(boost::asio::buffer(message_str), target_);
@@ -369,7 +459,7 @@ class Commander {
   const udp::endpoint target_;
   LinuxInput* const linux_input_;
   udp::socket* const socket_;
-  const Command command_;
+  Command command_;
   DeadlineTimer timer_;
   const AxisMapping mapping_;
 

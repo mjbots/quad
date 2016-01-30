@@ -140,8 +140,7 @@ class Turret::Impl : boost::noncopyable {
     data_.imu.x_deg = parser.get_int32(4) / 1000.0;
     data_.absolute.y_deg = data_.imu.y_deg;
 
-    const uint16_t absolute_int = parser.get(8) | parser.get(9) << 7;
-    data_.absolute.x_deg = (absolute_int - 0x3fff) / (0x7fff * 360.0);
+    data_.absolute.x_deg = parser.get_int32(8) / 1000.0;
 
     // Now read from the fire control board.
     servo_->MemRead(
@@ -324,7 +323,7 @@ class Turret::Impl : boost::noncopyable {
   int poll_count_ = 0;
   int error_count_ = 0;
 
-  TurretData data_;
+  Data data_;
 };
 
 Turret::Turret(boost::asio::io_service& service,
@@ -418,6 +417,8 @@ void Turret::SetCommand(const TurretCommand& command) {
 void Turret::SetFireControl(const TurretCommand::FireControl& command) {
   impl_->SetFireControl(command);
 }
+
+const Turret::Data& Turret::data() const { return impl_->data_; }
 
 Turret::Parameters* Turret::parameters() { return &impl_->parameters_; }
 

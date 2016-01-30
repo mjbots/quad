@@ -79,11 +79,7 @@ class Turret : boost::noncopyable {
 
   Parameters* parameters();
 
- private:
-  Turret(boost::asio::io_service& service,
-         Mech::ServoBase* servo);
-
-  struct TurretData {
+  struct Data {
     boost::posix_time::ptime timestamp;
     bool agitator_enabled = false;
     bool fire_enabled = false;
@@ -110,6 +106,12 @@ class Turret : boost::noncopyable {
     }
   };
 
+  const Data& data() const;
+
+ private:
+  Turret(boost::asio::io_service& service,
+         Mech::ServoBase* servo);
+
   struct CommandLog {
     boost::posix_time::ptime timestamp;
 
@@ -122,7 +124,7 @@ class Turret : boost::noncopyable {
     }
   };
 
-  boost::signals2::signal<void (const TurretData*)> turret_data_signal_;
+  boost::signals2::signal<void (const Data*)> turret_data_signal_;
   boost::signals2::signal<void (const CommandLog*)> turret_command_signal_;
 
   class Impl;

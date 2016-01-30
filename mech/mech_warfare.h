@@ -28,6 +28,9 @@
 #include "turret.h"
 
 namespace mjmech {
+namespace base {
+struct Context;
+}
 namespace mech {
 /// Accepts json formatted commands over the network and uses that to
 /// sequence gaits and firing actions.
@@ -36,25 +39,7 @@ namespace mech {
 /// managing it from C++.
 class MechWarfare : boost::noncopyable {
  public:
-  template <typename Context>
-  MechWarfare(Context& context) : MechWarfare(context.service) {
-    m_.servo_base.reset(new Mech::ServoBase(service_, *context.factory));
-    m_.servo.reset(new Mech::Servo(m_.servo_base.get()));
-    m_.imu.reset(new MjmechImuDriver(context));
-    m_.ahrs.reset(new Ahrs(context, m_.imu->imu_data_signal()));
-    m_.gait_driver.reset(new GaitDriver(service_,
-                                        context.telemetry_registry.get(),
-                                        m_.servo.get(),
-                                        m_.ahrs->ahrs_data_signal()));
-    m_.servo_iface.reset(
-        new ServoMonitor::HerkuleXServoConcrete<Mech::ServoBase>(
-            m_.servo_base.get()));
-    m_.servo_monitor.reset(new ServoMonitor(context, m_.servo_iface.get()));
-    m_.servo_monitor->parameters()->servos = "0-11,98,99";
-    m_.turret.reset(new Turret(context, m_.servo_base.get()));
-  }
-
-  MechWarfare(boost::asio::io_service&);
+  MechWarfare(base::Context& context);
   ~MechWarfare();
 
   void AsyncStart(base::ErrorHandler handler);
@@ -84,6 +69,8 @@ class MechWarfare : boost::noncopyable {
   struct Parameters {
     int port = 13356;
     std::string gait_config;
+    double period_s = 0.05;
+    double idle_timeout_s = 1.0;
 
     base::ComponentParameters<Members> children;
 
@@ -91,6 +78,8 @@ class MechWarfare : boost::noncopyable {
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(port));
       a->Visit(MJ_NVP(gait_config));
+      a->Visit(MJ_NVP(period_s));
+      a->Visit(MJ_NVP(idle_timeout_s));
       children.Serialize(a);
     }
 

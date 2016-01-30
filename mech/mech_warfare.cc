@@ -16,18 +16,58 @@
 
 #include <boost/property_tree/json_parser.hpp>
 
+#include "base/common.h"
+#include "base/context_full.h"
+#include "base/now.h"
 #include "base/property_tree_archive.h"
+
+#include "drive_command.h"
 
 namespace mjmech {
 namespace mech {
 
+namespace {
+struct Data {
+  boost::posix_time::ptime timestamp;
+
+  enum class Mode {
+    kManual,
+      kDrive,
+  };
+
+  Mode mode;
+
+  DriveCommand current_drive;
+  boost::posix_time::ptime last_drive_timestamp;
+
+  static std::map<Mode, const char*> ModeMapper() {
+    return std::map<Mode, const char*>{
+      {Mode::kManual, "kManual"},
+      {Mode::kDrive, "kDrive"},
+    };
+  }
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(MJ_NVP(timestamp));
+    a->Visit(MJ_ENUM(mode, ModeMapper));
+    a->Visit(MJ_NVP(current_drive));
+    a->Visit(MJ_NVP(last_drive_timestamp));
+  }
+};
+}
+
 class MechWarfare::Impl : boost::noncopyable {
  public:
   Impl(MechWarfare* parent,
-       boost::asio::io_service& service)
+       base::Context& context)
       : parent_(parent),
-        service_(service),
-        server_(service) {}
+        context_(context),
+        service_(context.service),
+        server_(service_),
+        timer_(service_) {
+    context_.telemetry_registry->Register("mech_warfare", &data_signal_);
+  }
 
   void AsyncStart(base::ErrorHandler handler) {
     try {
@@ -38,6 +78,7 @@ class MechWarfare::Impl : boost::noncopyable {
                                            new RippleGait(ripple_config)));
 
       NetworkListen();
+      StartTimer();
     } catch (base::SystemError& se) {
       service_.post(std::bind(handler, se.error_code()));
       return;
@@ -112,6 +153,69 @@ class MechWarfare::Impl : boost::noncopyable {
                   std::placeholders::_2));
   }
 
+  void StartTimer() {
+    timer_.expires_from_now(base::ConvertSecondsToDuration(
+                                parent_->parameters_.period_s));
+    timer_.async_wait(std::bind(&Impl::HandleTimer, this,
+                                std::placeholders::_1));
+  }
+
+  void HandleTimer(base::ErrorCode ec) {
+    if (ec == boost::asio::error::operation_aborted) { return; }
+    FailIf(ec);
+
+    StartTimer();
+
+    switch (data_.mode) {
+      case Data::Mode::kManual: { break; }
+      case Data::Mode::kDrive: {
+        DoDrive();
+        break;
+      }
+    }
+  }
+
+  void DoDrive() {
+    const double elapsed_s = base::ConvertDurationToSeconds(
+        base::Now(service_) - data_.last_drive_timestamp);
+    if (elapsed_s > parent_->parameters_.idle_timeout_s) {
+      data_.mode = Data::Mode::kManual;
+      return;
+    }
+
+    TurretCommand turret;
+    Command gait;
+
+    turret.fire_control = data_.current_drive.fire_control;
+    turret.rate = TurretCommand::Rate();
+    turret.rate->x_deg_s = data_.current_drive.turret_rate_dps.yaw;
+    turret.rate->y_deg_s = data_.current_drive.turret_rate_dps.pitch;
+
+    gait.body_x_mm = data_.current_drive.body_offset_mm.x;
+    gait.body_y_mm = data_.current_drive.body_offset_mm.y;
+    gait.body_z_mm = data_.current_drive.body_offset_mm.z;
+
+    gait.body_pitch_deg = data_.current_drive.body_attitude_deg.pitch;
+    gait.body_roll_deg = data_.current_drive.body_attitude_deg.roll;
+    gait.body_yaw_deg = data_.current_drive.body_attitude_deg.yaw;
+
+    const auto body_mm_s = base::Quaternion::FromEuler(
+        0.0,
+        0.0,
+        base::Radians(parent_->m_.turret->data().absolute.x_deg)).Rotate(
+            data_.current_drive.drive_mm_s);
+
+    gait.translate_x_mm_s = body_mm_s.x;
+    gait.translate_y_mm_s = body_mm_s.y;
+
+    const bool active = (data_.current_drive.drive_mm_s != base::Point3D());
+    gait.lift_height_percent = active ? 100.0 : 0.0;
+
+    // Give the commands to our members.
+    parent_->m_.turret->SetCommand(turret);
+    parent_->m_.gait_driver->SetCommand(gait);
+  }
+
   void HandleRead(base::ErrorCode ec, std::size_t size) {
     FailIf(ec);
 
@@ -131,6 +235,12 @@ class MechWarfare::Impl : boost::noncopyable {
   }
 
   void HandleMessage(const boost::property_tree::ptree& tree) {
+    auto optional_drive = tree.get_child_optional("drive");
+    if (optional_drive) {
+      HandleMessageDrive(*optional_drive);
+      return;
+    }
+
     auto optional_gait = tree.get_child_optional("gait");
     if (optional_gait) { HandleMessageGait(*optional_gait); }
 
@@ -143,6 +253,7 @@ class MechWarfare::Impl : boost::noncopyable {
     base::PropertyTreeReadArchive(
         tree, base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&command);
     parent_->m_.gait_driver->SetCommand(command);
+    data_.mode = Data::Mode::kManual;
   }
 
   void HandleMessageTurret(const boost::property_tree::ptree& tree) {
@@ -150,19 +261,53 @@ class MechWarfare::Impl : boost::noncopyable {
     base::PropertyTreeReadArchive(
         tree, base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&command);
     parent_->m_.turret->SetCommand(command);
+    data_.mode = Data::Mode::kManual;
+  }
+
+  void HandleMessageDrive(const boost::property_tree::ptree& tree) {
+    DriveCommand command;
+    base::PropertyTreeReadArchive(
+        tree, base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&command);
+
+    data_.current_drive = command;
+    data_.mode = Data::Mode::kDrive;
+    data_.last_drive_timestamp = base::Now(service_);
+
+    // Immediately update ourselves.
+    DoDrive();
   }
 
   MechWarfare* const parent_;
+  base::Context& context_;
   boost::asio::io_service& service_;
 
   boost::asio::ip::udp::socket server_;
   char receive_buffer_[3000] = {};
   boost::asio::ip::udp::endpoint receive_endpoint_;
+
+  base::DeadlineTimer timer_;
+
+  Data data_;
+  boost::signals2::signal<void (const Data*)> data_signal_;
 };
 
-MechWarfare::MechWarfare(boost::asio::io_service& service)
-    : service_(service),
-      impl_(new Impl(this, service)) {
+MechWarfare::MechWarfare(base::Context& context)
+    : service_(context.service),
+      impl_(new Impl(this, context)) {
+  m_.servo_base.reset(new Mech::ServoBase(service_, *context.factory));
+  m_.servo.reset(new Mech::Servo(m_.servo_base.get()));
+  m_.imu.reset(new MjmechImuDriver(context));
+  m_.ahrs.reset(new Ahrs(context, m_.imu->imu_data_signal()));
+  m_.gait_driver.reset(new GaitDriver(service_,
+                                      context.telemetry_registry.get(),
+                                      m_.servo.get(),
+                                      m_.ahrs->ahrs_data_signal()));
+  m_.servo_iface.reset(
+      new ServoMonitor::HerkuleXServoConcrete<Mech::ServoBase>(
+          m_.servo_base.get()));
+  m_.servo_monitor.reset(new ServoMonitor(context, m_.servo_iface.get()));
+  m_.servo_monitor->parameters()->servos = "0-11,98,99";
+  m_.turret.reset(new Turret(context, m_.servo_base.get()));
 }
 
 MechWarfare::~MechWarfare() {}
