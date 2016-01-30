@@ -16,6 +16,7 @@
 
 #include <boost/format.hpp>
 
+#include "common.h"
 #include "visitor.h"
 
 namespace mjmech {
@@ -77,6 +78,10 @@ struct Point3D {
 
   Point3D scaled(double value) const {
     return Point3D{x * value, y * value, z * value};
+  }
+
+  double heading_deg() const {
+    return Degrees(WrapNegPiToPi(0.5 * M_PI - std::atan2(y, x)));
   }
 
   template <typename Archive>
