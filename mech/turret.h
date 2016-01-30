@@ -39,6 +39,7 @@ class Turret : boost::noncopyable {
   void AsyncStart(base::ErrorHandler);
 
   void SetCommand(const TurretCommand&);
+  void SetFireControl(const TurretCommand::FireControl&);
 
   struct Parameters {
     int gimbal_address = 98;

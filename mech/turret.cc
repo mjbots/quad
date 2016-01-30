@@ -236,6 +236,84 @@ class Turret::Impl : boost::noncopyable {
     return now < disable_until_;
   }
 
+  void SetFireControl(const TurretCommand::FireControl& command) {
+    // Update the laser status.
+    uint8_t leds = (command.laser_on ? 1 : 0) << 2;
+    servo_->RamWrite(
+        parameters_.gimbal_address, LedControl, leds,
+        std::bind(&Impl::HandleWrite, this, std::placeholders::_1));
+
+    const auto u8 = [](int val) {
+      return static_cast<uint8_t>(std::max(0, std::min(255, val)));
+    };
+
+    // Update the agitator status.
+    using AM = TurretCommand::AgitatorMode;
+    const uint8_t agitator_pwm = u8([&]() {
+        switch (command.agitator) {
+          case AM::kOff: {
+            return 0.0;
+          }
+          case AM::kOn: {
+            return parameters_.agitator_pwm;
+          }
+          case AM::kAuto: {
+            base::Fail("Unsupported agitator mode");
+          }
+        }
+        base::AssertNotReached();
+      }() * 255);
+
+    servo_->RamWrite(
+        parameters_.gimbal_address, AgitatorPwm, agitator_pwm,
+        std::bind(&Impl::HandleWrite, this, std::placeholders::_1));
+
+
+    // Now do the fire control, only accept things where the sequence
+    // number has advanced.
+    if (command.fire.sequence != data_.last_sequence) {
+      using FM = TurretCommand::Fire::Mode;
+
+      data_.last_sequence = command.fire.sequence;
+
+      const double fire_time_s = [&]() {
+        switch (command.fire.command) {
+          case FM::kOff: { return 0.0; }
+          case FM::kNow1: { return parameters_.fire_duration_s; }
+          case FM::kCont: { return 0.5; }
+          case FM::kInPos1:
+          case FM::kInPos2:
+          case FM::kInPos3:
+          case FM::kInPos5: {
+            // TODO jpieper: Once we do support this (if we do at all),
+            // we should probably capture the command around so that we
+            // can keep trying to execute it as the gimbal moves into
+            // position.
+            base::Fail("Unsupported fire control command");
+            break;
+          }
+        }
+        base::AssertNotReached();
+      }();
+
+      const double pwm =
+          (fire_time_s == 0.0) ? 0.0 : parameters_.fire_motor_pwm;
+      const uint8_t fire_data[] = {
+        u8(fire_time_s / 0.01),
+        u8(pwm * 255),
+      };
+      std::string fire_data_str(reinterpret_cast<const char*>(fire_data),
+                                sizeof(fire_data));
+      servo_->MemWrite(
+          servo_->RAM_WRITE,
+          parameters_.gimbal_address,
+          FireTime.position,
+          fire_data_str,
+          std::bind(&Impl::HandleWrite, this,
+                    std::placeholders::_1));
+    }
+  }
+
   base::LogRef log_ = base::GetLogInstance("turret");
   Turret* const parent_;
   boost::asio::io_service& service_;
@@ -334,81 +412,11 @@ void Turret::SetCommand(const TurretCommand& command) {
     impl_->data_.last_rate = true;
   }
 
-  // Update the laser status.
-  uint8_t leds = (command.laser_on ? 1 : 0) << 2;
-  impl_->servo_->RamWrite(
-      impl_->parameters_.gimbal_address, LedControl, leds,
-      std::bind(&Impl::HandleWrite, impl_.get(), std::placeholders::_1));
+  impl_->SetFireControl(command.fire_control);
+}
 
-  const auto u8 = [](int val) {
-    return static_cast<uint8_t>(std::max(0, std::min(255, val)));
-  };
-
-  // Update the agitator status.
-  using AM = TurretCommand::AgitatorMode;
-  const uint8_t agitator_pwm = u8([&]() {
-      switch (command.agitator) {
-        case AM::kOff: {
-          return 0.0;
-        }
-        case AM::kOn: {
-          return impl_->parameters_.agitator_pwm;
-        }
-        case AM::kAuto: {
-          base::Fail("Unsupported agitator mode");
-      }
-      }
-      base::AssertNotReached();
-    }() * 255);
-
-  impl_->servo_->RamWrite(
-      impl_->parameters_.gimbal_address, AgitatorPwm, agitator_pwm,
-      std::bind(&Impl::HandleWrite, impl_.get(), std::placeholders::_1));
-
-
-  // Now do the fire control, only accept things where the sequence
-  // number has advanced.
-  if (command.fire.sequence != impl_->data_.last_sequence) {
-    using FM = TurretCommand::Fire::Mode;
-
-    impl_->data_.last_sequence = command.fire.sequence;
-
-    const double fire_time_s = [&]() {
-      switch (command.fire.command) {
-        case FM::kOff: { return 0.0; }
-        case FM::kNow1: { return impl_->parameters_.fire_duration_s; }
-        case FM::kCont: { return 0.5; }
-        case FM::kInPos1:
-        case FM::kInPos2:
-        case FM::kInPos3:
-        case FM::kInPos5: {
-          // TODO jpieper: Once we do support this (if we do at all),
-          // we should probably capture the command around so that we
-          // can keep trying to execute it as the gimbal moves into
-          // position.
-          base::Fail("Unsupported fire control command");
-          break;
-        }
-      }
-      base::AssertNotReached();
-    }();
-
-    const double pwm =
-        (fire_time_s == 0.0) ? 0.0 : impl_->parameters_.fire_motor_pwm;
-    const uint8_t fire_data[] = {
-      u8(fire_time_s / 0.01),
-      u8(pwm * 255),
-    };
-    std::string fire_data_str(reinterpret_cast<const char*>(fire_data),
-                              sizeof(fire_data));
-    impl_->servo_->MemWrite(
-        impl_->servo_->RAM_WRITE,
-        impl_->parameters_.gimbal_address,
-        FireTime.position,
-        fire_data_str,
-        std::bind(&Impl::HandleWrite, impl_.get(),
-                  std::placeholders::_1));
-  }
+void Turret::SetFireControl(const TurretCommand::FireControl& command) {
+  impl_->SetFireControl(command);
 }
 
 Turret::Parameters* Turret::parameters() { return &impl_->parameters_; }

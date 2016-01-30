@@ -287,9 +287,9 @@ class Commander {
 
       const bool do_fire =
           linux_input_->abs_info(mapping_.fire).scaled() > 0.0;
-      message.turret.fire.sequence = sequence_++;
+      message.turret.fire_control.fire.sequence = sequence_++;
       using FM = TurretCommand::Fire::Mode;
-      message.turret.fire.command = do_fire ? FM::kCont : FM::kOff;
+      message.turret.fire_control.fire.command = do_fire ? FM::kCont : FM::kOff;
     } else {
       maybe_map(&command.translate_x_mm_s, mapping_.translate_x,
                 mapping_.sign_translate_x,
@@ -333,8 +333,8 @@ class Commander {
       }
     }
 
-    message.turret.laser_on = laser_on_;
-    message.turret.agitator =
+    message.turret.fire_control.laser_on = laser_on_;
+    message.turret.fire_control.agitator =
         key_map_[mapping_.agitator] ?
         TurretCommand::AgitatorMode::kOn : TurretCommand::AgitatorMode::kOff;
 

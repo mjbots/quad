@@ -98,8 +98,6 @@ struct TurretCommand {
     }
   };
 
-  Fire fire;
-
   enum class AgitatorMode {
     kOff,
     kOn,
@@ -114,17 +112,27 @@ struct TurretCommand {
     };
   }
 
-  AgitatorMode agitator = AgitatorMode::kOff;
-  bool laser_on = false;
+  struct FireControl {
+    Fire fire;
+    AgitatorMode agitator = AgitatorMode::kOff;
+    bool laser_on = false;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(fire));
+      a->Visit(MJ_ENUM(agitator, AgitatorModeMapper));
+      a->Visit(MJ_NVP(laser_on));
+    }
+  };
+
+  FireControl fire_control;
 
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(rate));
     a->Visit(MJ_NVP(imu));
     a->Visit(MJ_NVP(absolute));
-    a->Visit(MJ_NVP(fire));
-    a->Visit(MJ_ENUM(agitator, AgitatorModeMapper));
-    a->Visit(MJ_NVP(laser_on));
+    a->Visit(MJ_NVP(fire_control));
   }
 };
 
