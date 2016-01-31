@@ -73,6 +73,27 @@ class Log(object):
         self.all = self.reader.get()
 
 
+def _make_timestamp_getter(all_data):
+    if len(all_data) == 0:
+        return lambda x: 0.0
+    sample = all_data[0]
+
+    # If any children have a timestamp field, use the first one we can
+    # find.
+    def find_child(prefix, value):
+        if hasattr(value, 'timestamp'):
+            return lambda x: _get_data(x, prefix + 'timestamp')
+        if not hasattr(value, '_fields'):
+            return None
+        for child in value._fields:
+            result = find_child(prefix + child + '.', getattr(value, child))
+            if result:
+                return result
+        return None
+
+    return find_child('', sample)
+
+
 def _bisect(array, item, key):
     if len(array) == 0:
         return None
@@ -378,10 +399,11 @@ class Tplot(QtGui.QMainWindow):
         for record, exemplar in self.log.records.iteritems():
             if record not in self.log.all:
                 continue
-            if not 'timestamp' in [x['name'] for x in exemplar['fields']]:
+            timestamp_getter = _make_timestamp_getter(self.log.all[record])
+            if timestamp_getter is None:
                 continue
 
-            these_times = [x.timestamp for x in self.log.all[record]]
+            these_times = [timestamp_getter(x) for x in self.log.all[record]]
             if len(these_times) == 0:
                 continue
             this_min = min(these_times)
@@ -459,8 +481,11 @@ class Tplot(QtGui.QMainWindow):
                 continue
             all_data = self.log.all[name]
 
-            this_data_index = _bisect(all_data, time,
-                                      key=lambda x: x.timestamp)
+            timestamp_getter = _make_timestamp_getter(all_data)
+            if timestamp_getter is None:
+                continue
+
+            this_data_index = _bisect(all_data, time, key=timestamp_getter)
             if this_data_index is None:
                 _clear_tree_widget(item)
             else:
@@ -477,7 +502,8 @@ class Tplot(QtGui.QMainWindow):
                     continue
 
                 all_data = self.log.all[line.tplot_record_name]
-                this_index = _bisect(all_data, new_time, lambda x: x.timestamp)
+                timestamp_getter = _make_timestamp_getter(all_data)
+                this_index = _bisect(all_data, new_time, timestamp_getter)
                 if this_index is None:
                     continue
 
