@@ -14,11 +14,11 @@
 
 import subprocess
 
-Import('canonenv')
+Import('gsenv')
 Import('libbase')
 Import('libmech')
 
-env = canonenv.Clone()
+env = gsenv.Clone()
 env.Append(CPPPATH=['.'])
 
 PKGS = [

@@ -340,6 +340,7 @@ MechWarfare::MechWarfare(base::Context& context)
   m_.servo_monitor.reset(new ServoMonitor(context, m_.servo_iface.get()));
   m_.servo_monitor->parameters()->servos = "0-11,98,99";
   m_.turret.reset(new Turret(context, m_.servo_base.get()));
+  m_.video.reset(new VideoSenderApp(context));
 }
 
 MechWarfare::~MechWarfare() {}

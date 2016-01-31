@@ -63,6 +63,7 @@ crenv.Append(LIBS=['boost_coroutine',
 
 gsenv = env.Clone()
 SetupGStreamer(gsenv)
+Export('gsenv')
 
 SOURCES = [
     'ahrs.cc',
@@ -119,7 +120,7 @@ for env in (crenv, gsenv):
     env['MODULE_MAIN_NSPREFIX'] = 'mech::'
 
 ModuleMain(crenv, 'mjmech_imu_driver', 'MjmechImuDriver')
-ModuleMain(crenv, 'mech_warfare', 'MechWarfare')
+ModuleMain(gsenv, 'mech_warfare', 'MechWarfare')
 ModuleMain(crenv, 'servo_monitor_app', 'ServoMonitorApp')
 ModuleMain(crenv, 'ahrs_app', 'AhrsApp')
 

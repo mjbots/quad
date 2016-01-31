@@ -26,6 +26,7 @@
 #include "ripple.h"
 #include "servo_monitor.h"
 #include "turret.h"
+#include "video_sender_app.h"
 
 namespace mjmech {
 namespace base {
@@ -34,9 +35,6 @@ struct Context;
 namespace mech {
 /// Accepts json formatted commands over the network and uses that to
 /// sequence gaits and firing actions.
-///
-/// NOTE jpieper: This could also manage video if we had a way of
-/// managing it from C++.
 class MechWarfare : boost::noncopyable {
  public:
   MechWarfare(base::Context& context);
@@ -53,6 +51,7 @@ class MechWarfare : boost::noncopyable {
     std::unique_ptr<ServoMonitor::HerkuleXServo> servo_iface;
     std::unique_ptr<ServoMonitor> servo_monitor;
     std::unique_ptr<Turret> turret;
+    std::unique_ptr<VideoSenderApp> video;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -63,6 +62,7 @@ class MechWarfare : boost::noncopyable {
       a->Visit(MJ_NVP(gait_driver));
       a->Visit(MJ_NVP(servo_monitor));
       a->Visit(MJ_NVP(turret));
+      a->Visit(MJ_NVP(video));
     }
   };
 
