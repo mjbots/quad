@@ -64,6 +64,10 @@ class UdpDataLink : boost::noncopyable {
     // seconds.
     double peer_timeout_s = 10.0;
 
+    // Link's MTU -- maximum size of packet
+    // TODO mafanasyev: get from udp socket when this is zero.
+    int link_mtu = 1400;
+
     UdpSocket::Parameters socket_params;
 
     template <typename Archive>
@@ -93,6 +97,9 @@ class UdpDataLink : boost::noncopyable {
   PeerSignal* peer_connected_signal() { return &peer_connected_signal_; }
   PeerSignal* peer_gone_signal() { return &peer_gone_signal_; };
 
+  // Return maximum payload size.
+  int get_max_data_size() const { return params_.link_mtu - kUdpV4HeaderSize; }
+
   // Send to all clients (see description of 'dest')
   void Send(const std::string& data);
 
@@ -110,6 +117,8 @@ class UdpDataLink : boost::noncopyable {
  private:
   void HandleUdpPacket(const std::string&, const UdpSocket::endpoint&);
   void HandlePeriodicTimer();
+
+  const int kUdpV4HeaderSize = 28; // 20 byte IPv4 + 8 bytes UDP
 
   boost::asio::io_service& service_;
   DeadlineTimer periodic_timer_;

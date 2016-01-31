@@ -62,13 +62,19 @@ class McastVideoLinkTransmitter : boost::noncopyable {
 
   struct Parameters {
     // How many times to repeat each packet. 0 disables data sending.
-    int repeat_count = 0;
+    int repeat_count = 2;
+
+    // Minimal framerate (corresponds to maximum inter-frame interval).
+    // The packets are scheduled to be sent at the video freamerate, but not
+    // slower than this value.
+    double min_fps = 20;
 
     base::UdpDataLink::Parameters link;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(repeat_count));
+      a->Visit(MJ_NVP(min_fps));
       link.Serialize(a);
     }
 
