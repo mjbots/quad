@@ -125,7 +125,8 @@ class ServoMonitor::Impl : boost::noncopyable {
     outstanding_ = false;
 
     const auto now = base::Now(service_);
-    if (ec == boost::asio::error::operation_aborted) {
+    if (ec == boost::asio::error::operation_aborted ||
+        ec == herkulex_error::synchronization_error) {
       UpdateServoTimeout(requested_servo, now);
       return;
     }
@@ -155,7 +156,8 @@ class ServoMonitor::Impl : boost::noncopyable {
     outstanding_ = false;
 
     const auto now = base::Now(service_);
-    if (ec == boost::asio::error::operation_aborted) {
+    if (ec == boost::asio::error::operation_aborted ||
+        ec == herkulex_error::synchronization_error) {
       UpdateServoTimeout(requested_servo, now);
       return;
     }
