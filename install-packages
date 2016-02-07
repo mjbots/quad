@@ -358,6 +358,7 @@ def main():
     libassimp-dev libtinyxml-dev libtinyxml2-dev libnlopt-dev
     freeglut3-dev libflann-dev libxmu-dev libxi-dev
     libopenscenegraph-dev libopenthreads-dev
+    gcc-arm-none-eabi
 ''')
 
     if options.system:
