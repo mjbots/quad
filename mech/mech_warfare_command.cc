@@ -129,7 +129,7 @@ AxisMapping GetAxisMapping(const LinuxInput* input) {
 
 struct Options {
   double period_s = 0.1;
-  double deadband = 0.18;
+  double deadband = 0.20;
   double max_translate_x_mm_s = 300.0;
   double max_translate_y_mm_s = 300.0;
   double max_rotate_deg_s = 100.0;
@@ -143,6 +143,8 @@ struct Options {
   double max_body_pitch_deg = 20;
   double max_body_roll_deg = 20;
   double max_turret_rate_deg_s = 100;
+  double turret_linear_transition_point = 0.5;
+  double turret_linear_fine_percent = 0.2;
   bool verbose = false;
 
   template <typename Archive>
@@ -162,6 +164,8 @@ struct Options {
     a->Visit(MJ_NVP(max_body_pitch_deg));
     a->Visit(MJ_NVP(max_body_roll_deg));
     a->Visit(MJ_NVP(max_turret_rate_deg_s));
+    a->Visit(MJ_NVP(turret_linear_transition_point));
+    a->Visit(MJ_NVP(turret_linear_fine_percent));
     a->Visit(MJ_NVP(verbose));
   }
 };
@@ -240,28 +244,48 @@ class Commander {
     }
   }
 
+  void MaybeMapNonLinear(
+      double* destination, int mapping, int sign,
+      double center, double minval, double maxval,
+      double transition_point, double fine_percent) const {
+
+    if (mapping < 0) { return; }
+
+    double scaled = linux_input_->abs_info(mapping).scaled();
+    scaled *= sign;
+    if (std::abs(scaled) < options_.deadband) {
+      scaled = 0.0;
+    } else if (scaled > 0.0) {
+      scaled = (scaled - options_.deadband) / (1.0 - options_.deadband);
+    } else {
+      scaled = (scaled + options_.deadband) / (1.0 - options_.deadband);
+    }
+
+    double abs_scaled = std::abs(scaled);
+
+    if (abs_scaled <= transition_point) {
+      abs_scaled = (abs_scaled / transition_point) * fine_percent;
+    } else {
+      abs_scaled =
+          ((abs_scaled - transition_point) /
+           (1.0 - transition_point) *
+           (1.0 - fine_percent)) +
+          fine_percent;
+    }
+
+    const double value = (
+        (scaled < 0) ?
+        (abs_scaled * (minval - center) + center) :
+        (abs_scaled * (maxval - center) + center));
+
+    *destination = value;
+  };
+
   void MaybeMap(double* destination, int mapping, int sign,
                 double center, double minval, double maxval) const {
-      if (mapping < 0) { return; }
-
-      double scaled = linux_input_->abs_info(mapping).scaled();
-      scaled *= sign;
-      if (std::abs(scaled) < options_.deadband) {
-        scaled = 0.0;
-      } else if (scaled > 0.0) {
-        scaled = (scaled - options_.deadband) / (1.0 - options_.deadband);
-      } else {
-        scaled = (scaled + options_.deadband) / (1.0 - options_.deadband);
-      }
-
-      const double abs_scaled = std::abs(scaled);
-      const double value = (
-          (scaled < 0) ?
-          (abs_scaled * (minval - center) + center) :
-          (abs_scaled * (maxval - center) + center));
-
-      *destination = value;
-  };
+    MaybeMapNonLinear(destination, mapping, sign,
+                      center, minval, maxval, 1.0, 1.0);
+  }
 
   bool body_enabled() const {
     return linux_input_->abs_info(mapping_.body).scaled() > 0.0;
@@ -319,16 +343,22 @@ class Commander {
 
     if (turret_enabled()) {
       message.turret.rate = TurretCommand::Rate();
-      MaybeMap(&(message.turret.rate->x_deg_s),
-               mapping_.turret_x, mapping_.sign_turret_x,
-               0,
-               -options_.max_turret_rate_deg_s,
-               options_.max_turret_rate_deg_s);
-      MaybeMap(&(message.turret.rate->y_deg_s),
-               mapping_.turret_y, mapping_.sign_turret_y,
-               0,
-               -options_.max_turret_rate_deg_s,
-               options_.max_turret_rate_deg_s);
+      MaybeMapNonLinear(
+          &(message.turret.rate->x_deg_s),
+          mapping_.turret_x, mapping_.sign_turret_x,
+          0,
+          -options_.max_turret_rate_deg_s,
+          options_.max_turret_rate_deg_s,
+          options_.turret_linear_transition_point,
+          options_.turret_linear_fine_percent);
+      MaybeMapNonLinear(
+          &(message.turret.rate->y_deg_s),
+          mapping_.turret_y, mapping_.sign_turret_y,
+          0,
+          -options_.max_turret_rate_deg_s,
+          options_.max_turret_rate_deg_s,
+          options_.turret_linear_transition_point,
+          options_.turret_linear_fine_percent);
 
       const bool do_fire =
           linux_input_->abs_info(mapping_.fire).scaled() > 0.0;
@@ -425,16 +455,22 @@ class Commander {
              mapping_.sign_translate_y,
              command_.translate_y_mm_s,
              -options_.max_translate_y_mm_s, options_.max_translate_y_mm_s);
-    MaybeMap(&command.turret_rate_dps.yaw, mapping_.turret_x,
-             mapping_.sign_turret_x,
-             0,
-             -options_.max_turret_rate_deg_s,
-             options_.max_turret_rate_deg_s);
-    MaybeMap(&command.turret_rate_dps.pitch, mapping_.turret_y,
-             mapping_.sign_turret_y,
-             0,
-             -options_.max_turret_rate_deg_s,
-             options_.max_turret_rate_deg_s);
+    MaybeMapNonLinear(
+        &command.turret_rate_dps.yaw, mapping_.turret_x,
+        mapping_.sign_turret_x,
+        0,
+        -options_.max_turret_rate_deg_s,
+        options_.max_turret_rate_deg_s,
+        options_.turret_linear_transition_point,
+        options_.turret_linear_fine_percent);
+    MaybeMapNonLinear(
+        &command.turret_rate_dps.pitch, mapping_.turret_y,
+        mapping_.sign_turret_y,
+        0,
+        -options_.max_turret_rate_deg_s,
+        options_.max_turret_rate_deg_s,
+        options_.turret_linear_transition_point,
+        options_.turret_linear_fine_percent);
 
     if (key_map_[mapping_.crouch]) {
       command.body_offset_mm.z = options_.min_body_z_mm;
@@ -452,6 +488,19 @@ class Commander {
 
     std::string message_str = SerializeCommand(message);
     socket_->send_to(boost::asio::buffer(message_str), target_);
+
+    if (options_.verbose) {
+      std::cout << boost::format(
+          "x=%4.0f y=%4.0f tx=%4.0f ty=%4.0f bx=%4.0f by=%4.0f") %
+          command.drive_mm_s.x %
+          command.drive_mm_s.y %
+          command.turret_rate_dps.yaw %
+          command.turret_rate_dps.pitch %
+          command.body_offset_mm.x %
+          command.body_offset_mm.y;
+      std::cout << "\r";
+      std::cout.flush();
+    }
   }
 
   const Options options_;
