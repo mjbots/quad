@@ -37,17 +37,19 @@ struct Data {
   boost::posix_time::ptime timestamp;
 
   enum class Mode {
+    kIdle,
     kManual,
       kDrive,
   };
 
-  Mode mode;
+  Mode mode = Mode::kIdle;
 
   DriveCommand current_drive;
-  boost::posix_time::ptime last_drive_timestamp;
+  boost::posix_time::ptime last_command_timestamp;
 
   static std::map<Mode, const char*> ModeMapper() {
     return std::map<Mode, const char*>{
+      {Mode::kIdle, "kIdle"},
       {Mode::kManual, "kManual"},
       {Mode::kDrive, "kDrive"},
     };
@@ -58,7 +60,7 @@ struct Data {
     a->Visit(MJ_NVP(timestamp));
     a->Visit(MJ_ENUM(mode, ModeMapper));
     a->Visit(MJ_NVP(current_drive));
-    a->Visit(MJ_NVP(last_drive_timestamp));
+    a->Visit(MJ_NVP(last_command_timestamp));
   }
 };
 }
@@ -172,23 +174,29 @@ class MechWarfare::Impl : boost::noncopyable {
 
     StartTimer();
 
+    if (data_.mode != Data::Mode::kIdle) {
+      const double elapsed_s = base::ConvertDurationToSeconds(
+          base::Now(service_) - data_.last_command_timestamp);
+      if (elapsed_s > parent_->parameters_.idle_timeout_s) {
+        data_.mode = Data::Mode::kIdle;
+        parent_->m_.gait_driver->SetFree();
+      }
+    }
+
     switch (data_.mode) {
+      case Data::Mode::kIdle: { break; }
       case Data::Mode::kManual: { break; }
       case Data::Mode::kDrive: {
         DoDrive();
         break;
       }
     }
+
+    data_.timestamp = base::Now(context_.service);
+    data_signal_(&data_);
   }
 
   void DoDrive() {
-    const double elapsed_s = base::ConvertDurationToSeconds(
-        base::Now(service_) - data_.last_drive_timestamp);
-    if (elapsed_s > parent_->parameters_.idle_timeout_s) {
-      data_.mode = Data::Mode::kManual;
-      return;
-    }
-
     TurretCommand turret;
     Command gait;
 
@@ -267,6 +275,8 @@ class MechWarfare::Impl : boost::noncopyable {
   }
 
   void HandleMessage(const boost::property_tree::ptree& tree) {
+    data_.last_command_timestamp = base::Now(service_);
+
     auto optional_drive = tree.get_child_optional("drive");
     if (optional_drive) {
       HandleMessageDrive(*optional_drive);
@@ -303,7 +313,6 @@ class MechWarfare::Impl : boost::noncopyable {
 
     data_.current_drive = command;
     data_.mode = Data::Mode::kDrive;
-    data_.last_drive_timestamp = base::Now(service_);
 
     // Immediately update ourselves.
     DoDrive();

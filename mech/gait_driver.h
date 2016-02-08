@@ -64,11 +64,7 @@ class GaitDriver : boost::noncopyable {
 
     /// This long with no commands will result in stopping the gait
     /// engine and setting all servos to unpowered.
-    double command_timeout_s = 2.0;
-
-    /// Before entering brake mode, spend this long getting into the
-    /// idle pose.
-    double idle_time_s = 1.0;
+    double command_timeout_s = 0.0;
 
     /// The maximum amount that the gait engine can accelerate in each
     /// axis.  Deceleration is currently unlimited.
@@ -78,7 +74,6 @@ class GaitDriver : boost::noncopyable {
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(period_s));
       a->Visit(MJ_NVP(command_timeout_s));
-      a->Visit(MJ_NVP(idle_time_s));
       a->Visit(MJ_NVP(max_acceleration_mm_s2));
     }
   };

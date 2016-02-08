@@ -86,6 +86,10 @@ class GaitDriver::Impl : boost::noncopyable {
   void SetFree() {
     servo_->EnablePower(ServoInterface::kPowerBrake, {}, FailHandler());
     state_ = kUnpowered;
+    timer_.cancel();
+    timer_started_ = false;
+
+    Emit();
   }
 
   void ProcessBodyAhrs(boost::posix_time::ptime timestamp,
@@ -114,11 +118,13 @@ class GaitDriver::Impl : boost::noncopyable {
   void HandleTimer(const boost::system::error_code& ec) {
     if (ec == boost::asio::error::operation_aborted) { return; }
 
-    auto now = base::Now(service_);
-    auto elapsed = now - last_command_timestamp_;
-    if (elapsed > base::ConvertSecondsToDuration(
-            parent_->parameters_.command_timeout_s)) {
-      timer_started_ = false;
+    const auto now = base::Now(service_);
+    const auto elapsed = now - last_command_timestamp_;
+    const bool timeout =
+        (parent_->parameters_.command_timeout_s > 0.0) &&
+        (elapsed > base::ConvertSecondsToDuration(
+            parent_->parameters_.command_timeout_s));
+    if (state_ == kUnpowered || timeout) {
       SetFree();
       return;
     }
@@ -153,34 +159,28 @@ class GaitDriver::Impl : boost::noncopyable {
                       &gait_command_.translate_y_mm_s,
                       parent_->parameters_.max_acceleration_mm_s2.y);
 
-    if (elapsed > (base::ConvertSecondsToDuration(
-                       parent_->parameters_.command_timeout_s -
-                       parent_->parameters_.idle_time_s))) {
-      Command idle_command;
-      idle_command.lift_height_percent = 0.0;
-      gait_->SetCommand(idle_command);
-    } else {
-      gait_->SetCommand(gait_command_);
-    }
-
     // Advance our gait, then send the requisite servo commands out.
-    auto gait_commands = gait_->AdvanceTime(parent_->parameters_.period_s);
+    gait_commands_ = gait_->AdvanceTime(parent_->parameters_.period_s);
 
     std::vector<ServoInterface::Joint> servo_commands;
-    for (const auto& joint: gait_commands.joints) {
+    for (const auto& joint: gait_commands_.joints) {
       servo_commands.emplace_back(
           ServoInterface::Joint{joint.servo_number, joint.angle_deg});
     }
 
     servo_->SetPose(servo_commands, FailHandler());
 
+    Emit();
+  }
+
+  void Emit() {
     const auto& state = gait_->state();
 
     GaitData data;
     data.timestamp = base::Now(service_);
 
     data.state = state_;
-    data.command = gait_commands;
+    data.command = gait_commands_;
     data.body_robot = state.body_frame.TransformToFrame(&state.robot_frame);
     data.cog_robot = state.cog_frame.TransformToFrame(&state.robot_frame);
     data.body_world = state.body_frame.TransformToFrame(&state.world_frame);
@@ -208,6 +208,7 @@ class GaitDriver::Impl : boost::noncopyable {
   boost::posix_time::ptime last_command_timestamp_;
   base::Quaternion attitude_;
   base::Point3D body_rate_dps_;
+  JointCommand gait_commands_;
 
   Command input_command_;
   Command gait_command_;
