@@ -20,6 +20,7 @@
 #include "base/common.h"
 #include "base/deadline_timer.h"
 #include "base/fail.h"
+#include "base/logging.h"
 #include "base/now.h"
 
 #include "servo_interface.h"
@@ -141,6 +142,7 @@ class ServoMonitor::Impl : boost::noncopyable {
     BOOST_ASSERT(response.register_data.size() >= 1);
     servo.voltage_V =
         HerkuleXBase::CountsToVoltage(response.register_data[0]);
+    servo.torque_on = response.motor_on;
 
     CheckFaults(response);
 
@@ -171,6 +173,7 @@ class ServoMonitor::Impl : boost::noncopyable {
     BOOST_ASSERT(response.register_data.size() >= 1);
     servo.temperature_C =
         HerkuleXBase::CountsToTemperatureC(response.register_data[0]);
+    servo.torque_on = response.motor_on;
 
     CheckFaults(response);
 
@@ -246,6 +249,7 @@ class ServoMonitor::Impl : boost::noncopyable {
       servo.last_update = pair.second.last_update;
       servo.voltage_V = pair.second.voltage_V;
       servo.temperature_C = pair.second.temperature_C;
+      servo.torque_on = pair.second.torque_on;
       data.servos.push_back(servo);
     }
 
@@ -254,11 +258,16 @@ class ServoMonitor::Impl : boost::noncopyable {
 
   void CheckFaults(const HerkuleXBase::MemReadResponse& response) {
     if (response.reg48) {
-      std::cerr << boost::format("ServoMonitor: %02X err=%s\n")
-          % response.servo % FaultToString(response);
+      log_.warn((boost::format("ServoMonitor: %02X err=%s\n")
+                 % response.servo % FaultToString(response)).str());
       servo_->ClearStatus(response.servo,
                           std::bind(&Impl::HandleClear, this,
                                     std::placeholders::_1));
+    }
+
+    if (!response.motor_on && expect_torque_on_) {
+      log_.warn((boost::format("%02X has motor unexpectedly off!") %
+                 response.servo).str());
     }
   }
 
@@ -298,12 +307,15 @@ class ServoMonitor::Impl : boost::noncopyable {
   boost::asio::io_service& service_;
   HerkuleXServo* const servo_;
 
+  base::LogRef log_ = base::GetLogInstance("ServoMonitor");
+
   base::DeadlineTimer timer_;
 
   struct Servo {
     boost::posix_time::ptime last_update;
     double voltage_V = 0;
     double temperature_C = 0;
+    bool torque_on = false;
 
     boost::posix_time::ptime next_update;
     double parole_time_s = 0;
@@ -323,6 +335,8 @@ class ServoMonitor::Impl : boost::noncopyable {
 
   bool outstanding_ = false;
 
+  bool expect_torque_on_ = false;
+
   Parameters parameters_;
 };
 
@@ -341,5 +355,14 @@ void ServoMonitor::AsyncStart(base::ErrorHandler handler) {
 ServoMonitor::Parameters* ServoMonitor::parameters() {
   return &impl_->parameters_;
 }
+
+void ServoMonitor::ExpectTorqueOn() {
+  impl_->expect_torque_on_ = true;
+}
+
+void ServoMonitor::ExpectTorqueOff() {
+  impl_->expect_torque_on_ = false;
+}
+
 }
 }

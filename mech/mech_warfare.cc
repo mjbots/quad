@@ -183,6 +183,7 @@ class MechWarfare::Impl : boost::noncopyable {
       if (elapsed_s > parent_->parameters_.idle_timeout_s) {
         data_.mode = Data::Mode::kIdle;
         parent_->m_.gait_driver->SetFree();
+        parent_->m_.servo_monitor->ExpectTorqueOff();
       }
     }
 
@@ -314,6 +315,7 @@ class MechWarfare::Impl : boost::noncopyable {
             now - data_.turret_bias_start_timestamp);
         if (elapsed_s > parent_->parameters_.turret_bias_timeout_s) {
           data_.mode = mode;
+          parent_->m_.servo_monitor->ExpectTorqueOn();
         }
         break;
       }
@@ -392,7 +394,7 @@ MechWarfare::MechWarfare(base::Context& context)
       new ServoMonitor::HerkuleXServoConcrete<Mech::ServoBase>(
           m_.servo_base.get()));
   m_.servo_monitor.reset(new ServoMonitor(context, m_.servo_iface.get()));
-  m_.servo_monitor->parameters()->servos = "0-11,98,99";
+  m_.servo_monitor->parameters()->servos = "0-11,98";
   m_.turret.reset(new Turret(context, m_.servo_base.get()));
   m_.video.reset(new VideoSenderApp(context));
 }
