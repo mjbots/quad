@@ -86,14 +86,18 @@ class ServoController {
     const double control =
         Limit(error * kServo_kp + velocity * kServo_kd, kLimit);
 
-    skeleton_->setForce(dof_number_, -control);
+    skeleton_->setForce(dof_number_, -control * power_factor_);
   }
+
+  void SetFree() { power_factor_ = 0.0; }
+  void SetTorque() { power_factor_ = 1.0; }
 
  private:
   SkeletonPtr skeleton_;
   const int dof_number_;
   double desired_rad_ = 0.0;
   double sign_ = 1.0;
+  double power_factor_ = 0.0;
 };
 
 typedef std::shared_ptr<ServoController> ServoControllerPtr;
@@ -572,6 +576,23 @@ class SimulatorWindow::Impl {
     }
 
     void WriteRam(int servo, uint8_t addr, uint8_t data) override {
+      if (addr == 52) {
+        auto command = [&](ServoController* servo) {
+          if (data == 0x40) {
+            // brake
+            servo->SetFree();
+          } else if (data == 0x60) {
+            // on
+            servo->SetTorque();
+          } else {
+            // off
+            servo->SetFree();
+          }
+        };
+        for (auto& servo: parent_->servos_) {
+          command(servo.second.get());
+        }
+      }
       // Noop
     }
 
