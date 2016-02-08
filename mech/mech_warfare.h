@@ -73,6 +73,7 @@ class MechWarfare : boost::noncopyable {
     double idle_timeout_s = 1.0;
     double drive_rotate_factor = 0.5;
     double drive_max_rotate_dps = 40.0;
+    double turret_bias_timeout_s = 1.5;
 
     base::ComponentParameters<Members> children;
 
@@ -84,6 +85,7 @@ class MechWarfare : boost::noncopyable {
       a->Visit(MJ_NVP(idle_timeout_s));
       a->Visit(MJ_NVP(drive_rotate_factor));
       a->Visit(MJ_NVP(drive_max_rotate_dps));
+      a->Visit(MJ_NVP(turret_bias_timeout_s));
       children.Serialize(a);
     }
 

@@ -38,14 +38,16 @@ struct Data {
 
   enum class Mode {
     kIdle,
+    kTurretBias,
     kManual,
-      kDrive,
+    kDrive,
   };
 
   Mode mode = Mode::kIdle;
 
   DriveCommand current_drive;
   boost::posix_time::ptime last_command_timestamp;
+  boost::posix_time::ptime turret_bias_start_timestamp;
 
   static std::map<Mode, const char*> ModeMapper() {
     return std::map<Mode, const char*>{
@@ -61,6 +63,7 @@ struct Data {
     a->Visit(MJ_ENUM(mode, ModeMapper));
     a->Visit(MJ_NVP(current_drive));
     a->Visit(MJ_NVP(last_command_timestamp));
+    a->Visit(MJ_NVP(turret_bias_start_timestamp));
   }
 };
 }
@@ -185,6 +188,7 @@ class MechWarfare::Impl : boost::noncopyable {
 
     switch (data_.mode) {
       case Data::Mode::kIdle: { break; }
+      case Data::Mode::kTurretBias: { break; }
       case Data::Mode::kManual: { break; }
       case Data::Mode::kDrive: {
         DoDrive();
@@ -290,20 +294,59 @@ class MechWarfare::Impl : boost::noncopyable {
     if (optional_turret) { HandleMessageTurret(*optional_turret); }
   }
 
+  void StartTurretBias() {
+    data_.turret_bias_start_timestamp = base::Now(service_);
+    parent_->m_.turret->StartBias();
+  }
+
+  void MaybeEnterActiveMode(Data::Mode mode) {
+    switch (data_.mode) {
+      case Data::Mode::kIdle: {
+        // Start the turret bias process.
+        StartTurretBias();
+        data_.mode = Data::Mode::kTurretBias;
+        break;
+      }
+      case Data::Mode::kTurretBias: {
+        // Wait until the turret bias process is finished.
+        const auto now = base::Now(service_);
+        const double elapsed_s = base::ConvertDurationToSeconds(
+            now - data_.turret_bias_start_timestamp);
+        if (elapsed_s > parent_->parameters_.turret_bias_timeout_s) {
+          data_.mode = mode;
+        }
+        break;
+      }
+      case Data::Mode::kManual: // fall-through
+      case Data::Mode::kDrive: {
+        data_.mode = mode;
+        break;
+      }
+    }
+  }
+
   void HandleMessageGait(const boost::property_tree::ptree& tree) {
     Command command;
     base::PropertyTreeReadArchive(
         tree, base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&command);
-    parent_->m_.gait_driver->SetCommand(command);
-    data_.mode = Data::Mode::kManual;
+
+    MaybeEnterActiveMode(Data::Mode::kManual);
+
+    if (data_.mode == Data::Mode::kManual) {
+      parent_->m_.gait_driver->SetCommand(command);
+    }
   }
 
   void HandleMessageTurret(const boost::property_tree::ptree& tree) {
     TurretCommand command;
     base::PropertyTreeReadArchive(
         tree, base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&command);
-    parent_->m_.turret->SetCommand(command);
-    data_.mode = Data::Mode::kManual;
+
+    MaybeEnterActiveMode(Data::Mode::kManual);
+
+    if (data_.mode == Data::Mode::kManual) {
+      parent_->m_.turret->SetCommand(command);
+    }
   }
 
   void HandleMessageDrive(const boost::property_tree::ptree& tree) {
@@ -312,10 +355,12 @@ class MechWarfare::Impl : boost::noncopyable {
         tree, base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&command);
 
     data_.current_drive = command;
-    data_.mode = Data::Mode::kDrive;
+    MaybeEnterActiveMode(Data::Mode::kDrive);
 
-    // Immediately update ourselves.
-    DoDrive();
+    if (data_.mode == Data::Mode::kDrive) {
+      // Immediately update ourselves.
+      DoDrive();
+    }
   }
 
   MechWarfare* const parent_;

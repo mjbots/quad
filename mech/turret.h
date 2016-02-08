@@ -41,6 +41,8 @@ class Turret : boost::noncopyable {
   void SetCommand(const TurretCommand&);
   void SetFireControl(const TurretCommand::FireControl&);
 
+  void StartBias();
+
   struct Parameters {
     int gimbal_address = 98;
     double period_s = 0.1;

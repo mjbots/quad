@@ -37,6 +37,7 @@ const HerkuleXConstants::Register LedControl = { 0x7f, 1 };
 const HerkuleXConstants::Register FireTime = { 0x7c, 1};
 const HerkuleXConstants::Register FirePwm = { 0x7d, 1};
 const HerkuleXConstants::Register AgitatorPwm  = {0x7e, 1};
+const HerkuleXConstants::Register BiasCommand = { 0x7b, 1};
 
 
 class Parser {
@@ -416,6 +417,12 @@ void Turret::SetCommand(const TurretCommand& command) {
 
 void Turret::SetFireControl(const TurretCommand::FireControl& command) {
   impl_->SetFireControl(command);
+}
+
+void Turret::StartBias() {
+  impl_->servo_->RamWrite(
+      impl_->parameters_.gimbal_address, BiasCommand, 1,
+      std::bind(&Impl::HandleWrite, impl_.get(), std::placeholders::_1));
 }
 
 const Turret::Data& Turret::data() const { return impl_->data_; }
