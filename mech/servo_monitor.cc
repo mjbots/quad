@@ -258,7 +258,7 @@ class ServoMonitor::Impl : boost::noncopyable {
 
   void CheckFaults(const HerkuleXBase::MemReadResponse& response) {
     if (response.reg48) {
-      log_.warn((boost::format("ServoMonitor: %02X err=%s\n")
+      log_.warn((boost::format("ServoMonitor: %02X err=%s")
                  % response.servo % FaultToString(response)).str());
       servo_->ClearStatus(response.servo,
                           std::bind(&Impl::HandleClear, this,
