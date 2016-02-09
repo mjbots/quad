@@ -444,6 +444,26 @@ class RxFrameBuffer : boost::noncopyable {
     return &info_;
   }
 
+
+  std::shared_ptr<std::string> AssembleFrame() {
+    BOOST_ASSERT(missing_.none());
+    int len = 0;
+    for (auto& packet: packets_) {
+      len += packet->data().size();
+    }
+
+    std::shared_ptr<std::string> result(new std::string(len, 0));
+
+    int pos = 0;
+    for (auto& packet: packets_) {
+      ::memcpy(&(*result)[pos], &packet->data()[0], packet->data().size());
+      pos += packet->data().size();
+    }
+    BOOST_ASSERT(pos == len);
+
+    return result;
+  }
+
   // Handle the packet. it will be moved 'in' if it is interesting.
   void HandlePacket(const boost::posix_time::ptime now,
                     std::unique_ptr<DataPacket>* packet) {
@@ -567,6 +587,8 @@ class McastVideoLinkReceiver::Impl : boost::noncopyable {
     if (buff->complete() && !was_complete) {
       // packet received. pass to decoder
       log_.debug("packet %d complete", header->frame_num);
+      std::shared_ptr<std::string> ready_frame = buff->AssembleFrame();
+      (*parent_->frame_ready_signal())(ready_frame);
     }
     ExpireOldFrames();
   }

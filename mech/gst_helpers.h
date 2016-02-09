@@ -92,6 +92,12 @@ class PipelineWrapper : boost::noncopyable {
                     int max_buffers, bool drop,
                     const AppsinkNewSampleCallback& callback);
 
+  // Calling this function will copy the memory and pass it to the specific
+  // appsrc.
+  // TODO theamk: re-write interface to avoid an extra copy.
+  typedef std::function<void(void*, int)> AppsrcSampleCallback;
+  AppsrcSampleCallback SetupAppsrc(const char* element_name);
+
  protected:
   bool HandleBusMessage(GstBus *bus, GstMessage *message);
 
@@ -99,6 +105,7 @@ class PipelineWrapper : boost::noncopyable {
   static gboolean handle_bus_message_wrapper(
       GstBus *bus, GstMessage *message, gpointer user_data);
   void HandleShutdown(GstMainLoopRefObj::QuitPostponerPtr& ptr);
+  void SendAppsrcSample(void* obj, void* data, int len);
 
   GstMainLoopRef gst_loop_;
   GstMainLoopRefObj::QuitPostponerPtr quit_request_;

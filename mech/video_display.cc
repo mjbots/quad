@@ -66,7 +66,14 @@ class VideoDisplay::Impl : boost::noncopyable {
   }
 
   void HandleIncomingFrame(std::shared_ptr<std::string>& frame) {
-    BOOST_ASSERT(false); // not implemented
+    if (!pipeline_ready_) {
+      log_.debug("discarding frame -- not started yet");
+      return;
+    }
+    if (!h264_src_) {
+      base::Fail("got raw frame from video link, but other input is selected");
+    }
+    h264_src_(&frame->front(), frame->size());
   }
 
  private:
@@ -163,6 +170,10 @@ class VideoDisplay::Impl : boost::noncopyable {
           last_decoded_time_ = now;
         });
 
+    if (parameters_.source == "") {
+      h264_src_ = pipeline_->SetupAppsrc("raw-src");
+    }
+
     pipeline_->Start();
 
     // Set up the timer for stats
@@ -171,6 +182,7 @@ class VideoDisplay::Impl : boost::noncopyable {
            parameters_.stats_interval_s,
            std::bind(&Impl::HandleStatsTimeout, this));
     }
+    parent_service_.post([=]() { pipeline_ready_ = true; });
   }
 
   void HandleStatsTimeout() {
@@ -212,12 +224,16 @@ class VideoDisplay::Impl : boost::noncopyable {
   const std::thread::id parent_id_;
   GstMainLoopRef gst_loop_;
 
+  bool pipeline_ready_ = false;
+  gst::PipelineWrapper::AppsrcSampleCallback h264_src_ = nullptr;
+
   // From child (and maybe gst threads) only.
   std::unique_ptr<gst::PipelineWrapper> pipeline_;
 
   std::mutex stats_mutex_;
   std::shared_ptr<Stats> stats_;
   boost::optional<boost::posix_time::ptime> last_decoded_time_;
+
 
 };
 

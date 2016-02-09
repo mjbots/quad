@@ -16,6 +16,7 @@
 
 #include <gst/gst.h>
 #include <gst/app/gstappsink.h>
+#include <gst/app/gstappsrc.h>
 
 #include <boost/format.hpp>
 
@@ -169,6 +170,36 @@ void PipelineWrapper::SetupAppsink(
   g_signal_connect(sink, "new-sample",
                    G_CALLBACK(appsink_new_sample_wrapper), callback_copy);
   gst_object_unref(sink);
+}
+
+PipelineWrapper::AppsrcSampleCallback
+PipelineWrapper::SetupAppsrc(const char* element_name) {
+  GstAppSrc* src = GST_APP_SRC(GetElementByName(element_name));
+  BOOST_ASSERT(src);  // This will fail if the element type is wrong
+
+  gst_app_src_set_stream_type(src, GST_APP_STREAM_TYPE_STREAM);
+  // Do not queue more than one buffer.
+  //gst_app_src_set_max_bytes(src, 1);
+
+  //return std::bind<void(void*, int)>(
+  //    &PipelineWrapper::SendAppsrcSample, this,
+  //    (void*)src, std::placeholders::_1, std::placeholders::_2);
+  return [=](void* data, int len) {
+    SendAppsrcSample(src, data, len);
+  };
+}
+
+void PipelineWrapper::SendAppsrcSample(void* obj, void* data, int len) {
+  BOOST_ASSERT(len > 0);
+  gpointer copy = ::g_memdup(data, len);
+  BOOST_ASSERT(copy); // if not, we are out of memory
+  GstBuffer* buffer = gst_buffer_new_wrapped(copy, len);
+  GstAppSrc* src = GST_APP_SRC(obj);
+  BOOST_ASSERT(src);
+  GstFlowReturn ret = gst_app_src_push_buffer(src, buffer);
+  if (ret != GST_FLOW_OK) {
+    base::Fail("could not push buffer");
+  }
 }
 
 gboolean PipelineWrapper::handle_bus_message_wrapper(
