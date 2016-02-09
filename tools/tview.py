@@ -107,6 +107,7 @@ class RecordSignal(object):
     def update(self, value):
         for handler in self._callbacks.itervalues():
             handler(value)
+        return len(self._callbacks) != 0
 
 
 class PlotItem(object):
@@ -314,9 +315,12 @@ class Record(object):
         return self.signals[name]
 
     def update(self, struct):
+        count = 0
         for key, signal in self.signals.iteritems():
             value = _get_data(struct, key)
-            signal.update(value)
+            if signal.update(value):
+                count += 1
+        return count != 0
 
 
 class NoEditDelegate(QtGui.QStyledItemDelegate):
@@ -366,6 +370,8 @@ class TviewMainWindow(QtGui.QMainWindow):
         self._telemetry_records = {}
         self._schema_name = None
         self._config_tree_items = {}
+
+        self._last_draw_time = 0.0
 
         self.ui = ui_tview_main_window.Ui_TviewMainWindow()
         self.ui.setupUi(self)
@@ -656,8 +662,12 @@ class TviewMainWindow(QtGui.QMainWindow):
         record = self._telemetry_records[name]
         struct = record.archive.deserialize(data)
         _set_tree_widget_data(record.tree_item, struct)
-        record.update(struct)
-        self.ui.plotWidget.canvas.draw()
+        if record.update(struct):
+            now = time.time()
+            elapsed = now - self._last_draw_time
+            if elapsed > 0.2:
+                self.ui.plotWidget.canvas.draw()
+                self._last_draw_time = now
 
         self._serial_state = self.STATE_LINE
 
