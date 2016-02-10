@@ -135,6 +135,13 @@ This list is to filter out the devices which are not interesting for some reasn
 - Sabrent AC600 Dual Band Wi-Fi USB Mini Adapter NT-WSAC
   driver file name is MT7601
 
+- 'Intel Corporation Wireless 7260' (iwlwifi, integrated into thinkpad T430)
+  does not support IBSS on 5GHZ band. Possible reason:
+  "The firmware of (some?) Intel cards seems to prohibit the use of Band 2 in
+  AP mode, and there is no workaround in driver or kernel code that I know
+  of. "
+  http://askubuntu.com/questions/457702/ubuntu-14-04-hostapd-802-11a-iwlwifi-no-ap
+
 Testing wireless cards
 ~~~~~~~~~~~~~~~~~~~~~~
 If you have a new wireless card, you can check it as following:
