@@ -113,6 +113,28 @@ Devices:
  - Box says: STRONGR-R AC600 / UW-600M01
  - Size: 15.1x14.9x8.1mm + 11.7x12x4.6mm USB plug
 
+Potential other devices
+~~~~~~~~~~~~~~~~~~~~~~~
+This list is to filter out the devices which are not interesting for some reasn
+
+- Satechi Wireless Mini Dual Band Wi-Fi USB Mini Adapter ST-UMWAC
+  rtl8812au according to amazon comments
+
+- BlueFire Mini 150M USB WiFi Adapter B012G7H1YC
+  not actually dual-band (2.4GHZ only)
+
+- Glam Hobby 600Mbps AC600 Dual Band USB WiFi Dongle B011T5IF06
+  driver link points to rtl8811au
+
+- TRENDnet TEW-804UB Dual Band USB WiFi
+  driver mentions RTL8811au, USB 20f4:804b
+
+- Linksys Wireless Mini USB Adapter AC 580 Dual Band (AE6000)
+  driver contains "RT2870" strings
+
+- Sabrent AC600 Dual Band Wi-Fi USB Mini Adapter NT-WSAC
+  driver file name is MT7601
+
 Testing wireless cards
 ~~~~~~~~~~~~~~~~~~~~~~
 If you have a new wireless card, you can check it as following:
