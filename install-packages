@@ -358,6 +358,8 @@ def main():
     libassimp-dev libtinyxml-dev libtinyxml2-dev libnlopt-dev
     freeglut3-dev libflann-dev libxmu-dev libxi-dev
     libopenscenegraph-dev libopenthreads-dev cmake
+    python-matplotlib ipython ipython-qtconsole
+    python-blessings
 ''')
 
     if options.system:
