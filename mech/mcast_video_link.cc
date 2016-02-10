@@ -39,7 +39,7 @@ namespace {
 // A header is located at the beginnning of the packet
 struct DataPacketHeader {
   const static uint32_t kMagic = 0x314C564D; // MVL1
-  const static int kSize = 32;
+  const static int kSize = 40;
 
   // Packet magic
   uint32_t magic;
@@ -64,6 +64,9 @@ struct DataPacketHeader {
   uint8_t repeat_index;
   // crc32 of original video frame
   uint32_t frame_crc32;
+  // crc32 of this packet only (payload only)
+  uint32_t packet_crc32;
+  uint32_t reserved2;
 
   template <typename Archive>
   void Serialize(Archive* a) {
@@ -78,6 +81,8 @@ struct DataPacketHeader {
     a->Visit(MJ_NVP(repeat_count));
     a->Visit(MJ_NVP(repeat_index));
     a->Visit(MJ_NVP(frame_crc32));
+    a->Visit(MJ_NVP(packet_crc32));
+    a->Visit(MJ_NVP(reserved2));
   }
 
   DataPacketHeader() {
@@ -100,6 +105,11 @@ class DataPacket : boost::noncopyable {
     BOOST_ASSERT(hdr.video_start >= sizeof(hdr));
     ::memcpy(&data_[0], &hdr, sizeof(hdr));
     ::memcpy(&data_[hdr.video_start], video_data, video_len);
+
+    boost::crc_32_type crc_calc;
+    crc_calc.process_bytes(video_data, video_len);
+    header_nv().packet_crc32 = crc_calc.checksum();
+
     CheckValid();
   }
 
@@ -115,21 +125,34 @@ class DataPacket : boost::noncopyable {
   // Mutable header
   DataPacketHeader& header() {
     BOOST_ASSERT(valid_);
-    return *reinterpret_cast<DataPacketHeader*>(&data_.front());
+    return header_nv();
   }
+
   const std::string& data() {
     BOOST_ASSERT(valid_);
     return data_;
   }
 
+  const char* payload() {
+    return &data_[header().video_start];
+  }
+
+  int payload_len() {
+    BOOST_ASSERT(valid_);
+    return data_.size() - header().video_start;
+  }
+
  private:
+  DataPacketHeader& header_nv() {
+    return *reinterpret_cast<DataPacketHeader*>(&data_.front());
+  }
+
   void CheckValid() {
     if (data_.size() <= DataPacketHeader::kSize) {
       valid_ = false;
       return;
     }
-    const DataPacketHeader& dph =
-        *reinterpret_cast<DataPacketHeader*>(&data_.front());
+    const DataPacketHeader& dph = header_nv();
     valid_ = (dph.magic == DataPacketHeader::kMagic &&
               dph.video_start >= sizeof(DataPacketHeader) &&
               dph.video_start < data_.size() &&
@@ -226,7 +249,6 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
     hdr.video_start = DataPacketHeader::kSize;
     hdr.total_packets = num_packets;
     hdr.repeat_count = parameters_.repeat_count;
-
     boost::crc_32_type crc_calc; // pkzip/ethernet
     crc_calc.process_bytes(data, len);
     hdr.frame_crc32 = crc_calc.checksum();
@@ -390,6 +412,7 @@ struct ReceivedFrameInfo {
   // number for this frame and for the latest i-frame
   uint32_t frame_num = 0;
   uint32_t iframe_num = 0;
+  uint32_t frame_crc32 = 0;
 
   // data packets sent (counting all duplicates only once)
   int total_packets = 0;
@@ -398,8 +421,8 @@ struct ReceivedFrameInfo {
 
   // repeat count for this frame
   int repeat_count = 0;
-  // average number of copies received
-  double avg_rx_copies = 0;
+  // fraction of packets received (0..1)
+  double rx_rate = 0;
 
   template <typename Archive>
   void Serialize(Archive* a) {
@@ -408,12 +431,13 @@ struct ReceivedFrameInfo {
 
     a->Visit(MJ_NVP(frame_num));
     a->Visit(MJ_NVP(iframe_num));
+    a->Visit(MJ_NVP(frame_crc32));
 
     a->Visit(MJ_NVP(total_packets));
     a->Visit(MJ_NVP(lost_packets));
 
     a->Visit(MJ_NVP(repeat_count));
-    a->Visit(MJ_NVP(avg_rx_copies));
+    a->Visit(MJ_NVP(rx_rate));
   }
 };
 typedef boost::signals2::signal<void (const ReceivedFrameInfo*)
@@ -427,6 +451,7 @@ class RxFrameBuffer : boost::noncopyable {
     info_.iframe_num = 0;
     info_.total_packets = header.total_packets;
     info_.repeat_count = header.repeat_count;
+    info_.frame_crc32 = header.frame_crc32;
 
     BOOST_ASSERT(info_.total_packets <= static_cast<int>(missing_.size()));
     packets_.resize(info_.total_packets);
@@ -445,22 +470,32 @@ class RxFrameBuffer : boost::noncopyable {
   }
 
 
-  std::shared_ptr<std::string> AssembleFrame() {
+  std::shared_ptr<std::string> AssembleFrame(base::LogRef& log) {
     BOOST_ASSERT(missing_.none());
     int len = 0;
     for (auto& packet: packets_) {
-      len += packet->data().size();
+      len += packet->payload_len();
     }
 
     std::shared_ptr<std::string> result(new std::string(len, 0));
 
     int pos = 0;
+    int idx = 0;
     for (auto& packet: packets_) {
-      ::memcpy(&(*result)[pos], &packet->data()[0], packet->data().size());
-      pos += packet->data().size();
+      BOOST_ASSERT(packet->header().packet_index == idx);
+      idx++;
+      ::memcpy(&(*result)[pos], packet->payload(), packet->payload_len());
+      pos += packet->payload_len();
     }
     BOOST_ASSERT(pos == len);
 
+    boost::crc_32_type crc32;
+    crc32.process_bytes(&(*result)[0], len);
+    uint32_t real = crc32.checksum();
+    if (real != info_.frame_crc32) {
+      log.warn("CRC32 mismatch for frame %d (%d bytes): 0x%08X != 0x%08X",
+               info_.frame_num, len, real, info_.frame_crc32);
+    }
     return result;
   }
 
@@ -471,6 +506,7 @@ class RxFrameBuffer : boost::noncopyable {
     BOOST_ASSERT(info_.frame_num == header.frame_num);
     BOOST_ASSERT(info_.total_packets == header.total_packets);
     BOOST_ASSERT(info_.repeat_count == header.repeat_count);
+    BOOST_ASSERT(info_.frame_crc32 == header.frame_crc32);
 
     info_.timestamp = now;
     if (first_rx_time_.is_not_a_date_time()) {
@@ -489,7 +525,8 @@ class RxFrameBuffer : boost::noncopyable {
       packets_[header.packet_index].swap(*packet);
     }
     rx_count_ += 1;
-    info_.avg_rx_copies = rx_count_ * 1.0 / info_.total_packets;
+    info_.rx_rate = rx_count_ * 1.0 / (
+        info_.total_packets * info_.repeat_count);
   }
  private:
   ReceivedFrameInfo info_;
@@ -532,8 +569,13 @@ class McastVideoLinkReceiver::Impl : boost::noncopyable {
       int id = pending_deque_.front();
       auto it = pending_.find(id);
       BOOST_ASSERT(it != pending_.end());
-      frame_info_signal_(it->second->info());
-
+      const auto& info = it->second->info();
+      frame_info_signal_(info);
+      if (!it->second->complete()) {
+        log_.info("packet %d lost (%d/%d, %.0f%% recvd)",
+                  info->frame_num, info->total_packets, info->lost_packets,
+                  info->rx_rate * 100.0);
+      }
       pending_deque_.pop_front();
       pending_.erase(it);
     }
@@ -568,6 +610,15 @@ class McastVideoLinkReceiver::Impl : boost::noncopyable {
     last_rx_time_ = now;
     packet_signal_(&dpl);
 
+    // Verify packet CRC32
+    boost::crc_32_type crc_calc;
+    crc_calc.process_bytes(packet->payload(), packet->payload_len());
+    if (header->packet_crc32 != crc_calc.checksum()) {
+      log_.warn("packet %d.%d.%d has bad checksum",
+                header->frame_num, header->packet_index,
+                header->repeat_index);
+    }
+
     // Find RxFrameBuffer or construct new if not found.
     auto p_it = pending_.find(header->frame_num);
     RxFrameBuffer* buff = nullptr;
@@ -586,8 +637,8 @@ class McastVideoLinkReceiver::Impl : boost::noncopyable {
 
     if (buff->complete() && !was_complete) {
       // packet received. pass to decoder
-      log_.debug("packet %d complete", header->frame_num);
-      std::shared_ptr<std::string> ready_frame = buff->AssembleFrame();
+      //log_.debug("packet %d complete", header->frame_num);
+      std::shared_ptr<std::string> ready_frame = buff->AssembleFrame(log_);
       (*parent_->frame_ready_signal())(ready_frame);
     }
     ExpireOldFrames();
