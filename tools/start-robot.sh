@@ -11,8 +11,7 @@ if [[ "$mach" == "armv7l" && "$USER" == "odroid" ]]; then
     echo Compiling source
     set -x
     scons -j2 mech/build-armv7l/video_sender_app
-    mech/build-armv7l/video_sender_app \
-        -t camera_driver.stats --video_link.dest=239.89.108.10 "$@"
+    mech/build-armv7l/video_sender_app -t camera_driver.stats  "$@"
 elif [[ "$mach" == "x86_64" && "$USER" != "odroid" ]]; then
     # make sure we can compile our copy
     set -x

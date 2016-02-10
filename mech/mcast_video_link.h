@@ -80,6 +80,7 @@ class McastVideoLinkTransmitter : boost::noncopyable {
 
     Parameters() {
       link.socket_params.default_port = 2180;
+      link.dest = "239.89.108.10";
     }
 
   };
@@ -113,6 +114,7 @@ class McastVideoLinkReceiver : boost::noncopyable {
 
     Parameters() {
       link.socket_params.default_port = 2180;
+      link.source = "239.89.108.10";
     }
 
   };
