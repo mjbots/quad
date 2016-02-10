@@ -360,6 +360,7 @@ def main():
     libopenscenegraph-dev libopenthreads-dev cmake
     python-matplotlib ipython ipython-qtconsole
     python-blessings
+    gcc-arm-none-eabi
 ''')
 
     if options.system:
