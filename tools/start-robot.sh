@@ -17,8 +17,11 @@ elif [[ "$mach" == "x86_64" && "$USER" != "odroid" ]]; then
     # make sure we can compile our copy
     set -x
     scons -j8 mech/build-x86_64/video_sender_app
+    # Use wlan IP unless specified otherwise
+    # to use wires, prefix with: REMOTE=odroid-mjmech
+    : ${REMOTE:=10.89.0.10}
     # upload and run
-    exec tools/odroid/push-tree.sh odroid-mjmech tools/start-robot.sh "$@"
+    exec tools/odroid/push-tree.sh $REMOTE tools/start-robot.sh "$@"
 else
     echo cannot determine what kind of machine it is
     exit 1
