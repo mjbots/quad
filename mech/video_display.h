@@ -100,8 +100,15 @@ class VideoDisplay : boost::noncopyable {
     }
   };
 
+  // Emit stats and log them
   boost::signals2::signal<void (const Stats*)>* stats_signal() {
     return &stats_signal_;
+  }
+
+  // Called just before the stats are emitted. Handlers may
+  // modify the stats.
+  boost::signals2::signal<void (Stats*)>* pre_stats_signal() {
+    return &pre_stats_signal_;
   }
 
   void HandleGstReady(GstMainLoopRef&);
@@ -112,6 +119,7 @@ class VideoDisplay : boost::noncopyable {
 
  private:
   boost::signals2::signal<void (const Stats*)> stats_signal_;
+  boost::signals2::signal<void (Stats*)> pre_stats_signal_;
   Parameters parameters_;
 
   class Impl;

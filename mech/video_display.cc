@@ -65,7 +65,7 @@ class VideoDisplay::Impl : boost::noncopyable {
     SetupPipeline();
   }
 
-  void HandleIncomingFrame(std::shared_ptr<std::string>&) {
+  void HandleIncomingFrame(std::shared_ptr<std::string>& frame) {
     BOOST_ASSERT(false); // not implemented
   }
 
@@ -190,6 +190,8 @@ class VideoDisplay::Impl : boost::noncopyable {
 
   void HandleStatsMainThread(std::shared_ptr<Stats> stats) {
     BOOST_ASSERT(std::this_thread::get_id() == parent_id_);
+
+    parent_->pre_stats_signal_(stats.get());
 
     if (stats_log_.isDebugEnabled()) {
       stats_log_.debug(gst::FormatStatsForLogging(stats.get()));
