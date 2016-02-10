@@ -42,6 +42,8 @@ HerkuleXConstants::HerkuleXConstants()
   { "inpos_margin", Register{44, 1} },
   { "cal_diff", cal_diff() },
   { "torque_control", torque_control() },
+  { "min_voltage", min_voltage() },
+  { "max_voltage", max_voltage() },
 
   { "gimbal_pitch", Register{0x50, 4, 7, true} },
   { "gimbal_yaw", Register{0x54, 4, 7, true} },

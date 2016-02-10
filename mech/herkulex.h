@@ -187,6 +187,8 @@ struct HerkuleXConstants {
   static constexpr Register pwm() { return Register{64, 2}; }
   static constexpr Register cal_diff() { return Register{53, 1}; }
   static constexpr Register torque_control() { return Register{52, 1}; }
+  static constexpr Register min_voltage() { return Register{6, 1}; }
+  static constexpr Register max_voltage() { return Register{7, 1}; }
 
 
   // EEPROM registers

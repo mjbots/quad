@@ -39,26 +39,7 @@ class ServoMonitor::Impl : boost::noncopyable {
         timer_(service) {}
 
   void SetupInitialServos() {
-    // Make a single query of a bunch of servo IDs so that the
-    // ServoMonitor will know who to talk to.
-    std::vector<std::string> fields;
-    boost::split(fields, parameters_.servos, boost::is_any_of(","));
-    std::vector<int> ids;
-    for (const auto& field: fields) {
-      if (field.empty()) { continue; }
-      size_t pos = field.find_first_of('-');
-      if (pos == std::string::npos) {
-        ids.push_back(std::stoi(field));
-      } else {
-        int start = std::stoi(field.substr(0, pos));
-        int end = std::stoi(field.substr(pos + 1));
-        if (start < 0 || start > 254 ||
-            end < 0 || end > 254) {
-          throw base::SystemError::einval("invalid servo spec");
-        }
-        for (int i = start; i <= end; i++) { ids.push_back(i); }
-      }
-    }
+    std::vector<int> ids = SplitServoIds(parameters_.servos);
 
     for (int id: ids) { servo_data_[id]; }
   }
@@ -362,6 +343,31 @@ void ServoMonitor::ExpectTorqueOn() {
 
 void ServoMonitor::ExpectTorqueOff() {
   impl_->expect_torque_on_ = false;
+}
+
+std::vector<int> ServoMonitor::SplitServoIds(const std::string& input) {
+  // Make a single query of a bunch of servo IDs so that the
+  // ServoMonitor will know who to talk to.
+  std::vector<std::string> fields;
+  boost::split(fields, input, boost::is_any_of(","));
+  std::vector<int> ids;
+  for (const auto& field: fields) {
+    if (field.empty()) { continue; }
+    size_t pos = field.find_first_of('-');
+    if (pos == std::string::npos) {
+      ids.push_back(std::stoi(field));
+    } else {
+      int start = std::stoi(field.substr(0, pos));
+      int end = std::stoi(field.substr(pos + 1));
+      if (start < 0 || start > 254 ||
+          end < 0 || end > 254) {
+        throw base::SystemError::einval("invalid servo spec");
+      }
+      for (int i = start; i <= end; i++) { ids.push_back(i); }
+    }
+  }
+
+  return ids;
 }
 
 }

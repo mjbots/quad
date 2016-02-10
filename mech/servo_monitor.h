@@ -107,6 +107,10 @@ class ServoMonitor : boost::noncopyable {
   void ExpectTorqueOn();
   void ExpectTorqueOff();
 
+  /// Given a string in the format of Parameters::servos, return a
+  /// list of integer servo ids that it represents.
+  static std::vector<int> SplitServoIds(const std::string&);
+
  private:
   ServoMonitor(boost::asio::io_service& service,
                HerkuleXServo* servo);

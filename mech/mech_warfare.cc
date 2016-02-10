@@ -27,6 +27,8 @@ namespace mjmech {
 namespace mech {
 
 namespace {
+typedef HerkuleXConstants HC;
+
 double Limit(double value, double max) {
   if (value > max) { return max; }
   if (value < -max) { return -max; }
@@ -298,6 +300,50 @@ class MechWarfare::Impl : boost::noncopyable {
   void StartTurretBias() {
     data_.turret_bias_start_timestamp = base::Now(service_);
     parent_->m_.turret->StartBias();
+
+    // During this bias period, we will also verify that each of our
+    // servos is configured properly.
+    servos_to_configure_ =
+        ServoMonitor::SplitServoIds(parent_->parameters_.config_servos);
+    DoNextServoConfigure();
+  }
+
+  void DoNextServoConfigure() {
+    // For now, we are only verifying a single RAM address.  This will
+    // be harder when we want to verify multiple things.
+    if (servos_to_configure_.empty()) { return; }
+
+    const int this_id = servos_to_configure_.back();
+    servos_to_configure_.pop_back();
+
+    parent_->m_.servo_base->RamRead(
+        this_id, HC::min_voltage(),
+        std::bind(&Impl::HandleServoConfigure, this, this_id,
+                  std::placeholders::_1, std::placeholders::_2));
+  }
+
+  void HandleServoConfigure(int servo_id,
+                            base::ErrorCode ec,
+                            int value) {
+    if (ec == boost::asio::error::operation_aborted ||
+        ec == herkulex_error::synchronization_error) {
+      // Ignore this.
+    } else {
+      base::FailIf(ec);
+    }
+
+    const int measured = value;
+    const int expected =
+        static_cast<int>(parent_->parameters_.servo_min_voltage_counts);
+    if (measured != expected) {
+      log_.warn((boost::format(
+                     "Servo %d has misconfigured min_voltage 0x%02X != 0x%02X") %
+                 servo_id %
+                 measured %
+                 expected).str());
+    }
+
+    DoNextServoConfigure();
   }
 
   void MaybeEnterActiveMode(Data::Mode mode) {
@@ -309,7 +355,12 @@ class MechWarfare::Impl : boost::noncopyable {
         break;
       }
       case Data::Mode::kTurretBias: {
-        // Wait until the turret bias process is finished.
+        // Wait until the turret bias process is finished and all
+        // servos are configured.
+        if (!servos_to_configure_.empty()) {
+          break;
+        }
+
         const auto now = base::Now(service_);
         const double elapsed_s = base::ConvertDurationToSeconds(
             now - data_.turret_bias_start_timestamp);
@@ -369,11 +420,15 @@ class MechWarfare::Impl : boost::noncopyable {
   base::Context& context_;
   boost::asio::io_service& service_;
 
+  base::LogRef log_ = base::GetLogInstance("MechWarfare");
+
   boost::asio::ip::udp::socket server_;
   char receive_buffer_[3000] = {};
   boost::asio::ip::udp::endpoint receive_endpoint_;
 
   base::DeadlineTimer timer_;
+
+  std::vector<int> servos_to_configure_;
 
   Data data_;
   boost::signals2::signal<void (const Data*)> data_signal_;
