@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <functional>
 #include <string>
 
 #include <boost/algorithm/string/classification.hpp>
@@ -30,6 +31,7 @@
 using namespace mjmech::base;
 using namespace mjmech::mech;
 namespace po = boost::program_options;
+namespace pl = std::placeholders;
 
 namespace {
 struct Options {
@@ -106,6 +108,57 @@ HC::Register ParseRegister(const std::string& args) {
 
 void DoStdio(CommandContext&);
 
+void MemReadCommand(CommandContext& ctx, Servo::Command command) {
+  HC::Register reg = ParseRegister(ctx.args);
+
+  auto response = ctx.servo.MemRead(
+      command, ctx.options.address,
+      reg.position, reg.length, ctx.yield);
+  std::cout << (boost::format("Servo %d: Address %d: ") %
+                static_cast<int>(ctx.options.address) %
+                static_cast<int>(reg.position));
+  for (char c: response.register_data) {
+    std::cout << boost::format(" %02X") % static_cast<int>(c);
+  }
+  if (response.register_data.size() > 1) {
+    int value = 0;
+    for (size_t i = 0; i < response.register_data.size(); i++) {
+      value |= (static_cast<uint8_t>(
+                    response.register_data[i]) << (i * reg.bit_align));
+    }
+
+    if (reg.sign) {
+      const int most_positive = 1 << (reg.bit_align * reg.length - 1);
+      if (value >= most_positive) {
+        value = value - (1 << (reg.bit_align * reg.length));
+      }
+    }
+
+    std::cout << boost::format(" (%d)") % value;
+  }
+  std::cout << "\n";
+}
+
+void MemWriteCommand(CommandContext& ctx, Servo::Command command) {
+  std::vector<std::string> args;
+  boost::split(args, ctx.args, boost::is_any_of(":"));
+  if (args.size() < 2) {
+    throw std::runtime_error("ram_write requires ADDR:HEXDATA");
+  }
+
+  HC::Register reg = ParseRegister(args.at(0));
+  std::ostringstream ostr;
+  std::string hexdata = args.at(1);
+  for (size_t i = 0; i < hexdata.size(); i += 2) {
+    std::string hexbyte = hexdata.substr(i, 2);
+    uint8_t hexvalue = std::stoi(hexbyte, 0, 16);
+    ostr.write(reinterpret_cast<const char*>(&hexvalue), 1);
+  }
+
+  ctx.servo.MemWrite(command, ctx.options.address,
+                     reg.position, ostr.str(), ctx.yield);
+}
+
 const std::map<std::string, Command> g_commands = {
   { "stdio", { kNoArgs, DoStdio } },
   { "sleep", { kArg, [](CommandContext& ctx) {
@@ -131,55 +184,10 @@ const std::map<std::string, Command> g_commands = {
                       static_cast<int>(ctx.options.address) %
                       value);
       } } },
-  { "ram_read", { kArg, [](CommandContext& ctx) {
-        HC::Register reg = ParseRegister(ctx.args);
-
-        auto response = ctx.servo.MemRead(
-            ctx.servo.RAM_READ, ctx.options.address,
-            reg.position, reg.length, ctx.yield);
-        std::cout << (boost::format("Servo %d: Address %d: ") %
-                      static_cast<int>(ctx.options.address) %
-                      static_cast<int>(reg.position));
-        for (char c: response.register_data) {
-          std::cout << boost::format(" %02X") % static_cast<int>(c);
-        }
-        if (response.register_data.size() > 1) {
-          int value = 0;
-          for (size_t i = 0; i < response.register_data.size(); i++) {
-            value |= (static_cast<uint8_t>(
-                          response.register_data[i]) << (i * reg.bit_align));
-          }
-
-          if (reg.sign) {
-            const int most_positive = 1 << (reg.bit_align * reg.length - 1);
-            if (value >= most_positive) {
-              value = value - (1 << (reg.bit_align * reg.length));
-            }
-          }
-
-          std::cout << boost::format(" (%d)") % value;
-        }
-        std::cout << "\n";
-      } } },
-  { "ram_write", { kArg, [](CommandContext& ctx) {
-        std::vector<std::string> args;
-        boost::split(args, ctx.args, boost::is_any_of(":"));
-        if (args.size() < 2) {
-          throw std::runtime_error("ram_write requires ADDR:HEXDATA");
-        }
-
-        HC::Register reg = ParseRegister(args.at(0));
-        std::ostringstream ostr;
-        std::string hexdata = args.at(1);
-        for (size_t i = 0; i < hexdata.size(); i += 2) {
-          std::string hexbyte = hexdata.substr(i, 2);
-          uint8_t hexvalue = std::stoi(hexbyte, 0, 16);
-          ostr.write(reinterpret_cast<const char*>(&hexvalue), 1);
-        }
-
-        ctx.servo.MemWrite(ctx.servo.RAM_WRITE, ctx.options.address,
-                           reg.position, ostr.str(), ctx.yield);
-      } } },
+  { "ram_read", { kArg, std::bind(MemReadCommand, pl::_1, Servo::RAM_READ) } },
+  { "eep_read", { kArg, std::bind(MemReadCommand, pl::_1, Servo::EEP_READ) } },
+  { "ram_write", { kArg, std::bind(MemWriteCommand, pl::_1, Servo::RAM_WRITE) } },
+  { "eep_write", { kArg, std::bind(MemWriteCommand, pl::_1, Servo::EEP_WRITE) } },
   { "value_write", { kArg, [](CommandContext& ctx) {
         std::vector<std::string> args;
         boost::split(args, ctx.args, boost::is_any_of(":"));
