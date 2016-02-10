@@ -75,6 +75,17 @@ class WifiSetup(object):
         # (ifname, phyname, os_driver) tuples
         candidates = list()
 
+        force_phy = None
+        if not self._opts.interface:
+            pass
+        elif self._opts.interface.startswith('phy'):
+            # phy name is passed in
+            force_phy = self._opts.interface
+        else:
+            # interface name is passed in
+            raise NotImplementedError()
+
+
         self.debug(1, 'Looking for wifi cards')
         # First check for new-style extensions (nl80211)
         for phydir in sorted(glob.glob('/sys/class/ieee80211/*')):
@@ -83,9 +94,15 @@ class WifiSetup(object):
             phyname = os.path.basename(phydir)
             self.debug(2, 'nl80211 phy %r has driver %r, subsystem %r' %
                        (phyname, driver, subsystem))
-            if subsystem != 'usb':
-                self.debug(2, ' skipping this phy -- not usb based')
-                continue
+
+            if force_phy:
+                if force_phy != phyname:
+                    self.debug(2, 'skippking this phy -- other one is forced')
+                    continue
+            else:
+                if subsystem != 'usb':
+                    self.debug(2, ' skipping this phy -- not usb based')
+                    continue
             # Any 802.11nl USB card should work
             candidates.append((None, phyname, driver))
 
@@ -104,18 +121,20 @@ class WifiSetup(object):
             self.debug(2, 'wireless if %r has driver %r, subsystem %r' %
                        (ifname, driver, subsystem))
 
-            if subsystem != 'usb':
-                self.debug(2, ' skipping this interface -- not usb')
-                continue
-
             if ifname.startswith('mon'):
                 self.debug(2, ' skipping this interface -- looks monitorish')
                 continue
 
             if (None, phybase, driver) in candidates:
+                # new-style interface. We already know its phy is valid.
                 self.debug(2, ' this will be a primary if for phy %r' %
                            (phybase))
                 candidates.remove((None, phybase, driver))
+            else:
+                # This is legacy-style interface
+                if subsystem != 'usb':
+                    self.debug(2, ' skipping this interface -- not usb')
+                    continue
 
             candidates.append((ifname, phybase, driver))
 
@@ -296,9 +315,13 @@ class WifiSetup(object):
             self.debug(2, 'Looks like this interface has no IPv6')
 
     def _exec(self, cmd, ok_codes=None):
-        self.debug(2, 'Executing: %r' % (cmd, ))
+        if isinstance(cmd, str):
+            cmd_str = cmd
+        else:
+            cmd_str = ' '.join(cmd)
+        self.debug(2, 'Executing: %s' % (cmd_str, ))
         if self._opts.dry_run:
-            print 'DRY-RUN: exec %r' % (cmd, )
+            print 'DRY-RUN: exec %s' % (cmd_str, )
             return
 
         try:
