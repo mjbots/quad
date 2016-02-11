@@ -131,6 +131,7 @@ This list is to filter out the devices which are not interesting for some reasn
 
 - Linksys Wireless Mini USB Adapter AC 580 Dual Band (AE6000)
   driver contains "RT2870" strings
+  actual device is 13b1:003e, which seems to require mt7610u
 
 - Sabrent AC600 Dual Band Wi-Fi USB Mini Adapter NT-WSAC
   driver file name is MT7601
