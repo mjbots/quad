@@ -97,9 +97,12 @@ class VideoDisplay::Impl : boost::noncopyable {
       out << "appsrc name=raw-src ";
     }
 
-    // Make them into h264 frames
-    out << "! queue ! identity name=raw-detector silent=false "
-        << "! h264parse ! identity name=h264-detector silent=false ";
+    if (source != "") {
+      // Make them into h264 frames
+      out << "! queue ! identity name=raw-detector silent=false "
+          << "! h264parse ";
+    }
+    out << "! identity name=h264-detector silent=false ";
 
     // Maybe save them
     if (parameters_.write_video != "") {
@@ -144,15 +147,21 @@ class VideoDisplay::Impl : boost::noncopyable {
 
     // Hook the counters. Note: we should have stored them somewhere
     // if we wanted to release the memory properly.
-    pipeline_->ConnectIdentityHandoff(
-        "raw-detector", [this](GstBuffer* buf) {
-          std::lock_guard<std::mutex> guard(stats_mutex_);
-          if (parameters_.analyze) {
-            log_.debug("detected raw frame %d", stats_->raw_frames);
-          }
-          stats_->raw_frames++;
-          stats_->raw_bytes += gst_buffer_get_size(buf);
+
+    if (parameters_.source != "") {
+      // If source is en empty string, we are getting data from
+      // mcast_video_link, and it will handle our raw counter
+      // for us.
+      pipeline_->ConnectIdentityHandoff(
+          "raw-detector", [this](GstBuffer* buf) {
+            std::lock_guard<std::mutex> guard(stats_mutex_);
+            if (parameters_.analyze) {
+              log_.debug("detected raw frame %d", stats_->raw_frames);
+            }
+            stats_->raw_frames++;
+            stats_->raw_bytes += gst_buffer_get_size(buf);
         });
+    }
 
     pipeline_->ConnectIdentityHandoff(
         "h264-detector", [this](GstBuffer* buf) {
@@ -187,7 +196,7 @@ class VideoDisplay::Impl : boost::noncopyable {
     if (parameters_.source == "") {
       h264_src_ = pipeline_->SetupAppsrc(
           "raw-src",
-          "video/x-h264, stream-format=byte-stream, alignment=au");
+          "video/x-h264,stream-format=byte-stream,alignment=au,parsed=true");
     }
 
     pipeline_->RegisterVideoAnalyzeMessageHandler(
