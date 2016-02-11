@@ -142,9 +142,9 @@ gsenv.Command(
 # Loopback test combines sender and receiver in a same app, and uses video link
 # to transfer frames from one to another.
 loopback = ModuleMain(gsenv, 'video_loopback_app', 'VideoLoopbackApp')
-#gsenv.Command(
-#    'video_loopback_test.passed', loopback,
-#    '$SOURCE -t video_display.stats --max_stats=2 --require_stats_good=1 '
-#    '--camera.device=TEST '
-#    '--remote_debug.port=0 --display.hide_video=1 '
-#    ' && touch $TARGET')
+gsenv.Command(
+    'video_loopback_test.passed', loopback,
+    '$SOURCE -t video_display.stats --max_stats=2 --require_stats_good=1 '
+    '--camera.device=TEST '
+    '--remote_debug.port=0 --display.hide_video=1 '
+    ' && touch $TARGET')
