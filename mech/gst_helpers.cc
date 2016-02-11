@@ -202,13 +202,49 @@ void PipelineWrapper::SendAppsrcSample(void* obj, void* data, int len) {
   }
 }
 
-gboolean PipelineWrapper::handle_bus_message_wrapper(
-    GstBus *bus, GstMessage *message, gpointer user_data) {
-  return static_cast<PipelineWrapper*>(user_data)
-      ->HandleBusMessage(bus, message) ? TRUE : FALSE;
+void PipelineWrapper::RegisterElementMessageHandler(
+    const std::string& src_name_,
+    const std::string& struct_name_,
+    const ElementMessageHandler& handler_) {
+  element_message_handlers_.push_back(
+      ElementMessageHandlerRec{
+        .src_name = src_name_,
+            .struct_name = struct_name_,
+            .handler = handler_ });
 }
 
-bool PipelineWrapper::HandleBusMessage(GstBus *bus, GstMessage *message) {
+void PipelineWrapper::RegisterVideoAnalyzeMessageHandler(
+    const std::string& src_name,
+    const VideoAnalyzeMessageHandler handler) {
+  int* count = new int();
+  RegisterElementMessageHandler(
+      src_name, "GstVideoAnalyse",
+      [=](const GstStructure* data) {
+        VideoAnalyzeMessage msg;
+        msg.timestamp = boost::posix_time::microsec_clock::universal_time();
+        msg.frame_count = *count;
+        (*count)++;
+        gboolean ok = gst_structure_get(
+            data,
+            "luma-average", G_TYPE_DOUBLE, &msg.luma_average,
+            "luma-variance", G_TYPE_DOUBLE, &msg.luma_variance,
+            NULL);
+        BOOST_ASSERT(ok);
+        handler(msg);
+        return true;
+      }
+                                           );
+}
+
+
+gboolean PipelineWrapper::handle_bus_message_wrapper(
+    GstBus *bus, GstMessage *message, gpointer user_data) {
+  static_cast<PipelineWrapper*>(user_data)
+      ->HandleBusMessage(bus, message);
+  return TRUE;
+}
+
+void PipelineWrapper::HandleBusMessage(GstBus *bus, GstMessage *message) {
   BOOST_ASSERT(std::this_thread::get_id() == gst_loop_->thread_id());
   bool print_message = true;
   switch (GST_MESSAGE_TYPE(message)) {
@@ -241,6 +277,19 @@ bool PipelineWrapper::HandleBusMessage(GstBus *bus, GstMessage *message) {
       base::Fail("gstreamer pipeline error: " + error_msg);
       break;
     }
+    case GST_MESSAGE_ELEMENT: {
+      const GstStructure* mstruct = gst_message_get_structure(message);
+      const std::string struct_name(gst_structure_get_name(mstruct));
+      for (const auto& rec: element_message_handlers_) {
+        if (rec.src_name != GST_MESSAGE_SRC_NAME(message)) { continue; }
+        if (rec.struct_name != struct_name) { continue; }
+        if (rec.handler(mstruct)) {
+          print_message = false;
+          break;
+        }
+      }
+      break;
+    }
     case GST_MESSAGE_STATE_CHANGED:
     case GST_MESSAGE_STREAM_STATUS:
     case GST_MESSAGE_TAG:
@@ -263,7 +312,6 @@ bool PipelineWrapper::HandleBusMessage(GstBus *bus, GstMessage *message) {
         % struct_info;
     g_free(struct_info);
   }
-  return true;
 }
 
 void PipelineWrapper::HandleShutdown(GstMainLoopRefObj::QuitPostponerPtr& ptr) {

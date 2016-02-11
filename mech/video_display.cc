@@ -122,6 +122,10 @@ class VideoDisplay::Impl : boost::noncopyable {
           << " appsrc name=decoded-src ";
     }
 
+    if (parameters_.analyze) {
+      out << " ! videoanalyse name=final-analyze ";
+    }
+
     if (parameters_.hide_video) {
       out << "! fakesink sync=false";
     } else {
@@ -174,6 +178,11 @@ class VideoDisplay::Impl : boost::noncopyable {
       h264_src_ = pipeline_->SetupAppsrc("raw-src");
     }
 
+    pipeline_->RegisterVideoAnalyzeMessageHandler(
+        "final-analyze",
+        std::bind(&Impl::HandleVideoAnalyzeMessage,
+                  this, std::placeholders::_1));
+
     pipeline_->Start();
 
     // Set up the timer for stats
@@ -183,6 +192,11 @@ class VideoDisplay::Impl : boost::noncopyable {
            std::bind(&Impl::HandleStatsTimeout, this));
     }
     parent_service_.post([=]() { pipeline_ready_ = true; });
+  }
+
+  void HandleVideoAnalyzeMessage(const gst::VideoAnalyzeMessage& msg) {
+    log_.infoStream() << "final frame info: "
+                      << msg.toString();
   }
 
   void HandleStatsTimeout() {

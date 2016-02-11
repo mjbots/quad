@@ -64,6 +64,9 @@ class VideoDisplay : boost::noncopyable {
     // If True, do not pop up X11 window
     bool hide_video = false;
 
+    // If True, calculate and log frame properties (like average brightness)
+    bool analyze = false;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(stats_interval_s));
@@ -71,6 +74,7 @@ class VideoDisplay : boost::noncopyable {
       a->Visit(MJ_NVP(write_video));
       a->Visit(MJ_NVP(process_frames));
       a->Visit(MJ_NVP(hide_video));
+      a->Visit(MJ_NVP(analyze));
     }
   };
 

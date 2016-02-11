@@ -189,13 +189,18 @@ class CameraDriver::Impl : boost::noncopyable {
         (parameters_.decoded_framerate > 0)
         ? parameters_.decoded_framerate
         : parameters_.framerate;
-    out << "! video/x-raw,format=YUY2,framerate="
+    out << "! video/x-raw,format=I420,framerate="
         << gst::FormatFraction(decoded_fps) << ","
         << parameters_.decoded_caps << " ";
+
     if (is_dumb) {
       out << "! tee name=dec-tee ";
     };
+    if (parameters_.analyze) {
+      out << " ! videoanalyse name=input-analyze ";
+    }
     out << "! queue ! appsink name=raw-sink ";
+
 
     // Make H264 endpoint
     if (is_dumb) {
@@ -278,6 +283,11 @@ class CameraDriver::Impl : boost::noncopyable {
         std::bind(&Impl::HandleH264SinkNewSample, this,
                   std::placeholders::_1));
 
+    pipeline_->RegisterVideoAnalyzeMessageHandler(
+        "input-analyze",
+        std::bind(&Impl::HandleVideoAnalyzeMessage,
+                  this, std::placeholders::_1));
+
     pipeline_->Start();
 
     // Set up the timer for stats
@@ -287,6 +297,12 @@ class CameraDriver::Impl : boost::noncopyable {
            std::bind(&Impl::HandleStatsTimeout, this));
     }
   }
+
+  void HandleVideoAnalyzeMessage(const gst::VideoAnalyzeMessage& msg) {
+    log_.infoStream() << "raw frame info: "
+                      << msg.toString();
+  }
+
 
   static gboolean handle_deep_notify_wrapper(
       GstObject* gstobject, GstObject* prop_object,

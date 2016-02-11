@@ -18,6 +18,7 @@
 // Not intended to be included in component's headers.
 
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/format.hpp>
 
 #include <gst/gst.h>
 
@@ -56,11 +57,35 @@ std::string FormatStatsForLogging(Stats* stats_ptr) {
   return out.str();
 };
 
+struct VideoAnalyzeMessage {
+  boost::posix_time::ptime timestamp;
+
+  int frame_count = 0;
+  double luma_average = 0;
+  double luma_variance = 0;
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(MJ_NVP(timestamp));
+    a->Visit(MJ_NVP(frame_count));
+    a->Visit(MJ_NVP(luma_average));
+    a->Visit(MJ_NVP(luma_variance));
+  }
+
+  std::string toString() const {
+    return (boost::format("count=%d luma_avg=%.1f luma_var=%.1f")
+            % frame_count
+            % (luma_average * 100.0)
+            % (luma_variance * 100.0)).str();
+  }
+};
+
 class PipelineWrapper : boost::noncopyable {
  public:
   PipelineWrapper(GstMainLoopRef& loop_ref,
                   const std::string& log_prefix,
                   const std::string& launch_cmd);
+  virtual ~PipelineWrapper() {};
 
   void Start();
 
@@ -98,8 +123,26 @@ class PipelineWrapper : boost::noncopyable {
   typedef std::function<void(void*, int)> AppsrcSampleCallback;
   AppsrcSampleCallback SetupAppsrc(const char* element_name);
 
+  // Function to handle element message. Should return true if the
+  // message was handled.
+  typedef std::function<bool(const GstStructure* data)> ElementMessageHandler;
+
+  // Install a handler for a given element message
+  void RegisterElementMessageHandler(
+      const std::string& src_name,
+      const std::string& struct_name,
+      const ElementMessageHandler& handler);
+
+  typedef std::function<void (const VideoAnalyzeMessage& data)
+                        > VideoAnalyzeMessageHandler;
+  // Install a handler for a video analyze message
+  void RegisterVideoAnalyzeMessageHandler(
+      const std::string& src_name,
+      const VideoAnalyzeMessageHandler handler);
+
  protected:
-  bool HandleBusMessage(GstBus *bus, GstMessage *message);
+  // Main handler for the bus messages
+  virtual void HandleBusMessage(GstBus *bus, GstMessage *message);
 
  private:
   static gboolean handle_bus_message_wrapper(
@@ -112,6 +155,12 @@ class PipelineWrapper : boost::noncopyable {
   base::LogRef log_;
   base::LogRef bus_log_;
 
+  struct ElementMessageHandlerRec {
+    const std::string src_name;
+    const std::string struct_name;
+    const ElementMessageHandler handler;
+  };
+  std::vector<ElementMessageHandlerRec> element_message_handlers_;
   GstElement* pipeline_ = NULL;
 };
 

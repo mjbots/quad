@@ -94,6 +94,9 @@ class CameraDriver : boost::noncopyable {
     bool dumb_camera = false;
     // If non-empty, gstreamer pipeline that is fed h264 data
     std::string custom_h264_consumer;
+    // If True, calculate and log frame properties (like average brightness)
+    // (this operates off uncompressed camera output)
+    bool analyze = false;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -116,6 +119,7 @@ class CameraDriver : boost::noncopyable {
       a->Visit(MJ_NVP(write_video));
       a->Visit(MJ_NVP(dumb_camera));
       a->Visit(MJ_NVP(custom_h264_consumer));
+      a->Visit(MJ_NVP(analyze));
     }
   };
 
