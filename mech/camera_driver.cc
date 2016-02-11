@@ -205,7 +205,9 @@ class CameraDriver::Impl : boost::noncopyable {
     // Make H264 endpoint
     if (is_dumb) {
       out << "dec-tee. ! videoconvert ! queue "
-          << " ! x264enc tune=zerolatency byte-stream=true ";
+          << " ! x264enc byte-stream=true speed-preset=ultrafast"
+          << " intra-refresh=true threads=1 sync-lookahead=0"
+          << " bframes=0 tune=zerolatency  ";
       if (parameters_.iframe_interval_s) {
         int key_int = 0.5 + decoded_fps * parameters_.iframe_interval_s;
         out << "key-int-max=" << std::max(1, key_int) << " ";
