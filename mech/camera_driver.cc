@@ -208,13 +208,18 @@ class CameraDriver::Impl : boost::noncopyable {
       if (bitrate_bps > 0) {
         out << "bitrate=" << (bitrate_bps / 1000) << " ";
       }
-      out << " ! video/x-h264,framerate="
-          << gst::FormatFraction(parameters_.framerate) << " ";
     } else {
-      out << "src.vidsrc ! video/x-h264,framerate="
-          << gst::FormatFraction(parameters_.framerate) << ","
-          << parameters_.h264_caps << " ! h264parse ";
+      out << "src.vidsrc";
+    }
+    out << "! video/x-h264,framerate="
+        << gst::FormatFraction(parameters_.framerate);
+    if (!is_dumb) {
+      // If this is not a dumb camera, force a h264 resolution (if it is a
+      // dumb camera, the h264 resolution is forced to be the the same as
+      // input resultion)
+      out << "," << parameters_.h264_caps;
     };
+    out << " ! h264parse ";
 
     if (parameters_.write_video != "" ||
         parameters_.custom_h264_consumer != "") {
@@ -233,7 +238,9 @@ class CameraDriver::Impl : boost::noncopyable {
         log_.error("Unknown h264 savefile extension " + tail +
                    ", assuming MP4 format");
       }
-      out << "! queue ! " << muxer
+      // h264parse is this magic component which will change the h264 stream
+      // format as required (for example, mp4 wants stream-format=avc)
+      out << "! queue ! h264parse ! " << muxer
           << " ! filesink name=h264writer location="
           << gst::PipelineEscape(parameters_.write_video)
           << " h264-tee. ";
@@ -243,8 +250,9 @@ class CameraDriver::Impl : boost::noncopyable {
       out << "! queue ! " << parameters_.custom_h264_consumer
           << " h264-tee. ";
     }
-    // And pass it to our app
-    out << "! queue ! appsink name=h264-sink";
+    // And pass it to our app (with the right caps)
+    out << "! queue ! appsink name=h264-sink "
+        << " caps=video/x-h264,stream-format=byte-stream,alignment=au ";
     return out.str();
   }
 
@@ -367,6 +375,17 @@ class CameraDriver::Impl : boost::noncopyable {
       c->ConsumeH264Sample(sample);
     }
 
+    GstCaps* caps = gst_sample_get_caps(sample);
+    assert(GST_CAPS_IS_SIMPLE(caps));
+    if (!(last_h264_caps_ && gst_caps_is_equal(caps, last_h264_caps_))) {
+      char* caps_str = gst_caps_to_string(caps);
+      log_.debug("H264 caps changed (frame %d): %s",
+                 total_h264_frames_, caps_str);
+      g_free(caps_str);
+      gst_caps_ref(caps);
+      last_h264_caps_ = caps;
+    }
+
     total_h264_frames_++;
 
     int flags = GST_BUFFER_FLAGS(buf);
@@ -431,7 +450,7 @@ class CameraDriver::Impl : boost::noncopyable {
     parent_->camera_stats_signal_(stats.get());
   }
 
-  // From both.
+  // From both, changed only on startup
   CameraDriver* const parent_;
   boost::asio::io_service& parent_service_;
 
@@ -444,15 +463,17 @@ class CameraDriver::Impl : boost::noncopyable {
 
   const std::thread::id parent_id_;
   GstMainLoopRef gst_loop_;
-
-  // From child (and maybe gst threads) only.
+  bool dumb_camera_ = false;
   std::unique_ptr<gst::PipelineWrapper> pipeline_;
 
+  // From both, protected by mutex.
   std::mutex stats_mutex_;
   std::shared_ptr<CameraStats> stats_;
-  int total_h264_frames_ =0;
-  bool dumb_camera_ = false;
+
+  // From child (and maybe gst threads) only.
+  int total_h264_frames_ = 0;
   boost::optional<boost::posix_time::ptime> last_h264_time_;
+  GstCaps* last_h264_caps_ = nullptr;
 };
 
 
