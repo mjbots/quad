@@ -106,9 +106,11 @@ class VideoLoopbackApp : boost::noncopyable {
     stats_count_++;
     if (parameters_.require_stats_good) {
       std::ostringstream errors;
-      if (stats->raw_frames < 5) {
-        errors << "not enough raw frames; ";
-      }
+
+      // TODO mafanasyev: re-enable this check once we hook raw frame counter
+      //if (stats->raw_frames < 5) {
+      //  errors << "not enough raw frames; ";
+      //}
       if (stats->h264_frames < 5) {
         errors << "not enough h264 frames; ";
       }
