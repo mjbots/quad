@@ -113,10 +113,13 @@ class VideoDisplay::Impl : boost::noncopyable {
           << " h264-tee. ";
     }
 
-    // Decode and do some basic overlays.
-    out << "! avdec_h264 ! videoconvert "
-        << "! identity name=decoded-detector silent=false "
-        << "! timeoverlay shaded_background=1 font_desc=8 valignment=bottom "
+    // Decode. We skip b-frames because we are not supposed to have them anyway.
+    out << "! avdec_h264 skip-frame=1 max-threads=1 "
+        << "! videoconvert "
+        << "! identity name=decoded-detector silent=false ";
+
+    // Do some basic overlays.
+    out << "! timeoverlay shaded_background=1 font_desc=8 valignment=bottom "
         << "   halignment=right ";
 
     // Maybe pass it to our app for OSD.
