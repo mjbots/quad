@@ -67,7 +67,12 @@ class McastVideoLinkTransmitter : boost::noncopyable {
     // Minimal framerate (corresponds to maximum inter-frame interval).
     // The packets are scheduled to be sent at the video freamerate, but not
     // slower than this value.
-    double min_fps = 20;
+    //
+    // This value defines burstyness/latency tradeoff. If min_fps is smaller,
+    // than the camera fps, then the packets will go out at a uniform rate but
+    // with 1-2 frames of latency. If min_fps is higher than the camera FPS,
+    // packets will go out in a burst and the latency will be smaller.
+    double min_fps = 60;
 
     base::UdpDataLink::Parameters link;
 

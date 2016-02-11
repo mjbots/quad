@@ -232,8 +232,9 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
     // tweak data_size to re-distribute data evenly across all packets
     int data_size = len / num_packets + 1;
 
-    log_.debug("Got packet %d bytes, is_key=%d, split into %d packets %d"
-               "(/%d) bytes long", len, key_frame, num_packets, data_size,
+    log_.debug("TXing frame %d: %d bytes, is_key=%d, split into %d packets %d"
+               "(/%d) bytes long",
+               total_frames_, len, key_frame, num_packets, data_size,
                max_data_size);
 
     BOOST_ASSERT(data_size <= max_data_size);
@@ -637,8 +638,10 @@ class McastVideoLinkReceiver::Impl : boost::noncopyable {
 
     if (buff->complete() && !was_complete) {
       // packet received. pass to decoder
-      //log_.debug("packet %d complete", header->frame_num);
       std::shared_ptr<std::string> ready_frame = buff->AssembleFrame(log_);
+      log_.debug("RXed frame %d: %d bytes, from %d packets",
+                 buff->info()->frame_num, ready_frame->size(),
+                 buff->info()->total_packets);
       (*parent_->frame_ready_signal())(ready_frame);
     }
     ExpireOldFrames();
