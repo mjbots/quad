@@ -162,7 +162,7 @@ class CameraDriver::Impl : boost::noncopyable {
                 * 1000 * 1000));
 
     if (is_test) {
-      out << "videotestsrc is-live=1 pattern=ball ";
+      out << "videotestsrc name=testsrc is-live=1 pattern=ball ";
     } else if (is_dumb) {
       out << "v4l2src name=src device=" << gst::PipelineEscape(device)
           << " ! videoconvert ";
@@ -288,6 +288,10 @@ class CameraDriver::Impl : boost::noncopyable {
         std::bind(&Impl::HandleVideoAnalyzeMessage,
                   this, std::placeholders::_1));
 
+    if (parameters_.device == "TEST") {
+      video_test_src_ = pipeline_->GetElementByName("testsrc");
+    }
+
     pipeline_->Start();
 
     // Set up the timer for stats
@@ -367,9 +371,21 @@ class CameraDriver::Impl : boost::noncopyable {
       c->ConsumeRawSample(sample);
     }
 
+    int count;
     {
       std::lock_guard<std::mutex> guard(stats_mutex_);
-      stats_->raw_frames++;
+      count = stats_->raw_frames++;
+    }
+
+    const int kInterval = 20;
+    if (video_test_src_ &&
+        (count % kInterval) == 0) {
+      // in test mode, periodically change background
+      guint background =
+          ((count / kInterval) % 2) ? 0 : 0x800080;
+      g_object_set(video_test_src_,
+                   "background-color", background,
+                   NULL);
     }
   }
 
@@ -481,6 +497,7 @@ class CameraDriver::Impl : boost::noncopyable {
   GstMainLoopRef gst_loop_;
   bool dumb_camera_ = false;
   std::unique_ptr<gst::PipelineWrapper> pipeline_;
+  GstElement* video_test_src_ = nullptr;
 
   // From both, protected by mutex.
   std::mutex stats_mutex_;
