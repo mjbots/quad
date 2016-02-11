@@ -112,9 +112,9 @@ class VideoDisplay::Impl : boost::noncopyable {
 
     // Decode and do some basic overlays.
     out << "! avdec_h264 ! videoconvert "
+        << "! identity name=decoded-detector silent=false "
         << "! timeoverlay shaded_background=1 font_desc=8 valignment=bottom "
-        << "   halignment=right "
-        << "! identity name=decoded-detector silent=false ";
+        << "   halignment=right ";
 
     // Maybe pass it to our app for OSD.
     if (parameters_.process_frames) {
@@ -147,6 +147,9 @@ class VideoDisplay::Impl : boost::noncopyable {
     pipeline_->ConnectIdentityHandoff(
         "raw-detector", [this](GstBuffer* buf) {
           std::lock_guard<std::mutex> guard(stats_mutex_);
+          if (parameters_.analyze) {
+            log_.debug("detected raw frame %d", stats_->raw_frames);
+          }
           stats_->raw_frames++;
           stats_->raw_bytes += gst_buffer_get_size(buf);
         });
@@ -154,6 +157,9 @@ class VideoDisplay::Impl : boost::noncopyable {
     pipeline_->ConnectIdentityHandoff(
         "h264-detector", [this](GstBuffer* buf) {
           std::lock_guard<std::mutex> guard(stats_mutex_);
+          if (parameters_.analyze) {
+            log_.debug("detected h264 frame %d", stats_->h264_frames);
+          }
           stats_->h264_frames++;
           if (!GST_BUFFER_FLAG_IS_SET(buf, GST_BUFFER_FLAG_DELTA_UNIT)) {
             stats_->h264_key_frames++;
@@ -163,6 +169,10 @@ class VideoDisplay::Impl : boost::noncopyable {
     pipeline_->ConnectIdentityHandoff(
         "decoded-detector", [this](GstBuffer* buf) {
           std::lock_guard<std::mutex> guard(stats_mutex_);
+          if (parameters_.analyze) {
+            log_.debug("detected decoded frame %d",
+                       stats_->decoded_frames);
+          }
           stats_->decoded_frames++;
 
           const auto now = base::Now(parent_service_);
@@ -175,7 +185,9 @@ class VideoDisplay::Impl : boost::noncopyable {
         });
 
     if (parameters_.source == "") {
-      h264_src_ = pipeline_->SetupAppsrc("raw-src");
+      h264_src_ = pipeline_->SetupAppsrc(
+          "raw-src",
+          "video/x-h264, stream-format=byte-stream, alignment=au");
     }
 
     pipeline_->RegisterVideoAnalyzeMessageHandler(

@@ -121,7 +121,9 @@ class PipelineWrapper : boost::noncopyable {
   // appsrc.
   // TODO theamk: re-write interface to avoid an extra copy.
   typedef std::function<void(void*, int)> AppsrcSampleCallback;
-  AppsrcSampleCallback SetupAppsrc(const char* element_name);
+  AppsrcSampleCallback SetupAppsrc(
+      const char* element_name,
+      const std::string& caps);
 
   // Function to handle element message. Should return true if the
   // message was handled.

@@ -173,11 +173,23 @@ void PipelineWrapper::SetupAppsink(
 }
 
 PipelineWrapper::AppsrcSampleCallback
-PipelineWrapper::SetupAppsrc(const char* element_name) {
+PipelineWrapper::SetupAppsrc(
+    const char* element_name,
+    const std::string& caps_str) {
   GstAppSrc* src = GST_APP_SRC(GetElementByName(element_name));
   BOOST_ASSERT(src);  // This will fail if the element type is wrong
 
   gst_app_src_set_stream_type(src, GST_APP_STREAM_TYPE_STREAM);
+  gst_app_src_set_latency(src, 0, 0);
+  g_object_set(src, "block", FALSE, NULL);
+  if (!caps_str.empty()) {
+    GstCaps* caps = gst_caps_from_string(caps_str.c_str());
+    if (!(caps && GST_CAPS_IS_SIMPLE(caps))) {
+      base::Fail("cannot parse caps: '" + caps_str + "'");
+    }
+    gst_app_src_set_caps(src, caps);
+    gst_caps_unref(caps);
+  }
   // Do not queue more than one buffer.
   //gst_app_src_set_max_bytes(src, 1);
 
