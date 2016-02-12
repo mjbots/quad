@@ -106,6 +106,12 @@ Driver: mt7610u
 ~~~~~~~~~~~~~~~
 Out-of-tree driver from: https://github.com/coolshou/mt7610u
 
+Also works for chipsets:
+ RT2870 RT2770 RT307X RT2070
+ RT357X RT3370
+ RT8070 RT5X7X
+ MT7610 MT7601 MT7612U
+
 Devices:
 * AC600 WiFi Dual Band USB Adapter UW-600M01 "ID 0e8d:7610 MediaTek Inc."
  - Black dongle with the small pinhole in the center of one side
@@ -115,7 +121,8 @@ Devices:
 
 Potential other devices
 ~~~~~~~~~~~~~~~~~~~~~~~
-This list is to filter out the devices which are not interesting for some reasn
+This list is to filter out the devices which are not interesting for some reason
+Hist: amazon search for "dual band wifi usb"
 
 - Satechi Wireless Mini Dual Band Wi-Fi USB Mini Adapter ST-UMWAC
   rtl8812au according to amazon comments
@@ -142,6 +149,24 @@ This list is to filter out the devices which are not interesting for some reasn
   AP mode, and there is no workaround in driver or kernel code that I know
   of. "
   http://askubuntu.com/questions/457702/ubuntu-14-04-hostapd-802-11a-iwlwifi-no-ap
+
+- "Motoraux 600Mbps Dual Band wireless" B0199FBBRM
+ - driver unknown, TODO
+
+- Woopower Wi-Fi Dual Band USB Adapter 5dBi Ext Antenna "AC600 MINI" B015SAFBRI
+ - single external antenna
+ - review has link to driver, which contains mt7610u code
+
+- Bolse 300Mbps Wifi Wireless-N USB Micro Mini Adapter BO-N1557
+ - has external antenna version (BO-N1559)
+ - review says "Realtek RTL8192CU"
+
+- Windrew 802.11AC 600mbps Dual Band 2.4G/5G UNT-W01
+ - review says RT2870, other says to use driver for "EW-7711MAC"
+ - this indicates mt7610u
+
+- LB1 High Performance 600Mbps Dual Band USB UW-600M01-N0001
+ - model number matches mt7610u part number
 
 Testing wireless cards
 ~~~~~~~~~~~~~~~~~~~~~~
