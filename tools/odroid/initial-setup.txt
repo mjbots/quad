@@ -41,6 +41,11 @@ ssh odroid@odroid-mjmech sudo uptime
 
 (3) Upload the code and configure the devices:
 tools/odroid/push-tree.sh odroid-mjmech sudo tools/odroid/setup-system.sh
+# if you this fails, ssh into device and run:
+sudo apt-get update
+sudo apt-get upgrade
+sudo mjmech-clean/tools/odroid/setup-system.sh
+
 
 (4) Setup wifi auth and reboot:
 ssh odroid@odroid-mjmech -t sudo editor /etc/wpa_supplicant/wpa_supplicant.conf

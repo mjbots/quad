@@ -207,8 +207,8 @@ echo -n | copy_stdin_to /etc/cron.weekly/update-notifier-common
 echo -n | copy_stdin_to /etc/cron.weekly/apt-xapian-index
 
 # add out-of-tree wifi driver
-test -d /usr/src/8812au-4.2.2 || \
-    git clone https://github.com/gnab/rtl8812au.git /usr/src/8812au-4.2.2
+#test -d /usr/src/8812au-4.2.2 || \
+#    git clone https://github.com/gnab/rtl8812au.git /usr/src/8812au-4.2.2
 
 # TODO theamk: actually build the driver. This requires getting the kernel
 # sources somehow -- we seem to get it from some weird autobuilder?
