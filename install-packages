@@ -361,6 +361,7 @@ def main():
     python-matplotlib ipython ipython-qtconsole
     python-blessings
     gcc-arm-none-eabi
+    libopencv-dev
 ''')
 
     if options.system:
