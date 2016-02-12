@@ -24,6 +24,7 @@ class TargetTracker::Impl : public CameraFrameConsumer {
         service_(context.service) {}
 
   void AsyncStart(base::ErrorHandler handler) {
+    enabled_ = true;
     service_.post(std::bind(handler, base::ErrorCode()));
   }
 
@@ -31,8 +32,14 @@ class TargetTracker::Impl : public CameraFrameConsumer {
 
   void StopTracking() {}
 
+  // The CameraFrameConsumer interface.
+  void ConsumeRawSample(GstSample* sample) override {
+    if (!enabled_) { return; }
+  }
+
   TargetTracker* const parent_;
   boost::asio::io_service& service_;
+  bool enabled_ = false;
 
   TargetTrackerData data_;
   TargetTrackerDataSignal data_signal_;

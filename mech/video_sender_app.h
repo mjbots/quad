@@ -20,8 +20,9 @@
 
 #include "camera_driver.h"
 #include "gst_main_loop.h"
-#include "rtsp_server.h"
 #include "mcast_video_link.h"
+#include "rtsp_server.h"
+#include "target_tracker.h"
 
 namespace mjmech {
 namespace mech {
@@ -35,6 +36,7 @@ class VideoSenderApp : boost::noncopyable {
     m_.camera.reset(new CameraDriver(context));
     m_.rtsp.reset(new RtspServer(context));
     m_.video_link.reset(new McastVideoLinkTransmitter(context));
+    m_.target_tracker.reset(new TargetTracker(context));
 
     m_.gst_main->ready_signal()->connect(
         std::bind(&CameraDriver::HandleGstReady, m_.camera.get(),
@@ -46,6 +48,7 @@ class VideoSenderApp : boost::noncopyable {
 
     m_.camera->AddFrameConsumer(m_.rtsp->get_frame_consumer());
     m_.camera->AddFrameConsumer(m_.video_link->get_frame_consumer());
+    m_.camera->AddFrameConsumer(m_.target_tracker->get_frame_consumer());
 
     m_.camera->stats_signal()->connect(
        std::bind(&VideoSenderApp::HandleStats, this, std::placeholders::_1));
@@ -60,6 +63,7 @@ class VideoSenderApp : boost::noncopyable {
     std::unique_ptr<CameraDriver> camera;
     std::unique_ptr<RtspServer> rtsp;
     std::unique_ptr<McastVideoLinkTransmitter> video_link;
+    std::unique_ptr<TargetTracker> target_tracker;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -67,6 +71,7 @@ class VideoSenderApp : boost::noncopyable {
       a->Visit(MJ_NVP(camera));
       a->Visit(MJ_NVP(rtsp));
       a->Visit(MJ_NVP(video_link));
+      a->Visit(MJ_NVP(target_tracker));
     }
   };
 
@@ -89,6 +94,7 @@ class VideoSenderApp : boost::noncopyable {
   };
 
   Parameters* parameters() { return &parameters_; }
+  TargetTracker* target_tracker() { return m_.target_tracker.get(); }
 
  private:
   void HandleStats(const CameraDriver::CameraStats* stats) {
