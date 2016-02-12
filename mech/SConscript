@@ -80,6 +80,7 @@ GST_SOURCES = [
     'gst_helpers.cc',
     'gst_main_loop.cc',
     'rtsp_server.cc',
+    'target_tracker.cc',
     'video_display.cc',
     'mcast_video_link.cc',
 ]
