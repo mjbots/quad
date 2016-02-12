@@ -29,10 +29,14 @@ namespace mech {
 namespace {
 typedef HerkuleXConstants HC;
 
-double Limit(double value, double max) {
+double Limit(double value, double min, double max) {
   if (value > max) { return max; }
-  if (value < -max) { return -max; }
+  if (value < min) { return min; }
   return value;
+}
+
+double Limit(double value, double max) {
+  return Limit(value, -max, max);
 }
 
 struct Data {
@@ -204,6 +208,8 @@ class MechWarfare::Impl : boost::noncopyable {
   }
 
   void DoDrive() {
+    const auto& p = parent_->parameters_;
+
     TurretCommand turret;
     Command gait;
 
@@ -220,7 +226,7 @@ class MechWarfare::Impl : boost::noncopyable {
     gait.body_roll_deg = data_.current_drive.body_attitude_deg.roll;
     gait.body_yaw_deg = data_.current_drive.body_attitude_deg.yaw;
 
-    const auto body_mm_s = base::Quaternion::FromEuler(
+    auto body_mm_s = base::Quaternion::FromEuler(
         0.0,
         0.0,
         base::Radians(parent_->m_.turret->data().absolute.x_deg)).Rotate(
@@ -234,25 +240,31 @@ class MechWarfare::Impl : boost::noncopyable {
       const double forward_error_deg = base::WrapNeg180To180(heading_deg);
       const double drive_heading_deg =
           data_.current_drive.drive_mm_s.heading_deg();
-      double correction_dps = 0.0;
+      double error_deg = 0.0;
       if (std::abs(forward_error_deg) < 145 &&
           std::abs(drive_heading_deg) < 135) {
         // Work to end up being forward.
-        correction_dps =
-            forward_error_deg * parent_->parameters_.drive_rotate_factor;
+        error_deg = forward_error_deg;
       } else {
         // Work to end up being backward.
         const double reverse_error_deg =
             base::WrapNeg180To180(heading_deg - 180.0);
-        correction_dps =
-            reverse_error_deg * parent_->parameters_.drive_rotate_factor;
+        error_deg = reverse_error_deg;
       }
-      correction_dps = Limit(correction_dps,
-                             parent_->parameters_.drive_max_rotate_dps);
+      const double correction_dps = Limit(error_deg * p.drive_rotate_factor,
+                                          p.drive_max_rotate_dps);
       gait.rotate_deg_s += correction_dps;
 
-      // TODO jpieper: Maybe limit the magnitude of the body velocity
-      // based on the error?
+      // Limit the magnitude of body velocity based on error.
+      const double max_translate_mm_s =
+          Limit((1.0f - ((std::abs(error_deg) - p.drive_min_error_deg) /
+                         (p.drive_max_error_deg - p.drive_min_error_deg))),
+                0.0f, 1.0f) *
+          p.drive_max_translate_mm_s;
+
+      if (body_mm_s.length() > max_translate_mm_s) {
+        body_mm_s = body_mm_s.scaled(max_translate_mm_s / body_mm_s.length());
+      }
     }
 
     gait.translate_x_mm_s = body_mm_s.x;

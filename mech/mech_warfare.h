@@ -73,6 +73,16 @@ class MechWarfare : boost::noncopyable {
     double idle_timeout_s = 1.0;
     double drive_rotate_factor = 0.5;
     double drive_max_rotate_dps = 40.0;
+
+    /// If the desired body heading is more than @p
+    /// drive_max_error_deg, allow no linear translation.  Scale the
+    /// maximum allowed translation linearly as the error decreases
+    /// from @p drive_max_error_deg to @p drive_min_error_deg.  The
+    /// maximum allowed translation is @p drive_max_translate_mm_s.
+    double drive_max_error_deg = 20.0;
+    double drive_min_error_deg = 10.0;
+    double drive_max_translate_mm_s = 400.0;
+
     double turret_bias_timeout_s = 1.5;
     std::string config_servos = "0-11";
 
@@ -88,6 +98,9 @@ class MechWarfare : boost::noncopyable {
       a->Visit(MJ_NVP(idle_timeout_s));
       a->Visit(MJ_NVP(drive_rotate_factor));
       a->Visit(MJ_NVP(drive_max_rotate_dps));
+      a->Visit(MJ_NVP(drive_max_error_deg));
+      a->Visit(MJ_NVP(drive_min_error_deg));
+      a->Visit(MJ_NVP(drive_max_translate_mm_s));
       a->Visit(MJ_NVP(turret_bias_timeout_s));
       a->Visit(MJ_NVP(config_servos));
       a->Visit(MJ_NVP(servo_min_voltage_counts));
