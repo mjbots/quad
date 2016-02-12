@@ -22,6 +22,7 @@
 #include "gst_main_loop.h"
 #include "mcast_video_link.h"
 #include "rtsp_server.h"
+#include "target_tracker.h"
 #include "video_display.h"
 
 namespace mjmech {
@@ -37,11 +38,13 @@ class VideoLoopbackApp : boost::noncopyable {
     m_.video_link_tx.reset(new McastVideoLinkTransmitter(context));
     m_.video_link_rx.reset(new McastVideoLinkReceiver(context));
     m_.display.reset(new VideoDisplay(context));
+    m_.target_tracker.reset(new TargetTracker(context));
 
     m_.gst_main->ready_signal()->connect(
         std::bind(&CameraDriver::HandleGstReady, m_.camera.get(),
                   std::placeholders::_1));
     m_.camera->AddFrameConsumer(m_.video_link_tx->get_frame_consumer());
+    m_.camera->AddFrameConsumer(m_.target_tracker->get_frame_consumer());
 
     m_.gst_main->ready_signal()->connect(
         std::bind(&VideoDisplay::HandleGstReady, m_.display.get(),
@@ -68,6 +71,7 @@ class VideoLoopbackApp : boost::noncopyable {
     std::unique_ptr<GstMainLoop> gst_main;
     std::unique_ptr<CameraDriver> camera;
     std::unique_ptr<VideoDisplay> display;
+    std::unique_ptr<TargetTracker> target_tracker;
     std::unique_ptr<McastVideoLinkTransmitter> video_link_tx;
     std::unique_ptr<McastVideoLinkReceiver> video_link_rx;
 
@@ -76,6 +80,7 @@ class VideoLoopbackApp : boost::noncopyable {
       a->Visit(MJ_NVP(gst_main));
       a->Visit(MJ_NVP(camera));
       a->Visit(MJ_NVP(display));
+      a->Visit(MJ_NVP(target_tracker));
       a->Visit(MJ_NVP(video_link_tx));
       a->Visit(MJ_NVP(video_link_rx));
     }
