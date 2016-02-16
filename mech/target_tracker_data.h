@@ -27,12 +27,14 @@ struct TargetTrackerData {
 
   enum State {
     kIdle,
+    kStarting,
     kTracking,
   };
 
   static std::map<State, const char*> StateMapper() {
     return std::map<State, const char*>{
       { kIdle, "kIdle" },
+      { kStarting, "kStarting" },
       { kTracking, "kTracking" },
     };
   }
@@ -42,12 +44,15 @@ struct TargetTrackerData {
   base::Point3D initial;
   base::Point3D current;
 
+  std::vector<base::Point3D> features;
+
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(timestamp));
     a->Visit(MJ_ENUM(state, StateMapper));
     a->Visit(MJ_NVP(initial));
     a->Visit(MJ_NVP(current));
+    a->Visit(MJ_NVP(features));
   }
 };
 

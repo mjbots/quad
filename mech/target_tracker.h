@@ -30,9 +30,13 @@ class TargetTracker : boost::noncopyable {
   void AsyncStart(base::ErrorHandler);
 
   struct Parameters {
+    int region_width = 100;
+    int region_height = 100;
 
     template <typename Archive>
     void Serialize(Archive* a)  {
+      a->Visit(MJ_NVP(region_width));
+      a->Visit(MJ_NVP(region_height));
     }
   };
 
