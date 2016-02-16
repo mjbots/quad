@@ -200,25 +200,51 @@ class Commander {
  public:
   Commander(const Options& options,
             boost::asio::io_service& service,
-            const udp::endpoint& target,
-            LinuxInput* linux_input,
-            udp::socket* socket,
+            std::string target,
             const Command& command)
       : options_(options),
         service_(service),
-        target_(target),
-        linux_input_(linux_input),
-        socket_(socket),
         command_(command),
-        timer_(service),
-        mapping_(GetAxisMapping(linux_input)) {
+        timer_(service) {
+
+    std::string host;
+    std::string port_str;
+    const size_t colon = target.find_first_of(':');
+    if (colon != std::string::npos) {
+      host = target.substr(0, colon);
+      port_str = target.substr(colon + 1);
+    } else {
+      host = target;
+      port_str = "13356";
+    }
+
+    udp::resolver resolver(service);
+    auto it = resolver.resolve(udp::resolver::query(host, port_str));
+    target_ = *it;
+
+    socket_.reset(new udp::socket(service, udp::v4()));
   }
 
   void Start() {
+    BOOST_ASSERT(linux_input_);
     StartRead();
     StartTimer();
   }
 
+  // Set the linux input object. Pointer must be valid for the lifetime of the
+  // object.
+  void SetLinuxInput(LinuxInput* target) {
+    linux_input_ = target;
+    mapping_ = GetAxisMapping(linux_input_);
+  }
+
+
+  void SendMechMessage(const MechMessage& message) {
+    std::string message_str = SerializeCommand(message);
+    socket_->send_to(boost::asio::buffer(message_str), target_);
+  }
+
+ private:
   void StartRead() {
     linux_input_->AsyncRead(
         &event_, std::bind(&Commander::HandleRead, this,
@@ -231,7 +257,6 @@ class Commander {
                                 std::placeholders::_1));
   }
 
- private:
   void HandleRead(ErrorCode ec) {
     FailIf(ec);
     StartRead();
@@ -434,8 +459,7 @@ class Commander {
       std::cout.flush();
     }
 
-    std::string message_str = SerializeCommand(message);
-    socket_->send_to(boost::asio::buffer(message_str), target_);
+    SendMechMessage(message);
   }
 
   void DoDrive() {
@@ -505,12 +529,12 @@ class Commander {
 
   const Options options_;
   boost::asio::io_service& service_;
-  const udp::endpoint target_;
-  LinuxInput* const linux_input_;
-  udp::socket* const socket_;
+  udp::endpoint target_;
+  LinuxInput* linux_input_ = nullptr;
+  std::unique_ptr<udp::socket> socket_;
   Command command_;
   DeadlineTimer timer_;
-  const AxisMapping mapping_;
+  AxisMapping mapping_;
 
   bool laser_on_ = false;
   LinuxInput::Event event_;
@@ -561,32 +585,14 @@ int work(int argc, char** argv) {
     turret.rate->y_deg_s = turret_pitch_rate_dps;
   }
 
-  std::string host;
-  std::string port_str;
-  const size_t colon = target.find_first_of(':');
-  if (colon != std::string::npos) {
-    host = target.substr(0, colon);
-    port_str = target.substr(colon + 1);
-  } else {
-    host = target;
-    port_str = "13356";
-  }
-
-  udp::resolver resolver(service);
-  auto it = resolver.resolve(udp::resolver::query(host, port_str));
-
-  udp::socket socket(service, udp::v4());
+  Commander commander(options, service, target, command);
 
   if (joystick.empty()) {
-    auto message_str = SerializeCommand(message);
-    socket.send_to(boost::asio::buffer(message_str), *it);
+    commander.SendMechMessage(message);
   } else {
-    LinuxInput input(service, joystick);
-
-    Commander commander(options, service, *it, &input, &socket, command);
-
+    LinuxInput* input = new LinuxInput(service, joystick);
+    commander.SetLinuxInput(input);
     commander.Start();
-
     service.run();
   }
 
