@@ -140,6 +140,20 @@ class MechWarfare::Impl : boost::noncopyable {
               base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&config);
           leg_configs[i].leg_ik =
               boost::shared_ptr<IKSolver>(new MammalIK(config));
+        } else if (type == "Lizard") {
+          LizardIK::Config config;
+
+          std::string field = (boost::format("ikconfig.leg.%d") % i).str();
+          auto optional_child = tree.get_child_optional(field);
+          if (!optional_child) {
+            throw base::SystemError::einval("could not locate field: " + field);
+          }
+
+          base::PropertyTreeReadArchive(
+              *optional_child,
+              base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&config);
+          leg_configs[i].leg_ik =
+              boost::shared_ptr<IKSolver>(new LizardIK(config));
         } else {
           throw base::SystemError::einval("unknown iktype: " + type);
         }
