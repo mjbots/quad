@@ -127,7 +127,7 @@ AxisMapping GetAxisMapping(const LinuxInput* input) {
   return result;
 }
 
-struct Options {
+struct OptOptions {
   double period_s = 0.1;
   double deadband = 0.20;
   double max_translate_x_mm_s = 300.0;
@@ -170,6 +170,19 @@ struct Options {
   }
 };
 
+struct CommanderOptions {
+  std::string target = "192.168.0.123";
+  Command cmd;
+  OptOptions opt;
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(MJ_NVP(target));
+    a->Visit(MJ_NVP(cmd));
+    a->Visit(MJ_NVP(opt));
+  }
+};
+
 struct MechMessage {
   Command gait;
   TurretCommand turret;
@@ -198,17 +211,16 @@ std::string SerializeCommand(const T& message_in) {
 
 class Commander {
  public:
-  Commander(const Options& options,
-            boost::asio::io_service& service,
-            std::string target,
-            const Command& command)
-      : options_(options),
+  Commander(const CommanderOptions& options,
+            boost::asio::io_service& service)
+      : options_(options.opt),
         service_(service),
-        command_(command),
+        command_(options.cmd),
         timer_(service) {
 
     std::string host;
     std::string port_str;
+    std::string target = options.target;
     const size_t colon = target.find_first_of(':');
     if (colon != std::string::npos) {
       host = target.substr(0, colon);
@@ -527,7 +539,7 @@ class Commander {
     }
   }
 
-  const Options options_;
+  const OptOptions options_;
   boost::asio::io_service& service_;
   udp::endpoint target_;
   LinuxInput* linux_input_ = nullptr;
@@ -547,27 +559,22 @@ int work(int argc, char** argv) {
 
   namespace po = boost::program_options;
 
-  std::string target = "192.168.0.123";
   std::string joystick;
-  MechMessage message;
-  Command& command = message.gait;
-  TurretCommand& turret = message.turret;
   double turret_pitch_rate_dps = 0.0;
   double turret_yaw_rate_dps = 0.0;
-  Options options;
+
+  CommanderOptions options;
 
   po::options_description desc("Allowable options");
   desc.add_options()
       ("help,h", "display usage message")
-      ("target,t", po::value(&target), "destination of commands")
       ("joystick,j", po::value(&joystick),
        "send live commands from joystick at this device")
       ("turret.pitch_rate_dps", po::value(&turret_pitch_rate_dps), "")
       ("turret.yaw_rate_dps", po::value(&turret_yaw_rate_dps), "")
       ;
 
-  ProgramOptionsArchive(&desc, "cmd.").Accept(&command);
-  ProgramOptionsArchive(&desc, "opt.").Accept(&options);
+  ProgramOptionsArchive(&desc).Accept(&options);
 
   po::variables_map vm;
   po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -578,16 +585,18 @@ int work(int argc, char** argv) {
     return 0;
   }
 
-  if (turret_pitch_rate_dps != 0.0 ||
-      turret_yaw_rate_dps != 0.0) {
-    turret.rate = TurretCommand::Rate();
-    turret.rate->x_deg_s = turret_yaw_rate_dps;
-    turret.rate->y_deg_s = turret_pitch_rate_dps;
-  }
-
-  Commander commander(options, service, target, command);
+  Commander commander(options, service);
 
   if (joystick.empty()) {
+    MechMessage message;
+    message.gait = options.cmd;
+    TurretCommand& turret = message.turret;
+    if (turret_pitch_rate_dps != 0.0 ||
+        turret_yaw_rate_dps != 0.0) {
+      turret.rate = TurretCommand::Rate();
+      turret.rate->x_deg_s = turret_yaw_rate_dps;
+      turret.rate->y_deg_s = turret_pitch_rate_dps;
+    }
     commander.SendMechMessage(message);
   } else {
     LinuxInput* input = new LinuxInput(service, joystick);
