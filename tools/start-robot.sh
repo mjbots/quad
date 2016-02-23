@@ -10,8 +10,9 @@ cd $(dirname $(dirname $(readlink -f $0)))
 if [[ "$mach" == "armv7l" && "$USER" == "odroid" ]]; then
     echo Compiling source
     set -x
-    scons -j2 mech/build-armv7l/video_sender_app
-    mech/build-armv7l/video_sender_app -t camera_driver.stats  "$@"
+    scons -j2 mech/build-armv7l/mech_warfare
+    mech/build-armv7l/mech_warfare -t camera_driver.stats \
+         -c configs/mw.ini  "$@"
 elif [[ "$mach" == "x86_64" && "$USER" != "odroid" ]]; then
     # make sure we can compile our copy
     set -x
