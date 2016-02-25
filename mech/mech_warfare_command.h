@@ -83,32 +83,36 @@ struct OptOptions {
   }
 };
 
-struct CommanderOptions {
-  std::string target = "192.168.0.123";
-  Command cmd;
-  OptOptions opt;
-
-  template <typename Archive>
-  void Serialize(Archive* a) {
-    a->Visit(MJ_NVP(target));
-    a->Visit(MJ_NVP(cmd));
-    a->Visit(MJ_NVP(opt));
-  }
-};
-
 class Commander {
  public:
-  Commander(const CommanderOptions& options,
-            boost::asio::io_service& service);
-  ~Commander();
+  Commander(boost::asio::io_service& service);
+  virtual ~Commander();
 
-  void Start();
-  void SetLinuxInput(base::LinuxInput*);
+  void AsyncStart(base::ErrorHandler);
   void SendMechMessage(const MechMessage&);
+
+  struct Parameters {
+    std::string target = "192.168.0.123";
+    // send live commands from joystick at this device
+    std::string joystick = "";
+    Command cmd;
+    OptOptions opt;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(target));
+      a->Visit(MJ_NVP(joystick));
+      a->Visit(MJ_NVP(cmd));
+      a->Visit(MJ_NVP(opt));
+    }
+  };
+
+  Parameters* parameters() { return &parameters_; }
 
  private:
   class Impl;
   std::unique_ptr<Impl> impl_;
+  Parameters parameters_;
 };
 
 

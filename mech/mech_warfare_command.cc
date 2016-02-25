@@ -18,11 +18,13 @@
 
 #include <boost/lexical_cast.hpp>
 #include <boost/program_options.hpp>
+
 #include <boost/property_tree/json_parser.hpp>
 
 #include "base/deadline_timer.h"
 #include "base/fail.h"
 #include "base/json_archive.h"
+#include "base/logging.h"
 #include "base/program_options_archive.h"
 #include "base/property_tree_archive.h"
 
@@ -147,16 +149,28 @@ std::string SerializeCommand(const T& message_in) {
 
 class Commander::Impl {
  public:
-  Impl(const CommanderOptions& options,
+  Impl(const Commander::Parameters& params,
        boost::asio::io_service& service)
-      : options_(options.opt),
+      : parameters_(params),
+        options_(params.opt),
         service_(service),
-        command_(options.cmd),
-        timer_(service) {
+        timer_(service) {}
 
+  void AsyncStart(base::ErrorHandler handler) {
+    // Create joystick, if needed.
+    if (!parameters_.joystick.empty()) {
+      log_.infoStream() << "Opening joystick: " << parameters_.joystick;
+      linux_input_.reset(new LinuxInput(service_, parameters_.joystick));
+      mapping_ = GetAxisMapping(linux_input_.get());
+    }
+
+    // Copy the default command.
+    command_ = parameters_.cmd;
+
+    // Resolve target
     std::string host;
     std::string port_str;
-    std::string target = options.target;
+    std::string target = parameters_.target;
     const size_t colon = target.find_first_of(':');
     if (colon != std::string::npos) {
       host = target.substr(0, colon);
@@ -166,26 +180,22 @@ class Commander::Impl {
       port_str = "13356";
     }
 
-    udp::resolver resolver(service);
+    udp::resolver resolver(service_);
     auto it = resolver.resolve(udp::resolver::query(host, port_str));
     target_ = *it;
 
-    socket_.reset(new udp::socket(service, udp::v4()));
-  }
+    log_.infoStream() << "Will send commands to " << target_;
 
-  void Start() {
-    BOOST_ASSERT(linux_input_);
-    StartRead();
-    StartTimer();
-  }
+    socket_.reset(new udp::socket(service_, udp::v4()));
 
-  // Set the linux input object. Pointer must be valid for the lifetime of the
-  // object.
-  void SetLinuxInput(LinuxInput* target) {
-    linux_input_ = target;
-    mapping_ = GetAxisMapping(linux_input_);
+    // Start reading
+    if (linux_input_) {
+      StartRead();
+      // Do not send command when we have no joystick.
+      StartTimer();
+    }
+    service_.post(std::bind(handler, base::ErrorCode()));
   }
-
 
   void SendMechMessage(const MechMessage& message) {
     std::string message_str = SerializeCommand(message);
@@ -475,12 +485,13 @@ class Commander::Impl {
     }
   }
 
-  const OptOptions options_;
+  const Parameters& parameters_;
+  const OptOptions& options_;
+  Command command_;
   boost::asio::io_service& service_;
   udp::endpoint target_;
-  LinuxInput* linux_input_ = nullptr;
+  std::unique_ptr<LinuxInput> linux_input_;
   std::unique_ptr<udp::socket> socket_;
-  Command command_;
   DeadlineTimer timer_;
   AxisMapping mapping_;
 
@@ -488,21 +499,18 @@ class Commander::Impl {
   LinuxInput::Event event_;
   std::map<int, int> key_map_;
   int sequence_ = 0;
+
+  base::LogRef log_ = base::GetLogInstance("commander");
 };
 
-Commander::Commander(const CommanderOptions& options,
-                     boost::asio::io_service& service)
-    : impl_(new Impl(options, service)) {
+Commander::Commander(boost::asio::io_service& service)
+    : impl_(new Impl(parameters_, service)) {
 }
 
 Commander::~Commander() {};
 
-void Commander::Start() {
-  impl_->Start();
-}
-
-void Commander::SetLinuxInput(LinuxInput* target) {
-  impl_->SetLinuxInput(target);
+void Commander::AsyncStart(base::ErrorHandler handler) {
+  impl_->AsyncStart(handler);
 }
 
 void Commander::SendMechMessage(const MechMessage& msg) {
@@ -514,22 +522,19 @@ int work(int argc, char** argv) {
 
   namespace po = boost::program_options;
 
-  std::string joystick;
   double turret_pitch_rate_dps = 0.0;
   double turret_yaw_rate_dps = 0.0;
 
-  CommanderOptions options;
+  Commander commander(service);
 
   po::options_description desc("Allowable options");
   desc.add_options()
       ("help,h", "display usage message")
-      ("joystick,j", po::value(&joystick),
-       "send live commands from joystick at this device")
       ("turret.pitch_rate_dps", po::value(&turret_pitch_rate_dps), "")
       ("turret.yaw_rate_dps", po::value(&turret_yaw_rate_dps), "")
       ;
 
-  ProgramOptionsArchive(&desc).Accept(&options);
+  ProgramOptionsArchive(&desc).Accept(commander.parameters());
 
   po::variables_map vm;
   po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -540,11 +545,9 @@ int work(int argc, char** argv) {
     return 0;
   }
 
-  Commander commander(options, service);
-
-  if (joystick.empty()) {
-    MechMessage message;
-    message.gait = options.cmd;
+  MechMessage message;
+  if (commander.parameters()->joystick.empty()) {
+    message.gait = commander.parameters()->cmd;
     TurretCommand& turret = message.turret;
     if (turret_pitch_rate_dps != 0.0 ||
         turret_yaw_rate_dps != 0.0) {
@@ -552,13 +555,16 @@ int work(int argc, char** argv) {
       turret.rate->x_deg_s = turret_yaw_rate_dps;
       turret.rate->y_deg_s = turret_pitch_rate_dps;
     }
-    commander.SendMechMessage(message);
+    commander.AsyncStart([&](ErrorCode ec) {
+        FailIf(ec);
+        commander.SendMechMessage(message);
+        service.stop();
+        base::GetLogInstance("main").info("message sent");
+      });
   } else {
-    LinuxInput* input = new LinuxInput(service, joystick);
-    commander.SetLinuxInput(input);
-    commander.Start();
-    service.run();
+    commander.AsyncStart([=](ErrorCode ec) { FailIf(ec); });
   }
+  service.run();
 
   return 0;
 }
