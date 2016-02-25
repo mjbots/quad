@@ -84,6 +84,8 @@ class FastIStringStream {
 
   size_t gcount() const { return last_read_; }
 
+  size_t remaining() const { return data_.size() - offset_; }
+
   const std::string data_;
   size_t offset_ = 0;
   size_t last_read_ = 0;
