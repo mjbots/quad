@@ -134,10 +134,17 @@ class McastVideoLinkReceiver : boost::noncopyable {
 
   typedef boost::signals2::signal<
     void (std::shared_ptr<std::string>&)> FrameReadySignal;
-  FrameReadySignal* frame_ready_signal() { return &frame_ready_signal_; };
+  FrameReadySignal* frame_ready_signal() { return &frame_ready_signal_; }
+
+  typedef boost::signals2::signal<
+    void (const std::string&, const std::string&)> TelemetryReadySignal;
+  TelemetryReadySignal* telemetry_ready_signal() {
+    return &telemetry_ready_signal_;
+  }
 
  private:
   FrameReadySignal frame_ready_signal_;
+  TelemetryReadySignal telemetry_ready_signal_;
   Parameters parameters_;
 
   class Impl;

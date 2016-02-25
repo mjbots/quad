@@ -578,32 +578,48 @@ class RxFrameBuffer : boost::noncopyable {
     return &info_;
   }
 
+  struct FrameResult {
+    std::shared_ptr<std::string> aux;
+    std::shared_ptr<std::string> video;
+  };
 
-  std::shared_ptr<std::string> AssembleFrame(base::LogRef& log) {
+  FrameResult AssembleFrame(base::LogRef& log) {
     BOOST_ASSERT(missing_.none());
-    int len = 0;
+    int aux_len = 0;
+    int video_len = 0;
     for (auto& packet: packets_) {
-      len += packet->payload_len();
+      aux_len += packet->aux_len();
+      video_len += packet->payload_len();
     }
 
-    std::shared_ptr<std::string> result(new std::string(len, 0));
+    FrameResult result;
+    result.aux.reset(new std::string(aux_len, 0));
+    result.video.reset(new std::string(video_len, 0));
 
-    int pos = 0;
+    int aux_pos = 0;
+    int video_pos = 0;
     int idx = 0;
     for (auto& packet: packets_) {
       BOOST_ASSERT(packet->header().packet_index == idx);
       idx++;
-      ::memcpy(&(*result)[pos], packet->payload(), packet->payload_len());
-      pos += packet->payload_len();
+      ::memcpy(&(*result.aux)[aux_pos],
+               packet->aux(),
+               packet->aux_len());
+      ::memcpy(&(*result.video)[video_pos],
+               packet->payload(),
+               packet->payload_len());
+      aux_pos += packet->aux_len();
+      video_pos += packet->payload_len();
     }
-    BOOST_ASSERT(pos == len);
+    BOOST_ASSERT(aux_pos == aux_len);
+    BOOST_ASSERT(video_pos == video_len);
 
     boost::crc_32_type crc32;
-    crc32.process_bytes(&(*result)[0], len);
+    crc32.process_bytes(&(*result.video)[0], video_len);
     uint32_t real = crc32.checksum();
     if (real != info_.frame_crc32) {
       log.warn("CRC32 mismatch for frame %d (%d bytes): 0x%08X != 0x%08X",
-               info_.frame_num, len, real, info_.frame_crc32);
+               info_.frame_num, video_len, real, info_.frame_crc32);
     }
     return result;
   }
@@ -746,13 +762,29 @@ class McastVideoLinkReceiver::Impl : boost::noncopyable {
 
     if (buff->complete() && !was_complete) {
       // packet received. pass to decoder
-      std::shared_ptr<std::string> ready_frame = buff->AssembleFrame(log_);
+      auto ready_frame = buff->AssembleFrame(log_);
       log_.debug("RXed frame %d: %d bytes, from %d packets",
-                 buff->info()->frame_num, ready_frame->size(),
+                 buff->info()->frame_num, ready_frame.video->size(),
                  buff->info()->total_packets);
-      (*parent_->frame_ready_signal())(ready_frame);
+      (*parent_->frame_ready_signal())(ready_frame.video);
+      DoAux(*ready_frame.aux);
     }
     ExpireOldFrames();
+  }
+
+  void DoAux(const std::string& aux) {
+    base::FastIStringStream istr(aux);
+    base::TelemetryReadStream<base::FastIStringStream> is(istr);
+
+    try {
+      while (istr.remaining()) {
+        const std::string name = is.ReadString();
+        const std::string data = is.ReadString();
+        (*parent_->telemetry_ready_signal())(name, data);
+      }
+    } catch (base::SystemError& se) {
+      log_.warn("corrupt aux data: " + se.error_code().message());
+    }
   }
 
   DataPacketSignal packet_signal_;
