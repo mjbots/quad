@@ -99,11 +99,16 @@ class DataPacket : boost::noncopyable {
 
   // Create new packet
   DataPacket(const DataPacketHeader& hdr,
+             const char* aux_data, int aux_len,
              const char* video_data, int video_len)
       : data_(hdr.video_start + video_len, 0) {
     BOOST_ASSERT(video_len >= 0);
     BOOST_ASSERT(hdr.video_start >= sizeof(hdr));
+    BOOST_ASSERT(aux_len == (hdr.video_start - DataPacketHeader::kSize));
     ::memcpy(&data_[0], &hdr, sizeof(hdr));
+    if (aux_len) {
+      ::memcpy(&data_[DataPacketHeader::kSize], aux_data, aux_len);
+    }
     ::memcpy(&data_[hdr.video_start], video_data, video_len);
 
     boost::crc_32_type crc_calc;
@@ -120,10 +125,15 @@ class DataPacket : boost::noncopyable {
   }
 
   // Accessors
-  bool valid() { return valid_; };
+  bool valid() const { return valid_; };
 
   // Mutable header
   DataPacketHeader& header() {
+    BOOST_ASSERT(valid_);
+    return header_nv();
+  }
+
+  const DataPacketHeader& header() const {
     BOOST_ASSERT(valid_);
     return header_nv();
   }
@@ -133,11 +143,20 @@ class DataPacket : boost::noncopyable {
     return data_;
   }
 
-  const char* payload() {
+  const char* aux() const {
+    return &data_[DataPacketHeader::kSize];
+  }
+
+  int aux_len() const {
+    BOOST_ASSERT(valid_);
+    return header().video_start - DataPacketHeader::kSize;
+  }
+
+  const char* payload() const {
     return &data_[header().video_start];
   }
 
-  int payload_len() {
+  int payload_len() const {
     BOOST_ASSERT(valid_);
     return data_.size() - header().video_start;
   }
@@ -145,6 +164,10 @@ class DataPacket : boost::noncopyable {
  private:
   DataPacketHeader& header_nv() {
     return *reinterpret_cast<DataPacketHeader*>(&data_.front());
+  }
+
+  const DataPacketHeader& header_nv() const {
+    return *reinterpret_cast<const DataPacketHeader*>(&data_.front());
   }
 
   void CheckValid() {
@@ -182,7 +205,6 @@ struct DataPacketLog {
 };
 
 typedef boost::signals2::signal<void (const DataPacketLog*)> DataPacketSignal;
-
 }
 
 
@@ -212,7 +234,7 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
     started_ = true;
   }
 
-  void HandleVideoPacket(uint8_t* data, int len, bool key_frame) {
+  void HandleVideoPacket(uint8_t* data, int video_len, bool key_frame) {
     if (!started_) {
       return;
     }
@@ -222,6 +244,10 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
     }
 
     std::lock_guard<std::mutex> guard(queue_mutex_);
+
+    ExpireTelemetry();
+    const std::string telemetry = MakeTelemetryData();
+    const int len = video_len + telemetry.size();
 
     if (key_frame) {
       last_iframe_num_ = total_frames_;
@@ -239,7 +265,7 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
 
     BOOST_ASSERT(data_size <= max_data_size);
     BOOST_ASSERT(num_packets >= 1);
-    BOOST_ASSERT(num_packets <= 0xFF);      // Wwe have 1 byte for # of packets.
+    BOOST_ASSERT(num_packets <= 0xFF);      // We have 1 byte for # of packets.
 
     // Generic header fields.
     DataPacketHeader hdr;
@@ -247,28 +273,43 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
     hdr.frame_num = total_frames_;
     hdr.iframe_num_lsb = static_cast<uint16_t>(last_iframe_num_);
     BOOST_ASSERT(DataPacketHeader::kSize == sizeof(hdr));
-    hdr.video_start = DataPacketHeader::kSize;
     hdr.total_packets = num_packets;
     hdr.repeat_count = parameters_.repeat_count;
     boost::crc_32_type crc_calc; // pkzip/ethernet
-    crc_calc.process_bytes(data, len);
+    crc_calc.process_bytes(data, video_len);
     hdr.frame_crc32 = crc_calc.checksum();
 
     // Produce and enqueue packets.
-    for (int copy=0; copy < parameters_.repeat_count; copy++) {
+    for (int copy = 0; copy < parameters_.repeat_count; copy++) {
       hdr.repeat_index = copy;
-      int offset = 0;
+      int telemetry_offset = 0;
+      int video_offset = 0;
+
       for (int index=0; index < num_packets; index++) {
+        const int telemetry_remaining = telemetry.size() - telemetry_offset;
+        const int video_remaining = video_len - video_offset;
+        const int total_remaining = telemetry_offset + video_remaining;
+        const int this_data_size = std::min(data_size, total_remaining);
+
+        const int telemetry_to_send =
+            std::min(this_data_size, telemetry_remaining);
+        const int video_to_send =
+            std::min(this_data_size - telemetry_to_send, video_remaining);
+
+        hdr.video_start = DataPacketHeader::kSize + telemetry_to_send;
         hdr.packet_index = index;
-        int this_data_size = std::min(data_size, len - offset);
         BOOST_ASSERT(this_data_size > 0);
 
         to_tx_.emplace_back(
-            hdr, reinterpret_cast<char*>(data) + offset, this_data_size);
+            hdr,
+            telemetry.data() + telemetry_offset, telemetry_to_send,
+            reinterpret_cast<char*>(data) + video_offset, video_to_send);
         BOOST_ASSERT(to_tx_.back().valid());
-        offset += this_data_size;
+        telemetry_offset += telemetry_to_send;
+        video_offset += video_to_send;
       }
-      BOOST_ASSERT(offset == len);
+      BOOST_ASSERT(telemetry_offset == static_cast<int>(telemetry.size()));
+      BOOST_ASSERT(video_offset == video_len);
     }
 
     total_frames_++;
@@ -282,6 +323,13 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
       service_.post(
           std::bind(&Impl::TxNextPacket, this, boost::system::error_code()));
     }
+  }
+
+  void SetTelemetry(const std::string& name, const std::string& data,
+                    boost::posix_time::ptime expiration) {
+    std::lock_guard<std::mutex> guard(queue_mutex_);
+
+    telemetry_[name] = Telemetry{data, expiration};
   }
 
   DataPacketSignal* packet_signal() { return &packet_signal_; }
@@ -325,6 +373,34 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
     packet_signal_(&dpl);
   }
 
+  // NOTE: This requires that the queue_mutex_ lock be held.
+  void ExpireTelemetry() {
+    const auto now = base::Now(service_);
+
+    for (auto it = telemetry_.begin(); it != telemetry_.end();) {
+      auto next = std::next(it);
+
+      if (now > it->second.expiration) {
+        telemetry_.erase(it);
+      }
+
+      it = next;
+    }
+  }
+
+  // NOTE: This requires that the queue_mutex_ lock be held.
+  std::string MakeTelemetryData() const {
+    base::FastOStringStream ostr;
+    base::TelemetryWriteStream<base::FastOStringStream> os(ostr);
+
+    for (const auto& pair: telemetry_) {
+      os.Write(pair.first); // name
+      os.Write(pair.second.data); // data
+    }
+
+    return ostr.str();
+  }
+
   // Variables which are only set in constructor or in Start()
   DataPacketSignal packet_signal_;
   McastVideoLinkTransmitter* const parent_;
@@ -344,6 +420,13 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
   boost::posix_time::ptime tx_deadline_;
   base::DeadlineTimer tx_timer_;
   bool tx_running_ = false;
+
+  struct Telemetry {
+    std::string data;
+    boost::posix_time::ptime expiration;
+  };
+
+  std::map<std::string, Telemetry> telemetry_;
 };
 
 
@@ -351,7 +434,8 @@ class McastVideoLinkTransmitter::FrameConsumerImpl :
       public CameraFrameConsumer {
  public:
   FrameConsumerImpl(std::shared_ptr<McastVideoLinkTransmitter::Impl> impl)
-      : impl_(impl) {};
+      : impl_(impl) {}
+  virtual ~FrameConsumerImpl() {}
 
   // CameraFrameConsumer interface
   virtual void ConsumeH264Sample(GstSample* sample) {
@@ -379,9 +463,28 @@ class McastVideoLinkTransmitter::FrameConsumerImpl :
   std::shared_ptr<McastVideoLinkTransmitter::Impl> impl_;
 };
 
+class McastVideoLinkTransmitter::TelemetryImpl :
+      public McastTelemetryInterface {
+ public:
+  TelemetryImpl(std::shared_ptr<McastVideoLinkTransmitter::Impl> impl)
+      : impl_(impl) {}
+
+  virtual ~TelemetryImpl() {}
+
+  void SetTelemetry(const std::string& name,
+                    const std::string& data,
+                    boost::posix_time::ptime expiration) override {
+    impl_->SetTelemetry(name, data, expiration);
+  }
+
+ private:
+  std::shared_ptr<McastVideoLinkTransmitter::Impl> impl_;
+};
+
 McastVideoLinkTransmitter::McastVideoLinkTransmitter(base::Context& context)
     : impl_(new Impl(this, context.service)),
-      frame_consumer_impl_(new FrameConsumerImpl(impl_)) {
+      frame_consumer_impl_(new FrameConsumerImpl(impl_)),
+      telemetry_impl_(new TelemetryImpl(impl_)) {
   context.telemetry_registry->Register("mvl_data_tx", impl_->packet_signal());
 }
 
@@ -394,6 +497,11 @@ void McastVideoLinkTransmitter::AsyncStart(base::ErrorHandler handler) {
 std::weak_ptr<CameraFrameConsumer
               > McastVideoLinkTransmitter::get_frame_consumer() {
   return frame_consumer_impl_;
+}
+
+std::weak_ptr<McastTelemetryInterface
+              > McastVideoLinkTransmitter::get_telemetry_interface() {
+  return telemetry_impl_;
 }
 
 

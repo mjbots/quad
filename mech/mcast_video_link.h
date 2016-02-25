@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2014-2016 Mikhail Afanasyev.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@
 #include "base/udp_data_link.h"
 
 #include "camera_driver.h"
+#include "mcast_telemetry_interface.h"
 
 namespace mjmech {
 namespace mech {
@@ -59,6 +60,9 @@ class McastVideoLinkTransmitter : boost::noncopyable {
   // Get a frameconsumer interface. pointer has same lifetime
   // as this object.
   std::weak_ptr<CameraFrameConsumer> get_frame_consumer();
+
+  // Get a telemetry interface object.
+  std::weak_ptr<McastTelemetryInterface> get_telemetry_interface();
 
   struct Parameters {
     // How many times to repeat each packet. 0 disables data sending.
@@ -97,9 +101,11 @@ class McastVideoLinkTransmitter : boost::noncopyable {
 
   class Impl;
   class FrameConsumerImpl;
+  class TelemetryImpl;
 
   std::shared_ptr<Impl> impl_;
   std::shared_ptr<FrameConsumerImpl> frame_consumer_impl_;
+  std::shared_ptr<TelemetryImpl> telemetry_impl_;
 };
 
 class McastVideoLinkReceiver : boost::noncopyable {
