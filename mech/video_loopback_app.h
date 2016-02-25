@@ -17,6 +17,7 @@
 #include "base/component_archives.h"
 #include "base/fail.h"
 #include "base/logging.h"
+#include "base/now.h"
 
 #include "camera_driver.h"
 #include "gst_main_loop.h"
@@ -58,6 +59,10 @@ class VideoLoopbackApp : boost::noncopyable {
        std::bind(&VideoLoopbackApp::HandleStats, this,
                  std::placeholders::_1));
 
+    m_.video_link_rx->telemetry_ready_signal()->connect(
+        std::bind(&VideoLoopbackApp::ReceiveTelemetry, this,
+                  std::placeholders::_1, std::placeholders::_2));
+
     const std::string kAddr = "127.0.0.1:12542";
     m_.video_link_tx->parameters()->link.dest = kAddr;
     m_.video_link_rx->parameters()->link.source = kAddr;
@@ -65,6 +70,7 @@ class VideoLoopbackApp : boost::noncopyable {
 
   void AsyncStart(base::ErrorHandler handler) {
     parameters_.children.Start(handler);
+    StartTimer();
   }
 
   struct Members {
@@ -94,11 +100,16 @@ class VideoLoopbackApp : boost::noncopyable {
     // if True, crash when stats do indicate the video is not working.
     bool require_stats_good = false;
 
+    double debug_telemetry_period_s = 0.0;
+    double debug_telemetry_expire_s = 0.2;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       children.Serialize(a);
       a->Visit(MJ_NVP(max_stats));
       a->Visit(MJ_NVP(require_stats_good));
+      a->Visit(MJ_NVP(debug_telemetry_period_s));
+      a->Visit(MJ_NVP(debug_telemetry_expire_s));
     }
 
     Parameters(Members* m) : children(m) { }
@@ -137,11 +148,41 @@ class VideoLoopbackApp : boost::noncopyable {
     }
   }
 
+  void ReceiveTelemetry(const std::string& name, const std::string& data) {
+    if (log_.isDebugEnabled()) {
+      log_.debug("telemetry: " + name + ": '" + data + "'");
+    }
+  }
+
+  void StartTimer() {
+    if (parameters_.debug_telemetry_period_s == 0.0) { return; }
+
+    timer_.expires_from_now(base::ConvertSecondsToDuration(
+                                parameters_.debug_telemetry_period_s));
+    timer_.async_wait(std::bind(&VideoLoopbackApp::HandleTimer, this,
+                                std::placeholders::_1));
+  }
+
+  void HandleTimer(boost::system::error_code ec) {
+    base::FailIf(ec);
+    StartTimer();
+
+    auto tel = m_.video_link_tx->get_telemetry_interface().lock();
+    const auto now = base::Now(service_);
+    const auto next = now + base::ConvertSecondsToDuration(
+        parameters_.debug_telemetry_expire_s);
+    tel->SetTelemetry(
+        "debug",
+        (boost::format("%s") % base::Now(service_)).str(),
+        next);
+  }
+
   boost::asio::io_service& service_;
   Members m_;
   Parameters parameters_{&m_};
   int stats_count_ = 0;
   base::LogRef log_ = base::GetLogInstance("video_loopback_app");
+  base::DeadlineTimer timer_{service_};
 };
 
 }
