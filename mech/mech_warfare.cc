@@ -22,11 +22,14 @@
 #include "base/property_tree_archive.h"
 
 #include "drive_command.h"
+#include "mech_telemetry.h"
 
 namespace mjmech {
 namespace mech {
 
 namespace {
+const double kTelemetryTimeoutS = 0.2;
+
 typedef HerkuleXConstants HC;
 
 double Limit(double value, double min, double max) {
@@ -219,6 +222,19 @@ class MechWarfare::Impl : boost::noncopyable {
 
     data_.timestamp = base::Now(context_.service);
     data_signal_(&data_);
+
+    MechTelemetry telemetry;
+    telemetry.timestamp = data_.timestamp;
+    telemetry.turret_absolute_deg = parent_->m_.turret->data().absolute.x_deg;
+    telemetry.total_fire_time_s = parent_->m_.turret->data().total_fire_time_s;
+    telemetry.servo_min_voltage_V = servo_min_voltage_V_;
+    telemetry.servo_max_voltage_V = servo_max_voltage_V_;
+
+    telemetry_->SetTelemetry(
+        "mech",
+        base::TelemetryWriteArchive<MechTelemetry>::Serialize(&telemetry),
+        base::Now(service_) +
+        base::ConvertSecondsToDuration(kTelemetryTimeoutS));
   }
 
   void DoDrive() {
@@ -442,6 +458,20 @@ class MechWarfare::Impl : boost::noncopyable {
     }
   }
 
+  void HandleServoData(const ServoMonitor::ServoData* data) {
+    bool first = true;
+    for (const auto& servo: data->servos) {
+      if (servo.last_update.is_not_a_date_time()) { continue; }
+      if (first || servo.voltage_V < servo_min_voltage_V_) {
+        servo_min_voltage_V_ = servo.voltage_V;
+      }
+      if (first || servo.voltage_V > servo_max_voltage_V_) {
+        servo_max_voltage_V_ = servo.voltage_V;
+      }
+      first = false;
+    }
+  }
+
   MechWarfare* const parent_;
   base::Context& context_;
   boost::asio::io_service& service_;
@@ -454,7 +484,11 @@ class MechWarfare::Impl : boost::noncopyable {
 
   base::DeadlineTimer timer_;
 
+  std::shared_ptr<McastTelemetryInterface> telemetry_;
+
   std::vector<int> servos_to_configure_;
+  double servo_min_voltage_V_ = 0.0;
+  double servo_max_voltage_V_ = 0.0;
 
   Data data_;
   boost::signals2::signal<void (const Data*)> data_signal_;
@@ -478,6 +512,11 @@ MechWarfare::MechWarfare(base::Context& context)
   m_.servo_monitor->parameters()->servos = "0-11,98";
   m_.turret.reset(new Turret(context, m_.servo_base.get()));
   m_.video.reset(new VideoSenderApp(context));
+
+  impl_->telemetry_ = m_.video->telemetry_interface().lock();
+  m_.servo_monitor->data_signal()->connect(
+      std::bind(&Impl::HandleServoData, impl_.get(),
+                std::placeholders::_1));
 }
 
 MechWarfare::~MechWarfare() {}

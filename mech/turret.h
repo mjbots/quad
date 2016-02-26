@@ -93,6 +93,7 @@ class Turret : boost::noncopyable {
     int last_sequence = -1;
     bool last_rate = false;
     double disable_period_s = 0.0;
+    double total_fire_time_s = 0.0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -105,6 +106,7 @@ class Turret : boost::noncopyable {
       a->Visit(MJ_NVP(last_sequence));
       a->Visit(MJ_NVP(last_rate));
       a->Visit(MJ_NVP(disable_period_s));
+      a->Visit(MJ_NVP(total_fire_time_s));
     }
   };
 

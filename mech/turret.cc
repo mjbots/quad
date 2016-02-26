@@ -159,6 +159,9 @@ class Turret::Impl : boost::noncopyable {
 
     data_.fire_enabled = response.register_data.at(0) != 0;
     data_.agitator_enabled = response.register_data.at(1) != 0;
+    if (data_.fire_enabled) {
+      data_.total_fire_time_s += parameters_.period_s;
+    }
 
     Emit();
   }

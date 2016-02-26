@@ -111,10 +111,6 @@ class ServoMonitor : boost::noncopyable {
   /// list of integer servo ids that it represents.
   static std::vector<int> SplitServoIds(const std::string&);
 
- private:
-  ServoMonitor(boost::asio::io_service& service,
-               HerkuleXServo* servo);
-
   struct ServoData {
     boost::posix_time::ptime timestamp;
 
@@ -144,7 +140,16 @@ class ServoMonitor : boost::noncopyable {
     }
   };
 
-  boost::signals2::signal<void (const ServoData*)> servo_data_signal_;
+  typedef boost::signals2::signal<void (const ServoData*)> ServoDataSignal;
+
+  ServoDataSignal* data_signal() { return &servo_data_signal_; }
+
+ private:
+  ServoMonitor(boost::asio::io_service& service,
+               HerkuleXServo* servo);
+
+
+  ServoDataSignal servo_data_signal_;
 
   class Impl;
   std::unique_ptr<Impl> impl_;

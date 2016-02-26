@@ -95,6 +95,9 @@ class VideoSenderApp : boost::noncopyable {
 
   Parameters* parameters() { return &parameters_; }
   TargetTracker* target_tracker() { return m_.target_tracker.get(); }
+  std::weak_ptr<McastTelemetryInterface> telemetry_interface() {
+    return m_.video_link->get_telemetry_interface();
+  }
 
  private:
   void HandleStats(const CameraDriver::CameraStats* stats) {
