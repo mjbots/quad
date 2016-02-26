@@ -288,7 +288,7 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
       for (int index=0; index < num_packets; index++) {
         const int telemetry_remaining = telemetry.size() - telemetry_offset;
         const int video_remaining = video_len - video_offset;
-        const int total_remaining = telemetry_offset + video_remaining;
+        const int total_remaining = telemetry_remaining + video_remaining;
         const int this_data_size = std::min(data_size, total_remaining);
 
         const int telemetry_to_send =
