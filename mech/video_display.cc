@@ -73,7 +73,16 @@ class VideoDisplay::Impl : boost::noncopyable {
     if (!h264_src_) {
       base::Fail("got raw frame from video link, but other input is selected");
     }
+
     h264_src_(&frame->front(), frame->size());
+  }
+
+  void SetOsdText(const std::string& text) {
+    if (overlaytext_) {
+      g_object_set(overlaytext_,
+                   "text", text.c_str(),
+                   NULL);
+    }
   }
 
  private:
@@ -121,6 +130,9 @@ class VideoDisplay::Impl : boost::noncopyable {
     // Do some basic overlays.
     out << "! timeoverlay shaded_background=1 font_desc=8 valignment=bottom "
         << "   halignment=right ";
+
+    out << "! textoverlay name=txt shaded_background=1 font_desc=8 "
+        << "   valignment=bottom halignment=left line-alignment=left ";
 
     // Maybe pass it to our app for OSD.
     if (parameters_.process_frames) {
@@ -207,6 +219,8 @@ class VideoDisplay::Impl : boost::noncopyable {
         std::bind(&Impl::HandleVideoAnalyzeMessage,
                   this, std::placeholders::_1));
 
+    overlaytext_ = pipeline_->GetElementByName("txt");
+
     pipeline_->Start();
 
     // Set up the timer for stats
@@ -272,7 +286,7 @@ class VideoDisplay::Impl : boost::noncopyable {
   std::shared_ptr<Stats> stats_;
   boost::optional<boost::posix_time::ptime> last_decoded_time_;
 
-
+  GstElement* overlaytext_ = nullptr;
 };
 
 
@@ -291,6 +305,10 @@ void VideoDisplay::HandleGstReady(GstMainLoopRef& loop_ref) {
 
 void VideoDisplay::HandleIncomingFrame(std::shared_ptr<std::string>& data) {
   impl_->HandleIncomingFrame(data);
+}
+
+void VideoDisplay::SetOsdText(const std::string& text) {
+  impl_->SetOsdText(text);
 }
 
 }

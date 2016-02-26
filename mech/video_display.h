@@ -121,6 +121,10 @@ class VideoDisplay : boost::noncopyable {
   // WARNING: the argument to this function should never be changed afterwards!
   void HandleIncomingFrame(std::shared_ptr<std::string>&);
 
+  // Display the given text in the OSD text area in the lower left of
+  // the window.
+  void SetOsdText(const std::string&);
+
  private:
   boost::signals2::signal<void (const Stats*)> stats_signal_;
   boost::signals2::signal<void (Stats*)> pre_stats_signal_;

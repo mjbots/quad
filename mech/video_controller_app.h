@@ -14,13 +14,18 @@
 
 #pragma once
 
+#include <boost/format.hpp>
+
 #include "base/component_archives.h"
 #include "base/fail.h"
+#include "base/fast_stream.h"
 #include "base/logging.h"
+#include "base/telemetry_archive.h"
 
 #include "gst_main_loop.h"
-#include "video_display.h"
 #include "mcast_video_link.h"
+#include "mech_telemetry.h"
+#include "video_display.h"
 
 namespace mjmech {
 namespace mech {
@@ -41,6 +46,9 @@ class VideoControllerApp : boost::noncopyable {
     m_.video_link->frame_ready_signal()->connect(
       std::bind(&VideoDisplay::HandleIncomingFrame, m_.display.get(),
                 std::placeholders::_1));
+    m_.video_link->telemetry_ready_signal()->connect(
+        std::bind(&VideoControllerApp::HandleTelemetry, this,
+                  std::placeholders::_1, std::placeholders::_2));
 
     m_.display->stats_signal()->connect(
        std::bind(&VideoControllerApp::HandleStats, this,
@@ -110,6 +118,31 @@ class VideoControllerApp : boost::noncopyable {
     if (parameters_.max_stats && parameters_.max_stats <= stats_count_) {
       log_.notice("Got required number of stats, quitting");
       service_.stop();
+    }
+  }
+
+  void HandleTelemetry(const std::string& name,
+                       const std::string& data) {
+    if (name == "mech") {
+      base::FastIStringStream istr(data);
+
+      MechTelemetry telemetry;
+      try {
+        base::TelemetrySimpleReadArchive<MechTelemetry>::Deserialize(
+            &telemetry, istr);
+      } catch (base::SystemError& se) {
+        log_.warn("invalid telemetry: " + se.error_code().message());
+        return;
+      }
+
+      m_.display->SetOsdText(
+          (boost::format("Servo: %.1f/%.1f\n"
+                         "Fire: %.0f(s)\n"
+                         "Turret: %.0f(deg)") %
+           telemetry.servo_min_voltage_V %
+           telemetry.servo_max_voltage_V %
+           telemetry.total_fire_time_s %
+           telemetry.turret_absolute_deg).str());
     }
   }
 
