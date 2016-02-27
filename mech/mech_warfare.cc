@@ -462,6 +462,7 @@ class MechWarfare::Impl : boost::noncopyable {
     bool first = true;
     for (const auto& servo: data->servos) {
       if (servo.last_update.is_not_a_date_time()) { continue; }
+      if (servo.voltage_V == 0.0) { continue; }
       if (first || servo.voltage_V < servo_min_voltage_V_) {
         servo_min_voltage_V_ = servo.voltage_V;
       }
