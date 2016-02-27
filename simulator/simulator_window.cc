@@ -597,6 +597,14 @@ class SimulatorWindow::Impl {
     }
 
     uint8_t ReadRam(int servo, uint8_t addr) override {
+      if (servo <= 11) {
+        switch (addr) {
+          case 54: {
+            // Voltage:
+            return 100;
+          }
+        }
+      }
       return 0;
     }
 
