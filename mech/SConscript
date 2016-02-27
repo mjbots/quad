@@ -111,14 +111,15 @@ test_mech = testenv.Program('test_mech', TESTS + libmech + libbase)
 testenv.Command('test_mech.passed', test_mech,
                 '$SOURCE && touch $TARGET')
 
-mech_warfare_command = crenv.Program(
-    'mw_command',
-    ['mech_warfare_command.cc'] + libmech + libbase)
-
-
 for env in (crenv, gsenv):
     env['MODULE_MAIN_LIBS'] = libmech + libbase
     env['MODULE_MAIN_NSPREFIX'] = 'mech::'
+
+command_env = gsenv.Clone()
+command_env['MODULE_MAIN_LIBS'] = [
+    command_env.Object('mech_warfare_command.cc')
+] + command_env['MODULE_MAIN_LIBS']
+ModuleMain(command_env, 'mw_command', 'MWCommand')
 
 ModuleMain(crenv, 'mjmech_imu_driver', 'MjmechImuDriver')
 ModuleMain(gsenv, 'mech_warfare', 'MechWarfare')

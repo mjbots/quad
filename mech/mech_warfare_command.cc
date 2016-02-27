@@ -517,68 +517,6 @@ void Commander::SendMechMessage(const MechMessage& msg) {
   impl_->SendMechMessage(msg);
 }
 
-int work(int argc, char** argv) {
-  boost::asio::io_service service;
-
-  namespace po = boost::program_options;
-
-  double turret_pitch_rate_dps = 0.0;
-  double turret_yaw_rate_dps = 0.0;
-
-  Commander commander(service);
-
-  po::options_description desc("Allowable options");
-  desc.add_options()
-      ("help,h", "display usage message")
-      ("turret.pitch_rate_dps", po::value(&turret_pitch_rate_dps), "")
-      ("turret.yaw_rate_dps", po::value(&turret_yaw_rate_dps), "")
-      ;
-
-  ProgramOptionsArchive(&desc).Accept(commander.parameters());
-
-  po::variables_map vm;
-  po::store(po::parse_command_line(argc, argv, desc), vm);
-  po::notify(vm);
-
-  if (vm.count("help")) {
-    std::cerr << desc;
-    return 0;
-  }
-
-  MechMessage message;
-  if (commander.parameters()->joystick.empty()) {
-    message.gait = commander.parameters()->cmd;
-    TurretCommand& turret = message.turret;
-    if (turret_pitch_rate_dps != 0.0 ||
-        turret_yaw_rate_dps != 0.0) {
-      turret.rate = TurretCommand::Rate();
-      turret.rate->x_deg_s = turret_yaw_rate_dps;
-      turret.rate->y_deg_s = turret_pitch_rate_dps;
-    }
-    commander.AsyncStart([&](ErrorCode ec) {
-        FailIf(ec);
-        commander.SendMechMessage(message);
-        service.stop();
-        base::GetLogInstance("main").info("message sent");
-      });
-  } else {
-    commander.AsyncStart([=](ErrorCode ec) { FailIf(ec); });
-  }
-  service.run();
-
-  return 0;
-}
-
 }
 }
-}
-
-int main(int argc, char** argv) {
-  try {
-    return mjmech::mech::mw_command::work(argc, argv);
-  } catch (std::exception& e) {
-    std::cerr << "error: " << e.what() << "\n";
-    return 1;
-  }
-  return 0;
 }
