@@ -18,8 +18,8 @@
 #include "base/fail.h"
 #include "base/logging.h"
 
-#include "mcast_video_link.h"
 #include "mech_warfare_command.h"
+#include "video_controller_app.h"
 
 namespace mjmech {
 namespace mech {
@@ -30,7 +30,8 @@ class MWCommand : boost::noncopyable {
   template <typename Context>
   MWCommand(Context& context)
     : service_(context.service) {
-    m_.video_link.reset(new McastVideoLinkReceiver(context));
+    m_.video_controller.reset(new VideoControllerApp(context));
+    m_.commander.reset(new mw_command::Commander(service_));
   }
 
   void AsyncStart(base::ErrorHandler handler) {
@@ -43,22 +44,25 @@ class MWCommand : boost::noncopyable {
               handler(ec);
             });
 
-    parameters_.children.Start(joiner->Wrap("starting children"));
-    commander_.AsyncStart(joiner->Wrap("starting commander"));
+    m_.video_controller->AsyncStart(joiner->Wrap("starting video_controller"));
+    m_.commander->AsyncStart(joiner->Wrap("starting commander"));
   }
 
   struct Members {
-    std::unique_ptr<McastVideoLinkReceiver> video_link;
+    std::unique_ptr<VideoControllerApp> video_controller;
+    std::unique_ptr<mw_command::Commander> commander;
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(video_link));
+      a->Visit(MJ_NVP(video_controller));
+      a->Visit(MJ_NVP(commander));
     }
   };
 
   struct Parameters {
-    base::ComponentParameters<Members> children;
-    mw_command::Commander::Parameters* mw_params;
+    // We are not using ComponentParameters because we do not want an extra
+    // level of indirection in command line options.
+    Members* members = nullptr;
 
     // If true, sends a command once and immediately exits.
     bool send_once = false;
@@ -66,14 +70,12 @@ class MWCommand : boost::noncopyable {
     double turret_yaw_rate_dps = 0.0;
 
 
-    Parameters(base::ComponentParameters<Members> _children,
-               mw_command::Commander::Parameters* _mw_params)
-        : children(_children), mw_params(_mw_params) {};
+    Parameters(Members& m) : members(&m) {};
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      children.Serialize(a);
-      mw_params->Serialize(a);
+      members->video_controller->parameters()->Serialize(a);
+      members->commander->parameters()->Serialize(a);
 
       a->Visit(MJ_NVP(send_once));
       a->Visit(MJ_NVP(turret_pitch_rate_dps));
@@ -99,24 +101,21 @@ class MWCommand : boost::noncopyable {
     }
 
     mw_command::MechMessage message;
-    message.gait = commander_.parameters()->cmd;
+    message.gait = m_.commander->parameters()->cmd;
     TurretCommand& turret = message.turret;
     if (turret_set) {
       turret.rate = TurretCommand::Rate();
       turret.rate->x_deg_s = parameters_.turret_yaw_rate_dps;
       turret.rate->y_deg_s = parameters_.turret_pitch_rate_dps;
     }
-    commander_.SendMechMessage(message);
+    m_.commander->SendMechMessage(message);
     service_.stop();
     log_.info("message sent, exiting");
   };
 
   boost::asio::io_service& service_;
   Members m_;
-  // This is not a member because we do not want an extra level of indirection
-  // in command line options.
-  mw_command::Commander commander_{service_};
-  Parameters parameters_ = Parameters(&m_, commander_.parameters());
+  Parameters parameters_ = Parameters(m_);
   base::LogRef log_ = base::GetLogInstance("mw_command");
 };
 
