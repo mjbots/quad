@@ -43,16 +43,19 @@ class ErrorHandlerJoiner
     auto it = outstanding_.begin();
     auto me = shared_from_this();
     return [me, it, message](ErrorCode ec) {
-      me->log_.debugStream()
-          << "Complete [" << message << "]: result " << (!!ec)
-          <<  "', " << me->outstanding_.size() << " pending";
       if (me->done_) {
+        me->log_.warnStream()
+            << "Complete [" << message << "]: result " << (!!ec)
+            << ", but we are already done";
         // Another callback already finished early, eat this handler
         // and return.
         return;
       }
 
       me->outstanding_.erase(it);
+      me->log_.debugStream()
+          << "Complete [" << message << "]: result " << (!!ec)
+          <<  ", " << me->outstanding_.size() << " pending";
       if (ec || me->outstanding_.empty()) {
         ec.Append(message);
         me->log_.debug("All complete");
