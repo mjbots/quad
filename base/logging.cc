@@ -21,6 +21,7 @@
 
 #include <log4cpp/OstreamAppender.hh>
 #include <log4cpp/PatternLayout.hh>
+//#include <log4cpp/Formatter.hh>
 
 #include "telemetry_log.h"
 
@@ -171,6 +172,16 @@ TextLogMessageSignal* GetLogMessageSignal() {
 LogRef GetLogInstance(const std::string& name) {
   LoggerSetup::get();
   return log4cpp::Category::getInstance(name);
+}
+
+LogRef GetUniqueLogInstance(const std::string& name) {
+  static int id = 0;
+  std::ostringstream final;
+  final << name << "." << id;
+  id++;
+  return GetLogInstance(final.str());
+  //return GetLogInstance(
+  //    log4cpp::StringUtil::vform("%s.%d", name.c_str(), id));
 }
 
 LogRef GetSubLogger(LogRef parent, const std::string& name) {

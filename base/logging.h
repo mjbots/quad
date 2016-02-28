@@ -42,6 +42,9 @@ typedef log4cpp::Category& LogRef;
 //  - set the first element to C++ file name (lowercase, _-separated)
 LogRef GetLogInstance(const std::string& name);
 
+// Same as GetLogInstance, but appends a unique suffix to a name.
+LogRef GetUniqueLogInstance(const std::string& name);
+
 LogRef GetSubLogger(LogRef parent, const std::string& name);
 
 

@@ -19,6 +19,7 @@
 
 #include "comm.h"
 #include "error_code.h"
+#include "logging.h"
 
 namespace mjmech {
 namespace base {
@@ -28,15 +29,23 @@ namespace base {
 class ErrorHandlerJoiner
     : public std::enable_shared_from_this<ErrorHandlerJoiner> {
  public:
-  ErrorHandlerJoiner(ErrorHandler handler) : handler_(handler) {}
+  ErrorHandlerJoiner(ErrorHandler handler)
+      : handler_(handler),
+        log_(GetUniqueLogInstance("joiner")) {
+  }
 
   ErrorHandler Wrap(const std::string& message) {
     BOOST_ASSERT(!done_);
-
     outstanding_.push_front(true);
+    log_.debugStream()
+        << "Scheduling [" << message  << "], "
+        << outstanding_.size() << " pending";
     auto it = outstanding_.begin();
     auto me = shared_from_this();
     return [me, it, message](ErrorCode ec) {
+      me->log_.debugStream()
+          << "Complete [" << message << "]: result " << (!!ec)
+          <<  "', " << me->outstanding_.size() << " pending";
       if (me->done_) {
         // Another callback already finished early, eat this handler
         // and return.
@@ -46,6 +55,7 @@ class ErrorHandlerJoiner
       me->outstanding_.erase(it);
       if (ec || me->outstanding_.empty()) {
         ec.Append(message);
+        me->log_.debug("All complete");
         me->handler_(ec);
         me->done_ = true;
       }
@@ -55,6 +65,7 @@ class ErrorHandlerJoiner
   bool done_ = false;
   ErrorHandler handler_;
   std::list<bool> outstanding_;
+  LogRef log_;
 };
 }
 }
