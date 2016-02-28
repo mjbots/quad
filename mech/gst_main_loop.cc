@@ -52,6 +52,7 @@ class GstMainLoop::Impl : boost::noncopyable {
 
     std::lock_guard<std::mutex> guard(thread_mutex_);
     child_ = std::thread(std::bind(&Impl::Run, this, handler));
+    service_.post(std::bind(handler, base::ErrorCode()));
   }
 
   void WaitForQuit() {

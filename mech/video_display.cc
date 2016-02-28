@@ -54,6 +54,7 @@ class VideoDisplay::Impl : boost::noncopyable {
 
     started_ = true;
     parameters_ = parent_->parameters_;
+    parent_service_.post(std::bind(handler, base::ErrorCode()));
   }
 
   void HandleGstReady(GstMainLoopRef& loop_ref) {

@@ -232,6 +232,7 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
       log_.info("video_link tx disabled -- repeat_count is zero");
     }
     started_ = true;
+    service_.post(std::bind(handler, base::ErrorCode()));
   }
 
   void HandleVideoPacket(uint8_t* data, int video_len, bool key_frame) {
@@ -682,6 +683,7 @@ class McastVideoLinkReceiver::Impl : boost::noncopyable {
         std::bind(&Impl::HandlePacket, this, std::placeholders::_1,
                   std::placeholders::_2));
     started_ = true;
+    service_.post(std::bind(handler, base::ErrorCode()));
   }
 
   DataPacketSignal* packet_signal() { return &packet_signal_; }
