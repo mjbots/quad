@@ -116,7 +116,7 @@ class VideoDisplay::Impl : boost::noncopyable {
 
     // Maybe save them
     if (parameters_.write_video != "") {
-      out << "! tee name=h264-tee ! queue ! "
+      out << "! tee name=h264-tee ! queue ! h264parse ! "
           << gst::MuxerForVideoName(parameters_.write_video)
           << " ! filesink name=h264writer location="
           << gst::PipelineEscape(parameters_.write_video)
