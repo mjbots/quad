@@ -79,9 +79,9 @@ class MechWarfare : boost::noncopyable {
     /// maximum allowed translation linearly as the error decreases
     /// from @p drive_max_error_deg to @p drive_min_error_deg.  The
     /// maximum allowed translation is @p drive_max_translate_mm_s.
-    double drive_max_error_deg = 20.0;
+    double drive_max_error_deg = 40.0;
     double drive_min_error_deg = 10.0;
-    double drive_max_translate_mm_s = 400.0;
+    double drive_max_translate_mm_s = 200.0;
 
     double turret_bias_timeout_s = 1.5;
     std::string config_servos = "0-11";
