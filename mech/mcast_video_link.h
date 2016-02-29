@@ -96,6 +96,12 @@ class McastVideoLinkTransmitter : boost::noncopyable {
 
   Parameters* parameters() { return &parameters_; }
 
+  // This signal is emitted when we get a control command
+  // from the receiver.
+  typedef boost::signals2::signal<
+    void (const std::string&)> ControlCommandSignal;
+  ControlCommandSignal* control_command_signal();
+
  private:
   Parameters parameters_;
 
@@ -141,6 +147,9 @@ class McastVideoLinkReceiver : boost::noncopyable {
   TelemetryReadySignal* telemetry_ready_signal() {
     return &telemetry_ready_signal_;
   }
+
+  // Send a control command to the transmitter.
+  void SendControlCommand(const std::string& command);
 
  private:
   FrameReadySignal frame_ready_signal_;

@@ -205,6 +205,9 @@ struct DataPacketLog {
 };
 
 typedef boost::signals2::signal<void (const DataPacketLog*)> DataPacketSignal;
+
+// Control command prefix
+const std::string kControlCommandPrefix = "MVC1";
 }
 
 
@@ -227,6 +230,9 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
   void AsyncStart(base::ErrorHandler handler) {
     link_.reset(new base::UdpDataLink(
                     service_, log_, parameters_.link));
+    link_->data_signal()->connect(
+        std::bind(&Impl::HandleUdpPacket,
+                  this, std::placeholders::_1, std::placeholders::_2));
     if (parameters_.repeat_count == 0) {
       // Link is disabled
       log_.info("video_link tx disabled -- repeat_count is zero");
@@ -335,6 +341,10 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
 
   DataPacketSignal* packet_signal() { return &packet_signal_; }
 
+  ControlCommandSignal* control_command_signal() {
+    return &control_command_signal_;
+  }
+
  private:
   void TxNextPacket(boost::system::error_code ec) {
     base::FailIf(ec);
@@ -402,6 +412,16 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
     return ostr.str();
   }
 
+  void HandleUdpPacket(const std::string& data,
+                       const base::UdpDataLink::PeerInfo& peer) {
+    if (data.substr(0, kControlCommandPrefix.size()) ==
+        kControlCommandPrefix) {
+      control_command_signal_(data.substr(kControlCommandPrefix.size()));
+      return;
+    }
+    log_.warnStream() << "Unknown control packet from peer " << peer.name;
+  }
+
   // Variables which are only set in constructor or in Start()
   DataPacketSignal packet_signal_;
   McastVideoLinkTransmitter* const parent_;
@@ -412,6 +432,7 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
   base::LogRef log_ = base::GetLogInstance("mcast_video_tx");
   std::unique_ptr<base::UdpDataLink> link_;
   std::mutex queue_mutex_;
+  ControlCommandSignal control_command_signal_;
 
   // Queue-related variables. Protected by queue_mutex_.
   uint32_t total_frames_ = 0;
@@ -505,6 +526,10 @@ std::weak_ptr<McastTelemetryInterface
   return telemetry_impl_;
 }
 
+McastVideoLinkTransmitter::ControlCommandSignal*
+McastVideoLinkTransmitter::control_command_signal() {
+  return impl_->control_command_signal();
+}
 
 //
 //                          RECEIVER
@@ -689,6 +714,10 @@ class McastVideoLinkReceiver::Impl : boost::noncopyable {
   DataPacketSignal* packet_signal() { return &packet_signal_; }
   ReceivedFrameInfoSignal* frame_info_signal() { return &frame_info_signal_; }
 
+  void SendControlCommand(const std::string& command) {
+    link_->Send(kControlCommandPrefix + command);
+  }
+
  private:
   void ExpireOldFrames() {
     // Remove oldest frames
@@ -816,6 +845,10 @@ McastVideoLinkReceiver::~McastVideoLinkReceiver() {}
 
 void McastVideoLinkReceiver::AsyncStart(base::ErrorHandler handler) {
   impl_->AsyncStart(handler);
+}
+
+void McastVideoLinkReceiver::SendControlCommand(const std::string& command) {
+  SendControlCommand(command);
 }
 
 
