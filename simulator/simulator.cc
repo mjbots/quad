@@ -16,6 +16,7 @@
 
 #include <dart/dart.h>
 
+#include "base/logging.h"
 #include "base/program_options.h"
 #include "base/visitor.h"
 #include "simulator_window.h"
@@ -30,6 +31,7 @@ int main(int argc, char** argv) {
   desc.add_options()
       ("help,h", "display usage message")
       ;
+  base::AddLoggingOptions(&desc);
 
   SimulatorWindow window;
   base::MergeProgramOptions(window.options_description(),
@@ -44,6 +46,8 @@ int main(int argc, char** argv) {
     std::cerr << desc;
     return 0;
   }
+
+  base::InitLogging();
 
   glutInit(&argc, argv);
   window.initWindow(640, 480, "Mech Simulator");
