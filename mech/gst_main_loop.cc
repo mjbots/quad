@@ -19,6 +19,7 @@
 
 #include <gst/gst.h>
 
+#include <boost/asio/deadline_timer.hpp>
 #include <boost/format.hpp>
 
 #include "base/common.h"
@@ -28,7 +29,9 @@
 namespace mjmech {
 namespace mech {
 
-class GstMainLoop::Impl : boost::noncopyable {
+class GstMainLoop::Impl :
+      public std::enable_shared_from_this<Impl>,
+                  boost::noncopyable {
  public:
   Impl(GstMainLoop* parent, boost::asio::io_service& service)
       : parent_(parent),
@@ -51,14 +54,13 @@ class GstMainLoop::Impl : boost::noncopyable {
     parameters_ = parent_->parameters_;
 
     std::lock_guard<std::mutex> guard(thread_mutex_);
-    child_ = std::thread(std::bind(&Impl::Run, this, handler));
+    child_ = std::thread(std::bind(&Impl::Run, shared_from_this(), handler));
     service_.post(std::bind(handler, base::ErrorCode()));
   }
 
   void WaitForQuit() {
     const auto kShutdownTimeout = std::chrono::milliseconds(2000);
     BOOST_ASSERT(std::this_thread::get_id() == parent_id_);
-    std::unique_lock<std::mutex> lock(thread_mutex_);
 
     if (shutdown_complete_) {
       BOOST_ASSERT(!child_.joinable());
@@ -66,23 +68,44 @@ class GstMainLoop::Impl : boost::noncopyable {
       return;
     }
 
-    if (!loop_) {
+    if (!child_.joinable()) {
       log_.debug("was going to wait for quit, but we never started");
-      BOOST_ASSERT(!child_.joinable());
       return;
     }
 
     if (!shutdown_requested_) {
-      shutdown_requested_ = true;
+      {
+        std::lock_guard<std::mutex> guard(thread_mutex_);
+        shutdown_requested_ = true;
+      }
       log_.debug("requesting child thread shutdown");
-      BOOST_ASSERT(loop_);
+
+      // We may not have actually started our gst loop yet here if the
+      // child thread is slow.
+      while (true) {
+        {
+          std::lock_guard<std::mutex> guard(thread_mutex_);
+          if (loop_) { break; }
+        }
+
+        log_.debug("somehow the gst loop isn't active, sleeping");
+
+        boost::asio::deadline_timer timer(service_);
+        timer.expires_from_now(boost::posix_time::milliseconds(1000));
+        timer.wait();
+      }
+
       // TODO theamk: this will need to use to use explicit main loop if
       // we ever have more than one glib main loops.
-      g_timeout_add(1, shutdown_wrapper, this);
+      {
+        std::lock_guard<std::mutex> lock(thread_mutex_);
+        g_timeout_add(1, shutdown_wrapper, this);
+      }
     }
 
     log_.debug("waiting for child thread to quit");
 
+    std::unique_lock<std::mutex> lock(thread_mutex_);
     while (!shutdown_complete_) {
       if (shutdown_var_.wait_for(lock, kShutdownTimeout)
           == std::cv_status::timeout) {
@@ -122,7 +145,7 @@ class GstMainLoop::Impl : boost::noncopyable {
       loop_ = g_main_loop_new(NULL, FALSE);
     }
 
-    parent_->SignalReady();
+    service_.post(std::bind(&GstMainLoop::SignalReady, parent_));
 
     // Start main loop.
     g_main_loop_run(loop_);
@@ -196,6 +219,8 @@ class GstMainLoop::Impl : boost::noncopyable {
     std::shared_ptr<Impl> impl_ptr = parent_->impl_;
     GstMainLoopRefObj::QuitPostponerPtr ptr(new QuitPostponerImpl(impl_ptr));
     quit_request_signal_(ptr);
+
+    service_.post(std::bind(&Impl::DoShutdown, impl_ptr));
     // Will call FinishShutdownRequest in destructor
   }
 
@@ -204,6 +229,10 @@ class GstMainLoop::Impl : boost::noncopyable {
     log_.debug("all quit postponers are complete");
     quit_requested_ = true;
     g_main_loop_quit(loop_);
+  }
+
+  static void DoShutdown(std::shared_ptr<Impl> impl) {
+    // Let the impl fall off the end to be destroyed here.
   }
 
   // From both
@@ -239,7 +268,7 @@ GstMainLoop::~GstMainLoop() {}
 
 class GstMainLoop::MainLoopRefImpl : public GstMainLoopRefObj {
  public:
-  MainLoopRefImpl(std::shared_ptr<Impl>& impl)
+  MainLoopRefImpl(std::shared_ptr<Impl> impl)
       : impl_(impl) {};
 
   virtual boost::signals2::signal<void (QuitPostponerPtr&)
