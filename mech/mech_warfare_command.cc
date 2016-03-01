@@ -38,6 +38,11 @@ using namespace mjmech::base;
 namespace pt = boost::property_tree;
 typedef boost::asio::ip::udp udp;
 
+bool IsAxis(int item) {
+  if (item >= ABS_X && item <= ABS_MAX) { return true; }
+  return false;
+}
+
 struct AxisMapping {
   int translate_x = -1;
   int sign_translate_x = 1;
@@ -76,11 +81,8 @@ struct AxisMapping {
 
 AxisMapping GetAxisMapping(const LinuxInput* input) {
   auto features = input->features(EV_ABS);
-
-  // For now, we'll just hard-code the mapping used by jpieper's xbox
-  // controller.  In the long term, or even medium term, this should
-  // probably be configurable somehow.
   AxisMapping result;
+
   if (features.capabilities.test(ABS_X)) {
     result.translate_x = ABS_X;
     result.sign_translate_x = 1;
@@ -96,35 +98,71 @@ AxisMapping GetAxisMapping(const LinuxInput* input) {
     result.sign_body_y = -1;
   }
 
-  if (features.capabilities.test(ABS_RX)) {
-    result.rotate = ABS_RX;
-    result.sign_rotate = 1;
+  if (input->name().find("Logitech Dual Action") != std::string::npos) {
+    if (features.capabilities.test(ABS_Z)) {
+      result.rotate = ABS_Z;
+      result.sign_rotate = 1;
 
-    result.body_roll = ABS_RX;
-    result.sign_body_roll = 1;
+      result.body_roll = ABS_Z;
+      result.sign_body_roll = 1;
 
-    result.turret_x = ABS_RX;
-    result.sign_turret_x = 1;
+      result.turret_x = ABS_Z;
+      result.sign_turret_x = 1;
+    }
+
+    if (features.capabilities.test(ABS_RZ)) {
+      result.body_z = ABS_RZ;
+      result.sign_body_z = -1;
+
+      result.body_pitch = ABS_RZ;
+      result.sign_body_pitch = 1;
+
+      result.turret_y = ABS_RZ;
+      result.sign_turret_y = -1;
+    }
+
+    result.crouch = BTN_THUMB;
+    result.manual = BTN_PINKIE;
+    result.body = BTN_BASE;
+    result.turret = BTN_TOP2;
+
+    result.laser = BTN_TOP;
+    result.fire = BTN_BASE2;
+    result.agitator = BTN_JOYSTICK;
+  } else {
+    // For now, we'll just hard-code the mapping used by jpieper's xbox
+    // controller.  In the long term, or even medium term, this should
+    // probably be configurable somehow.
+    if (features.capabilities.test(ABS_RX)) {
+      result.rotate = ABS_RX;
+      result.sign_rotate = 1;
+
+      result.body_roll = ABS_RX;
+      result.sign_body_roll = 1;
+
+      result.turret_x = ABS_RX;
+      result.sign_turret_x = 1;
+    }
+    if (features.capabilities.test(ABS_RY)) {
+      result.body_z = ABS_RY;
+      result.sign_body_z = -1;
+
+      result.body_pitch = ABS_RY;
+      result.sign_body_pitch = 1;
+
+      result.turret_y = ABS_RY;
+      result.sign_turret_y = -1;
+    }
+
+    result.crouch = BTN_A;
+    result.manual = BTN_TR;
+    result.body = ABS_Z;
+    result.turret = BTN_TL;
+
+    result.laser = BTN_WEST;
+    result.fire = ABS_RZ;
+    result.agitator = BTN_NORTH;
   }
-  if (features.capabilities.test(ABS_RY)) {
-    result.body_z = ABS_RY;
-    result.sign_body_z = -1;
-
-    result.body_pitch = ABS_RY;
-    result.sign_body_pitch = 1;
-
-    result.turret_y = ABS_RY;
-    result.sign_turret_y = -1;
-  }
-
-  result.crouch = BTN_A;
-  result.manual = BTN_TR;
-  result.body = ABS_Z;
-  result.turret = BTN_TL;
-
-  result.laser = BTN_WEST;
-  result.fire = ABS_RZ;
-  result.agitator = BTN_NORTH;
 
   return result;
 }
@@ -271,11 +309,25 @@ class Commander::Impl {
   }
 
   bool body_enabled() const {
-    return linux_input_->abs_info(mapping_.body).scaled() > 0.0;
+    if (IsAxis(mapping_.body)) {
+      return linux_input_->abs_info(mapping_.body).scaled() > 0.0;
+    }
+    auto it = key_map_.find(mapping_.body);
+    if (it == key_map_.end()) { return false; }
+    return it->second;
   }
 
   bool turret_enabled() const {
     auto it = key_map_.find(mapping_.turret);
+    if (it == key_map_.end()) { return false; }
+    return it->second;
+  }
+
+  bool fire_enabled() const {
+    if (IsAxis(mapping_.fire)) {
+      return linux_input_->abs_info(mapping_.fire).scaled() > 0.0;
+    }
+    auto it = key_map_.find(mapping_.fire);
     if (it == key_map_.end()) { return false; }
     return it->second;
   }
@@ -343,8 +395,7 @@ class Commander::Impl {
           options_.turret_linear_transition_point,
           options_.turret_linear_fine_percent);
 
-      const bool do_fire =
-          linux_input_->abs_info(mapping_.fire).scaled() > 0.0;
+      const bool do_fire = fire_enabled();
       message.turret.fire_control.fire.sequence = sequence_++;
       using FM = TurretCommand::Fire::Mode;
       message.turret.fire_control.fire.command = do_fire ? FM::kCont : FM::kOff;
@@ -458,8 +509,7 @@ class Commander::Impl {
       command.body_offset_mm.z = options_.min_body_z_mm;
     }
 
-    const bool do_fire =
-        linux_input_->abs_info(mapping_.fire).scaled() > 0.0;
+    const bool do_fire = fire_enabled();
     command.fire_control.fire.sequence = sequence_++;
     using FM = TurretCommand::Fire::Mode;
     command.fire_control.fire.command = do_fire ? FM::kCont : FM::kOff;
@@ -473,13 +523,14 @@ class Commander::Impl {
 
     if (options_.verbose) {
       std::cout << boost::format(
-          "x=%4.0f y=%4.0f tx=%4.0f ty=%4.0f bx=%4.0f by=%4.0f") %
+          "x=%4.0f y=%4.0f tx=%4.0f ty=%4.0f bx=%4.0f by=%4.0f %s") %
           command.drive_mm_s.x %
           command.drive_mm_s.y %
           command.turret_rate_dps.yaw %
           command.turret_rate_dps.pitch %
           command.body_offset_mm.x %
-          command.body_offset_mm.y;
+          command.body_offset_mm.y %
+          (do_fire ? "FIRE" : "    ");
       std::cout << "\r";
       std::cout.flush();
     }
