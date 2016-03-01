@@ -118,9 +118,9 @@ class VideoDisplay::Impl : boost::noncopyable {
     if (parameters_.write_video != "") {
       out << "! tee name=h264-tee ! queue ! h264parse ! "
           << gst::MuxerForVideoName(parameters_.write_video)
-          << " ! filesink name=h264writer location="
-          << gst::PipelineEscape(parameters_.write_video)
-          << " h264-tee. ";
+          << " ! filesink name=h264writer blocksize=1024000 buffer-mode=2 "
+          << "location=" << gst::PipelineEscape(parameters_.write_video)
+          << " h264-tee. ! queue  ";
     }
 
     // Decode. We skip b-frames because we are not supposed to have them anyway.
