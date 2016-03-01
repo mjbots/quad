@@ -24,6 +24,13 @@ if [[ "$mach" == "armv7l" && "$USER" == "odroid" ]]; then
         (set -x;
             scons -j2 mech/build-armv7l/mech_warfare)
     fi
+    # TODO theamk: maybe restart camera
+    #  the topology is bus1 (bus2 is OTG port)
+    #     -> port3 (external devices, port2 is wired eth)
+    #     -> port1 (external; ports2/3 are double connection)
+    # if  /sys/bus/usb/devices/1-3.1/*\:1.0/driver
+    #   is a symlink to uvcvideo, all is fine; else we need to
+    # echo 0 then 1 to /sys/bus/usb/devices/1-3.1/authorized
     set -x
     mech/build-armv7l/mech_warfare -t camera_driver.stats \
          -c configs/mw.ini "$@"
