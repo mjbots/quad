@@ -145,7 +145,7 @@ class GstMainLoop::Impl :
       loop_ = g_main_loop_new(NULL, FALSE);
     }
 
-    service_.post(std::bind(&GstMainLoop::SignalReady, parent_));
+    parent_->SignalReady();
 
     // Start main loop.
     g_main_loop_run(loop_);
