@@ -240,6 +240,8 @@ class Turret::Impl : boost::noncopyable {
   }
 
   void SetFireControl(const TurretCommand::FireControl& command) {
+    const auto now = base::Now(service_);
+
     // Update the laser status.
     uint8_t leds = (command.laser_on ? 1 : 0) << 2;
     servo_->RamWrite(
@@ -249,28 +251,6 @@ class Turret::Impl : boost::noncopyable {
     const auto u8 = [](int val) {
       return static_cast<uint8_t>(std::max(0, std::min(255, val)));
     };
-
-    // Update the agitator status.
-    using AM = TurretCommand::AgitatorMode;
-    const uint8_t agitator_pwm = u8([&]() {
-        switch (command.agitator) {
-          case AM::kOff: {
-            return 0.0;
-          }
-          case AM::kOn: {
-            return parameters_.agitator_pwm;
-          }
-          case AM::kAuto: {
-            base::Fail("Unsupported agitator mode");
-          }
-        }
-        base::AssertNotReached();
-      }() * 255);
-
-    servo_->RamWrite(
-        parameters_.gimbal_address, AgitatorPwm, agitator_pwm,
-        std::bind(&Impl::HandleWrite, this, std::placeholders::_1));
-
 
     // Now do the fire control, only accept things where the sequence
     // number has advanced.
@@ -299,6 +279,20 @@ class Turret::Impl : boost::noncopyable {
         base::AssertNotReached();
       }();
 
+      if ((command.fire.command == FM::kNow1 ||
+           command.fire.command == FM::kCont) &&
+          data_.last_fire_command != command.fire.command) {
+        data_.auto_agitator_count++;
+        if (data_.auto_agitator_count == 2) {
+          data_.auto_agitator_count = 0;
+          data_.auto_agitator_end =
+              now + base::ConvertSecondsToDuration(
+                  parameters_.auto_agitator_time_s);
+        }
+      }
+
+      data_.last_fire_command = command.fire.command;
+
       const double pwm =
           (fire_time_s == 0.0) ? 0.0 : parameters_.fire_motor_pwm;
       const uint8_t fire_data[] = {
@@ -315,6 +309,32 @@ class Turret::Impl : boost::noncopyable {
           std::bind(&Impl::HandleWrite, this,
                     std::placeholders::_1));
     }
+
+    // Update the agitator status.
+    using AM = TurretCommand::AgitatorMode;
+    const uint8_t agitator_pwm = u8([&]() {
+        switch (command.agitator) {
+          case AM::kOff: {
+            return 0.0;
+          }
+          case AM::kOn: {
+            return parameters_.agitator_pwm;
+          }
+          case AM::kAuto: {
+            if (data_.auto_agitator_end.is_not_a_date_time() ||
+                data_.auto_agitator_end < now) {
+              return 0.0;
+            } else {
+              return parameters_.agitator_pwm;
+            }
+          }
+        }
+        base::AssertNotReached();
+      }() * 255);
+
+    servo_->RamWrite(
+        parameters_.gimbal_address, AgitatorPwm, agitator_pwm,
+        std::bind(&Impl::HandleWrite, this, std::placeholders::_1));
   }
 
   base::LogRef log_ = base::GetLogInstance("turret");

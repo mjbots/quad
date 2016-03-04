@@ -58,6 +58,7 @@ struct OptOptions {
   double max_turret_rate_deg_s = 100;
   double turret_linear_transition_point = 0.5;
   double turret_linear_fine_percent = 0.2;
+  bool manual_agitator = false;
   bool verbose = false;
 
   template <typename Archive>
@@ -79,6 +80,7 @@ struct OptOptions {
     a->Visit(MJ_NVP(max_turret_rate_deg_s));
     a->Visit(MJ_NVP(turret_linear_transition_point));
     a->Visit(MJ_NVP(turret_linear_fine_percent));
+    a->Visit(MJ_NVP(manual_agitator));
     a->Visit(MJ_NVP(verbose));
   }
 };

@@ -445,7 +445,7 @@ class Commander::Impl {
     message.turret.fire_control.laser_on = laser_on_;
     message.turret.fire_control.agitator =
         key_map_[mapping_.agitator] ?
-        TurretCommand::AgitatorMode::kOn : TurretCommand::AgitatorMode::kOff;
+        TurretCommand::AgitatorMode::kOn : agitator_off_mode();
 
     if (options_.verbose) {
       std::cout << boost::format(
@@ -516,7 +516,7 @@ class Commander::Impl {
     command.fire_control.laser_on = laser_on_;
     command.fire_control.agitator =
         key_map_[mapping_.agitator] ?
-        TurretCommand::AgitatorMode::kOn : TurretCommand::AgitatorMode::kOff;
+        TurretCommand::AgitatorMode::kOn : agitator_off_mode();
 
     std::string message_str = SerializeCommand(message);
     socket_->send_to(boost::asio::buffer(message_str), target_);
@@ -534,6 +534,12 @@ class Commander::Impl {
       std::cout << "\r";
       std::cout.flush();
     }
+  }
+
+  TurretCommand::AgitatorMode agitator_off_mode() const {
+    return options_.manual_agitator ?
+        TurretCommand::AgitatorMode::kOff :
+        TurretCommand::AgitatorMode::kAuto;
   }
 
   const Parameters& parameters_;

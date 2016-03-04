@@ -50,7 +50,7 @@ class Turret : boost::noncopyable {
     int error_disable_count = 3;
     double initial_disable_period_s = 1.0;
     double max_disable_period_s = 60.0;
-    double auto_agitator_time_s = 2.0;
+    double auto_agitator_time_s = 0.5;
     double min_x_deg = -120;
     double max_x_deg = 120;
     double min_y_deg = -35;
@@ -95,6 +95,11 @@ class Turret : boost::noncopyable {
     double disable_period_s = 0.0;
     double total_fire_time_s = 0.0;
 
+    boost::posix_time::ptime auto_agitator_end;
+    TurretCommand::Fire::Mode last_fire_command =
+        TurretCommand::Fire::Mode::kOff;
+    int auto_agitator_count = 0;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(timestamp));
@@ -107,6 +112,9 @@ class Turret : boost::noncopyable {
       a->Visit(MJ_NVP(last_rate));
       a->Visit(MJ_NVP(disable_period_s));
       a->Visit(MJ_NVP(total_fire_time_s));
+      a->Visit(MJ_NVP(auto_agitator_end));
+      a->Visit(MJ_ENUM(last_fire_command, TurretCommand::Fire::CommandMapper));
+      a->Visit(MJ_NVP(auto_agitator_count));
     }
   };
 
