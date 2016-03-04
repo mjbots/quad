@@ -55,7 +55,17 @@ double Limit(double value, double limit) {
   return (value > limit) ? limit : ((value < -limit) ? -limit : value);
 }
 
-class ServoController {
+class ServoInterface : boost::noncopyable {
+ public:
+  virtual ~ServoInterface() {}
+
+  virtual void SetPosition(double angle_rad) = 0;
+  virtual void Reboot() = 0;
+  virtual void WriteRam(uint8_t addr, uint8_t data) = 0;
+  virtual uint8_t ReadRam(uint8_t addr) = 0;
+};
+
+class ServoController : public ServoInterface {
  public:
   ServoController(const SkeletonPtr& skel,
                   Joint* joint,
@@ -68,8 +78,47 @@ class ServoController {
     joint->setCoulombFriction(0, 0.2);
   }
 
-  void SetPosition(double angle_rad) {
+  virtual ~ServoController() {}
+
+  void SetPosition(double angle_rad) override {
     desired_rad_ = angle_rad * sign_;
+  }
+
+  void Reboot() override {
+    // noop for now
+  }
+
+  void WriteRam(uint8_t addr, uint8_t data) override {
+    if (addr == 52) {
+      if (data == 0x40) {
+        // brake
+        SetFree();
+      } else if (data == 0x60) {
+        // on
+        SetTorque();
+      } else {
+        // off
+        SetFree();
+      }
+    };
+  }
+
+  uint8_t ReadRam(uint8_t addr) override {
+    switch (addr) {
+      case 48: {
+        // status error
+        return 0;
+      }
+      case 49: {
+        return power_factor_ != 0.0 ? 0x40 : 0x00;
+      }
+      case 54: {
+        // Voltage:
+        return 100;
+      }
+    }
+
+    return 0;
   }
 
   void SetSign(double sign) {
@@ -100,6 +149,7 @@ class ServoController {
   double power_factor_ = 0.0;
 };
 
+typedef std::shared_ptr<ServoInterface> ServoInterfacePtr;
 typedef std::shared_ptr<ServoController> ServoControllerPtr;
 
 void SetMass(BodyNodePtr body, double mass_kg) {
@@ -371,6 +421,10 @@ class SimulatorWindow::Impl {
         std::make_shared<ServoController>(
             skel, tibia->getParentJoint(), count - 1);
 
+    for (int i = 0; i < 3; i++) {
+      devices_[snum_start + i] = servos_[snum_start + i];
+    }
+
     return coxa;
   }
 
@@ -435,6 +489,7 @@ class SimulatorWindow::Impl {
         std::make_shared<ServoController>(
             skeleton, turret_pitch->getParentJoint(),
             skeleton->getNumDofs() - 1);
+    devices_[snum_start + 1] = servos_[snum_start + 1];
   }
 
   void CreateMech() {
@@ -560,52 +615,46 @@ class SimulatorWindow::Impl {
 
     bool address_valid(int) const override { return true; }
 
+    template <typename Functor>
+    void DoServo(int servo_addr, Functor functor) {
+      if (servo_addr == 0xfe) {
+        for (auto& device: parent_->devices_) {
+          functor(device.second.get());
+        }
+      } else {
+        auto it = parent_->devices_.find(servo_addr);
+        if (it != parent_->devices_.end()) {
+          return functor(it->second.get());
+        }
+      }
+    }
+
     void SJog(const std::vector<ServoAngle>& angles) override {
       for (const auto& angle: angles) {
-        auto it = parent_->servos_.find(angle.first);
-        if (it != parent_->servos_.end()) {
-          const double angle_deg = (angle.second - 512) * 0.325;
-          const double angle_rad = base::Radians(angle_deg);
-          it->second->SetPosition(angle_rad);
-        }
+        const double angle_deg = (angle.second - 512) * 0.325;
+        const double angle_rad = base::Radians(angle_deg);
+
+        DoServo(angle.first,
+                [&](ServoInterface* s) { s->SetPosition(angle_rad); });
       }
     }
 
     void Reboot(int servo) override {
-      // Noop.
+      DoServo(servo, [](ServoInterface* s) { s->Reboot(); });
     }
 
-    void WriteRam(int servo, uint8_t addr, uint8_t data) override {
-      if (addr == 52) {
-        auto command = [&](ServoController* servo) {
-          if (data == 0x40) {
-            // brake
-            servo->SetFree();
-          } else if (data == 0x60) {
-            // on
-            servo->SetTorque();
-          } else {
-            // off
-            servo->SetFree();
-          }
-        };
-        for (auto& servo: parent_->servos_) {
-          command(servo.second.get());
-        }
-      }
-      // Noop
+    void WriteRam(int servo_addr, uint8_t addr, uint8_t data) override {
+      DoServo(servo_addr, [&](ServoInterface* s) {
+          s->WriteRam(addr, data);
+        });
     }
 
     uint8_t ReadRam(int servo, uint8_t addr) override {
-      if (servo <= 11) {
-        switch (addr) {
-          case 54: {
-            // Voltage:
-            return 100;
-          }
-        }
-      }
-      return 0;
+      uint8_t result = 0;
+      DoServo(servo, [&](ServoInterface* s) {
+          result = s->ReadRam(addr);
+        });
+      return result;
     }
 
    private:
@@ -645,6 +694,7 @@ class SimulatorWindow::Impl {
   dart::dynamics::SkeletonPtr mech_;
   int current_joint_ = 0;
   std::map<int, ServoControllerPtr> servos_;
+  std::map<int, ServoInterfacePtr> devices_;
 
   base::Context context_;
   base::DebugDeadlineService* const debug_deadline_service_;

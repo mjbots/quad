@@ -194,8 +194,8 @@ class HerkulexProtocol::Impl {
   void HandleStat(uint8_t servo) {
     if (write_outstanding_) { return; }
 
-    tx_buffer_[kPacketData] = status_error_;
-    tx_buffer_[kPacketData + 1] = status_detail_;
+    tx_buffer_[kPacketData] = GetStatusError(servo);
+    tx_buffer_[kPacketData + 1] = GetStatusDetail(servo);
 
     SendData(servo, 0x47, 2); // STAT_ACK
   }
@@ -240,8 +240,8 @@ class HerkulexProtocol::Impl {
     for (uint8_t i = 0; i < len; i++) {
       tx_buffer_[kPacketData + i] = operations_.ReadRam(servo, address + i);
     }
-    tx_buffer_[kPacketData + 0 + len] = status_error_;
-    tx_buffer_[kPacketData + 1 + len] = status_detail_;
+    tx_buffer_[kPacketData + 0 + len] = GetStatusError(servo);
+    tx_buffer_[kPacketData + 1 + len] = GetStatusDetail(servo);
 
     SendData(servo, 0x44, len + 4);
   }
@@ -262,6 +262,14 @@ class HerkulexProtocol::Impl {
     }
 
     operations_.SJog(angles);
+  }
+
+  uint8_t GetStatusError(int servo) const {
+    return status_error_ | operations_.ReadRam(servo, 48);
+  }
+
+  uint8_t GetStatusDetail(int servo) const {
+    return status_detail_ | operations_.ReadRam(servo, 49);
   }
 
   void SendData(uint8_t from_servo, uint8_t cmd, std::size_t size) {
