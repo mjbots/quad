@@ -152,6 +152,61 @@ class ServoController : public ServoInterface {
 typedef std::shared_ptr<ServoInterface> ServoInterfacePtr;
 typedef std::shared_ptr<ServoController> ServoControllerPtr;
 
+class GimbalController : public ServoInterface {
+ public:
+  GimbalController(const SkeletonPtr& skel,
+                   Joint* yaw,
+                   int joint_dof,
+                   Joint* pitch,
+                   int pitch_dof) {
+    yaw->setVelocityUpperLimit(0, base::Radians(360));
+    yaw->setDampingCoefficient(0, 0.2);
+    yaw->setCoulombFriction(0, 0.2);
+
+    pitch->setVelocityUpperLimit(0, base::Radians(360));
+    pitch->setDampingCoefficient(0, 0.2);
+    pitch->setCoulombFriction(0, 0.2);
+  }
+
+  virtual ~GimbalController() {}
+
+  void SetPosition(double angle_rad) override {
+  }
+
+  void Reboot() override {
+  }
+
+  void WriteRam(uint8_t addr, uint8_t data) override {
+    switch (addr) {
+      case 52: {
+        if (data == 0x60) {
+          torque_on_ = true;
+        } else {
+          torque_on_ = false;
+        }
+        break;
+      }
+      case 0x7e: { // agitator pwm
+        agitator_pwm_ = data;
+        break;
+      }
+    }
+  }
+
+  uint8_t ReadRam(uint8_t addr) override {
+    switch (addr) {
+      case 49: {
+        return torque_on_ ? 0x40 : 0x00;
+      }
+    }
+    return 0;
+  }
+
+ private:
+  bool torque_on_ = false;
+  uint8_t agitator_pwm_ = 0;
+};
+
 void SetMass(BodyNodePtr body, double mass_kg) {
   BOOST_ASSERT(body->getNumCollisionShapes() == 1);
 
@@ -437,12 +492,6 @@ class SimulatorWindow::Impl {
                      Eigen::Vector3d(0.0, 0.0, -0.0157),
                      0.02);
 
-    const std::size_t snum_start = servos_.size();
-    servos_[snum_start + 0] =
-        std::make_shared<ServoController>(
-            skeleton, turret_yaw->getParentJoint(),
-            skeleton->getNumDofs() - 1);
-
     auto gimbal_base =
         std::make_shared<BoxShape>(Eigen::Vector3d(0.040, 0.0695, 0.003));
     gimbal_base->setLocalTransform(
@@ -485,11 +534,12 @@ class SimulatorWindow::Impl {
     // rather than off to the side and make it be the correct
     // magnitude.
 
-    servos_[snum_start + 1] =
-        std::make_shared<ServoController>(
-            skeleton, turret_pitch->getParentJoint(),
-            skeleton->getNumDofs() - 1);
-    devices_[snum_start + 1] = servos_[snum_start + 1];
+    devices_[0x62] = std::make_shared<GimbalController>(
+        skeleton,
+        turret_yaw->getParentJoint(),
+        skeleton->getNumDofs() - 2,
+        turret_pitch->getParentJoint(),
+        skeleton->getNumDofs() - 1);
   }
 
   void CreateMech() {
