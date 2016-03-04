@@ -94,6 +94,9 @@ class TargetTracker::Impl : public CameraFrameConsumer {
     cv::Mat mat(height, width, CV_8UC1, info.data);
 
     HandleImage(mat);
+
+    gst_memory_unmap(mem, &info);
+    gst_memory_unref(mem);
   }
 
   void HandleImage(const cv::Mat& mat) {
