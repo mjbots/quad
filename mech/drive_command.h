@@ -31,6 +31,8 @@ struct DriveCommand {
 
   TurretCommand::FireControl fire_control;
 
+  bool freeze_rotation = false;
+
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(drive_mm_s));
@@ -38,6 +40,7 @@ struct DriveCommand {
     a->Visit(MJ_NVP(body_offset_mm));
     a->Visit(MJ_NVP(body_attitude_deg));
     a->Visit(MJ_NVP(fire_control));
+    a->Visit(MJ_NVP(freeze_rotation));
   }
 };
 

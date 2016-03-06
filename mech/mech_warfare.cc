@@ -281,6 +281,9 @@ class MechWarfare::Impl : boost::noncopyable {
             base::WrapNeg180To180(heading_deg - 180.0);
         error_deg = reverse_error_deg;
       }
+      if (data_.current_drive.freeze_rotation) {
+        error_deg = 0.0;
+      }
       const double correction_dps = Limit(error_deg * p.drive_rotate_factor,
                                           p.drive_max_rotate_dps);
       gait.rotate_deg_s += correction_dps;

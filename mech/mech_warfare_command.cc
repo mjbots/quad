@@ -76,7 +76,7 @@ struct AxisMapping {
   int crouch = -1;
   int manual = -1;
   int body = -1;
-  int turret = -1;
+  int freeze = -1;
 };
 
 AxisMapping GetAxisMapping(const LinuxInput* input) {
@@ -124,7 +124,7 @@ AxisMapping GetAxisMapping(const LinuxInput* input) {
     result.crouch = BTN_THUMB;
     result.manual = BTN_PINKIE;
     result.body = BTN_BASE;
-    result.turret = BTN_TOP2;
+    result.freeze = BTN_TOP2;
 
     result.laser = BTN_TOP;
     result.fire = BTN_BASE2;
@@ -157,7 +157,7 @@ AxisMapping GetAxisMapping(const LinuxInput* input) {
     result.crouch = BTN_A;
     result.manual = BTN_TR;
     result.body = ABS_Z;
-    result.turret = BTN_TL;
+    result.freeze = BTN_TL;
 
     result.laser = BTN_WEST;
     result.fire = ABS_RZ;
@@ -317,8 +317,8 @@ class Commander::Impl {
     return it->second;
   }
 
-  bool turret_enabled() const {
-    auto it = key_map_.find(mapping_.turret);
+  bool freeze_enabled() const {
+    auto it = key_map_.find(mapping_.freeze);
     if (it == key_map_.end()) { return false; }
     return it->second;
   }
@@ -339,7 +339,7 @@ class Commander::Impl {
   }
 
   bool drive_enabled() const {
-    return !body_enabled() && !turret_enabled() && !manual_enabled();
+    return !body_enabled() && !manual_enabled();
   }
 
   void HandleTimeout(ErrorCode ec) {
@@ -376,30 +376,7 @@ class Commander::Impl {
 
     command = command_;
 
-    if (turret_enabled()) {
-      message.turret.rate = TurretCommand::Rate();
-      MaybeMapNonLinear(
-          &(message.turret.rate->x_deg_s),
-          mapping_.turret_x, mapping_.sign_turret_x,
-          0,
-          -options_.max_turret_rate_deg_s,
-          options_.max_turret_rate_deg_s,
-          options_.turret_linear_transition_point,
-          options_.turret_linear_fine_percent);
-      MaybeMapNonLinear(
-          &(message.turret.rate->y_deg_s),
-          mapping_.turret_y, mapping_.sign_turret_y,
-          0,
-          -options_.max_turret_rate_deg_s,
-          options_.max_turret_rate_deg_s,
-          options_.turret_linear_transition_point,
-          options_.turret_linear_fine_percent);
-
-      const bool do_fire = fire_enabled();
-      message.turret.fire_control.fire.sequence = sequence_++;
-      using FM = TurretCommand::Fire::Mode;
-      message.turret.fire_control.fire.command = do_fire ? FM::kCont : FM::kOff;
-    } else {
+    if (!body_enabled()) {
       MaybeMap(&command.translate_x_mm_s, mapping_.translate_x,
                mapping_.sign_translate_x,
                command_.translate_x_mm_s,
@@ -428,7 +405,7 @@ class Commander::Impl {
         command.rotate_deg_s != 0;
     command.lift_height_percent = active ? 100.0 : 0.0;
 
-    if (!key_map_[mapping_.body]) {
+    if (!body_enabled()) {
       if (active) {
         if (command.translate_y_mm_s > 0.0) {
           command.body_y_mm = options_.forward_body_y_mm;
@@ -480,30 +457,32 @@ class Commander::Impl {
     command.body_attitude_deg.pitch = command_.body_pitch_deg;
     command.body_attitude_deg.roll = command_.body_roll_deg;
 
-    MaybeMap(&command.drive_mm_s.x, mapping_.translate_x,
-             mapping_.sign_translate_x,
-             command_.translate_x_mm_s,
-             -options_.max_translate_x_mm_s, options_.max_translate_x_mm_s);
-    MaybeMap(&command.drive_mm_s.y, mapping_.translate_y,
-             mapping_.sign_translate_y,
-             command_.translate_y_mm_s,
-             -options_.max_translate_y_mm_s, options_.max_translate_y_mm_s);
-    MaybeMapNonLinear(
-        &command.turret_rate_dps.yaw, mapping_.turret_x,
-        mapping_.sign_turret_x,
-        0,
-        -options_.max_turret_rate_deg_s,
-        options_.max_turret_rate_deg_s,
-        options_.turret_linear_transition_point,
-        options_.turret_linear_fine_percent);
-    MaybeMapNonLinear(
-        &command.turret_rate_dps.pitch, mapping_.turret_y,
-        mapping_.sign_turret_y,
-        0,
-        -options_.max_turret_rate_deg_s,
-        options_.max_turret_rate_deg_s,
-        options_.turret_linear_transition_point,
-        options_.turret_linear_fine_percent);
+    if (!body_enabled()) {
+      MaybeMap(&command.drive_mm_s.x, mapping_.translate_x,
+               mapping_.sign_translate_x,
+               command_.translate_x_mm_s,
+               -options_.max_translate_x_mm_s, options_.max_translate_x_mm_s);
+      MaybeMap(&command.drive_mm_s.y, mapping_.translate_y,
+               mapping_.sign_translate_y,
+               command_.translate_y_mm_s,
+               -options_.max_translate_y_mm_s, options_.max_translate_y_mm_s);
+      MaybeMapNonLinear(
+          &command.turret_rate_dps.yaw, mapping_.turret_x,
+          mapping_.sign_turret_x,
+          0,
+          -options_.max_turret_rate_deg_s,
+          options_.max_turret_rate_deg_s,
+          options_.turret_linear_transition_point,
+          options_.turret_linear_fine_percent);
+      MaybeMapNonLinear(
+          &command.turret_rate_dps.pitch, mapping_.turret_y,
+          mapping_.sign_turret_y,
+          0,
+          -options_.max_turret_rate_deg_s,
+          options_.max_turret_rate_deg_s,
+          options_.turret_linear_transition_point,
+          options_.turret_linear_fine_percent);
+    }
 
     if (key_map_[mapping_.crouch]) {
       command.body_offset_mm.z = options_.min_body_z_mm;
@@ -517,20 +496,22 @@ class Commander::Impl {
     command.fire_control.agitator =
         key_map_[mapping_.agitator] ?
         TurretCommand::AgitatorMode::kOn : agitator_off_mode();
+    command.freeze_rotation = freeze_enabled();
 
     std::string message_str = SerializeCommand(message);
     socket_->send_to(boost::asio::buffer(message_str), target_);
 
     if (options_.verbose) {
       std::cout << boost::format(
-          "x=%4.0f y=%4.0f tx=%4.0f ty=%4.0f bx=%4.0f by=%4.0f %s") %
+          "x=%4.0f y=%4.0f tx=%4.0f ty=%4.0f bx=%4.0f by=%4.0f %s %s") %
           command.drive_mm_s.x %
           command.drive_mm_s.y %
           command.turret_rate_dps.yaw %
           command.turret_rate_dps.pitch %
           command.body_offset_mm.x %
           command.body_offset_mm.y %
-          (do_fire ? "FIRE" : "    ");
+          (do_fire ? "FIRE" : "    ") %
+          (command.freeze_rotation ? "FREEZE" : "      ");
       std::cout << "\r";
       std::cout.flush();
     }
