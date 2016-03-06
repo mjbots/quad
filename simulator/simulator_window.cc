@@ -51,6 +51,9 @@ const double kConvert_kgf_cm_to_N_m = 10.197162;
 const double kServo_kp = 10.0;
 const double kServo_kd = 0.1;
 
+const double kGimbal_kp = 0.1;
+const double kGimbalLimit = 10.0;
+
 double Limit(double value, double limit) {
   return (value > limit) ? limit : ((value < -limit) ? -limit : value);
 }
@@ -63,6 +66,7 @@ class ServoInterface : boost::noncopyable {
   virtual void Reboot() = 0;
   virtual void WriteRam(uint8_t addr, uint8_t data) = 0;
   virtual uint8_t ReadRam(uint8_t addr) = 0;
+  virtual void Update(double dt_s) = 0;
 };
 
 class ServoController : public ServoInterface {
@@ -125,7 +129,7 @@ class ServoController : public ServoInterface {
     sign_ = sign;
   }
 
-  void Update() {
+  void Update(double dt_s) override {
     const double position = skeleton_->getPosition(dof_number_);
     const double velocity = skeleton_->getVelocity(dof_number_);
 
@@ -156,9 +160,13 @@ class GimbalController : public ServoInterface {
  public:
   GimbalController(const SkeletonPtr& skel,
                    Joint* yaw,
-                   int joint_dof,
+                   int yaw_dof,
                    Joint* pitch,
-                   int pitch_dof) {
+                   int pitch_dof)
+      : skeleton_(skel),
+        yaw_dof_(yaw_dof),
+        pitch_dof_(pitch_dof),
+        pitch_node_(pitch->getChildBodyNode()) {
     yaw->setVelocityUpperLimit(0, base::Radians(360));
     yaw->setDampingCoefficient(0, 0.2);
     yaw->setCoulombFriction(0, 0.2);
@@ -186,6 +194,29 @@ class GimbalController : public ServoInterface {
         }
         break;
       }
+      // pitch rate
+      case 0x6c:
+      case 0x6d:
+      case 0x6e:
+      case 0x6f: {
+        const int shift = (addr - 0x6c) * 7;
+        const int mask = 0x7f << shift;
+        pitch_rate_mdps_ = (pitch_rate_mdps_ & (~mask)) | (data << shift);
+        break;
+      }
+
+        //  yaw rate
+      case 0x70:
+      case 0x71:
+      case 0x72:
+      case 0x73: {
+        const int shift = (addr - 0x70) * 7;
+        const int mask = 0x7f << shift;
+        yaw_rate_mdps_ = (yaw_rate_mdps_ & (~mask)) | (data << shift);
+
+        break;
+      }
+
       case 0x7e: { // agitator pwm
         agitator_pwm_ = data;
         break;
@@ -198,13 +229,101 @@ class GimbalController : public ServoInterface {
       case 49: {
         return torque_on_ ? 0x40 : 0x00;
       }
+      case 0x60:
+      case 0x61:
+      case 0x62:
+      case 0x63: {
+        const int shift = (addr - 0x60) * 7;
+        const int yaw_mdps = static_cast<int>(absolute_yaw_deg_ * 1000.0);
+        return (yaw_mdps >> shift) & 0x7f;
+      }
     }
     return 0;
   }
 
+  static double MakeDps(int mdeg) {
+    if (mdeg < (1 << 27)) {
+      return static_cast<double>(mdeg) / 1000.0;
+    } else {
+      return static_cast<double>(mdeg - (1 << 28)) / 1000.0;
+    }
+  }
+
+  void Update(double dt_s) override {
+    const double pitch_rate_dps = MakeDps(pitch_rate_mdps_);
+    const double yaw_rate_dps = MakeDps(yaw_rate_mdps_);
+
+    pitch_deg_ += pitch_rate_dps * dt_s;
+    yaw_deg_ += yaw_rate_dps * dt_s;
+
+    if (pitch_deg_ < -20.0) { pitch_deg_ = -20.0; }
+    if (pitch_deg_ > 20.0) { pitch_deg_ = 20.0; }
+
+    const auto transform = pitch_node_->getWorldTransform();
+    const auto rotation =
+        transform.rotation() *
+        Eigen::AngleAxisd(0.5 * M_PI, Eigen::Vector3d::UnitX());
+    const auto euler = rotation.eulerAngles(0, 1, 2);
+
+    // TODO jpieper: pitch and roll are not correct here.  However,
+    // for the moment, I really only care about yaw so am not
+    // investigating any further.
+
+    //const double actual_roll_deg = base::Degrees(euler[0]) - 90;
+    const double actual_yaw_deg = -(base::Degrees(euler[1]) - 180);
+    const double actual_pitch_deg =
+        base::WrapNeg180To180(base::Degrees(euler[2]) + 180);
+
+    const double change = actual_yaw_deg - last_actual_yaw_deg_;
+    if (std::abs(change) > 90.0) {
+      if (actual_yaw_deg > last_actual_yaw_deg_) {
+        yaw_wrap_deg_ -= 360.0;
+      } else {
+        yaw_wrap_deg_ += 360.0;
+      }
+    }
+    last_actual_yaw_deg_ = actual_yaw_deg;
+
+    const double unwrapped_actual_yaw_deg = actual_yaw_deg + yaw_wrap_deg_;
+
+    const double yaw_error =
+        unwrapped_actual_yaw_deg - yaw_deg_;
+    const double pitch_error =
+        base::WrapNeg180To180(actual_pitch_deg - pitch_deg_);
+
+    const double power = torque_on_ ? 1.0 : 0.0;
+
+    const double kMaxForce_kgf_cm = 12.0;
+    const double kLimit = kMaxForce_kgf_cm / kConvert_kgf_cm_to_N_m;
+    const double yaw_control = Limit(yaw_error * kGimbal_kp, kLimit);
+    const double pitch_control = Limit(pitch_error * kGimbal_kp, kLimit);
+
+    skeleton_->setForce(yaw_dof_, -yaw_control * power);
+    skeleton_->setForce(pitch_dof_, -pitch_control * power);
+
+    absolute_yaw_deg_ = base::WrapNeg180To180(
+        base::Degrees(skeleton_->getPosition(yaw_dof_)));
+  }
+
  private:
+  SkeletonPtr skeleton_;
+  const int yaw_dof_;
+  const int pitch_dof_;
+  const BodyNode* pitch_node_;
+
   bool torque_on_ = false;
   uint8_t agitator_pwm_ = 0;
+
+  int pitch_rate_mdps_ = 0;
+  int yaw_rate_mdps_ = 0;
+
+  double pitch_deg_ = 0.0;
+  double yaw_deg_ = 0.0;
+
+  double last_actual_yaw_deg_ = 0.0;
+  double yaw_wrap_deg_ = 0.0;
+
+  double absolute_yaw_deg_ = 0.0;
 };
 
 void SetMass(BodyNodePtr body, double mass_kg) {
@@ -393,7 +512,7 @@ class SimulatorWindow::Impl {
          "do not start the mech instance")
         ("start-disabled", po::bool_switch(&start_disabled_),
          "begin in paused mode")
-        ("turret-enabled", po::bool_switch(&turret_enabled_),
+        ("disable-turret", po::bool_switch(&disable_turret_),
          "include turret model")
         ;
 
@@ -530,6 +649,16 @@ class SimulatorWindow::Impl {
                      Eigen::Vector3d(0.0, -0.5 * 0.0695, -0.128),
                      0.02);
 
+    auto barrel =
+        std::make_shared<BoxShape>(
+            Eigen::Vector3d(0.200, 0.03, 0.03));
+    barrel->setLocalTransform(
+        Eigen::Isometry3d(
+            Eigen::Translation3d(
+                Eigen::Vector3d(
+                    0.03, 0.04, 0.0))));
+    turret_pitch->addVisualizationShape(barrel);
+
     // TODO jpieper: Put the turret mass at the correct location,
     // rather than off to the side and make it be the correct
     // magnitude.
@@ -572,7 +701,7 @@ class SimulatorWindow::Impl {
     auto leg_lf = MakeLeg(
         result, body, Eigen::Vector3d(0.09, -0.062, 0.0), 1, "lf");
 
-    if (turret_enabled_) {
+    if (!disable_turret_) {
       CreateTurret(result, body);
     }
 
@@ -609,13 +738,15 @@ class SimulatorWindow::Impl {
   }
 
   void timeStepping() {
-    for (auto& pair: servos_) {
-      pair.second->Update();
+    const double dt_s = world_->getTimeStep();
+
+    for (auto& pair: devices_) {
+      pair.second->Update(dt_s);
     }
 
     debug_deadline_service_->SetTime(
         base::Now(context_.service) +
-        base::ConvertSecondsToDuration(world_->getTimeStep()));
+        base::ConvertSecondsToDuration(dt_s));
     context_.service.poll();
     context_.service.reset();
   }
@@ -741,6 +872,7 @@ class SimulatorWindow::Impl {
   }
 
   std::shared_ptr<dart::simulation::World> world_;
+  dart::dynamics::SkeletonPtr floor_;
   dart::dynamics::SkeletonPtr mech_;
   int current_joint_ = 0;
   std::map<int, ServoControllerPtr> servos_;
@@ -764,7 +896,7 @@ class SimulatorWindow::Impl {
   std::string log_file_;
   bool disable_mech_ = false;
   bool start_disabled_ = false;
-  bool turret_enabled_ = false;
+  bool disable_turret_ = false;
 
   std::list<std::shared_ptr<I2CDevice> > i2c_devices_;
   std::multimap<boost::posix_time::ptime, base::NullHandler> callbacks_;
@@ -772,7 +904,8 @@ class SimulatorWindow::Impl {
 };
 
 SimulatorWindow::SimulatorWindow() : impl_(new Impl()) {
-  impl_->world_->addSkeleton(createFloor());
+  impl_->floor_ = createFloor();
+  impl_->world_->addSkeleton(impl_->floor_);
 
   setWorld(impl_->world_);
 }
