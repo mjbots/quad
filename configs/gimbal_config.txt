@@ -7,13 +7,13 @@ pimu.offset_deg.pitch 0.000000
 pimu.offset_deg.roll 0.000000
 yawenc.i2c_address 64
 yawblenc.sign -1
-yawblenc.offset_deg 55.000000
-yawblenc.phase_center_deg -20.799999
+yawblenc.offset_deg -108.000000
+yawblenc.phase_center_deg -3.000000
 yawblenc.poles 7
 pitchenc.i2c_address 128
 pitchblenc.sign 1
-pitchblenc.offset_deg 165.000000
-pitchblenc.phase_center_deg 1.500000
+pitchblenc.offset_deg 0.000000
+pitchblenc.phase_center_deg -6.500000
 pitchblenc.poles 7
 mahony.bias_period_s 1.000000
 mahony.kp 2.000000
@@ -47,5 +47,5 @@ gimbal.yaw.control_derate 0.200000
 gimbal.yaw.mode 1
 gimbal.pitch_limit.min_deg -15.000000
 gimbal.pitch_limit.max_deg 30.000000
-gimbal.abs_yaw_limit.min_deg 0.000000
-gimbal.abs_yaw_limit.max_deg 0.000000
+gimbal.abs_yaw_limit.min_deg -130.000000
+gimbal.abs_yaw_limit.max_deg 130.000000
