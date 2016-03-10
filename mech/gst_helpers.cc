@@ -43,12 +43,31 @@ std::string FormatFraction(double val) {
 std::string MuxerForVideoName(const std::string& name) {
   std::string tail = name.substr(
       std::max(0, static_cast<int>(name.size()) - 4));
-  if (tail == ".mkv") {
-    return "matroskamux streamable=true";
+  if (tail == ".raw" || tail == "h264") {
+    // Simplest format. mpv complains due to lack of timestamps, vlc fails.
+    // TODO theamk: figure out why and fix. Maybe put timestamp when we inject
+    // buffers into appsink and/or set {disable-passthrough,config-interval}
+    // on h264parse?
+    return "identity";
+  } else if (tail == ".mkv") {
+    // streamable=true seems to always produce a file which is 314 bytes long.
+    // We set index interval to 1 second.
+    return "matroskamux min-index-interval=1000000000";
   } else if (tail == ".avi") {
+    // Assumes fixed framerate. Our camera decreases framerate when dark, so
+    // timestamp becomes off in this case.
+    // Fails to negotiate on receiver side because we do not set framerate in
+    // appsrc caps.
     return "avimux";
   } else if (tail == ".mp4") {
-    return "mp4mux";
+    // On receiver side, this produces file which has invalid timestamps,
+    // unfortunately.
+    // use fragmented file, so at most 1000mS will be lost on crash.
+    return "mp4mux fragment-duration=1000 presentation-time=false ";
+  } else if (tail == "mpeg" || tail == ".mpg") {
+    // use mpeg program stream. The stream is playable in mpv with 'No PTS'
+    // errors, and broken in VLC.
+    return "mpegpsmux";
   } else {
     base::Fail(
         std::string("Unknown h264 savefile extension ") + tail);
