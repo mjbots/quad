@@ -43,28 +43,26 @@ std::string FormatFraction(double val) {
 std::string MuxerForVideoName(const std::string& name) {
   std::string tail = name.substr(
       std::max(0, static_cast<int>(name.size()) - 4));
-  if (tail == ".raw" || tail == "h264") {
-    // Simplest format. mpv complains due to lack of timestamps, vlc fails.
-    // TODO theamk: figure out why and fix. Maybe put timestamp when we inject
-    // buffers into appsink and/or set {disable-passthrough,config-interval}
-    // on h264parse?
+
+  // We cannot use 'avi' here because it assumes fixed framerate. Our camera
+  // decreases framerate when dark, so timestamp becomes off in this case. It
+  // also fails to negotiate on receiver side because we do not set framerate
+  // in appsrc caps.
+
+  if (tail == ".raw") {
+    // Simplest format. Used for debugging only -- mpv complains due to lack
+    // of timestamps, vlc fails.
     return "identity";
   } else if (tail == ".mkv") {
-    // streamable=true seems to always produce a file which is 314 bytes long.
-    // We set index interval to 1 second.
+    // Works. vlc does not show total time.
+    // insert an index every second.
     return "matroskamux min-index-interval=1000000000";
-  } else if (tail == ".avi") {
-    // Assumes fixed framerate. Our camera decreases framerate when dark, so
-    // timestamp becomes off in this case.
-    // Fails to negotiate on receiver side because we do not set framerate in
-    // appsrc caps.
-    return "avimux";
   } else if (tail == ".mp4") {
-    // On receiver side, this produces file which has invalid timestamps,
-    // unfortunately.
-    // use fragmented file, so at most 1000mS will be lost on crash.
+    // Works.
+    // use fragmented file, so at most 1 second will be lost on crash.
     return "mp4mux fragment-duration=1000 presentation-time=false ";
   } else if (tail == "mpeg" || tail == ".mpg") {
+    // Works.
     // use mpeg program stream. The stream is playable in mpv with 'No PTS'
     // errors, and broken in VLC.
     return "mpegpsmux";
@@ -212,12 +210,17 @@ PipelineWrapper::SetupAppsrc(
   // Do not queue more than one buffer.
   //gst_app_src_set_max_bytes(src, 1);
 
-  //return std::bind<void(void*, int)>(
-  //    &PipelineWrapper::SendAppsrcSample, this,
-  //    (void*)src, std::placeholders::_1, std::placeholders::_2);
   return [=](void* data, int len) {
     SendAppsrcSample(src, data, len);
   };
+}
+
+GstClockTime PipelineWrapper::get_time() {
+  GstClock* clock = gst_pipeline_get_clock(GST_PIPELINE(pipeline_));
+  BOOST_ASSERT(clock);
+  GstClockTime now = gst_clock_get_time(clock);
+  gst_object_unref(clock);
+  return now;
 }
 
 void PipelineWrapper::SendAppsrcSample(void* obj, void* data, int len) {
@@ -225,8 +228,19 @@ void PipelineWrapper::SendAppsrcSample(void* obj, void* data, int len) {
   gpointer copy = ::g_memdup(data, len);
   BOOST_ASSERT(copy); // if not, we are out of memory
   GstBuffer* buffer = gst_buffer_new_wrapped(copy, len);
+
   GstAppSrc* src = GST_APP_SRC(obj);
   BOOST_ASSERT(src);
+
+  // Set PTS to a current time. While most of our sources have original
+  // timestamps, we ignore because minimal latency is much more important than
+  // proper frame rate or A-V sync.
+  GstClockTime now = get_time();
+  GST_BUFFER_PTS(buffer) = now;
+  // Set DTS to PTS. This breaks h264 B-frames, but we should not have them
+  // anyway.
+  GST_BUFFER_DTS(buffer) = now;
+
   GstFlowReturn ret = gst_app_src_push_buffer(src, buffer);
   if (ret != GST_FLOW_OK) {
     base::Fail("could not push buffer");

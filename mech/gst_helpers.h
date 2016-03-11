@@ -142,6 +142,7 @@ class PipelineWrapper : boost::noncopyable {
       const std::string& src_name,
       const VideoAnalyzeMessageHandler handler);
 
+  GstClockTime get_time();
  protected:
   // Main handler for the bus messages
   virtual void HandleBusMessage(GstBus *bus, GstMessage *message);
