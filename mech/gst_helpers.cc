@@ -111,6 +111,7 @@ void PipelineWrapper::Start() {
     // more information.
     log_.error("Failed to start pipeline: %d", rv);
   }
+  log_.debugStream() << "Started pipeline, time " << get_time();
 }
 
 GstElement* PipelineWrapper::GetElementByName(const char* name) {
@@ -198,7 +199,7 @@ PipelineWrapper::SetupAppsrc(
 
   gst_app_src_set_stream_type(src, GST_APP_STREAM_TYPE_STREAM);
   gst_app_src_set_latency(src, 0, 0);
-  g_object_set(src, "block", FALSE, NULL);
+  g_object_set(src, "block", FALSE, "is-live", TRUE, NULL);
   if (!caps_str.empty()) {
     GstCaps* caps = gst_caps_from_string(caps_str.c_str());
     if (!(caps && GST_CAPS_IS_SIMPLE(caps))) {
@@ -236,6 +237,7 @@ void PipelineWrapper::SendAppsrcSample(void* obj, void* data, int len) {
   // timestamps, we ignore because minimal latency is much more important than
   // proper frame rate or A-V sync.
   GstClockTime now = get_time();
+  now -= gst_element_get_base_time(GST_ELEMENT(src));
   GST_BUFFER_PTS(buffer) = now;
   // Set DTS to PTS. This breaks h264 B-frames, but we should not have them
   // anyway.

@@ -183,7 +183,9 @@ class VideoDisplay::Impl : boost::noncopyable {
         "h264-detector", [this](GstBuffer* buf) {
           std::lock_guard<std::mutex> guard(stats_mutex_);
           if (parameters_.analyze) {
-            log_.debug("detected h264 frame %d", stats_->h264_frames);
+            log_.debug("detected h264 frame %d pts=%lld dts=%lld",
+                       stats_->h264_frames,
+                       GST_BUFFER_PTS(buf), GST_BUFFER_DTS(buf));
           }
           stats_->h264_frames++;
           if (!GST_BUFFER_FLAG_IS_SET(buf, GST_BUFFER_FLAG_DELTA_UNIT)) {
