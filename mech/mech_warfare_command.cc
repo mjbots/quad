@@ -77,6 +77,7 @@ struct AxisMapping {
   int manual = -1;
   int body = -1;
   int freeze = -1;
+  int pause = -1;
 };
 
 AxisMapping GetAxisMapping(const LinuxInput* input) {
@@ -125,6 +126,7 @@ AxisMapping GetAxisMapping(const LinuxInput* input) {
     result.manual = BTN_PINKIE;
     result.body = BTN_BASE;
     result.freeze = BTN_TOP2;
+    result.pause = BTN_START; // TODO jpieper: This is likely incorrect.
 
     result.laser = BTN_TOP;
     result.fire = BTN_BASE2;
@@ -158,6 +160,7 @@ AxisMapping GetAxisMapping(const LinuxInput* input) {
     result.manual = BTN_TR;
     result.body = ABS_Z;
     result.freeze = BTN_TL;
+    result.pause = BTN_START;
 
     result.laser = BTN_WEST;
     result.fire = ABS_RZ;
@@ -236,6 +239,8 @@ class Commander::Impl {
   }
 
   void SendMechMessage(const MechMessage& message) {
+    if (paused_) { return; }
+
     std::string message_str = SerializeCommand(message);
     socket_->send_to(boost::asio::buffer(message_str), target_);
   }
@@ -261,6 +266,9 @@ class Commander::Impl {
       key_map_[event_.code] = event_.value;
       if (event_.code == mapping_.laser && event_.value) {
         laser_on_ = !laser_on_;
+      }
+      if (event_.code == mapping_.pause && event_.value) {
+        paused_ = !paused_;
       }
     }
   }
@@ -499,7 +507,9 @@ class Commander::Impl {
     command.freeze_rotation = freeze_enabled();
 
     std::string message_str = SerializeCommand(message);
-    socket_->send_to(boost::asio::buffer(message_str), target_);
+    if (!paused_) {
+      socket_->send_to(boost::asio::buffer(message_str), target_);
+    }
 
     if (options_.verbose) {
       std::cout << boost::format(
@@ -537,6 +547,7 @@ class Commander::Impl {
   LinuxInput::Event event_;
   std::map<int, int> key_map_;
   int sequence_ = 0;
+  bool paused_ = false;
 
   base::LogRef log_ = base::GetLogInstance("commander");
 };
