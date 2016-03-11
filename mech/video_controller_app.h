@@ -25,6 +25,7 @@
 #include "gst_main_loop.h"
 #include "mcast_video_link.h"
 #include "mech_telemetry.h"
+#include "mech_warfare_data.h"
 #include "video_display.h"
 
 namespace mjmech {
@@ -135,14 +136,24 @@ class VideoControllerApp : boost::noncopyable {
         return;
       }
 
+      const auto mode_map = MechWarfareData::ModeMapper();
+      const auto it = mode_map.find(
+          static_cast<MechWarfareData::Mode>(telemetry.mech_mode));
+      const std::string mode_str =
+          (it == mode_map.end()) ?
+          "UNKNOWN" :
+          it->second;
+
       m_.display->SetOsdText(
           (boost::format("Servo: %.1f/%.1f\n"
                          "Fire: %.0f(s)\n"
-                         "Turret: %.0f(deg)") %
+                         "Turret: %.0f(deg)\n"
+                         "Mode: %s") %
            telemetry.servo_min_voltage_V %
            telemetry.servo_max_voltage_V %
            telemetry.total_fire_time_s %
-           telemetry.turret_absolute_deg).str());
+           telemetry.turret_absolute_deg %
+           mode_str).str());
     }
   }
 

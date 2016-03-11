@@ -14,35 +14,48 @@
 
 #pragma once
 
+#include <boost/date_time/posix_time/posix_time_types.hpp>
+
+#include "drive_command.h"
+
 namespace mjmech {
 namespace mech {
 
-/// This structure is sent from the primary mech application over the
-/// mcast link to the controller.  It should be small, because it will
-/// be sent at a high rate and will add to overall video load.
-struct MechTelemetry {
+struct MechWarfareData {
   boost::posix_time::ptime timestamp;
 
-  float servo_min_voltage_V = 0.0;
-  float servo_max_voltage_V = 0.0;
+  enum class Mode {
+    kIdle,
+    kTurretBias,
+    kManual,
+    kDrive,
+  };
 
-  float turret_absolute_deg = 0.0;
+  Mode mode = Mode::kIdle;
 
-  float total_fire_time_s = 0.0;
+  DriveCommand current_drive;
+  boost::posix_time::ptime last_command_timestamp;
+  boost::posix_time::ptime turret_bias_start_timestamp;
 
-  // An enum from MechWarfare::Impl::Data::Mode
-  uint8_t mech_mode = 0;
+  static std::map<Mode, const char*> ModeMapper() {
+    return std::map<Mode, const char*>{
+      {Mode::kIdle, "kIdle"},
+      {Mode::kTurretBias, "kTurretBias"},
+      {Mode::kManual, "kManual"},
+      {Mode::kDrive, "kDrive"},
+    };
+  }
 
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(timestamp));
-    a->Visit(MJ_NVP(servo_min_voltage_V));
-    a->Visit(MJ_NVP(servo_max_voltage_V));
-    a->Visit(MJ_NVP(turret_absolute_deg));
-    a->Visit(MJ_NVP(total_fire_time_s));
-    a->Visit(MJ_NVP(mech_mode));
+    a->Visit(MJ_ENUM(mode, ModeMapper));
+    a->Visit(MJ_NVP(current_drive));
+    a->Visit(MJ_NVP(last_command_timestamp));
+    a->Visit(MJ_NVP(turret_bias_start_timestamp));
   }
 };
+
 
 }
 }

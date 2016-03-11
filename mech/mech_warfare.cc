@@ -23,6 +23,7 @@
 
 #include "drive_command.h"
 #include "mech_telemetry.h"
+#include "mech_warfare_data.h"
 
 namespace mjmech {
 namespace mech {
@@ -42,39 +43,7 @@ double Limit(double value, double max) {
   return Limit(value, -max, max);
 }
 
-struct Data {
-  boost::posix_time::ptime timestamp;
-
-  enum class Mode {
-    kIdle,
-    kTurretBias,
-    kManual,
-    kDrive,
-  };
-
-  Mode mode = Mode::kIdle;
-
-  DriveCommand current_drive;
-  boost::posix_time::ptime last_command_timestamp;
-  boost::posix_time::ptime turret_bias_start_timestamp;
-
-  static std::map<Mode, const char*> ModeMapper() {
-    return std::map<Mode, const char*>{
-      {Mode::kIdle, "kIdle"},
-      {Mode::kManual, "kManual"},
-      {Mode::kDrive, "kDrive"},
-    };
-  }
-
-  template <typename Archive>
-  void Serialize(Archive* a) {
-    a->Visit(MJ_NVP(timestamp));
-    a->Visit(MJ_ENUM(mode, ModeMapper));
-    a->Visit(MJ_NVP(current_drive));
-    a->Visit(MJ_NVP(last_command_timestamp));
-    a->Visit(MJ_NVP(turret_bias_start_timestamp));
-  }
-};
+typedef MechWarfareData Data;
 }
 
 class MechWarfare::Impl : boost::noncopyable {
@@ -229,6 +198,7 @@ class MechWarfare::Impl : boost::noncopyable {
     telemetry.total_fire_time_s = parent_->m_.turret->data().total_fire_time_s;
     telemetry.servo_min_voltage_V = servo_min_voltage_V_;
     telemetry.servo_max_voltage_V = servo_max_voltage_V_;
+    telemetry.mech_mode = static_cast<int>(data_.mode);
 
     telemetry_->SetTelemetry(
         "mech",
