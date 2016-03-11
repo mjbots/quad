@@ -66,6 +66,13 @@ const Preset kPresets[] = {{
  h264_caps         : "width=864,height=480",
  decoded_caps      : "width=640,height=480",
  extra_uvch264     : "",
+  }, {
+ framerate         : 30,  // Actually 15 fps
+ decoded_framerate : 0,
+ bitrate_mbps      : 0.25,
+ h264_caps         : "width=432,height=240",
+ decoded_caps      : "width=640,height=480",
+ extra_uvch264     : "",
  // TODO theamk: figure out if we can decrease the framerate somehow (currenly,
  // values other than 30 just prevent piepline from starting)
 }};
