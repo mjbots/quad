@@ -67,6 +67,9 @@ class VideoDisplay : boost::noncopyable {
     // If True, calculate and log frame properties (like average brightness)
     bool analyze = false;
 
+    // If True, do not display the target.
+    bool disable_target = false;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(stats_interval_s));
@@ -75,6 +78,7 @@ class VideoDisplay : boost::noncopyable {
       a->Visit(MJ_NVP(process_frames));
       a->Visit(MJ_NVP(hide_video));
       a->Visit(MJ_NVP(analyze));
+      a->Visit(MJ_NVP(disable_target));
     }
   };
 
@@ -124,6 +128,10 @@ class VideoDisplay : boost::noncopyable {
   // Display the given text in the OSD text area in the lower left of
   // the window.
   void SetOsdText(const std::string&);
+
+  // Position the center target by the given number of pixels offset
+  // from the center.
+  void SetTargetOffset(int x, int y);
 
  private:
   boost::signals2::signal<void (const Stats*)> stats_signal_;

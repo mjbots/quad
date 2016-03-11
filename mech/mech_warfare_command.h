@@ -17,6 +17,7 @@
 
 #include <boost/asio.hpp>
 #include <boost/optional.hpp>
+#include <boost/signals2/signal.hpp>
 
 #include "base/linux_input.h"
 #include "base/visitor.h"
@@ -58,6 +59,7 @@ struct OptOptions {
   double max_turret_rate_deg_s = 100;
   double turret_linear_transition_point = 0.5;
   double turret_linear_fine_percent = 0.2;
+  double target_max_rate = 100.0;
   bool manual_agitator = false;
   bool verbose = false;
 
@@ -80,6 +82,7 @@ struct OptOptions {
     a->Visit(MJ_NVP(max_turret_rate_deg_s));
     a->Visit(MJ_NVP(turret_linear_transition_point));
     a->Visit(MJ_NVP(turret_linear_fine_percent));
+    a->Visit(MJ_NVP(target_max_rate));
     a->Visit(MJ_NVP(manual_agitator));
     a->Visit(MJ_NVP(verbose));
   }
@@ -110,6 +113,9 @@ class Commander {
   };
 
   Parameters* parameters() { return &parameters_; }
+
+  typedef boost::signals2::signal<void (int x, int y)> TargetOffsetSignal;
+  TargetOffsetSignal* target_offset_signal();
 
  private:
   class Impl;

@@ -86,6 +86,18 @@ class VideoDisplay::Impl : boost::noncopyable {
     }
   }
 
+  void SetTargetOffset(int x, int y) {
+    if (overlaytarget_) {
+      g_object_set(overlaytarget_,
+                   "deltax", x,
+                   NULL);
+      g_object_set(overlaytarget_,
+                   "deltay", y,
+                   NULL);
+    }
+  }
+
+
  private:
   std::string MakeLaunchCmd() {
     std::ostringstream out;
@@ -134,6 +146,12 @@ class VideoDisplay::Impl : boost::noncopyable {
 
     out << "! textoverlay name=txt shaded_background=1 font_desc=8 "
         << "   valignment=bottom halignment=left line-alignment=left ";
+
+    if (!parameters_.disable_target) {
+      out << "! textoverlay name=target shaded_background=1 font_desc=8 "
+          << "   valignment=center halignment=center line-alignment=center "
+          << "   text=\"O\" ";
+    }
 
     // Maybe pass it to our app for OSD.
     if (parameters_.process_frames) {
@@ -223,6 +241,9 @@ class VideoDisplay::Impl : boost::noncopyable {
                   this, std::placeholders::_1));
 
     overlaytext_ = pipeline_->GetElementByName("txt");
+    if (!parameters_.disable_target) {
+      overlaytarget_ = pipeline_->GetElementByName("target");
+    }
 
     pipeline_->Start();
 
@@ -290,6 +311,7 @@ class VideoDisplay::Impl : boost::noncopyable {
   boost::optional<boost::posix_time::ptime> last_decoded_time_;
 
   GstElement* overlaytext_ = nullptr;
+  GstElement* overlaytarget_ = nullptr;
 };
 
 
@@ -312,6 +334,10 @@ void VideoDisplay::HandleIncomingFrame(std::shared_ptr<std::string>& data) {
 
 void VideoDisplay::SetOsdText(const std::string& text) {
   impl_->SetOsdText(text);
+}
+
+void VideoDisplay::SetTargetOffset(int x, int y) {
+  impl_->SetTargetOffset(x, y);
 }
 
 }

@@ -93,6 +93,10 @@ class VideoControllerApp : boost::noncopyable {
 
   Parameters* parameters() { return &parameters_; }
 
+  void SetTargetOffset(int x, int y) {
+    m_.display->SetTargetOffset(x, y);
+  }
+
  private:
   void HandleStats(const VideoDisplay::Stats* stats) {
     stats_count_++;

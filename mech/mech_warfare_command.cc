@@ -78,6 +78,7 @@ struct AxisMapping {
   int body = -1;
   int freeze = -1;
   int pause = -1;
+  int target_move = -1;
 };
 
 AxisMapping GetAxisMapping(const LinuxInput* input) {
@@ -127,6 +128,7 @@ AxisMapping GetAxisMapping(const LinuxInput* input) {
     result.body = BTN_BASE;
     result.freeze = BTN_TOP2;
     result.pause = BTN_START; // TODO jpieper: This is likely incorrect.
+    result.target_move = BTN_THUMB2;
 
     result.laser = BTN_TOP;
     result.fire = BTN_BASE2;
@@ -161,6 +163,7 @@ AxisMapping GetAxisMapping(const LinuxInput* input) {
     result.body = ABS_Z;
     result.freeze = BTN_TL;
     result.pause = BTN_START;
+    result.target_move = BTN_X;
 
     result.laser = BTN_WEST;
     result.fire = ABS_RZ;
@@ -245,7 +248,7 @@ class Commander::Impl {
     socket_->send_to(boost::asio::buffer(message_str), target_);
   }
 
- private:
+
   void StartRead() {
     linux_input_->AsyncRead(
         &event_, std::bind(&Impl::HandleRead, this,
@@ -316,38 +319,40 @@ class Commander::Impl {
                       center, minval, maxval, 1.0, 1.0);
   }
 
-  bool body_enabled() const {
-    if (IsAxis(mapping_.body)) {
-      return linux_input_->abs_info(mapping_.body).scaled() > 0.0;
-    }
-    auto it = key_map_.find(mapping_.body);
+  bool key_pressed(int key) const {
+    auto it = key_map_.find(key);
     if (it == key_map_.end()) { return false; }
     return it->second;
   }
 
+  bool body_enabled() const {
+    if (IsAxis(mapping_.body)) {
+      return linux_input_->abs_info(mapping_.body).scaled() > 0.0;
+    }
+    return key_pressed(mapping_.body);
+  }
+
   bool freeze_enabled() const {
-    auto it = key_map_.find(mapping_.freeze);
-    if (it == key_map_.end()) { return false; }
-    return it->second;
+    return key_pressed(mapping_.freeze);
   }
 
   bool fire_enabled() const {
     if (IsAxis(mapping_.fire)) {
       return linux_input_->abs_info(mapping_.fire).scaled() > 0.0;
     }
-    auto it = key_map_.find(mapping_.fire);
-    if (it == key_map_.end()) { return false; }
-    return it->second;
+    return key_pressed(mapping_.fire);
   }
 
   bool manual_enabled() const {
-    auto it = key_map_.find(mapping_.manual);
-    if (it == key_map_.end()) { return false; }
-    return it->second;
+    return key_pressed(mapping_.manual);
   }
 
   bool drive_enabled() const {
     return !body_enabled() && !manual_enabled();
+  }
+
+  bool target_enabled() const {
+    return key_pressed(mapping_.target_move);
   }
 
   void HandleTimeout(ErrorCode ec) {
@@ -465,7 +470,20 @@ class Commander::Impl {
     command.body_attitude_deg.pitch = command_.body_pitch_deg;
     command.body_attitude_deg.roll = command_.body_roll_deg;
 
-    if (!body_enabled()) {
+    if (target_enabled()) {
+      double target_x_px_s = 0.0;
+      MaybeMap(&target_x_px_s, mapping_.translate_x,
+               mapping_.sign_translate_x,
+               0.0, -options_.target_max_rate, options_.target_max_rate);
+      double target_y_px_s = 0.0;
+      MaybeMap(&target_y_px_s, mapping_.translate_y,
+               -mapping_.sign_translate_y,
+               0.0, -options_.target_max_rate, options_.target_max_rate);
+      target_x_ += target_x_px_s * options_.period_s;
+      target_y_ += target_y_px_s * options_.period_s;
+      target_offset_signal_(static_cast<int>(target_x_),
+                            static_cast<int>(target_y_));
+    } else if (!body_enabled()) {
       MaybeMap(&command.drive_mm_s.x, mapping_.translate_x,
                mapping_.sign_translate_x,
                command_.translate_x_mm_s,
@@ -550,6 +568,10 @@ class Commander::Impl {
   bool paused_ = false;
 
   base::LogRef log_ = base::GetLogInstance("commander");
+
+  double target_x_ = 0.0;
+  double target_y_ = 0.0;
+  TargetOffsetSignal target_offset_signal_;
 };
 
 Commander::Commander(boost::asio::io_service& service)
@@ -564,6 +586,10 @@ void Commander::AsyncStart(base::ErrorHandler handler) {
 
 void Commander::SendMechMessage(const MechMessage& msg) {
   impl_->SendMechMessage(msg);
+}
+
+Commander::TargetOffsetSignal* Commander::target_offset_signal() {
+  return &impl_->target_offset_signal_;
 }
 
 }

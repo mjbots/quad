@@ -46,6 +46,10 @@ class MWCommand : boost::noncopyable {
 
     m_.video_controller->AsyncStart(joiner->Wrap("starting video_controller"));
     m_.commander->AsyncStart(joiner->Wrap("starting commander"));
+
+    m_.commander->target_offset_signal()->connect([this](int x, int y) {
+        m_.video_controller->SetTargetOffset(x, y);
+      });
   }
 
   struct Members {
