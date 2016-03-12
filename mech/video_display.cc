@@ -132,6 +132,7 @@ class VideoDisplay::Impl : boost::noncopyable {
           << gst::MuxerForVideoName(parameters_.write_video)
           << " ! filesink name=h264writer blocksize=1024000 buffer-mode=2 "
           << "location=" << gst::PipelineEscape(parameters_.write_video)
+          << " sync=false"
           << " h264-tee. ! queue  ";
     }
 

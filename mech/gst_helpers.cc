@@ -182,6 +182,7 @@ void PipelineWrapper::SetupAppsink(
   gst_app_sink_set_emit_signals(sink, TRUE);
   gst_app_sink_set_max_buffers(sink, max_buffers);
   gst_app_sink_set_drop(sink, drop ? TRUE : FALSE);
+  g_object_set(sink, "sync", FALSE, NULL);
 
   AppsinkNewSampleCallback* callback_copy =
       new AppsinkNewSampleCallback(callback);
