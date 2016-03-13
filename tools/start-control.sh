@@ -12,5 +12,5 @@ set -x
     --log logs/mwc-$now.klg -L --display.write_video logs/mwv-$now.mp4  \
     --opt.verbose 1 --joystick $jsname \
     --target 10.89.0.10 \
-    --cmd.body_y_mm 10 --opt.max_translate_x_mm_s 200 --opt.max_translate_y_mm_s 200 \
+    --opt.max_translate_x_mm_s 200 --opt.max_translate_y_mm_s 200 \
     "$@"

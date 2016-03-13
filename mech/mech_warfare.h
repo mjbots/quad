@@ -88,6 +88,9 @@ class MechWarfare : boost::noncopyable {
 
     uint8_t servo_min_voltage_counts = 0x50;
 
+    base::Point3D body_offset_mm;
+    base::Euler body_attitude_deg;
+
     base::ComponentParameters<Members> children;
 
     template <typename Archive>
@@ -104,6 +107,8 @@ class MechWarfare : boost::noncopyable {
       a->Visit(MJ_NVP(turret_bias_timeout_s));
       a->Visit(MJ_NVP(config_servos));
       a->Visit(MJ_NVP(servo_min_voltage_counts));
+      a->Visit(MJ_NVP(body_offset_mm));
+      a->Visit(MJ_NVP(body_attitude_deg));
       children.Serialize(a);
     }
 

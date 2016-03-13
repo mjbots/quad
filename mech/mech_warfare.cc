@@ -218,13 +218,29 @@ class MechWarfare::Impl : boost::noncopyable {
     turret.rate->x_deg_s = data_.current_drive.turret_rate_dps.yaw;
     turret.rate->y_deg_s = data_.current_drive.turret_rate_dps.pitch;
 
-    gait.body_x_mm = data_.current_drive.body_offset_mm.x;
-    gait.body_y_mm = data_.current_drive.body_offset_mm.y;
-    gait.body_z_mm = data_.current_drive.body_offset_mm.z;
+    const auto body_offset_mm =
+        data_.current_drive.body_offset_mm + p.body_offset_mm;
+    gait.body_x_mm = body_offset_mm.x;
+    gait.body_y_mm = body_offset_mm.y;
+    gait.body_z_mm = body_offset_mm.z;
 
-    gait.body_pitch_deg = data_.current_drive.body_attitude_deg.pitch;
-    gait.body_roll_deg = data_.current_drive.body_attitude_deg.roll;
-    gait.body_yaw_deg = data_.current_drive.body_attitude_deg.yaw;
+    // NOTE jpieper: Yeah, I know that rotations don't compose this
+    // way.  This is really only a fudge factor though, so I'm intent
+    // on getting away with it.
+    const base::Euler body_attitude_deg = [&]() {
+      base::Euler result;
+      result.roll = (data_.current_drive.body_attitude_deg.roll +
+                     p.body_attitude_deg.roll);
+      result.pitch = (data_.current_drive.body_attitude_deg.pitch +
+                      p.body_attitude_deg.pitch);
+      result.yaw = (data_.current_drive.body_attitude_deg.yaw +
+                    p.body_attitude_deg.yaw);
+      return result;
+    }();
+
+    gait.body_pitch_deg = body_attitude_deg.pitch;
+    gait.body_roll_deg = body_attitude_deg.roll;
+    gait.body_yaw_deg = body_attitude_deg.yaw;
 
     auto body_mm_s = base::Quaternion::FromEuler(
         0.0,
