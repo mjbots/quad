@@ -4,10 +4,11 @@ This script sets up the radio. It will automatically detect the device to work
 on.
 
 Basic commands:
-  up down info
+  'up' (for default profile), 'down', 'info'
+   or give one of profile names for implied 'up': %PROFLIST%
 
 Other commands:
-  reinit mon scan
+   'mon', 'scan'
 
 Sample: monitor traffic
  sudo ./tools/setup_wifi_link.py mon
@@ -24,36 +25,80 @@ import subprocess
 import sys
 import time
 
-#FREQ=2452   # channel 9
-FREQ=5200   # channel 40
-#FREQ=5765   # channel 153
 
-SSID  = "MjmechTelemetry"
-BSSID = "00:C6:0B:F0:F0:F0"
-RATE  = 24    # Mbps, 6/9/12/18/24/36/48/54
-# yes, we can only do WEP or client-side. WPA has too much state.
-#WEP_KEY=
+class DefaultProfile(object):
+    # profile name. auto-assigned
+    name = None
 
-# Increase beacon interval. This may be a bad idea if the other side needs
-# beacons, however as we are hardcoding our configuration on both ends we
-# should not need beacons at all.
-BEACON_INTERVAL = 2000
+    # frequency in MHz; 2452 = ch9, 5200=ch40, 5675=ch153
+    freq = None
+    # ssid (string) and bssid (mac) for the network
+    ssid = None
+    bssid = None
 
-MCAST_NET = '239.89.108.0/24'
-IP_PREFIX = '10.89'
-# Give well-known devices short IP addresses
+    # multicast rate, MBps;  6/9/12/18/24/36/48/54
+    rate = 24
+    #  wep_key: wep key or None
+    #    yes, we can only do WEP or client-side. WPA has too much state.
+    wep_key = None
+    # Increase beacon interval. This may be a bad idea if the other side needs
+    # beacons, however as we are hardcoding our configuration on both ends we
+    # should not need beacons at all.
+    beacon_interval = 2000
+
+    mcast_net = '239.89.108.0/24'
+    ip_prefix = '10.89'
+
+class ProfileA1(DefaultProfile):
+    freq = 5200   # channel 40
+    ssid = "MjmechTelemetry"
+    bssid = "00:C6:0B:F0:F0:F0"
+
+class ProfileA2(DefaultProfile):
+    freq = 5675   # channel 159
+    ssid = "MjmechTelemetryA2"
+    bssid = "00:C6:0B:F0:F2:F2"
+
+class ProfileG9(DefaultProfile):
+    freq = 2452
+    ssid = "MjmechTelemetryG9"
+    bssid = "00:C6:0B:F0:A2:F9"
+
+PROFILES = { 'a1': ProfileA1, 'a2': ProfileA2,
+             'g9': ProfileG9 }
+
+# Assign 'name' propery
+for key, obj in PROFILES.items(): obj.name = key
+
+# Assign profiles/IP addresses to well-known devices short IP addresses
 FIXED_IP_MAP = {
-    '36:e6:6a:0e:97:b1': '10.89.0.10',  # mjmech-odroid
+    '36:e6:6a:0e:97:b1': ('a1', '10.89.0.10'),  # mjmech-odroid
 }
+DEFAULT_PROFILE_NAME = 'a1'
 
 class WifiSetup(object):
-    def __init__(self, opts):
+    def __init__(self, opts, force_profile=None):
         self._opts = opts
         self._verbose = opts.verbose
 
+        if force_profile is not None:
+            pname = force_profile
+        elif opts.profile is not None:
+            pname = opts.profile
+        else:
+            finfo = FIXED_IP_MAP.get(self.get_base_mac())
+            if finfo is not None:
+                pname = finfo[1]
+            else:
+                pname = DEFAULT_PROFILE_NAME
+        assert pname in PROFILES, 'Invalid profile name %r' % (pname, )
+
+        self.profile = PROFILES[pname]
         self.phyname = None
         self.ifname = None
         self.os_driver = None
+
+        self.debug(0, 'Using profile %s' % self.profile.name)
 
         self._find_interface()
 
@@ -231,10 +276,12 @@ class WifiSetup(object):
         self._exec('ip link set dev %s up' % self.ifname)
 
         # join ibss
-        cmd = ['iw', 'dev', self.ifname, 'ibss', 'join', SSID, str(FREQ),
-               'HT20', 'fixed-freq', BSSID]
-        cmd += ['beacon-interval', str(BEACON_INTERVAL)]
-        cmd += ['basic-rates', str(RATE), 'mcast-rate', str(RATE)]
+        cmd = ['iw', 'dev', self.ifname, 'ibss', 'join', self.profile.ssid,
+               str(self.profile.freq),
+               'HT20', 'fixed-freq', self.profile.bssid]
+        cmd += ['beacon-interval', str(self.profile.beacon_interval)]
+        cmd += ['basic-rates', str(self.profile.rate),
+                'mcast-rate', str(self.profile.rate)]
         self._exec(cmd)
 
         # Do not crash if power saving is not supported
@@ -285,19 +332,26 @@ class WifiSetup(object):
         #flags fcsfail,control,otherbss
         self._exec('ip link set dev mon_r up')
 
-    def _desired_station_ip(self):
+    def get_base_mac(self):
         # Make IP from last 2 digits of MAC of eth0 interface (this way,
         # changing wifi card will leav IP alone)
         with open('/sys/class/net/eth0/address', 'r') as f:
             base_mac = f.read().strip()
+        return base_mac
+
+    def _desired_station_ip(self):
+        base_mac = self.get_base_mac()
         self.debug(2, 'Calculating station IP for MAC %r' % base_mac)
 
-        if_ip = FIXED_IP_MAP.get(base_mac)
+        profile, if_ip = FIXED_IP_MAP.get(base_mac, (None, None))
         if if_ip:
-            return if_ip
+            if profile == self.profile.name:
+                return if_ip
+            self.debug(0, 'Ignoring preset ip -- profile overriden')
 
         base_mac_int = [int(x, 16) for x in base_mac.split(':')]
-        if_ip = IP_PREFIX + '.%d.%d' % (base_mac_int[-2], base_mac_int[-1])
+        if_ip = self.profile.ip_prefix + \
+                '.%d.%d' % (base_mac_int[-2], base_mac_int[-1])
         return if_ip
 
     def _setup_ip_addressing(self):
@@ -307,7 +361,8 @@ class WifiSetup(object):
 
         self._exec('ip addr flush dev %s' % (self.ifname))
         self._exec('ip addr replace %s/16 dev %s' % (if_ip, self.ifname))
-        self._exec('ip route add %s dev %s' % (MCAST_NET, self.ifname))
+        self._exec('ip route add %s dev %s' % (self.profile.mcast_net,
+                                               self.ifname))
         iv6f = '/proc/sys/net/ipv6/conf/%s/disable_ipv6' % self.ifname
         if os.path.exists(iv6f):
             self._write_to_file(iv6f, '1')
@@ -347,8 +402,9 @@ class WifiSetup(object):
             print >>f, data
 
 def main():
-    parser = optparse.OptionParser(usage='%prog command',
-                                   description=__doc__)
+    parser = optparse.OptionParser(
+        usage='%prog command',
+        description=__doc__.replace('%PROFLIST%', repr(sorted(PROFILES.keys()))))
     parser.format_description = lambda _: parser.description.lstrip()
     parser.add_option('-i', '--interface',
                       help='force wifi interface/phy to work on')
@@ -356,22 +412,29 @@ def main():
                       help='Print more info')
     parser.add_option('-n', '--dry-run', action='store_true',
                       help='Do not actually change anything')
+    parser.add_option('--reinit', action='store_true',
+                      help='For up action, force reinitialization')
+    parser.add_option('-p', '--profile',
+                      help='A profile to use')
     opts, args = parser.parse_args()
 
     if len(args) == 0:
         parser.error('command missing')
 
-    ws = WifiSetup(opts)
+    kwargs = dict()
+    if args[0] in PROFILES:
+        kwargs["force_profile"] = args[0]
+
+    ws = WifiSetup(opts, **kwargs)
     if args[0] == 'info':
         ws.print_info()
     elif args[0] == 'up-boot':
         ws.bring_interface_up()
-    elif args[0] == 'up':
-        ws.bring_interface_up()
-    elif args[0] == 'reinit':
-        ws.bring_interface_up(force_reinit=True)
+    elif args[0] == 'up' or args[0] in PROFILES:
+        ws.bring_interface_up(force_reinit=opts.reinit)
     elif args[0] == 'down':
         ws.bring_interface_down()
+        ws.debug(0, 'success')
     elif args[0] == 'mon':
         ws.add_mon_interface()
     else:
