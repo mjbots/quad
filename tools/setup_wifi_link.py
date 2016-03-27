@@ -285,8 +285,10 @@ class WifiSetup(object):
         self._exec(cmd)
 
         # Do not crash if power saving is not supported
-        self._exec('iw dev %s set power_save off' % self.ifname,
-                   ok_codes=[161])
+        self._exec(
+            'iw dev %s set power_save off 2>&1' % self.ifname,
+            ok_codes_stdout=[
+                (161, 'command failed: Operation not supported (-95)\n')])
 
         # set ip
         self._setup_ip_addressing()
@@ -369,7 +371,7 @@ class WifiSetup(object):
         else:
             self.debug(2, 'Looks like this interface has no IPv6')
 
-    def _exec(self, cmd, ok_codes=None):
+    def _exec(self, cmd, ok_codes=None, ok_codes_stdout=None):
         if isinstance(cmd, str):
             cmd_str = cmd
         else:
@@ -379,13 +381,29 @@ class WifiSetup(object):
             print 'DRY-RUN: exec %s' % (cmd_str, )
             return
 
+        out = None
         try:
+            if ok_codes_stdout:
+                # When we require stdout contents, we may fail even
+                # if we got exit code 0.
+                raise subprocess.CalledProcessError(
+                    0, cmd,
+                    output=subprocess.check_output(
+                        cmd, shell=isinstance(cmd, str)))
+
             subprocess.check_call(cmd, shell=isinstance(cmd, str))
         except subprocess.CalledProcessError as e:
             if ok_codes and e.returncode in ok_codes:
                 self.debug(2, 'command returned %r, but this is ok' % (
                     e.returncode))
                 return
+            if ok_codes_stdout and (e.returncode, e.output) in ok_codes_stdout:
+                self.debug(2, 'command returned %r with stdout %r, '
+                           'but this is ok' % (
+                               e.returncode, e.output))
+                return
+            if e.output is not None:
+                self.debug(0, 'stdout for failed command was %r' % (e.output, ))
             raise
 
     def _check_output(self, cmd):
