@@ -88,7 +88,7 @@ class WifiSetup(object):
         else:
             finfo = FIXED_IP_MAP.get(self.get_base_mac())
             if finfo is not None:
-                pname = finfo[1]
+                pname = finfo[0]
             else:
                 pname = DEFAULT_PROFILE_NAME
         assert pname in PROFILES, 'Invalid profile name %r' % (pname, )
