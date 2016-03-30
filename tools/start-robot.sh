@@ -30,7 +30,7 @@ if [[ "$mach" == "armv7l" && "$USER" == "odroid" ]]; then
 elif [[ "$mach" == "x86_64" && "$USER" != "odroid" ]]; then
     # upload and run
     set -x
-    exec tools/odroid/push-tree.sh tools/start-robot.sh "$@"
+    exec tools/odroid/push-tree.sh --no-push tools/start-robot.sh "$@"
 else
     echo cannot determine what kind of machine it is
     exit 1
