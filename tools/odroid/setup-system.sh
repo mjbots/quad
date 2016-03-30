@@ -3,7 +3,7 @@
 if ! test -d /sys/devices/platform/odroidu2-fan; then
     echo Error: this script is for odroid only
     echo Try:
-    echo tools/odroid/push-tree.sh odroid-mjmech sudo tools/odroid/setup-system.sh
+    echo tools/odroid/push-tree.sh -H odroid-mjmech sudo tools/odroid/setup-system.sh
     exit 1
 fi
 
