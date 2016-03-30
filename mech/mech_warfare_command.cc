@@ -127,7 +127,7 @@ AxisMapping GetAxisMapping(const LinuxInput* input) {
     result.manual = BTN_PINKIE;
     result.body = BTN_BASE;
     result.freeze = BTN_TOP2;
-    result.pause = BTN_START; // TODO jpieper: This is likely incorrect.
+    result.pause = BTN_BASE4;
     result.target_move = BTN_THUMB2;
 
     result.laser = BTN_TOP;
@@ -565,7 +565,7 @@ class Commander::Impl {
   LinuxInput::Event event_;
   std::map<int, int> key_map_;
   int sequence_ = 0;
-  bool paused_ = false;
+  bool paused_ = true;
 
   base::LogRef log_ = base::GetLogInstance("commander");
 
