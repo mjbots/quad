@@ -11,6 +11,7 @@ set -x
 ./mech/build-x86_64/mw_command \
     --log logs/mwc-$now.klg -L --display.write_video logs/mwv-$now.mp4  \
     --opt.verbose 1 --joystick $jsname \
+    -t video_display.stats --display.stats_interval_s 30 \
     --target 10.89.0.10 \
     --opt.max_translate_x_mm_s 200 --opt.max_translate_y_mm_s 200 \
     "$@"
