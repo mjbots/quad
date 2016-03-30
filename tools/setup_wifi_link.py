@@ -288,7 +288,8 @@ class WifiSetup(object):
         self._exec(
             'iw dev %s set power_save off 2>&1' % self.ifname,
             ok_codes_stdout=[
-                (161, 'command failed: Operation not supported (-95)\n')])
+                (161, 'command failed: Operation not supported (-95)\n'),
+                (0, '')])
 
         # set ip
         self._setup_ip_addressing()
