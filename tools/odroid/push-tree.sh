@@ -47,6 +47,12 @@ EOF
     exit 1
 fi
 
+# ping the robot
+if ! ping -c 1 -i 0.2 -w 30 $REMOTE; then
+	echo could not ping
+	exit 1
+fi
+
 if [[ "$do_push" == "yes" ]]; then
     echo Pushing code to $REMOTE
 
