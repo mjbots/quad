@@ -18,6 +18,8 @@
 #include <execinfo.h>
 #include <string.h>
 
+#include <iostream>
+
 #include <boost/format.hpp>
 
 namespace mjmech {

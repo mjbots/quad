@@ -14,6 +14,8 @@
 
 #include "base/i2c_factory.h"
 
+#include <iostream>
+
 #include <boost/asio/read_until.hpp>
 #include <boost/asio/posix/stream_descriptor.hpp>
 #include <boost/asio/streambuf.hpp>

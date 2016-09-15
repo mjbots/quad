@@ -222,8 +222,8 @@ class VirtualDeadlineTimerServiceHolder
 
     this->child_->async_wait(
         impl,
-        [init](ErrorCode ec) mutable {
-          init.handler(ec.error_code());
+        [handler=init.handler](ErrorCode ec) mutable {
+          handler(ec.error_code());
         });
 
     return init.result.get();

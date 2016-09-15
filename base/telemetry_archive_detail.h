@@ -64,7 +64,7 @@ class DataVisitorBase : public VisitArchive<Derived> {
                    std::array<T, N>*,
                    int) {
     auto value = pair.value();
-    for (int i = 0; i < N; i++) {
+    for (std::size_t i = 0; i < N; i++) {
       VisitArchive<Derived>::Visit(FakeNvp<T>(&(*value)[i]));
     }
   }

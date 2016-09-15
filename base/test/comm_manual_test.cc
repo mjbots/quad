@@ -15,6 +15,7 @@
 #include "comm_factory.h"
 
 #include <functional>
+#include <iostream>
 
 #include <boost/asio/read.hpp>
 #include <boost/asio/spawn.hpp>

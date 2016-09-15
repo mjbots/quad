@@ -131,8 +131,8 @@ class StreamFactory : boost::noncopyable {
       TryCreate try_create(
           this,
           parameters,
-          [init](ErrorCode ec, SharedStream stream) mutable {
-            init.handler(ec.error_code(), stream);
+          [handler=init.handler](ErrorCode ec, SharedStream stream) mutable {
+            handler(ec.error_code(), stream);
           },
           &visited);
       meta::for_each(Types{}, try_create);

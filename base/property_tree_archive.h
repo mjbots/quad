@@ -15,6 +15,7 @@
 #pragma once
 
 #include <tuple>
+#include <vector>
 
 #include <boost/property_tree/ptree.hpp>
 
@@ -52,7 +53,7 @@ class PropertyTreeWriteArchive
 
   template <typename Array>
   void DoArray(Array* array, ptree* tree) {
-    for (int i = 0; i < array->size(); i++) {
+    for (std::size_t i = 0; i < array->size(); i++) {
       ptree element;
       VisitHelper(&(*array)[i], &element, 0);
       tree->push_back(ptree::value_type("", element));

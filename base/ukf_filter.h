@@ -87,7 +87,7 @@ class UkfFilter {
                   "array must be non-empty");
 
     auto result = array[0];
-    for (int i = 1; i < (sizeof(array) / sizeof(*array)); i++) {
+    for (std::size_t i = 1; i < (sizeof(array) / sizeof(*array)); i++) {
       result += array[i];
     }
     return result;

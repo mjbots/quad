@@ -47,6 +47,10 @@ class ProgramOptionsArchiveValue : public boost::program_options::value_semantic
     nvp_.set_value(boost::any_cast<decltype(nvp_.get_value())>(value_store));
   }
 
+  virtual bool adjacent_tokens_only() const {
+	  return false;
+  }
+
  private:
   NameValuePair nvp_;
 };

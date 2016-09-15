@@ -18,6 +18,8 @@
 
 #include "comm_factory.h"
 
+#include <iostream>
+
 #include <boost/algorithm/string.hpp>
 #include <boost/asio/buffers_iterator.hpp>
 #include <boost/asio/ip/tcp.hpp>

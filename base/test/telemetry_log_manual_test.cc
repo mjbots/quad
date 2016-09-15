@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <iostream>
+
 #include "telemetry_log.h"
 #include "telemetry_log_registrar.h"
 #include "telemetry_registry.h"
