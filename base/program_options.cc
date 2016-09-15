@@ -45,10 +45,11 @@ class ProgramOptionsArchiveWrapValue :
   virtual void notify(const boost::any& value_store) const override {
     base_->notify(value_store);
   }
+#if BOOST_VERSION >= 106100
   virtual bool adjacent_tokens_only() const override {
-	  return base_->adjacent_tokens_only();
+    return base_->adjacent_tokens_only();
   }
-
+#endif
  private:
   const boost::shared_ptr<const boost::program_options::value_semantic> base_;
 };
