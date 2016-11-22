@@ -26,6 +26,16 @@ namespace pl = std::placeholders;
 using namespace mjmech::base;
 namespace pt = boost::property_tree;
 
+namespace {
+std::string FilterWhitespace(const std::string& initial) {
+  std::ostringstream ostr;
+  for (char c : initial) {
+    if (!std::isspace(c)) { ostr.write(&c, 1); }
+  }
+  return ostr.str();
+}
+}
+
 BOOST_AUTO_TEST_CASE(StreamFactoryTest) {
   typedef StreamFactory<StdioGenerator,
                         SerialPortGenerator,
@@ -61,7 +71,8 @@ BOOST_AUTO_TEST_CASE(StreamFactoryTest) {
     }
 }
 )XX";
-  BOOST_CHECK_EQUAL(ostr.str(), expected);
+  BOOST_CHECK_EQUAL(FilterWhitespace(ostr.str()),
+                    FilterWhitespace(expected));
   factory.AsyncCreate(params, [](boost::system::error_code,
                                  std::shared_ptr<AsyncStream>){});
 }

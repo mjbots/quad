@@ -22,7 +22,7 @@ using namespace mjmech::base;
 
 struct TestData {
   int intval = 3;
-  double doubleval = 9.1;
+  double doubleval = 9.0;
 
   template <typename Archive>
   void Serialize(Archive* a) {
@@ -42,6 +42,14 @@ struct Container {
   }
 };
 
+std::string FilterWhitespace(const std::string& initial) {
+  std::ostringstream ostr;
+  for (char c : initial) {
+    if (!std::isspace(c)) { ostr.write(&c, 1); }
+  }
+  return ostr.str();
+}
+
 namespace pt = boost::property_tree;
 }
 
@@ -54,7 +62,7 @@ BOOST_AUTO_TEST_CASE(BasicPropertyTreeTest) {
     std::string expected =
         "{\n"
         "    \"intval\": \"3\",\n"
-        "    \"doubleval\": \"9.1\"\n"
+        "    \"doubleval\": \"9\"\n"
         "}\n";
     BOOST_CHECK_EQUAL(ostr.str(), expected);
   }
@@ -64,15 +72,16 @@ BOOST_AUTO_TEST_CASE(BasicPropertyTreeTest) {
     std::ostringstream ostr;
     pt::write_json(ostr,
                    PropertyTreeWriteArchive().Accept(&container).tree());
-    BOOST_CHECK_EQUAL(ostr.str(),
-                      "{\n"
-                      "    \"child\":\n"
-                      "    {\n"
-                      "        \"intval\": \"3\",\n"
-                      "        \"doubleval\": \"9.1\"\n"
-                      "    },\n"
-                      "    \"stuff\": \"5\"\n"
-                      "}\n");
+    BOOST_CHECK_EQUAL(FilterWhitespace(ostr.str()),
+                      FilterWhitespace(
+		          "{\n"
+			  "    \"child\":\n"
+			  "    {\n"
+			  "        \"intval\": \"3\",\n"
+			  "        \"doubleval\": \"9\"\n"
+			  "    },\n"
+			  "    \"stuff\": \"5\"\n"
+			  "}\n"));
   }
 }
 
@@ -122,11 +131,12 @@ BOOST_AUTO_TEST_CASE(VectorPropertyTreeTest) {
         "    [\n"
         "        {\n"
         "            \"intval\": \"3\",\n"
-        "            \"doubleval\": \"9.1\"\n"
+        "            \"doubleval\": \"9\"\n"
         "        }\n"
         "    ]\n"
         "}\n";
-    BOOST_CHECK_EQUAL(ostr.str(), expected);
+    BOOST_CHECK_EQUAL(FilterWhitespace(ostr.str()),
+                      FilterWhitespace(expected));
   }
 }
 

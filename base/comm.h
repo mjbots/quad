@@ -83,8 +83,8 @@ class AsyncStream : boost::noncopyable {
 
     this->virtual_async_read_some(
         buffers,
-        [init](ErrorCode ec, std::size_t size) mutable {
-          init.handler(ec.error_code(), size);
+        [handler=init.handler](ErrorCode ec, std::size_t size) mutable {
+          handler(ec.error_code(), size);
         });
 
     return init.result.get();
