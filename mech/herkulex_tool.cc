@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <functional>
+#include <iostream>
 #include <string>
 
 #include <boost/algorithm/string/classification.hpp>

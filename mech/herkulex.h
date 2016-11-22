@@ -756,9 +756,9 @@ class HerkuleX : public HerkuleXProtocol {
 
     MemRead(
         command, servo, field.position, field.length,
-        [=](base::ErrorCode ec, MemReadResponse response) mutable {
+        [field, handler=init.handler](base::ErrorCode ec, MemReadResponse response) mutable {
           if (ec) {
-            init.handler(ec, 0);
+            handler(ec, 0);
             return;
           }
 
@@ -769,7 +769,7 @@ class HerkuleX : public HerkuleXProtocol {
                            response.register_data[i]) << (i * field.bit_align));
           }
 
-          init.handler(base::ErrorCode(), result);
+          handler(base::ErrorCode(), result);
         });
 
     return init.result.get();
