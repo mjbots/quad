@@ -17,8 +17,7 @@
 
 '''%prog [options]
 
-Install packages necessary for mjmech.  Only tested currently on
-Ubuntu trusty x64.
+Install packages necessary for mjmech.
 '''
 
 import datetime
@@ -346,15 +345,7 @@ def main():
 
     PKGLIST = split('''
     scons libeigen3-dev libsnappy-dev python-snappy libi2c-dev
-    pyside-tools liblog4cpp5-dev libboost1.55-dev
-    libboost-system1.55-dev libboost-program-options1.55-dev
-    libboost-coroutine1.55-dev libboost-context1.55-dev
-    libboost-test1.55-dev libboost-python1.55-dev
-    libboost-serialization1.55-dev
-    libboost-date-time1.55-dev libboost-filesystem1.55-dev
-    libboost-thread1.55-dev libboost-chrono1.55-dev
-    libboost-atomic1.55-dev libboost-test1.55-dev
-    libboost-regex1.55-dev
+    pyside-tools liblog4cpp5-dev 
     libassimp-dev libtinyxml-dev libtinyxml2-dev libnlopt-dev
     freeglut3-dev libflann-dev libxmu-dev libxi-dev
     python-matplotlib ipython ipython-qtconsole
@@ -363,6 +354,24 @@ def main():
     libopencv-dev
 ''')
 
+    ubuntu_release = subprocess.check_output(["lsb_release", "-cs"])
+
+    if ubuntu_release == 'trusty':
+        PKGLIST += split('''
+    libboost1.55-dev
+    libboost-system1.55-dev libboost-program-options1.55-dev
+    libboost-coroutine1.55-dev libboost-context1.55-dev
+    libboost-test1.55-dev libboost-python1.55-dev
+    libboost-serialization1.55-dev
+    libboost-date-time1.55-dev libboost-filesystem1.55-dev
+    libboost-thread1.55-dev libboost-chrono1.55-dev
+    libboost-atomic1.55-dev libboost-test1.55-dev
+    libboost-regex1.55-dev
+''')
+
+    if ubuntu_release == 'xenial':
+        PKGLIST += ['libboost-all-dev']
+        
     if options.dart:
         PKGLIST += split('''
 libopenscenegraph-dev libopenthreads-dev cmake
@@ -392,14 +401,16 @@ libopenscenegraph-dev libopenthreads-dev cmake
     revision = (open(gstreamer_revision).read() if
                 os.path.exists(gstreamer_revision) else 0)
 
-    if revision < GS_MIN_REVISION:
-        do_install_gstreamer(options)
-    else:
-        print 'gstreamer in %s is up to date' % GSTREAMER_ROOT
+    if ubuntu_release != 'xenial':
+        if revision < GS_MIN_REVISION:
+            do_install_gstreamer(options)
+        else:
+            print 'gstreamer in %s is up to date' % GSTREAMER_ROOT
 
-    do_install_gst_packages(options)
-    if options.dart:
-        do_install_dart(options)
+        do_install_gst_packages(options)
+
+        if options.dart:
+            do_install_dart(options)
 
 
 if __name__ == '__main__':

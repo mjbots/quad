@@ -22,7 +22,7 @@ env = canonenv.Clone()
 
 env.Append(CPPPATH=['.'])
 
-def SetupGStreamer(gsenv):
+def SetupCustomGStreamer(gsenv):
     # We do not want to use stock gstreamer -- it has hard-to-catch bugs like
     # streams stopping after few minutes of operation. We require a custom-built
     # one from 'mj-gstreamer-build' project.
@@ -56,13 +56,26 @@ def SetupGStreamer(gsenv):
         gsenv.ParseConfig('PKG_CONFIG_PATH=$GS_LIB/pkgconfig pkg-config '
                           '--cflags --libs ' + lib)
 
+def SetupGStreamer(gsenv):
+    for lib in [
+            'gstreamer-rtsp-server-1.0', 'gstreamer-rtsp-1.0',
+            'gstreamer-sdp-1.0',
+            'gstreamer-1.0', 'gstreamer-base-1.0', 'gstreamer-app-1.0',
+            'glib-2.0', 'gobject-2.0']:
+        gsenv.ParseConfig('pkg-config '
+                          '--cflags --libs ' + lib)
+
+        
 crenv = env.Clone()
 crenv.Append(LIBS=['boost_coroutine',
                    'boost_context',
                    ])
 
 gsenv = env.Clone()
-SetupGStreamer(gsenv)
+if gsenv['UBUNTU_RELEASE'] == 'xenial':
+    SetupGStreamer(gsenv)
+else:
+    SetupCustomGStreamer(gsenv)
 Export('gsenv')
 
 SOURCES = [
