@@ -1,0 +1,138 @@
+Types of UDP streams:
+
+- Point-to-point:
+ - Both client's and server's addresses are hardcoded
+ - A pain to configure, only two devices
+ - Settings: Client: server-host, server-port, local-port
+             Server: client-host, client-port, local-port
+ - Optional: local-interface
+ - Addressing:
+    Announce: server-local -> client-local
+    Response: server-local -> client-local
+    Request:  client-local -> server-local
+
+- Responding server:
+ - Server listens on a fixed port, sends responses to incoming clients.
+ - Server cannot send unsolicited packets.
+ - Settings: Client: server-host, server-port
+             Server: local-port
+ - Optional: local-interface, client only: local-port
+ - Variation: client-learning server
+   Server remembers last peer addr / all peer addrs active in last X seconds,
+   sends unsolicited packets there.
+ - Addressing:
+    Announce: server-local -> last-client-local
+    Response: server-local -> client-local
+    Request:  client-local -> server-local
+
+- Server with discovery:
+ - Server multicasts data regularly. Client listens for server messages,
+   then contacts server over regular UDP.
+ - Server must keep broadcasting.
+ - Settings: Client: multicast-addr, multicast-port
+             Server: multicast-addr, multicast-port
+ - Optional: local-interface, local-port, server only: mc-ttl
+ - Addressing:
+    Announce: server-local -> server-multicast
+    Response: server-local -> client-local
+    Request:  client-local -> server-local
+
+- Multicast-only link:
+ - Both client and server multicast data
+ - For request-response comms. client must do the matching itself
+ - Settings: Client: srv-mc-addr, srv-mc-port, cli-mc-addr, cli-mc-port
+             Server: srv-mc-addr, srv-mc-port, cli-mc-addr, cli-mc-port
+ - Optional: local-interface, local-port, mc-ttl
+ - Client's multicast information may be auto-derived:
+  - Increment server's settings by one (addr should be different -- routing
+    uses (mcast addr, sender addr) pair, we may want to route response/replies
+    separately)
+  - Mention addr/port explicitly in server status messages.
+  - Send *from* client multicast socket
+ - Addressing:
+    Announce: server-local -> server-multicast
+    Response: server-local -> server-multicast
+    Request:  client-local -> client-multicast
+     Note: If server/clients are using the same socket for RX/TX, then:
+       server-local-port == server-multicast-port
+       client-local-port == client-multicast-port
+
+- Proxied point-to-point link:
+ - Packets converted to byte stream, sent via CommFactory (tcp/stdio/pipe)
+ - Useful for debugging/simulation
+   - or when wifi card is in different device (router?)
+   - or when you want to to namespaces, but not root access
+ - May use simple framing: 2-byte packet prefix; or magic separator
+  - This only allows one peer.
+  - May use SOCKS5-like "UDP Request Header" (SOCKS5 itself is useless, as
+    it does not serialize UDP diagrams; see RFC1928)
+
+What if we want to have multiple clients?
+ - we need to bind() to specific port to receive multicast, this will fail with
+   multiple processes
+
+ - Luckily, at least in 3.13 kernel, any of SO_REUSEADDR and SO_REUSEPORT allow
+   multiple processes to bind to a socket, and incoming data will be copied to
+   each client (this is not the case with regular UDP)
+
+ - TODO: experiment with IP_MULTICAST_ALL in ip(7)
+
+ - If the clients on localhost want to be able to talk to each other, AND
+   they use the same socket for both tx and rx, they have to set
+   IP_MULTICAST_LOOP. But then we will have to filter out duplicates -- and
+   this will be hard, as all packets will have identical sender (multicast
+   address).
+
+
+====================================
+# base build:
+time scons
+...
+base/build/test_base && touch base/build/test_base.passed
+Running 23 test cases...
+qemu: Unsupported syscall: 350
+qemu: Unsupported syscall: 350
+qemu: Unsupported syscall: 350
+qemu: Unsupported syscall: 350
+qemu: Unsupported syscall: 350
+qemu: Unsupported syscall: 350
+scons: *** [base/build/test_base.passed] Error 141
+scons: building terminated because of errors.
+
+real    35m25.240s
+user    35m8.656s
+sys     0m10.488s
+
+time scons -k
+...
+mech/build/test_mech && touch mech/build/test_mech.passed
+Running 6 test cases...
+qemu: Unsupported syscall: 350
+qemu: Unsupported syscall: 350
+
+*** No errors detected
+...
+mech/build/video_controller_app -t video_display.stats --max_stats=2 --require_stats_good=1 --remote_debug.port=0 --display.source=TEST --display.hide_video=1 && touch mech/build/video_controller_test.passed
+qemu: Unsupported syscall: 350
+libudev: udev_monitor_new_from_netlink_fd: error getting socket: Address family not supported by protocol
+libudev: udev_monitor_new_from_netlink_fd: error getting socket: Address family not supported by protocol
+libdc1394 error: Failed to initialize libdc1394
+
+(gst-plugin-scanner:23225): GStreamer-WARNING **: Failed to load plugin '/opt/gstreamer-1.4.5/lib/gstreamer-1.0/libgstdfbvideosink.so': libdirectfb-1.2.so.9: cannot open shared object file: No such file or directory
+Segmentation fault (core dumped)
+scons: *** [mech/build/video_controller_test.passed] Error 139
+...
+mech/build/video_sender_app -t camera_driver.stats --max_stats=2 --require_stats_good=1 --remote_debug.port=0 --camera.device=TEST --rtsp.port=0 && touch mech/build/video_sender_test.passed
+qemu: Unsupported syscall: 350
+Unsupported setsockopt level=1 optname=15
+18:50:16.131 NOTICE[rtsp_server]: RTSP server ready at rtsp://127.0.0.1:37757/video
+Segmentation fault (core dumped)
+scons: *** [mech/build/video_sender_test.passed] Error 139
+...
+scons: done building targets (errors occurred during build).
+
+real    88m54.164s
+user    88m19.917s
+sys     0m24.696s
+
+# total: 123 minutes, 3 times slower than original odroid

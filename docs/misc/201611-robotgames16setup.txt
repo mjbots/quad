@@ -1,0 +1,15 @@
+odroid@odroid-mjmech:~/mjmech-clean$
+$ ./mech/build-armv7l/herkulex_tool --servo.stream.type serial --servo.stream.serial.serial_port /dev/ttySAC0 --address 253 --set_address 8
+$ ./mech/build-armv7l/herkulex_tool --servo.stream.type serial --servo.stream.serial.serial_port /dev/ttySAC0 --enumerate
+0 1 2 3 4 5 6 7 9 10 11 98 99 253 
+$ ./mech/build-armv7l/herkulex_tool --servo.stream.type serial --servo.stream.serial.serial_port /dev/ttySAC0 --enumerate
+0 1 2 3 4 5 6 7 8 9 10 11 ^C
+$ ./mech/build-armv7l/herkulex_tool --servo.stream.type serial --servo.stream.serial.serial_port /dev/ttySAC0 --address 8 --eep_read 12
+Servo 8: Address 12:  5B
+$ ./mech/build-armv7l/herkulex_tool --servo.stream.type serial --servo.stream.serial.serial_port /dev/ttySAC0 --address 7 --eep_read 12
+Servo 7: Address 12:  50
+$ ./mech/build-armv7l/herkulex_tool --servo.stream.type serial --servo.stream.serial.serial_port /dev/ttySAC0 --address 8 --eep_write 12:50
+$ ./mech/build-armv7l/herkulex_tool --servo.stream.type serial --servo.stream.serial.serial_port /dev/ttySAC0 --address 7 --eep_read 12
+Servo 7: Address 12:  50
+$ sudo poweroff
+
