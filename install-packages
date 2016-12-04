@@ -370,7 +370,10 @@ def main():
 ''')
 
     if ubuntu_release == 'xenial':
-        PKGLIST += ['libboost-all-dev']
+        PKGLIST += ['libboost-all-dev',
+                    'libboost-dev',
+                    'libgstrtspserver-1.0-dev',
+                    'python-dev']
         
     if options.dart:
         PKGLIST += split('''
