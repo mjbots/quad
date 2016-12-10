@@ -345,7 +345,7 @@ def main():
 
     PKGLIST = split('''
     scons libeigen3-dev libsnappy-dev python-snappy libi2c-dev
-    pyside-tools liblog4cpp5-dev 
+    pyside-tools liblog4cpp5-dev
     libassimp-dev libtinyxml-dev libtinyxml2-dev libnlopt-dev
     freeglut3-dev libflann-dev libxmu-dev libxi-dev
     python-matplotlib ipython ipython-qtconsole
@@ -354,7 +354,7 @@ def main():
     libopencv-dev
 ''')
 
-    ubuntu_release = subprocess.check_output(["lsb_release", "-cs"])
+    ubuntu_release = subprocess.check_output(["lsb_release", "-cs"]).strip()
 
     if ubuntu_release == 'trusty':
         PKGLIST += split('''
@@ -374,7 +374,7 @@ def main():
                     'libboost-dev',
                     'libgstrtspserver-1.0-dev',
                     'python-dev']
-        
+
     if options.dart:
         PKGLIST += split('''
 libopenscenegraph-dev libopenthreads-dev cmake
