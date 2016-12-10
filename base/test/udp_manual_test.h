@@ -22,6 +22,7 @@
 #include "base/error_code.h"
 #include "base/fail.h"
 #include "base/logging.h"
+#include "base/program_options_archive.h"
 #include "base/visitor.h"
 
 #include "udp_socket.h"
@@ -325,6 +326,7 @@ class UdpManualTest : boost::noncopyable {
     UdpManualTest(Context& context)
         : service_(context.service),
           exit_timer_(service_) {
+    ProgramOptionsArchive(&options_).Accept(&parameters_);
   }
 
   void AsyncStart(base::ErrorHandler handler) {
@@ -378,10 +380,12 @@ class UdpManualTest : boost::noncopyable {
   };
 
   Parameters* parameters() { return &parameters_; }
+  boost::program_options::options_description* options() { return &options_; }
 
  private:
   boost::asio::io_service& service_;
   Parameters parameters_;
+  boost::program_options::options_description options_;
   typedef std::shared_ptr<SocketTesterBase> TesterPtr;
   std::vector<TesterPtr> testers_;
   base::LogRef log_ = base::GetLogInstance("manual_test");

@@ -17,6 +17,7 @@
 
 #include <boost/asio.hpp>
 #include <boost/optional.hpp>
+#include <boost/program_options.hpp>
 #include <boost/signals2/signal.hpp>
 
 #include "base/linux_input.h"
@@ -113,6 +114,7 @@ class Commander {
   };
 
   Parameters* parameters() { return &parameters_; }
+  boost::program_options::options_description* options();
 
   typedef boost::signals2::signal<void (int x, int y)> TargetOffsetSignal;
   TargetOffsetSignal* target_offset_signal();

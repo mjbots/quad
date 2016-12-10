@@ -516,7 +516,7 @@ class SimulatorWindow::Impl {
          "include turret model")
         ;
 
-    base::MergeProgramOptions(stream_config_.options_description(),
+    base::MergeProgramOptions(stream_config_.options(),
                               "stream.",
                               &options_description_);
     base::ProgramOptionsArchive archive(&options_description_, "mech.");

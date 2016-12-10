@@ -1,4 +1,4 @@
-// Copyright 2015 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2015-2016 Mikhail Afanasyev.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@
 #include "base/fail.h"
 #include "base/fast_stream.h"
 #include "base/logging.h"
+#include "base/program_options_archive.h"
 #include "base/telemetry_archive.h"
 
 #include "gst_main_loop.h"
@@ -54,6 +55,8 @@ class VideoControllerApp : boost::noncopyable {
     m_.display->stats_signal()->connect(
        std::bind(&VideoControllerApp::HandleStats, this,
                  std::placeholders::_1));
+
+    base::ProgramOptionsArchive(&options_).Accept(&parameters_);
   }
 
   void AsyncStart(base::ErrorHandler handler) {
@@ -92,6 +95,7 @@ class VideoControllerApp : boost::noncopyable {
   };
 
   Parameters* parameters() { return &parameters_; }
+  boost::program_options::options_description* options() { return &options_; }
 
   void SetTargetOffset(int x, int y) {
     m_.display->SetTargetOffset(x, y);
@@ -164,6 +168,7 @@ class VideoControllerApp : boost::noncopyable {
   boost::asio::io_service& service_;
   Members m_;
   Parameters parameters_{&m_};
+  boost::program_options::options_description options_;
   int stats_count_ = 0;
   base::LogRef log_ = base::GetLogInstance("video_controller_app");
 };

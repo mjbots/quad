@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ int main(int argc, char** argv) {
   base::AddLoggingOptions(&desc);
 
   SimulatorWindow window;
-  base::MergeProgramOptions(window.options_description(),
+  base::MergeProgramOptions(window.options(),
                             "",
                             &desc);
 

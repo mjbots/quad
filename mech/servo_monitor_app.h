@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,6 +31,8 @@ class ServoMonitorApp : boost::noncopyable {
         new ServoMonitor::HerkuleXServoConcrete<Mech::ServoBase>(
             m_.servo_base.get()));
     m_.servo_monitor.reset(new ServoMonitor(context, m_.servo_iface.get()));
+
+    base::ProgramOptionsArchive(&options_).Accept(&parameters_);
   }
 
   void AsyncStart(base::ErrorHandler handler) {
@@ -61,10 +63,12 @@ class ServoMonitorApp : boost::noncopyable {
   };
 
   Parameters* parameters() { return &parameters_; }
+  boost::program_options::options_description* options() { return &options_; }
 
  private:
   Members m_;
   Parameters parameters_{&m_};
+  boost::program_options::options_description options_;
 };
 }
 }

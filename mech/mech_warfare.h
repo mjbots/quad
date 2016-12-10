@@ -116,6 +116,7 @@ class MechWarfare : boost::noncopyable {
   };
 
   Parameters* parameters() { return &parameters_; }
+  boost::program_options::options_description* options();
 
  private:
   boost::asio::io_service& service_;

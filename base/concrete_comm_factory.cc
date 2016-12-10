@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -44,7 +44,7 @@ ConcreteStreamFactory::Parameters::Parameters()
 ConcreteStreamFactory::Parameters::~Parameters() {}
 
 boost::program_options::options_description*
-ConcreteStreamFactory::Parameters::options_description() {
+ConcreteStreamFactory::Parameters::options() {
   return &impl_->options_description_;
 }
 

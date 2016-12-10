@@ -193,12 +193,14 @@ std::string SerializeCommand(const T& message_in) {
 
 class Commander::Impl {
  public:
-  Impl(const Commander::Parameters& params,
+  Impl(Commander::Parameters& params,
        boost::asio::io_service& service)
       : parameters_(params),
         options_(params.opt),
         service_(service),
-        timer_(service) {}
+        timer_(service) {
+    base::ProgramOptionsArchive(&po_options_).Accept(&params);
+  }
 
   void AsyncStart(base::ErrorHandler handler) {
     // Create joystick, if needed.
@@ -553,6 +555,7 @@ class Commander::Impl {
 
   const Parameters& parameters_;
   const OptOptions& options_;
+  boost::program_options::options_description po_options_;
   Command command_;
   boost::asio::io_service& service_;
   udp::endpoint target_;
@@ -586,6 +589,10 @@ void Commander::AsyncStart(base::ErrorHandler handler) {
 
 void Commander::SendMechMessage(const MechMessage& msg) {
   impl_->SendMechMessage(msg);
+}
+
+boost::program_options::options_description* Commander::options() {
+  return &impl_->po_options_;
 }
 
 Commander::TargetOffsetSignal* Commander::target_offset_signal() {

@@ -1,4 +1,4 @@
-// Copyright 2015 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2015-2016 Mikhail Afanasyev.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@
 #include "base/fail.h"
 #include "base/logging.h"
 #include "base/now.h"
+#include "base/program_options_archive.h"
 
 #include "camera_driver.h"
 #include "gst_main_loop.h"
@@ -66,6 +67,8 @@ class VideoLoopbackApp : boost::noncopyable {
     const std::string kAddr = "127.0.0.1:12542";
     m_.video_link_tx->parameters()->link.dest = kAddr;
     m_.video_link_rx->parameters()->link.source = kAddr;
+
+    base::ProgramOptionsArchive(&options_).Accept(&parameters_);
   }
 
   void AsyncStart(base::ErrorHandler handler) {
@@ -116,6 +119,7 @@ class VideoLoopbackApp : boost::noncopyable {
   };
 
   Parameters* parameters() { return &parameters_; }
+  boost::program_options::options_description* options() { return &options_; }
 
  private:
   void HandleStats(const VideoDisplay::Stats* stats) {
@@ -180,6 +184,7 @@ class VideoLoopbackApp : boost::noncopyable {
   boost::asio::io_service& service_;
   Members m_;
   Parameters parameters_{&m_};
+  boost::program_options::options_description options_;
   int stats_count_ = 0;
   base::LogRef log_ = base::GetLogInstance("video_loopback_app");
   base::DeadlineTimer timer_{service_};

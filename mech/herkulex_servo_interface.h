@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 #pragma once
 
 #include "base/fail.h"
+#include "base/program_options_archive.h"
 
 #include "servo_interface.h"
 
@@ -25,7 +26,9 @@ class HerkuleXServoInterface : public ServoInterface {
  public:
   typedef HerkuleXConstants HC;
 
-  HerkuleXServoInterface(Servo* servo) : servo_(servo) {}
+  HerkuleXServoInterface(Servo* servo) : servo_(servo) {
+    base::ProgramOptionsArchive(&options_).Accept(&parameters_);
+  }
   Servo* servo() { return servo_; }
   const Servo* servo() const { return servo_; }
 
@@ -39,6 +42,7 @@ class HerkuleXServoInterface : public ServoInterface {
   };
 
   Parameters* parameters() { return &parameters_; }
+  boost::program_options::options_description* options() { return &options_; }
 
   virtual void SetPose(const std::vector<Joint>& joints,
                        base::ErrorHandler handler) override {
@@ -230,6 +234,7 @@ class HerkuleXServoInterface : public ServoInterface {
   }
 
   Parameters parameters_;
+  boost::program_options::options_description options_;
   Servo* const servo_;
 };
 }

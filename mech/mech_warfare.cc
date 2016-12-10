@@ -19,6 +19,7 @@
 #include "base/common.h"
 #include "base/context_full.h"
 #include "base/now.h"
+#include "base/program_options_archive.h"
 #include "base/property_tree_archive.h"
 
 #include "drive_command.h"
@@ -56,6 +57,7 @@ class MechWarfare::Impl : boost::noncopyable {
         server_(service_),
         timer_(service_) {
     context_.telemetry_registry->Register("mech_warfare", &data_signal_);
+    base::ProgramOptionsArchive(&options_).Accept(&parent_->parameters_);
   }
 
   void AsyncStart(base::ErrorHandler handler) {
@@ -465,6 +467,7 @@ class MechWarfare::Impl : boost::noncopyable {
   MechWarfare* const parent_;
   base::Context& context_;
   boost::asio::io_service& service_;
+  boost::program_options::options_description options_;
 
   base::LogRef log_ = base::GetLogInstance("MechWarfare");
 
@@ -513,6 +516,10 @@ MechWarfare::~MechWarfare() {}
 
 void MechWarfare::AsyncStart(base::ErrorHandler handler) {
   impl_->AsyncStart(handler);
+}
+
+boost::program_options::options_description* MechWarfare::options() {
+  return &impl_->options_;
 }
 
 }

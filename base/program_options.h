@@ -27,5 +27,10 @@ void MergeProgramOptions(
     const std::string& destination_prefix,
     boost::program_options::options_description* destination);
 
+void SetOption(
+    boost::program_options::options_description* source,
+    const std::string& key,
+    const std::string& value);
+
 }
 }

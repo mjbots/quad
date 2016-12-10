@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 #pragma once
 
 #include "base/component_archives.h"
+#include "base/program_options_archive.h"
 
 #include "mjmech_imu_driver.h"
 #include "ahrs.h"
@@ -27,6 +28,9 @@ class AhrsApp : boost::noncopyable {
   AhrsApp(Context& context) {
     m_.imu.reset(new MjmechImuDriver(context));
     m_.ahrs.reset(new Ahrs(context, m_.imu->imu_data_signal()));
+
+    base::MergeProgramOptions(m_.imu->options(), "imu.", &options_);
+    base::MergeProgramOptions(m_.ahrs->options(), "ahrs.", &options_);
   }
 
   void AsyncStart(base::ErrorHandler handler) {
@@ -55,11 +59,12 @@ class AhrsApp : boost::noncopyable {
     Parameters(Members* m) : children(m) {}
   };
 
-  Parameters* parameters() { return &parameters_; }
+  boost::program_options::options_description* options() { return &options_; }
 
  private:
   Members m_;
   Parameters parameters_{&m_};
+  boost::program_options::options_description options_;
 };
 }
 }

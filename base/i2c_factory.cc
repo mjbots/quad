@@ -53,7 +53,7 @@ std::unique_ptr<I2CFactory::Parameters> I2CFactory::MakeParameters() const {
   }
 
   for (auto& pair: result->generators_) {
-    MergeProgramOptions(pair.second->options_description(),
+    MergeProgramOptions(pair.second->options(),
                         pair.first + ".",
                         &result->options_description_);
   }

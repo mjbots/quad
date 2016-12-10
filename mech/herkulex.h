@@ -27,6 +27,8 @@
 #include "base/common.h"
 #include "base/concrete_comm_factory.h"
 #include "base/fail.h"
+#include "base/program_options.h"
+#include "base/program_options_archive.h"
 #include "base/signal_result.h"
 #include "base/visitor.h"
 
@@ -203,20 +205,22 @@ class HerkuleXProtocol : public HerkuleXBase {
                    base::ConcreteStreamFactory& factory)
       : service_(service),
         factory_(factory),
-        sequencer_(service) {}
+        sequencer_(service) {
+    base::ProgramOptionsArchive(&options_).Accept(&parameters_);
+    base::MergeProgramOptions(stream_parameters_.options(), "stream.", &options_);
+  }
 
   struct Parameters {
-    base::ConcreteStreamFactory::Parameters stream;
     double packet_timeout_s = 0.05;
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(stream));
       a->Visit(MJ_NVP(packet_timeout_s));
     }
   };
 
   Parameters* parameters() { return &parameters_; }
+  boost::program_options::options_description* options() { return &options_; }
 
   template <typename Handler>
   BOOST_ASIO_INITFN_RESULT_TYPE(Handler,
@@ -228,7 +232,7 @@ class HerkuleXProtocol : public HerkuleXBase {
             BOOST_ASIO_MOVE_CAST(Handler)(handler));
 
     factory_.AsyncCreate(
-        parameters_.stream,
+        stream_parameters_,
         std::bind(&HerkuleXProtocol::HandleStart, this, init.handler,
                   std::placeholders::_1,
                   std::placeholders::_2));
@@ -473,6 +477,8 @@ class HerkuleXProtocol : public HerkuleXBase {
   boost::asio::io_service& service_;
   base::ConcreteStreamFactory& factory_;
   Parameters parameters_;
+  base::ConcreteStreamFactory::Parameters stream_parameters_;
+  boost::program_options::options_description options_;
   base::CommandSequencer sequencer_;
   base::SharedStream stream_;
   boost::signals2::signal<void (const Packet*)> read_signal_;
@@ -841,4 +847,3 @@ class herkulex_category_impl : public boost::system::error_category {
 
 }
 }
-

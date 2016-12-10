@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -38,7 +38,7 @@ class ConcreteStreamFactory : boost::noncopyable {
 
     /// Ownership remains with the ConcreteStreamFactory, the return
     /// object is guaranteed to live as long as the callee does.
-    boost::program_options::options_description* options_description();
+    boost::program_options::options_description* options();
 
     class Impl;
     std::unique_ptr<Impl> impl_;

@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,8 +15,8 @@
 #pragma once
 
 #include <tuple>
-#include "meta/meta.hpp"
 
+#include "program_options.h"
 #include "visitor.h"
 
 namespace mjmech {
@@ -35,6 +35,21 @@ class ParametersArchive {
 
   template <typename NameValuePair>
   void Visit(const NameValuePair& pair) {
+    VisitHelper(pair, pair.value(), static_cast<int32_t>(0));
+  }
+
+  template <typename NameValuePair, typename Serializable>
+  auto VisitHelper(const NameValuePair& pair,
+                   Serializable* serializable,
+                   int32_t value) -> decltype((*serializable)->options()) {
+    MergeProgramOptions((*serializable)->options(), pair.name(), base_->options());
+    return (*serializable)->options();
+  }
+
+  template <typename NameValuePair, typename Serializable>
+  void VisitHelper(const NameValuePair& pair,
+                   Serializable* serializable,
+                   int64_t) {
     base_->Visit(
         MakeNameValuePair((*pair.value())->parameters(), pair.name()));
   }

@@ -39,33 +39,18 @@ class ProgramOptionsArchive : public VisitArchive<ProgramOptionsArchive> {
 
   template <typename NameValuePair>
   void VisitScalar(const NameValuePair& pair) {
-    VisitOptions(pair, 0);
+    VisitOptions(pair);
   }
 
   template <typename NameValuePair>
-  auto VisitOptions(const NameValuePair& pair, int) ->
-      decltype(pair.value()->options_description()) {
-    MergeProgramOptions(pair.value()->options_description(),
-                        prefix_ + pair.name() + ".",
-                        description_);
-    return 0;
-  }
-
-  template <typename NameValuePair>
-  auto VisitOptions(const NameValuePair& pair, int) ->
-      decltype((*pair.value())->options_description()) {
-    BOOST_ASSERT(*pair.value());
-    MergeProgramOptions((*pair.value())->options_description(),
-                        prefix_ + pair.name() + ".",
-                        description_);
-    return 0;
-  }
-
-  template <typename NameValuePair>
-  void VisitOptions(const NameValuePair& pair, long) {
+  void VisitOptions(const NameValuePair& pair) {
     (*description_).add_options()(
         (prefix_ + pair.name()).c_str(),
         new detail::ProgramOptionsArchiveValue<NameValuePair>(pair));
+  }
+
+  boost::program_options::options_description* options() {
+    return description_;
   }
 
   boost::program_options::options_description* const description_;

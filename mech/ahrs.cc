@@ -17,6 +17,7 @@
 #include "base/attitude_estimator.h"
 #include "base/common.h"
 #include "base/now.h"
+#include "base/program_options_archive.h"
 
 namespace mjmech {
 namespace mech {
@@ -31,7 +32,9 @@ class Ahrs::Impl : boost::noncopyable {
  public:
   Impl(Ahrs* parent, boost::asio::io_service& service)
       : parent_(parent),
-        service_(service) {}
+        service_(service) {
+    base::ProgramOptionsArchive(&options_).Accept(&parameters_);
+  }
 
   void Start() {
     estimator_.reset(
@@ -188,6 +191,7 @@ class Ahrs::Impl : boost::noncopyable {
   Ahrs* const parent_;
   boost::asio::io_service& service_;
   Parameters parameters_;
+  boost::program_options::options_description options_;
 
   std::unique_ptr<base::AttitudeEstimator> estimator_;
 
@@ -206,7 +210,8 @@ void Ahrs::AsyncStart(base::ErrorHandler handler) {
   impl_->service_.post(std::bind(handler, base::ErrorCode()));
 }
 
-Ahrs::Parameters* Ahrs::parameters() { return &impl_->parameters_; }
+boost::program_options::options_description*
+Ahrs::options() { return &impl_->options_; }
 
 void Ahrs::ProcessImu(boost::posix_time::ptime timestamp,
                       const base::Point3D& accel_mps2,

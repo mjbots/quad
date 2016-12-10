@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,10 +28,8 @@ namespace {
 class Fixture {
  public:
   Fixture() {
-    herkulex_.parameters()->stream.options_description()->
-        find("type", false).semantic()->notify(std::string("pipe"));
-    herkulex_.parameters()->stream.options_description()->
-        find("pipe.key", false).semantic()->notify(std::string("test"));
+    SetOption(herkulex_.options(), "stream.type", "pipe");
+    SetOption(herkulex_.options(), "stream.pipe.key", "test");
 
     stream_ = factory_.pipe_generator()->GetStream(
         service_, "test", PipeGenerator::Mode::kDirectionB);

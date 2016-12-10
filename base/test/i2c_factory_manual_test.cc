@@ -121,7 +121,7 @@ int main(int argc, char** argv) {
   std::unique_ptr<I2CFactory::Parameters> parameters =
       factory.MakeParameters();
 
-  MergeProgramOptions(parameters->options_description(), "i2c.", &options);
+  MergeProgramOptions(parameters->options(), "i2c.", &options);
 
   po::variables_map vm;
   po::store(po::parse_command_line(argc, argv, options), vm);

@@ -24,6 +24,7 @@
 #include "base/common.h"
 #include "base/concrete_comm_factory.h"
 #include "base/error_wrap.h"
+#include "base/program_options.h"
 #include "base/program_options_archive.h"
 
 #include "herkulex.h"
@@ -297,9 +298,7 @@ int work(int argc, char** argv) {
   HerkuleXServoInterface<Servo> servo_interface(&servo);
 
   // Default to something moderately useful.
-  boost::any value = std::string("serial");
-  servo.parameters()->stream.options_description()->
-      find("type", false).semantic()->apply_default(value);
+  mjmech::base::SetOption(servo.options(), "stream.type", "serial");
 
   Options options;
 
@@ -317,7 +316,7 @@ int work(int argc, char** argv) {
             pair.first, pair.second.args, &command_sequence), "");
   }
 
-  ProgramOptionsArchive(&desc, "servo.").Accept(servo.parameters());
+  MergeProgramOptions(servo.options(), "servo.", &desc);
 
   po::variables_map vm;
   po::store(po::parse_command_line(argc, argv, desc), vm);

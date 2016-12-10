@@ -1,4 +1,4 @@
-// Copyright 2015 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2015-2016 Mikhail Afanasyev.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 #include "base/component_archives.h"
 #include "base/fail.h"
 #include "base/logging.h"
+#include "base/program_options_archive.h"
 
 #include "mech_warfare_command.h"
 #include "video_controller_app.h"
@@ -32,6 +33,8 @@ class MWCommand : boost::noncopyable {
     : service_(context.service) {
     m_.video_controller.reset(new VideoControllerApp(context));
     m_.commander.reset(new mw_command::Commander(service_));
+
+    base::ProgramOptionsArchive(&options_).Accept(&parameters_);
   }
 
   void AsyncStart(base::ErrorHandler handler) {
@@ -89,6 +92,7 @@ class MWCommand : boost::noncopyable {
   };
 
   Parameters* parameters() { return &parameters_; }
+  boost::program_options::options_description* options() { return &options_; }
 
  private:
 
@@ -120,6 +124,7 @@ class MWCommand : boost::noncopyable {
   boost::asio::io_service& service_;
   Members m_;
   Parameters parameters_ = Parameters(m_);
+  boost::program_options::options_description options_;
   base::LogRef log_ = base::GetLogInstance("mw_command");
 };
 

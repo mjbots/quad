@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -54,7 +54,7 @@ int safe_main(int argc, char**argv) {
   AddLoggingOptions(&desc);
   ProgramOptionsArchive(&desc, "remote_debug.").Accept(
       context.remote_debug->parameters());
-  ProgramOptionsArchive(&desc).Accept(module.parameters());
+  MergeProgramOptions(module.options(), "", &desc);
 
   // Do not accept any positional arguments.
   const po::positional_options_description empty_po;

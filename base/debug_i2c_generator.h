@@ -32,7 +32,7 @@ class DebugI2CGenerator : public I2CFactory::Generator {
     virtual ~Parameters() {}
 
     boost::program_options::options_description*
-    options_description() override { return &options_description_; }
+    options() override { return &options_description_; }
 
     std::string key;
 

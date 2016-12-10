@@ -32,7 +32,7 @@ class I2CFactory : boost::noncopyable {
    public:
     virtual ~GeneratorParameters() {}
     virtual boost::program_options::options_description*
-      options_description() = 0;
+      options() = 0;
   };
 
   class Generator {
@@ -49,7 +49,7 @@ class I2CFactory : boost::noncopyable {
 
   class Parameters {
    public:
-    boost::program_options::options_description* options_description() {
+    boost::program_options::options_description* options() {
       return &options_description_;
     }
 

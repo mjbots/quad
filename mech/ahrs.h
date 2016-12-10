@@ -17,6 +17,7 @@
 #include <boost/asio/io_service.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/noncopyable.hpp>
+#include <boost/program_options.hpp>
 #include <boost/signals2/signal.hpp>
 
 #include "base/comm.h"
@@ -71,7 +72,7 @@ class Ahrs : boost::noncopyable {
     }
   };
 
-  Parameters* parameters();
+  boost::program_options::options_description* options();
 
   struct AhrsDebugData {
     enum {

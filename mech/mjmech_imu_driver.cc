@@ -35,6 +35,37 @@ auto to_int16 = [](uint8_t msb, uint8_t lsb) {
 };
 
 const double kGravity = 9.80665;
+
+struct Parameters {
+  std::unique_ptr<base::I2CFactory::Parameters> i2c;
+  int gyro_address = 0x59;
+  int accel_address = 0x1d;
+
+  double accel_g = 4.0;
+  double rotation_dps = 500.0;
+  double rate_hz = 100.0;
+
+  double roll_deg = 0;
+  double pitch_deg = 0;
+  double yaw_deg = 0;
+  base::Point3D gyro_scale = base::Point3D(1, 1, 1);
+  base::Point3D accel_scale = base::Point3D(1, 1, 1);
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(MJ_NVP(i2c));
+    a->Visit(MJ_NVP(gyro_address));
+    a->Visit(MJ_NVP(accel_address));
+    a->Visit(MJ_NVP(accel_g));
+    a->Visit(MJ_NVP(rotation_dps));
+    a->Visit(MJ_NVP(rate_hz));
+    a->Visit(MJ_NVP(roll_deg));
+    a->Visit(MJ_NVP(pitch_deg));
+    a->Visit(MJ_NVP(yaw_deg));
+    a->Visit(MJ_NVP(gyro_scale));
+    a->Visit(MJ_NVP(accel_scale));
+  }
+};
 }
 
 class MjmechImuDriver::Impl : boost::noncopyable {
@@ -43,23 +74,25 @@ class MjmechImuDriver::Impl : boost::noncopyable {
        base::I2CFactory* i2c_factory)
       : parent_(parent),
         service_(service),
-        i2c_factory_(i2c_factory) {}
+        i2c_factory_(i2c_factory) {
+    parameters_.i2c = i2c_factory->MakeParameters();
+  }
 
   ~Impl() {
   }
 
   void AsyncStart(base::ErrorHandler handler) {
-    const auto& parameters = parent_->parameters_;
-
     transform_ = base::Quaternion::FromEuler(
-        base::Radians(parameters.roll_deg),
-        base::Radians(parameters.pitch_deg),
-        base::Radians(parameters.yaw_deg));
+        base::Radians(parameters_.roll_deg),
+        base::Radians(parameters_.pitch_deg),
+        base::Radians(parameters_.yaw_deg));
 
     i2c_factory_->AsyncCreate(
-        *parameters.i2c,
+        *parameters_.i2c,
         std::bind(&Impl::HandleStart, this, handler, _1, _2));
   }
+
+  boost::program_options::options_description* options() { return &options_; }
 
  private:
   void HandleStart(base::ErrorHandler handler,
@@ -109,12 +142,10 @@ class MjmechImuDriver::Impl : boost::noncopyable {
       return;
     }
 
-    const auto& parameters = parent_->parameters_;
-
     try {
       // Configure the gyroscope.
-      const uint8_t fs = [&parameters]() {
-        const double scale = parameters.rotation_dps;
+      const uint8_t fs = [&]() {
+        const double scale = parameters_.rotation_dps;
         if (scale <= 250) { return 3; }
         else if (scale <= 500) { return 2; }
         else if (scale <= 1000) { return 1; }
@@ -136,8 +167,8 @@ class MjmechImuDriver::Impl : boost::noncopyable {
       buffer_[0] = static_cast<uint8_t>(0x0f | (fs << 6));
 
       // Pick a bandwidth which is less than half the desired rate.
-      const uint8_t bw = [&parameters]() {
-        const double rate = parameters.rate_hz;
+      const uint8_t bw = [&]() {
+        const double rate = parameters_.rate_hz;
         if (rate < 8) { return 0; } // 2 Hz
         else if (rate < 12) { return 1; } // 4 Hz
         else if (rate < 16) { return 2; } // 6 Hz
@@ -186,8 +217,8 @@ class MjmechImuDriver::Impl : boost::noncopyable {
         return static_cast<uint8_t>(value);
       };
 
-      const uint8_t odr = limit([&parameters]() {
-          const double rate = parameters.rate_hz;
+      const uint8_t odr = limit([&]() {
+          const double rate = parameters_.rate_hz;
           if (rate < 4.95) {
             throw base::SystemError::einval("IMU rate too small");
           } else if (rate < 20) {
@@ -242,12 +273,10 @@ class MjmechImuDriver::Impl : boost::noncopyable {
       return;
     }
 
-    const auto& parameters = parent_->parameters_;
-
     try {
 
-      const uint8_t fsg = [&parameters]() {
-        const double scale = parameters.accel_g;
+      const uint8_t fsg = [&]() {
+        const double scale = parameters_.accel_g;
         if (scale <= 2.0) { return 0; }
         else if (scale <= 4.0) { return 1; }
         else if (scale <= 8.0) { return 2; }
@@ -281,11 +310,9 @@ class MjmechImuDriver::Impl : boost::noncopyable {
       return;
     }
 
-    const auto& parameters = parent_->parameters_;
-
     try {
-      const uint8_t dr = [&parameters]() {
-        const double rate = parameters.rate_hz;
+      const uint8_t dr = [this]() {
+        const double rate = parameters_.rate_hz;
         if (rate <= 1.56) { return 7; }
         else if (rate <= 6.25) { return 6; }
         else if (rate <= 12.5) { return 5; }
@@ -296,8 +323,8 @@ class MjmechImuDriver::Impl : boost::noncopyable {
         else if (rate <= 800) { return 0; }
         throw base::SystemError::einval("accel rate too large");
       }();
-      const uint8_t lnoise = [&parameters]() {
-        if (parameters.accel_g <= 4) { return 1; }
+      const uint8_t lnoise = [&]() {
+        if (parameters_.accel_g <= 4) { return 1; }
         return 0;
       }();
 
@@ -335,13 +362,11 @@ class MjmechImuDriver::Impl : boost::noncopyable {
       return;
     }
 
-    const auto& parameters = parent_->parameters_;
-
-    imu_config_.roll_deg = parameters.roll_deg;
-    imu_config_.pitch_deg = parameters.pitch_deg;
-    imu_config_.yaw_deg = parameters.yaw_deg;
-    imu_config_.gyro_scale = parameters.gyro_scale;
-    imu_config_.accel_scale = parameters.accel_scale;
+    imu_config_.roll_deg = parameters_.roll_deg;
+    imu_config_.pitch_deg = parameters_.pitch_deg;
+    imu_config_.yaw_deg = parameters_.yaw_deg;
+    imu_config_.gyro_scale = parameters_.gyro_scale;
+    imu_config_.accel_scale = parameters_.accel_scale;
 
     imu_config_.timestamp = base::Now(service_);
 
@@ -350,7 +375,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
 
     service_.post(std::bind(handler, base::ErrorCode()));
 
-    accel_sensitivity_ = [this]() {
+    accel_sensitivity_ = [&]() {
       const double fs = imu_config_.accel_g;
       if (fs == 2.0) { return 1.0 / 4096 / 4; }
       else if (fs == 4.0) { return 1.0 / 2048 / 4; }
@@ -358,7 +383,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
       base::Fail("invalid configured accel range");
     }();
 
-    gyro_sensitivity_ = [this]() {
+    gyro_sensitivity_ = [&]() {
       const double fs = imu_config_.rotation_dps;
       if (fs == 250.0) { return 1.0 / 120.0; }
       else if (fs == 500.0) { return 1.0 / 60.0; }
@@ -392,18 +417,17 @@ class MjmechImuDriver::Impl : boost::noncopyable {
 
 
     const auto& gdata = buffer_;
-    const auto& parameters = parent_->parameters_;
 
     base::Point3D body_rate_dps;
     body_rate_dps.x =
         to_int16(gdata[1], gdata[2]) * gyro_sensitivity_ *
-        parameters.gyro_scale.x;
+        parameters_.gyro_scale.x;
     body_rate_dps.y =
         to_int16(gdata[3], gdata[4]) * gyro_sensitivity_ *
-        parameters.gyro_scale.y;
+        parameters_.gyro_scale.y;
     body_rate_dps.z =
         to_int16(gdata[5], gdata[6]) * gyro_sensitivity_ *
-        parameters.gyro_scale.z;
+        parameters_.gyro_scale.z;
 
     auto rate_dps = transform_.Rotate(body_rate_dps);
 
@@ -418,19 +442,18 @@ class MjmechImuDriver::Impl : boost::noncopyable {
     ImuData imu_data;
     imu_data.timestamp = base::Now(service_);
 
-    const auto& parameters = parent_->parameters_;
     const auto& adata = buffer_;
     base::Point3D accel_mps2;
 
     accel_mps2.x =
         to_int16(adata[1], adata[2]) * accel_sensitivity_ * kGravity *
-        parameters.accel_scale.x;
+        parameters_.accel_scale.x;
     accel_mps2.y =
           to_int16(adata[3], adata[4]) * accel_sensitivity_ * kGravity *
-        parameters.accel_scale.y;
+        parameters_.accel_scale.y;
     accel_mps2.z =
           to_int16(adata[5], adata[6]) * accel_sensitivity_ * kGravity *
-        parameters.accel_scale.z;
+        parameters_.accel_scale.z;
 
     imu_data.accel_mps2 = transform_.Rotate(accel_mps2);
 
@@ -443,22 +466,22 @@ class MjmechImuDriver::Impl : boost::noncopyable {
 
   void WriteGyro(uint8_t reg, std::size_t length,
                  base::WriteHandler handler) {
-    WriteData(parent_->parameters_.gyro_address, reg, length, handler);
+    WriteData(parameters_.gyro_address, reg, length, handler);
   }
 
   void WriteAccel(uint8_t reg, std::size_t length,
                   base::WriteHandler handler) {
-    WriteData(parent_->parameters_.accel_address, reg, length, handler);
+    WriteData(parameters_.accel_address, reg, length, handler);
   }
 
   void ReadGyro(uint8_t reg, std::size_t length,
                 base::ReadHandler handler) {
-    ReadData(parent_->parameters_.gyro_address, reg, length, handler);
+    ReadData(parameters_.gyro_address, reg, length, handler);
   }
 
   void ReadAccel(uint8_t reg, std::size_t length,
                  base::ReadHandler handler) {
-    ReadData(parent_->parameters_.accel_address, reg, length, handler);
+    ReadData(parameters_.accel_address, reg, length, handler);
   }
 
   void WriteData(uint8_t address, uint8_t reg, std::size_t length,
@@ -477,6 +500,8 @@ class MjmechImuDriver::Impl : boost::noncopyable {
 
   // From both.
   MjmechImuDriver* const parent_;
+  Parameters parameters_;
+  boost::program_options::options_description options_;
   boost::asio::io_service& service_;
   base::I2CFactory* const i2c_factory_;
   base::SharedI2C i2c_;
@@ -493,13 +518,17 @@ class MjmechImuDriver::Impl : boost::noncopyable {
 MjmechImuDriver::MjmechImuDriver(boost::asio::io_service& service,
                                  base::I2CFactory* i2c_factory)
     : impl_(new Impl(this, service, i2c_factory)) {
-  parameters_.i2c = i2c_factory->MakeParameters();
 }
 
 MjmechImuDriver::~MjmechImuDriver() {}
 
 void MjmechImuDriver::AsyncStart(base::ErrorHandler handler) {
   impl_->AsyncStart(handler);
+}
+
+boost::program_options::options_description*
+MjmechImuDriver::options() {
+  return impl_->options();
 }
 
 }

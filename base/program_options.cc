@@ -67,5 +67,15 @@ void MergeProgramOptions(
   }
 }
 
+void SetOption(
+    boost::program_options::options_description* source,
+    const std::string& key,
+    const std::string& value) {
+  auto semantic = source->find(key, false).semantic();
+  boost::any any_value;
+  semantic->parse(any_value, std::vector<std::string>({value}), true);
+  semantic->notify(any_value);
+}
+
 }
 }
