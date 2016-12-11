@@ -57,7 +57,6 @@ class MechWarfare::Impl : boost::noncopyable {
         server_(service_),
         timer_(service_) {
     context_.telemetry_registry->Register("mech_warfare", &data_signal_);
-    base::ProgramOptionsArchive(&options_).Accept(&parent_->parameters_);
   }
 
   void AsyncStart(base::ErrorHandler handler) {
@@ -510,6 +509,8 @@ MechWarfare::MechWarfare(base::Context& context)
   m_.servo_monitor->data_signal()->connect(
       std::bind(&Impl::HandleServoData, impl_.get(),
                 std::placeholders::_1));
+
+  base::ProgramOptionsArchive(&impl_->options_).Accept(&parameters_);
 }
 
 MechWarfare::~MechWarfare() {}

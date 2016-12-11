@@ -519,8 +519,8 @@ class SimulatorWindow::Impl {
     base::MergeProgramOptions(stream_config_.options(),
                               "stream.",
                               &options_description_);
-    base::ProgramOptionsArchive archive(&options_description_, "mech.");
-    archive.Accept(mech_warfare_->parameters());
+    base::MergeProgramOptions(
+        mech_warfare_->options(), "mech.", &options_description_);
 
     // Prepare our default configuration.
     auto key = [&](const std::string& value) {
@@ -536,6 +536,7 @@ class SimulatorWindow::Impl {
     boost::filesystem::path root = this_file.parent_path().parent_path();
     key("mech.gait_config")->notify((root / "configs" / "real.cfg").string());
     key("mech.imu_enable")->notify(false);
+    key("mech.video_enable")->notify(false);
   }
 
   ~Impl() {
@@ -944,7 +945,7 @@ void SimulatorWindow::render() {
 }
 
 boost::program_options::options_description*
-SimulatorWindow::options_description() {
+SimulatorWindow::options() {
   return &impl_->options_description_;
 }
 

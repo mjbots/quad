@@ -42,7 +42,9 @@ class ParametersArchive {
   auto VisitHelper(const NameValuePair& pair,
                    Serializable* serializable,
                    int32_t value) -> decltype((*serializable)->options()) {
-    MergeProgramOptions((*serializable)->options(), pair.name(), base_->options());
+    MergeProgramOptions((*serializable)->options(),
+                        std::string(pair.name()) + ".",
+                        base_->options());
     return (*serializable)->options();
   }
 

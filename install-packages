@@ -412,8 +412,8 @@ libopenscenegraph-dev libopenthreads-dev cmake
 
         do_install_gst_packages(options)
 
-        if options.dart:
-            do_install_dart(options)
+    if options.dart:
+        do_install_dart(options)
 
 
 if __name__ == '__main__':
