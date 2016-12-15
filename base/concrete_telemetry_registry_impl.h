@@ -14,32 +14,7 @@
 
 #pragma once
 
-#include <memory>
-
-#include <boost/noncopyable.hpp>
-#include <boost/asio/io_service.hpp>
-
 #include "base/concrete_telemetry_registry.h"
-
-namespace mjmech {
-namespace base {
-
-class ConcreteStreamFactory;
-class I2CFactory;
-class TelemetryLog;
-class TelemetryRemoteDebugServer;
-
-struct Context : boost::noncopyable {
-  Context();
-  ~Context();
-
-  boost::asio::io_service service;
-  std::unique_ptr<TelemetryLog> telemetry_log;
-  std::unique_ptr<TelemetryRemoteDebugServer> remote_debug;
-  std::unique_ptr<ConcreteTelemetryRegistry> telemetry_registry;
-  std::unique_ptr<ConcreteStreamFactory> factory;
-  std::unique_ptr<I2CFactory> i2c_factory;
-};
-
-}
-}
+#include "base/telemetry_log_registrar.h"
+#include "base/telemetry_registry.h"
+#include "base/telemetry_remote_debug_registrar.h"

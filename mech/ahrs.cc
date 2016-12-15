@@ -16,6 +16,7 @@
 
 #include "base/attitude_estimator.h"
 #include "base/common.h"
+#include "base/concrete_telemetry_registry_impl.h"
 #include "base/now.h"
 #include "base/program_options_archive.h"
 
@@ -26,14 +27,72 @@ using base::Point3D;
 using base::Radians;
 using base::Degrees;
 const double kGravity = 9.81;
+
+struct Parameters {
+  double process_noise_attitude_dps = 0.01;
+  double process_noise_bias_dps = 0.0256;
+  double measurement_noise_accel_mps2 = 0.5;
+  double measurement_noise_stationary_dps = 0.1;
+  double initial_noise_attitude_deg = 2.0;
+  double initial_noise_bias_dps = 0.2;
+  double init_time_s = 1.0;
+  double stationary_threshold_dps = 1.0;
+  double stationary_threshold_delay_s = 1.0;
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(MJ_NVP(process_noise_attitude_dps));
+    a->Visit(MJ_NVP(process_noise_bias_dps));
+    a->Visit(MJ_NVP(measurement_noise_accel_mps2));
+    a->Visit(MJ_NVP(measurement_noise_stationary_dps));
+    a->Visit(MJ_NVP(initial_noise_attitude_deg));
+    a->Visit(MJ_NVP(initial_noise_bias_dps));
+    a->Visit(MJ_NVP(init_time_s));
+    a->Visit(MJ_NVP(stationary_threshold_dps));
+    a->Visit(MJ_NVP(stationary_threshold_delay_s));
+  }
+};
+
+struct AhrsDebugData {
+  enum {
+    kFilterSize = 7
+  };
+
+  boost::posix_time::ptime timestamp;
+
+  std::array<double, kFilterSize> ukf_state = {};
+  std::array<double, kFilterSize * kFilterSize> ukf_covariance = {};
+  base::Point3D bias_body_dps;
+  base::Point3D init_accel_mps2;
+  int init_count = 0;
+  boost::posix_time::ptime init_start;
+  boost::posix_time::ptime last_measurement;
+  boost::posix_time::ptime last_movement;
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(MJ_NVP(timestamp));
+    a->Visit(MJ_NVP(ukf_state));
+    a->Visit(MJ_NVP(ukf_covariance));
+    a->Visit(MJ_NVP(bias_body_dps));
+    a->Visit(MJ_NVP(init_accel_mps2));
+    a->Visit(MJ_NVP(init_count));
+    a->Visit(MJ_NVP(init_start));
+    a->Visit(MJ_NVP(last_measurement));
+    a->Visit(MJ_NVP(last_movement));
+  }
+};
 }
 
 class Ahrs::Impl : boost::noncopyable {
  public:
-  Impl(Ahrs* parent, boost::asio::io_service& service)
-      : parent_(parent),
-        service_(service) {
+  Impl(boost::asio::io_service& service,
+       base::ConcreteTelemetryRegistry* registry)
+      : service_(service) {
     base::ProgramOptionsArchive(&options_).Accept(&parameters_);
+
+    registry->Register("ahrs", &ahrs_data_signal_);
+    registry->Register("ahrs_debug", &ahrs_debug_signal_);
   }
 
   void Start() {
@@ -184,11 +243,10 @@ class Ahrs::Impl : boost::noncopyable {
       }
     }
 
-    parent_->ahrs_data_signal_(&data_);
-    parent_->ahrs_debug_signal_(&data_debug_);
+    ahrs_data_signal_(&data_);
+    ahrs_debug_signal_(&data_debug_);
   }
 
-  Ahrs* const parent_;
   boost::asio::io_service& service_;
   Parameters parameters_;
   boost::program_options::options_description options_;
@@ -198,11 +256,15 @@ class Ahrs::Impl : boost::noncopyable {
   AhrsData data_;
   AhrsDebugData data_debug_;
 
+  boost::signals2::signal<void (const AhrsData*)> ahrs_data_signal_;
+  boost::signals2::signal<void (const AhrsDebugData*)> ahrs_debug_signal_;
+
   boost::posix_time::ptime start_init_timestamp_;
 };
 
-Ahrs::Ahrs(boost::asio::io_service& service)
-    : impl_(new Impl(this, service)) {}
+Ahrs::Ahrs(boost::asio::io_service& service,
+           base::ConcreteTelemetryRegistry* registry)
+    : impl_(new Impl(service, registry)) {}
 Ahrs::~Ahrs() {}
 
 void Ahrs::AsyncStart(base::ErrorHandler handler) {
@@ -212,6 +274,9 @@ void Ahrs::AsyncStart(base::ErrorHandler handler) {
 
 boost::program_options::options_description*
 Ahrs::options() { return &impl_->options_; }
+
+boost::signals2::signal<void (const AhrsData*)>*
+Ahrs::ahrs_data_signal() { return &impl_->ahrs_data_signal_; }
 
 void Ahrs::ProcessImu(boost::posix_time::ptime timestamp,
                       const base::Point3D& accel_mps2,

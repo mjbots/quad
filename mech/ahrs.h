@@ -21,6 +21,7 @@
 #include <boost/signals2/signal.hpp>
 
 #include "base/comm.h"
+#include "base/concrete_telemetry_registry.h"
 #include "base/point3d.h"
 #include "base/quaternion.h"
 #include "base/visitor.h"
@@ -36,9 +37,7 @@ class Ahrs : boost::noncopyable {
             typename ImuData>
   Ahrs(Context& context,
        boost::signals2::signal<void (const ImuData*)>* imu_signal)
-      : Ahrs(context.service) {
-    context.telemetry_registry->Register("ahrs", &ahrs_data_signal_);
-    context.telemetry_registry->Register("ahrs_debug", &ahrs_debug_signal_);
+      : Ahrs(context.service, context.telemetry_registry.get()) {
     imu_signal->connect(std::bind(&Ahrs::HandleImuData<ImuData>, this,
                                   std::placeholders::_1));
   }
@@ -47,72 +46,12 @@ class Ahrs : boost::noncopyable {
 
   void AsyncStart(base::ErrorHandler);
 
-  struct Parameters {
-    double process_noise_attitude_dps = 0.01;
-    double process_noise_bias_dps = 0.0256;
-    double measurement_noise_accel_mps2 = 0.5;
-    double measurement_noise_stationary_dps = 0.1;
-    double initial_noise_attitude_deg = 2.0;
-    double initial_noise_bias_dps = 0.2;
-    double init_time_s = 1.0;
-    double stationary_threshold_dps = 1.0;
-    double stationary_threshold_delay_s = 1.0;
-
-    template <typename Archive>
-    void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(process_noise_attitude_dps));
-      a->Visit(MJ_NVP(process_noise_bias_dps));
-      a->Visit(MJ_NVP(measurement_noise_accel_mps2));
-      a->Visit(MJ_NVP(measurement_noise_stationary_dps));
-      a->Visit(MJ_NVP(initial_noise_attitude_deg));
-      a->Visit(MJ_NVP(initial_noise_bias_dps));
-      a->Visit(MJ_NVP(init_time_s));
-      a->Visit(MJ_NVP(stationary_threshold_dps));
-      a->Visit(MJ_NVP(stationary_threshold_delay_s));
-    }
-  };
-
   boost::program_options::options_description* options();
 
-  struct AhrsDebugData {
-    enum {
-      kFilterSize = 7
-    };
-
-    boost::posix_time::ptime timestamp;
-
-    std::array<double, kFilterSize> ukf_state = {};
-    std::array<double, kFilterSize * kFilterSize> ukf_covariance = {};
-    base::Point3D bias_body_dps;
-    base::Point3D init_accel_mps2;
-    int init_count = 0;
-    boost::posix_time::ptime init_start;
-    boost::posix_time::ptime last_measurement;
-    boost::posix_time::ptime last_movement;
-
-    template <typename Archive>
-    void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(timestamp));
-      a->Visit(MJ_NVP(ukf_state));
-      a->Visit(MJ_NVP(ukf_covariance));
-      a->Visit(MJ_NVP(bias_body_dps));
-      a->Visit(MJ_NVP(init_accel_mps2));
-      a->Visit(MJ_NVP(init_count));
-      a->Visit(MJ_NVP(init_start));
-      a->Visit(MJ_NVP(last_measurement));
-      a->Visit(MJ_NVP(last_movement));
-    }
-  };
-
-  boost::signals2::signal<void (const AhrsData*)>* ahrs_data_signal() {
-    return &ahrs_data_signal_;
-  }
+  boost::signals2::signal<void (const AhrsData*)>* ahrs_data_signal();
 
  private:
-  boost::signals2::signal<void (const AhrsData*)> ahrs_data_signal_;
-  boost::signals2::signal<void (const AhrsDebugData*)> ahrs_debug_signal_;
-
-  Ahrs(boost::asio::io_service&);
+  Ahrs(boost::asio::io_service&, base::ConcreteTelemetryRegistry*);
 
   template <typename ImuData>
   void HandleImuData(const ImuData* data) {
