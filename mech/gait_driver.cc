@@ -14,9 +14,11 @@
 
 #include "gait_driver.h"
 
+#include "base/concrete_telemetry_registry_impl.h"
 #include "base/deadline_timer.h"
 #include "base/fail.h"
 #include "base/now.h"
+#include "base/program_options_archive.h"
 
 #include "ripple.h"
 #include "servo_interface.h"
@@ -24,6 +26,87 @@
 namespace mjmech {
 namespace mech {
 namespace {
+struct Parameters {
+  /// Update the gait engine (and send servo commands) at this rate.
+  double period_s = 0.05; // 20Hz
+
+  /// This long with no commands will result in stopping the gait
+  /// engine and setting all servos to unpowered.
+  double command_timeout_s = 0.0;
+
+  /// The maximum amount that the gait engine can accelerate in each
+  /// axis.  Deceleration is currently unlimited.
+  base::Point3D max_acceleration_mm_s2 = base::Point3D(200., 200., 200.);
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(MJ_NVP(period_s));
+    a->Visit(MJ_NVP(command_timeout_s));
+    a->Visit(MJ_NVP(max_acceleration_mm_s2));
+  }
+};
+
+enum State : int {
+  kUnpowered,
+      kActive,
+      };
+
+static std::map<State, const char*> StateMapper() {
+  return std::map<State, const char*>{
+    { kUnpowered, "kUnpowered" },
+    { kActive, "kActive" },
+        };
+}
+
+struct GaitData {
+  boost::posix_time::ptime timestamp;
+
+  State state;
+  base::Transform body_robot;
+  base::Transform cog_robot;
+  base::Transform body_world;
+  base::Transform robot_world;
+
+  base::Quaternion attitude;
+  base::Point3D body_rate_dps;
+
+  std::array<base::Point3D, 4> legs;
+  // The command as sent by the user.
+  JointCommand command;
+
+  // The command as given to the gait engine.
+  Command input_command;
+  Command gait_command;
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(MJ_NVP(timestamp));
+    a->Visit(MJ_ENUM(state, StateMapper));
+    a->Visit(MJ_NVP(body_robot));
+    a->Visit(MJ_NVP(cog_robot));
+    a->Visit(MJ_NVP(body_world));
+    a->Visit(MJ_NVP(robot_world));
+    a->Visit(MJ_NVP(attitude));
+    a->Visit(MJ_NVP(body_rate_dps));
+    a->Visit(MJ_NVP(legs));
+    a->Visit(MJ_NVP(command));
+    a->Visit(MJ_NVP(input_command));
+    a->Visit(MJ_NVP(gait_command));
+  }
+};
+
+struct CommandData {
+  boost::posix_time::ptime timestamp;
+
+  Command command;
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(MJ_NVP(timestamp));
+    a->Visit(MJ_NVP(command));
+  }
+};
+
 double Limit(double val, double max) {
   if (val > max) { return max; }
   else if (val < -max) { return -max; }
@@ -40,13 +123,17 @@ class FailHandler {
 
 class GaitDriver::Impl : boost::noncopyable {
  public:
-  Impl(GaitDriver* parent,
-       boost::asio::io_service& service,
+  Impl(boost::asio::io_service& service,
+       base::ConcreteTelemetryRegistry* telemetry_registry,
        ServoInterface* servo)
-      : parent_(parent),
-        service_(service),
+      : service_(service),
         servo_(servo),
-        timer_(service) {}
+        timer_(service) {
+    base::ProgramOptionsArchive(&options_).Accept(&parameters_);
+
+    telemetry_registry->Register("gait", &gait_data_signal_);
+    telemetry_registry->Register("gait_command", &command_data_signal_);
+  }
 
   void SetGait(std::unique_ptr<RippleGait> gait) {
     gait_ = std::move(gait);
@@ -64,7 +151,7 @@ class GaitDriver::Impl : boost::noncopyable {
     CommandData data;
     data.timestamp = base::Now(service_);
     data.command = input_command_;
-    parent_->command_data_signal_(&data);
+    command_data_signal_(&data);
 
     last_command_timestamp_ = data.timestamp;
 
@@ -106,11 +193,15 @@ class GaitDriver::Impl : boost::noncopyable {
     body_rate_dps_ = body_rate_dps;
   }
 
+  boost::program_options::options_description* options() {
+    return &options_;
+  }
+
  private:
   void StartTimer() {
     timer_.expires_at(
         timer_.expires_at() +
-        base::ConvertSecondsToDuration(parent_->parameters_.period_s));
+        base::ConvertSecondsToDuration(parameters_.period_s));
     timer_.async_wait(std::bind(&Impl::HandleTimer, this,
                                 std::placeholders::_1));
   }
@@ -121,9 +212,9 @@ class GaitDriver::Impl : boost::noncopyable {
     const auto now = base::Now(service_);
     const auto elapsed = now - last_command_timestamp_;
     const bool timeout =
-        (parent_->parameters_.command_timeout_s > 0.0) &&
+        (parameters_.command_timeout_s > 0.0) &&
         (elapsed > base::ConvertSecondsToDuration(
-            parent_->parameters_.command_timeout_s));
+            parameters_.command_timeout_s));
     if (state_ == kUnpowered || timeout) {
       SetFree();
       return;
@@ -140,7 +231,7 @@ class GaitDriver::Impl : boost::noncopyable {
         if (std::abs(input_mm_s) > std::abs(*gait_mm_s)) {
           double delta_mm_s = input_mm_s - *gait_mm_s;
           const double max_step_mm_s =
-            parent_->parameters_.period_s * accel_mm_s2;
+            parameters_.period_s * accel_mm_s2;
           const double step_mm_s = Limit(delta_mm_s, max_step_mm_s);
           *gait_mm_s += step_mm_s;
         } else {
@@ -154,13 +245,13 @@ class GaitDriver::Impl : boost::noncopyable {
 
     update_axis_accel(input_command_.translate_x_mm_s,
                       &gait_command_.translate_x_mm_s,
-                      parent_->parameters_.max_acceleration_mm_s2.x);
+                      parameters_.max_acceleration_mm_s2.x);
     update_axis_accel(input_command_.translate_y_mm_s,
                       &gait_command_.translate_y_mm_s,
-                      parent_->parameters_.max_acceleration_mm_s2.y);
+                      parameters_.max_acceleration_mm_s2.y);
 
     // Advance our gait, then send the requisite servo commands out.
-    gait_commands_ = gait_->AdvanceTime(parent_->parameters_.period_s);
+    gait_commands_ = gait_->AdvanceTime(parameters_.period_s);
 
     std::vector<ServoInterface::Joint> servo_commands;
     for (const auto& joint: gait_commands_.joints) {
@@ -194,13 +285,19 @@ class GaitDriver::Impl : boost::noncopyable {
     }
     data.input_command = input_command_;
     data.gait_command = gait_command_;
-    parent_->gait_data_signal_(&data);
+    gait_data_signal_(&data);
   }
 
-  GaitDriver* const parent_;
   boost::asio::io_service& service_;
   std::unique_ptr<RippleGait> gait_;
   ServoInterface* const servo_;
+
+  boost::program_options::options_description options_;
+
+  Parameters parameters_;
+
+  boost::signals2::signal<void (const GaitData*)> gait_data_signal_;
+  boost::signals2::signal<void (const CommandData*)> command_data_signal_;
 
   base::DeadlineTimer timer_;
   bool timer_started_ = false;
@@ -215,8 +312,9 @@ class GaitDriver::Impl : boost::noncopyable {
 };
 
 GaitDriver::GaitDriver(boost::asio::io_service& service,
+                       base::ConcreteTelemetryRegistry* registry,
                        ServoInterface* servo)
-    : impl_(new Impl(this, service, servo)) {}
+    : impl_(new Impl(service, registry, servo)) {}
 
 GaitDriver::~GaitDriver() {}
 
@@ -231,6 +329,9 @@ void GaitDriver::SetCommand(const Command& command) {
 void GaitDriver::SetFree() {
   impl_->SetFree();
 }
+
+boost::program_options::options_description*
+GaitDriver::options() { return impl_->options(); }
 
 void GaitDriver::ProcessBodyAhrs(boost::posix_time::ptime timestamp,
                                  bool valid,

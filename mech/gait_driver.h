@@ -16,8 +16,10 @@
 
 #include <boost/asio/io_service.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
+#include <boost/program_options.hpp>
 #include <boost/signals2/signal.hpp>
 
+#include "base/concrete_telemetry_registry.h"
 #include "base/tf.h"
 #include "base/visitor.h"
 
@@ -32,18 +34,15 @@ class ServoInterface;
 /// commands out to some servos.
 class GaitDriver : boost::noncopyable {
  public:
-  template <typename TelemetryRegistry,
-            typename AhrsData>
+  template <typename AhrsData>
   GaitDriver(boost::asio::io_service& service,
-             TelemetryRegistry* telemetry_registry,
+             base::ConcreteTelemetryRegistry* telemetry_registry,
              ServoInterface* servo,
              boost::signals2::signal<void (const AhrsData*)>* body_ahrs_signal)
-      : GaitDriver(service, servo) {
+      : GaitDriver(service, telemetry_registry, servo) {
     body_ahrs_signal->connect(
         std::bind(&GaitDriver::HandleBodyAhrs<AhrsData>,
                   this, std::placeholders::_1));
-    telemetry_registry->Register("gait", &gait_data_signal_);
-    telemetry_registry->Register("gait_command", &command_data_signal_);
   }
 
   ~GaitDriver();
@@ -58,30 +57,11 @@ class GaitDriver : boost::noncopyable {
   /// engine.
   void SetFree();
 
-  struct Parameters {
-    /// Update the gait engine (and send servo commands) at this rate.
-    double period_s = 0.05; // 20Hz
-
-    /// This long with no commands will result in stopping the gait
-    /// engine and setting all servos to unpowered.
-    double command_timeout_s = 0.0;
-
-    /// The maximum amount that the gait engine can accelerate in each
-    /// axis.  Deceleration is currently unlimited.
-    base::Point3D max_acceleration_mm_s2 = base::Point3D(200., 200., 200.);
-
-    template <typename Archive>
-    void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(period_s));
-      a->Visit(MJ_NVP(command_timeout_s));
-      a->Visit(MJ_NVP(max_acceleration_mm_s2));
-    }
-  };
-
-  Parameters* parameters() { return &parameters_; }
+  boost::program_options::options_description* options();
 
  private:
   GaitDriver(boost::asio::io_service& service,
+             base::ConcreteTelemetryRegistry*,
              ServoInterface* servo);
 
   template <typename AhrsData>
@@ -95,72 +75,6 @@ class GaitDriver : boost::noncopyable {
                        bool valid,
                        const base::Quaternion& attitude,
                        const base::Point3D& body_rate_dps);
-
-  enum State : int {
-    kUnpowered,
-    kActive,
-  };
-
-  static std::map<State, const char*> StateMapper() {
-    return std::map<State, const char*>{
-      { kUnpowered, "kUnpowered" },
-      { kActive, "kActive" },
-    };
-  }
-
-  struct GaitData {
-    boost::posix_time::ptime timestamp;
-
-    State state;
-    base::Transform body_robot;
-    base::Transform cog_robot;
-    base::Transform body_world;
-    base::Transform robot_world;
-
-    base::Quaternion attitude;
-    base::Point3D body_rate_dps;
-
-    std::array<base::Point3D, 4> legs;
-    // The command as sent by the user.
-    JointCommand command;
-
-    // The command as given to the gait engine.
-    Command input_command;
-    Command gait_command;
-
-    template <typename Archive>
-    void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(timestamp));
-      a->Visit(MJ_ENUM(state, StateMapper));
-      a->Visit(MJ_NVP(body_robot));
-      a->Visit(MJ_NVP(cog_robot));
-      a->Visit(MJ_NVP(body_world));
-      a->Visit(MJ_NVP(robot_world));
-      a->Visit(MJ_NVP(attitude));
-      a->Visit(MJ_NVP(body_rate_dps));
-      a->Visit(MJ_NVP(legs));
-      a->Visit(MJ_NVP(command));
-      a->Visit(MJ_NVP(input_command));
-      a->Visit(MJ_NVP(gait_command));
-    }
-  };
-
-  struct CommandData {
-    boost::posix_time::ptime timestamp;
-
-    Command command;
-
-    template <typename Archive>
-    void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(timestamp));
-      a->Visit(MJ_NVP(command));
-    }
-  };
-
-  Parameters parameters_;
-
-  boost::signals2::signal<void (const GaitData*)> gait_data_signal_;
-  boost::signals2::signal<void (const CommandData*)> command_data_signal_;
 
   class Impl;
   std::unique_ptr<Impl> impl_;
