@@ -18,19 +18,17 @@
 
 #include <boost/signals2/signal.hpp>
 
-#include "meta/meta.hpp"
+#include "base/telemetry_log_registrar.h"
+#include "base/telemetry_remote_debug_registrar.h"
 
 namespace mjmech {
 namespace base {
 /// Maintain a local publish-subscribe model used for data objects.
-template <typename... Registrars>
 class TelemetryRegistry : boost::noncopyable {
  public:
-  using RegistrarList = meta::list<Registrars...>;
-
-  template <typename... Arg>
-  TelemetryRegistry(Arg&&... args)
-      : registrars_(std::forward<Arg>(args)...) {}
+  TelemetryRegistry(TelemetryLog* log,
+                    TelemetryRemoteDebugServer* debug)
+      : log_(log), debug_(debug) {}
 
   /// Register a serializable object, and return a function object
   /// which when called will disseminate the
@@ -46,14 +44,12 @@ class TelemetryRegistry : boost::noncopyable {
     auto* ptr = new Concrete<DataObject>();
     auto result = [ptr](const DataObject* object) { ptr->signal(object); };
 
+    log_.Register(record_name, &ptr->signal);
+    debug_.Register(record_name, &ptr->signal);
+
     records_.insert(
         std::make_pair(
             record_name, std::move(std::unique_ptr<Base>(ptr))));
-
-    VisitRegistrar<DataObject> visit_registrant(this, record_name, ptr);
-    meta::for_each(
-        meta::as_list<meta::make_index_sequence<RegistrarList::size()> >{},
-        visit_registrant);
 
     return result;
   };
@@ -62,18 +58,6 @@ class TelemetryRegistry : boost::noncopyable {
   void Register(const std::string& record_name,
                 boost::signals2::signal<void (const DataObject*)>* signal) {
     signal->connect(Register<DataObject>(record_name));
-  }
-
-  template <typename Registrar>
-  Registrar* registrar() {
-    using Index = meta::find_index<RegistrarList, Registrar>;
-    return &std::get<Index{}>(registrars_);
-  }
-
-  template <typename Registrar>
-  const Registrar* registrar() const {
-    using Index = meta::find_index<RegistrarList, Registrar>;
-    return &std::get<Index{}>(registrars_);
   }
 
  private:
@@ -88,28 +72,10 @@ class TelemetryRegistry : boost::noncopyable {
     boost::signals2::signal<void (const Serializable*)> signal;
   };
 
-  template <typename DataObject>
-  struct VisitRegistrar {
-    VisitRegistrar(TelemetryRegistry* registry,
-                   const std::string& name,
-                   Concrete<DataObject>* concrete)
-        : registry_(registry),
-          name_(name),
-          concrete_(concrete) {}
-
-    template <typename RegistrarIndex>
-    void operator()(const RegistrarIndex&) {
-      std::get<RegistrarIndex::value>(registry_->registrars_).
-          Register(name_, &concrete_->signal);
-    }
-
-    TelemetryRegistry* const registry_;
-    const std::string name_;
-    Concrete<DataObject>* const concrete_;
-  };
-
   std::map<std::string, std::unique_ptr<Base> > records_;
-  std::tuple<Registrars...> registrars_;
+
+  TelemetryLogRegistrar log_;
+  TelemetryRemoteDebugRegistrar debug_;
 };
 
 }

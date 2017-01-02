@@ -14,11 +14,11 @@
 
 #include "gait_driver.h"
 
-#include "base/concrete_telemetry_registry_impl.h"
 #include "base/deadline_timer.h"
 #include "base/fail.h"
 #include "base/now.h"
 #include "base/program_options_archive.h"
+#include "base/telemetry_registry.h"
 
 #include "ripple.h"
 #include "servo_interface.h"
@@ -124,7 +124,7 @@ class FailHandler {
 class GaitDriver::Impl : boost::noncopyable {
  public:
   Impl(boost::asio::io_service& service,
-       base::ConcreteTelemetryRegistry* telemetry_registry,
+       base::TelemetryRegistry* telemetry_registry,
        ServoInterface* servo)
       : service_(service),
         servo_(servo),
@@ -312,7 +312,7 @@ class GaitDriver::Impl : boost::noncopyable {
 };
 
 GaitDriver::GaitDriver(boost::asio::io_service& service,
-                       base::ConcreteTelemetryRegistry* registry,
+                       base::TelemetryRegistry* registry,
                        ServoInterface* servo)
     : impl_(new Impl(service, registry, servo)) {}
 

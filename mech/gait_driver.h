@@ -19,7 +19,7 @@
 #include <boost/program_options.hpp>
 #include <boost/signals2/signal.hpp>
 
-#include "base/concrete_telemetry_registry.h"
+#include "base/context.h"
 #include "base/tf.h"
 #include "base/visitor.h"
 
@@ -36,7 +36,7 @@ class GaitDriver : boost::noncopyable {
  public:
   template <typename AhrsData>
   GaitDriver(boost::asio::io_service& service,
-             base::ConcreteTelemetryRegistry* telemetry_registry,
+             base::TelemetryRegistry* telemetry_registry,
              ServoInterface* servo,
              boost::signals2::signal<void (const AhrsData*)>* body_ahrs_signal)
       : GaitDriver(service, telemetry_registry, servo) {
@@ -61,7 +61,7 @@ class GaitDriver : boost::noncopyable {
 
  private:
   GaitDriver(boost::asio::io_service& service,
-             base::ConcreteTelemetryRegistry*,
+             base::TelemetryRegistry*,
              ServoInterface* servo);
 
   template <typename AhrsData>

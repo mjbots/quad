@@ -19,7 +19,5 @@
 #include "concrete_comm_factory.h"
 #include "i2c_factory.h"
 #include "telemetry_log.h"
-#include "telemetry_log_registrar.h"
 #include "telemetry_registry.h"
-#include "telemetry_remote_debug_registrar.h"
 #include "telemetry_remote_debug_server.h"

@@ -21,7 +21,7 @@
 #include <boost/signals2/signal.hpp>
 
 #include "base/comm.h"
-#include "base/concrete_telemetry_registry.h"
+#include "base/context.h"
 #include "base/point3d.h"
 #include "base/quaternion.h"
 #include "base/visitor.h"
@@ -51,7 +51,7 @@ class Ahrs : boost::noncopyable {
   boost::signals2::signal<void (const AhrsData*)>* ahrs_data_signal();
 
  private:
-  Ahrs(boost::asio::io_service&, base::ConcreteTelemetryRegistry*);
+  Ahrs(boost::asio::io_service&, base::TelemetryRegistry*);
 
   template <typename ImuData>
   void HandleImuData(const ImuData* data) {

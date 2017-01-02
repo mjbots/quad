@@ -107,7 +107,7 @@ int work(int argc, char** argv) {
     flags &= ~TelemetryLog::LogFlags::kDefaultCompression;
   }
   TelemetryLog log(static_cast<TelemetryLog::LogFlags>(flags));
-  TelemetryRegistry<TelemetryLogRegistrar> registry(&log);
+  TelemetryRegistry registry(&log, nullptr);
   auto callable = registry.Register<SampleStruct>("sample");
 
   log.SetRealtime(realtime);

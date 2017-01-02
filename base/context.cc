@@ -22,7 +22,7 @@ namespace base {
 Context::Context()
     : telemetry_log(new TelemetryLog),
       remote_debug(new TelemetryRemoteDebugServer(service)),
-      telemetry_registry(new ConcreteTelemetryRegistry(
+      telemetry_registry(new TelemetryRegistry(
                              telemetry_log.get(), remote_debug.get())),
       factory(new ConcreteStreamFactory(service)),
       i2c_factory(new I2CFactory(service))

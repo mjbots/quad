@@ -16,9 +16,9 @@
 
 #include "base/attitude_estimator.h"
 #include "base/common.h"
-#include "base/concrete_telemetry_registry_impl.h"
 #include "base/now.h"
 #include "base/program_options_archive.h"
+#include "base/telemetry_registry.h"
 
 namespace mjmech {
 namespace mech {
@@ -87,7 +87,7 @@ struct AhrsDebugData {
 class Ahrs::Impl : boost::noncopyable {
  public:
   Impl(boost::asio::io_service& service,
-       base::ConcreteTelemetryRegistry* registry)
+       base::TelemetryRegistry* registry)
       : service_(service) {
     base::ProgramOptionsArchive(&options_).Accept(&parameters_);
 
@@ -263,7 +263,7 @@ class Ahrs::Impl : boost::noncopyable {
 };
 
 Ahrs::Ahrs(boost::asio::io_service& service,
-           base::ConcreteTelemetryRegistry* registry)
+           base::TelemetryRegistry* registry)
     : impl_(new Impl(service, registry)) {}
 Ahrs::~Ahrs() {}
 
