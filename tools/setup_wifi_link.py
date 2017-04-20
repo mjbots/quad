@@ -44,7 +44,8 @@ class DefaultProfile(object):
     # Increase beacon interval. This may be a bad idea if the other side needs
     # beacons, however as we are hardcoding our configuration on both ends we
     # should not need beacons at all.
-    beacon_interval = 2000
+    # TODO mikhail.afanasyev: decrease it back for intel card
+    beacon_interval = 200
 
     mcast_net = '239.89.108.0/24'
     ip_prefix = '10.89'

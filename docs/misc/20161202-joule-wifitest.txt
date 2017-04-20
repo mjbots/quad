@@ -1,0 +1,232 @@
+# goal: check wifi module on joule
+
+nmcli r wifi off
+iw reg get
+
+option 1:
+  sudo ip link set wlp1s0 down
+  sudo iw dev wlp1s0 set type ibss
+  echo 1 | sudo tee /sys/class/rfkill/rfkill*/state 
+  sudo ip link set wlp1s0 up
+  sudo iw dev wlp1s0 ibss join TEST 5200
+
+option 2:
+  sudo nmcli r wifi on
+  sudo nmcli r wifi off
+  sudo ./mjmech/tools/setup_wifi_link.py -i phy0 -vv up
+  iw dev wlp1s0 link
+
+option 3:
+  sudo nmcli r wifi on && sleep 2
+  sudo nmcli r wifi off
+  sudo systemctl stop wpa_supplicant
+  sudo systemctl stop bluetooth
+  sudo ip link set dev wlp1s0 down
+  echo 1 | sudo tee /sys/class/rfkill/rfkill*/state 
+  sudo iw dev wlp1s0 set type ibss
+  sudo ip link set dev wlp1s0 up
+  # repeat until results
+  sudo iw dev wlp1s0 scan | grep Mjmech
+
+  sudo iw dev wlp1s0 ibss join MjmechTelemetry 5200
+  iw dev wlp1s0 link
+  sudo iw dev wlp1s0 ibss leave
+
+  sudo iw dev wlp1s0 ibss join MjmechTelemetry 5200 HT20 fixed-freq 00:C6:0B:F0:F0:F0 beacon-interval 2000 basic-rates 24 mcast-rate 24
+  iw dev wlp1s0 link
+  sudo ip addr flush dev wlp1s0 && sudo ip addr replace 10.89.15.21/16 dev wlp1s0
+  ping -c 3 10.89.231.138
+  sudo ip route add 239.89.108.0/24 dev wlp1s0
+
+md5sum   /lib/firmware/iwlwifi-8000C-* firmware/v1/* | sort
+
+# on mjmech:
+mjmech/base/build-x86_64/udp_manual_test -v --link1.send_interval_s 0.005 --link1.source 239.89.108.11 --link1.stats_interval_s 1
+# on laptop:
+sudo ./tools/setup_wifi_link.py -vvv up
+./base/build-x86_64/udp_manual_test -v --link1.send_interval_s 0.005 --link1.dest 239.89.108.11 --link1.stats_interval_s 1
+
+==========
+# intel joule ostro image post-boot commands
+
+export LANG=C TERM=vt100
+systemctl stop connman
+systemctl stop wpa_supplicant
+systemctl stop avahi-daemon.socket
+systemctl stop avahi-daemon
+systemctl status   # optional
+
+udhcpc -i enp0s21f0u2u1 
+
+ssh-keygen -t rsa
+# save to: /etc/ssh/ssh_host_rsa_key
+/usr/sbin/sshd  &   # not sure if needed
+cat >>.ssh/authorized_keys
+# paste ecdsa key
+
+# test login and copy tools
+{HOST} ssh -v root@192.168.24.153 uptime
+{HOST} scp udp_test_static /sbin/iw root@192.168.24.153:
+ln -s /lib /lib64
+
+# set country
+./iw reg get
+
+# try to set country with supplicant (not working)
+wpa_supplicant -Dnl80211 -iwlp1s0 -c/etc/wpa_supplicant.conf &
+wpa_cli set country=US
+
+# try to join with wpa_supplicant (not working)
+wpa_cli add_network
+# should print "1"
+wpa_cli set_network 1 mode "1"
+wpa_cli set_network 1 bssid "00:C6:0B:F0:F0:F0"
+wpa_cli set_network 1 ssid '"MjmechTelemetry"'
+wpa_cli set_network 1 frequency "5200"
+wpa_cli set_network 1 key_mgmt NONE
+wpa_cli set_network 1 priority 1
+wpa_cli set_network 1 scan_ssid 1
+wpa_cli ap_scan 2
+wpa_cli select_network 1
+wpa_cli status
+
+# try to set country with CRDA
+{HOST} scp /lib/x86_64-linux-gnu/libcrypto.so.1.0.0 /sbin/crda root@192.168.24.153:
+{HOST} scp -r /lib/crda/ root@192.168.24.153:/lib/crda/
+COUNTRY=US LD_LIBRARY_PATH=. ./crda
+# FAIL: Failed to set regulatory domain: -7
+
+# try to set country with connman
+systemctl enable connman
+connmanctl state
+connmanctl enable wifi
+connmanctl scan wifi
+connmanctl tether wifi on TEST some-password
+# FAIL -- reg domain still wrong
+
+# try to set with random advice
+# http://unix.stackexchange.com/questions/253933/wifi-iw-reg-set-us-has-no-effect
+rmmod iwlmvm
+rmmod iwlwifi
+rmmod mac80211
+rmmod cfg80211
+modprobe -v cfg80211 ieee80211_regdom=US
+modprobe -v iwlmvm
+
+
+# join network
+systemctl stop connman ; sleep 2 && udhcpc -i enp0s21f0u2u1 
+ip link set dev wlp1s0 down
+echo 1 | tee /sys/class/rfkill/rfkill*/state 
+./iw dev wlp1s0 set type ibss
+ip link set dev wlp1s0 up
+./iw dev wlp1s0 ibss leave
+./iw dev wlp1s0 ibss join MjmechTelemetry 5200 HT20 fixed-freq 00:C6:0B:F0:F0:F0 beacon-interval 2000 basic-rates 24 mcast-rate 24
+
+./iw dev wlp1s0 link
+./iw dev wlp1s0 info
+ip addr flush dev wlp1s0
+ip addr replace 10.89.15.21/16 dev wlp1s0
+ip route add 239.89.108.0/24 dev wlp1s0
+ping -c 3 10.89.231.138   
+
+====
+attempting to set iw reg zone:
+
+# ensure the wifi is not loaded from initrd
+zcat /boot/initrd.img-4.9.0-040900-generic | cpio -vt | grep iwl
+# check cfg80211 parameters
+grep . /sys/module/cfg80211/parameters/*
+
+# make udev more verbose on boot
+sudo nano /etc/udev/udev.conf
+udev_log="debug"
+# END
+sudo update-initramfs -k `uname -r` -u
+
+# set regdom -- via options
+sudo nano /etc/modprobe.d/iwlwifi-theamk.conf
+options iwlmvm power_scheme=1
+options cfg80211 cfg80211_disable_40mhz_24ghz=1 ieee80211_regdom=US
+# END
+
+# set regdom -- via crda
+sudo nano /etc/default/crda
+
+# disable auto-load of cfg80211 -- so we can set regdom
+sudo nano /etc/modprobe.d/iwlwifi-theamk.conf
+# add: install cfg80211 /usr/bin/logger 'auto-install of cfg80211 blocked'
+# reboot, after boot:
+sudo modprobe --ignore-install -v cfg80211
+iw reg get
+#country US: DFS-FCC
+#        (2402 - 2472 @ 40), (N/A, 30), (N/A)
+#        (5170 - 5250 @ 80), (N/A, 17), (N/A)
+#        (5250 - 5330 @ 80), (N/A, 23), (0 ms), DFS
+#        (5490 - 5730 @ 160), (N/A, 23), (0 ms), DFS
+#        (5735 - 5835 @ 80), (N/A, 30), (N/A)
+#        (57240 - 63720 @ 2160), (N/A, 40), (N/A)
+sudo modprobe -v iwlwifi
+
+===
+# trying Core24 release per bug advice
+# https://wireless.wiki.kernel.org/en/users/drivers/iwlwifi/core_release
+# https://bugzilla.kernel.org/show_bug.cgi?id=191691
+
+# downloaded firmware file and moved it
+wget http://git.kernel.org/cgit/linux/kernel/git/iwlwifi/linux-firmware.git/plain/iwlwifi-8000C-27.ucode
+sudo cp iwlwifi-8000C-27.ucode /lib/firmware/
+md5sum /lib/firmware/iwlwifi-8000C-27.ucode
+# BAD: 1f02925e45712837343709f102a73aba  iwlwifi-8000C-27.ucode
+# ceffc7564531aebe5840b4e00a8d4962  /lib/firmware/iwlwifi-8000C-27.ucode
+
+# downloaded backports and built it (kernel 4.9 did not work, tried 4.4 instead)
+git clone git://git.kernel.org/pub/scm/linux/kernel/git/iwlwifi/backport-iwlwifi.git
+cd ~/backport-iwlwifi/
+git checkout release/LinuxCore24
+make defconfig-iwlwifi-public KLIB=/lib/modules/4.4.0-1000-joule/
+sed -i 's/CPTCFG_IWLMVM_VENDOR_CMDS=y/# CPTCFG_IWLMVM_VENDOR_CMDS is not set/' .config
+make KLIB=/lib/modules/4.4.0-1000-joule/
+sudo make install KLIB=/lib/modules/4.4.0-1000-joule/
+# somehow, modules ended up in /lib/modules/4.4.0-1000-joule/lib/modules/4.4.0-1000-joule/updates/
+# to fix:
+sudo ln -s ./lib/modules/4.4.0-1000-joule/updates/ /lib/modules/4.4.0-1000-joule/updates
+sudo depmod -a 4.4.0-1000-joule
+grep -m1 iwlwifi /lib/modules/4.4.0-1000-joule/*.dep
+
+# install kernel 4.8
+mkdir ~/kernel-4.8
+cd ~/kernel-4.8
+links http://kernel.ubuntu.com/~kernel-ppa/mainline/v4.8.17/
+# download 3 files: headers*_all.deb, headers*generic*amd64.deb, image*generic*amd64.deb
+sudo dpkg -i *.deb
+less /boot/grub/grub.cfg  # find out new kernel name
+sudo nano /etc/default/grub  # setup default kernal
+sudo update-grub
+
+# try again, with 4.8
+cd ~/backport-iwlwifi/
+git fetch --all
+git checkout release/LinuxCore24 && git rebase origin/release/LinuxCore24
+git clean -fdx
+KLIB=/lib/modules/4.8.17-040817-generic
+make defconfig-iwlwifi-public KLIB=$KLIB
+sed -i 's/CPTCFG_IWLMVM_VENDOR_CMDS=y/# CPTCFG_IWLMVM_VENDOR_CMDS is not set/' .config
+make KLIB=$KLIB && sudo make install KLIB=$KLIB KMODPATH_ARG=''
+find $KLIB -name cfg80211.ko
+
+# or Core19
+git checkout release/LinuxCore19 && git rebase origin/release/LinuxCore19
+git clean -fdx
+KLIB=/lib/modules/4.4.0-1000-joule
+# (do the build commands above)
+sudo cp firmware/iwlwifi-8000C-22.ucode-uSniff /lib/firmware/iwlwifi-8000C-22.ucode
+
+# firmware version:
+dmesg|grep firmw
+# before (4.8 kernel): iwlwifi 0000:01:00.0: loaded firmware version 22.361476.0 op_mode iwlmvm
+# after (4.4 kernel)
+
+
+
+
