@@ -339,9 +339,15 @@ class WifiSetup(object):
     def get_base_mac(self):
         # Make IP from last 2 digits of MAC of eth0 interface (this way,
         # changing wifi card will leav IP alone)
-        with open('/sys/class/net/eth0/address', 'r') as f:
-            base_mac = f.read().strip()
-        return base_mac
+        addrfiles = ['/sys/class/net/eth0/address'] + \
+            sorted(glob.glob('/sys/class/net/en*/address'))
+        for addrfile in addrfiles:
+            if not os.path.exists(addrfile):
+                 continue
+            with open(addrfile, 'r') as f:
+                base_mac = f.read().strip()
+            return base_mac
+        assert False, 'Cannot find a wired interface'
 
     def _desired_station_ip(self):
         base_mac = self.get_base_mac()
