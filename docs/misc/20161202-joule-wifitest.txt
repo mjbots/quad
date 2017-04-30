@@ -6,7 +6,7 @@ iw reg get
 option 1:
   sudo ip link set wlp1s0 down
   sudo iw dev wlp1s0 set type ibss
-  echo 1 | sudo tee /sys/class/rfkill/rfkill*/state 
+  echo 1 | sudo tee /sys/class/rfkill/rfkill*/state
   sudo ip link set wlp1s0 up
   sudo iw dev wlp1s0 ibss join TEST 5200
 
@@ -22,7 +22,7 @@ option 3:
   sudo systemctl stop wpa_supplicant
   sudo systemctl stop bluetooth
   sudo ip link set dev wlp1s0 down
-  echo 1 | sudo tee /sys/class/rfkill/rfkill*/state 
+  echo 1 | sudo tee /sys/class/rfkill/rfkill*/state
   sudo iw dev wlp1s0 set type ibss
   sudo ip link set dev wlp1s0 up
   # repeat until results
@@ -56,7 +56,7 @@ systemctl stop avahi-daemon.socket
 systemctl stop avahi-daemon
 systemctl status   # optional
 
-udhcpc -i enp0s21f0u2u1 
+udhcpc -i enp0s21f0u2u1
 
 ssh-keygen -t rsa
 # save to: /etc/ssh/ssh_host_rsa_key
@@ -115,9 +115,9 @@ modprobe -v iwlmvm
 
 
 # join network
-systemctl stop connman ; sleep 2 && udhcpc -i enp0s21f0u2u1 
+systemctl stop connman ; sleep 2 && udhcpc -i enp0s21f0u2u1
 ip link set dev wlp1s0 down
-echo 1 | tee /sys/class/rfkill/rfkill*/state 
+echo 1 | tee /sys/class/rfkill/rfkill*/state
 ./iw dev wlp1s0 set type ibss
 ip link set dev wlp1s0 up
 ./iw dev wlp1s0 ibss leave
@@ -128,7 +128,7 @@ ip link set dev wlp1s0 up
 ip addr flush dev wlp1s0
 ip addr replace 10.89.15.21/16 dev wlp1s0
 ip route add 239.89.108.0/24 dev wlp1s0
-ping -c 3 10.89.231.138   
+ping -c 3 10.89.231.138
 
 ====
 attempting to set iw reg zone:
@@ -214,6 +214,19 @@ make defconfig-iwlwifi-public KLIB=$KLIB
 sed -i 's/CPTCFG_IWLMVM_VENDOR_CMDS=y/# CPTCFG_IWLMVM_VENDOR_CMDS is not set/' .config
 make KLIB=$KLIB && sudo make install KLIB=$KLIB KMODPATH_ARG=''
 find $KLIB -name cfg80211.ko
+#expect: entry in both kernel/ and updates/
+
+# try again, with 4.9
+cd ~/backport-iwlwifi/
+git fetch --all
+git checkout release/LinuxCore24 && git rebase origin/release/LinuxCore24
+git clean -fdx
+KLIB=/lib/modules/4.9.0-040900-generic
+make defconfig-iwlwifi-public KLIB=$KLIB
+sed -i 's/CPTCFG_IWLMVM_VENDOR_CMDS=y/# CPTCFG_IWLMVM_VENDOR_CMDS is not set/' .config
+make KLIB=$KLIB && sudo make install KLIB=$KLIB KMODPATH_ARG=''
+# NOTE: THIS FAILS TO COMPILE
+find $KLIB -name cfg80211.ko
 
 # or Core19
 git checkout release/LinuxCore19 && git rebase origin/release/LinuxCore19
@@ -225,8 +238,4 @@ sudo cp firmware/iwlwifi-8000C-22.ucode-uSniff /lib/firmware/iwlwifi-8000C-22.uc
 # firmware version:
 dmesg|grep firmw
 # before (4.8 kernel): iwlwifi 0000:01:00.0: loaded firmware version 22.361476.0 op_mode iwlmvm
-# after (4.4 kernel)
-
-
-
-
+# after (4.4 kernel): iwlwifi 0000:01:00.0: loaded firmware version 22.391740.0 op_mode iwlmvm
