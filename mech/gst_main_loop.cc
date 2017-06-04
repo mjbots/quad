@@ -190,9 +190,11 @@ class GstMainLoop::Impl :
         NULL,
         static_cast<GLogLevelFlags>(G_LOG_LEVEL_ERROR | G_LOG_LEVEL_CRITICAL));
     // Exit on critical messages from GStreamer
-    g_log_set_fatal_mask(
-        "GStreamer",
-        static_cast<GLogLevelFlags>(G_LOG_LEVEL_ERROR | G_LOG_LEVEL_CRITICAL));
+    if (parameters_.critical_warnings_fatal) {
+      g_log_set_fatal_mask(
+          "GStreamer",
+          static_cast<GLogLevelFlags>(G_LOG_LEVEL_ERROR | G_LOG_LEVEL_CRITICAL));
+    }
   }
 
 

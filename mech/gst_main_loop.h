@@ -90,9 +90,12 @@ class GstMainLoop : boost::noncopyable {
     // argv/argc to pass to gst
     std::string options;
 
+    bool critical_warnings_fatal = true;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(options));
+      a->Visit(MJ_NVP(critical_warnings_fatal));
     }
   };
 
