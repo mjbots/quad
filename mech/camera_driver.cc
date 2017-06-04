@@ -161,14 +161,16 @@ class CameraDriver::Impl : boost::noncopyable {
     }
 
     bool is_test = device == "TEST";
-    bool is_dumb = parameters_.dumb_camera || is_test;
+    bool is_dumb = parameters_.raw_gstreamer || parameters_.dumb_camera || is_test;
     dumb_camera_ = is_dumb;
 
     int bitrate_bps = static_cast<int>(
         ::round(parameters_.bitrate_mbps * parameters_.bitrate_scale
                 * 1000 * 1000));
 
-    if (is_test) {
+    if (parameters_.raw_gstreamer) {
+      out << device << " ! videoconvert ";
+    } else if (is_test) {
       out << "videotestsrc name=testsrc is-live=1 pattern=ball ";
     } else if (is_dumb) {
       out << "v4l2src name=src device=" << gst::PipelineEscape(device)

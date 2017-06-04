@@ -92,6 +92,8 @@ class CameraDriver : boost::noncopyable {
     std::string write_video;
     // If True, use regular v4l driver and encode h264 in software
     bool dumb_camera = false;
+    // If True, treat "device" as custom gstreamer pipeline string.
+    bool raw_gstreamer = false;
     // If non-empty, gstreamer pipeline that is fed h264 data
     std::string custom_h264_consumer;
     // If True, calculate and log frame properties (like average brightness)
@@ -118,6 +120,7 @@ class CameraDriver : boost::noncopyable {
 
       a->Visit(MJ_NVP(write_video));
       a->Visit(MJ_NVP(dumb_camera));
+      a->Visit(MJ_NVP(raw_gstreamer));
       a->Visit(MJ_NVP(custom_h264_consumer));
       a->Visit(MJ_NVP(analyze));
     }
