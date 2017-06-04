@@ -65,7 +65,7 @@ def SetupGStreamer(gsenv):
         gsenv.ParseConfig('pkg-config '
                           '--cflags --libs ' + lib)
 
-        
+
 crenv = env.Clone()
 crenv.Append(LIBS=['boost_coroutine',
                    'boost_context',
