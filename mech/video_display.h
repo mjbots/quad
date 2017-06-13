@@ -57,6 +57,9 @@ class VideoDisplay : boost::noncopyable {
     // If non-empty, write video file to this location
     std::string write_video;
 
+    // If non-empty, write raw frames to this base
+    std::string raw_frame_base;
+
     // If True, we pass the frames via our app to enable OSD
     // and missing video indication.
     bool process_frames = false;
@@ -75,6 +78,7 @@ class VideoDisplay : boost::noncopyable {
       a->Visit(MJ_NVP(stats_interval_s));
       a->Visit(MJ_NVP(source));
       a->Visit(MJ_NVP(write_video));
+      a->Visit(MJ_NVP(raw_frame_base));
       a->Visit(MJ_NVP(process_frames));
       a->Visit(MJ_NVP(hide_video));
       a->Visit(MJ_NVP(analyze));

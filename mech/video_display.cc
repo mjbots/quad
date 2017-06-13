@@ -14,6 +14,7 @@
 
 #include "video_display.h"
 
+#include <fstream>
 #include <mutex>
 #include <thread>
 
@@ -73,6 +74,13 @@ class VideoDisplay::Impl : boost::noncopyable {
     }
     if (!h264_src_) {
       base::Fail("got raw frame from video link, but other input is selected");
+    }
+
+    if (!parameters_.raw_frame_base.empty()) {
+      std::string fname = (boost::format("%s-%05d.raw") % parameters_.raw_frame_base % raw_frame_count_++).str();
+      std::ofstream of(fname);
+      BOOST_ASSERT(of);
+      of.write(&frame->front(), frame->size());
     }
 
     h264_src_(&frame->front(), frame->size());
@@ -313,6 +321,8 @@ class VideoDisplay::Impl : boost::noncopyable {
 
   GstElement* overlaytext_ = nullptr;
   GstElement* overlaytarget_ = nullptr;
+
+  int raw_frame_count_ = 0;
 };
 
 
