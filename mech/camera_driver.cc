@@ -19,6 +19,7 @@
 
 #include <gst/gst.h>
 
+#include <boost/algorithm/string/predicate.hpp>
 #include <boost/format.hpp>
 
 #include "base/common.h"
@@ -34,49 +35,246 @@ namespace mjmech {
 namespace mech {
 
 namespace {
+const double kFrameRate = 30.0;
+
+struct Size {
+  int width = 0;
+  int height = 0;
+
+  Size() {}
+  Size(int width_in, int height_in) : width(width_in), height(height_in) {}
+};
+
+struct Bitrate {
+  int bitrate_kbps = -1;
+  double peak_scale = 1.5;
+  double iframe_interval_s = 1.0;
+
+  Bitrate() {}
+  Bitrate(int bitrate_kbps_in, double peak_scale_in,
+          double iframe_interval_s_in)
+      : bitrate_kbps(bitrate_kbps_in),
+        peak_scale(peak_scale_in),
+        iframe_interval_s(iframe_interval_s_in) {}
+};
 
 struct Preset {
-  double framerate;
-  double decoded_framerate;
-  double bitrate_mbps;
-  const char* h264_caps;
-  const char* decoded_caps;
+  int bitrate_kbps;
+  Size h264_size;
   const char* extra_uvch264;
 };
 
 // To get list of supported resolutions, use: v4l2-ctl --list-formats-ext
 const Preset kPresets[] = {{
- framerate         : 30,
- decoded_framerate : 0,
- bitrate_mbps      : 3.0,
- h264_caps         : "width=1920,height=1080",
- decoded_caps      : "width=640,height=480",
+ bitrate_kbps      : 3000,
+ h264_size         : { 1920, 1080 },
  extra_uvch264     : "",
   }, {
- framerate         : 30, // Actually 15-24 fps
- decoded_framerate : 0,
- bitrate_mbps      : 1.5,
- h264_caps         : "width=1280,height=720",
- decoded_caps      : "width=640,height=480",
+ bitrate_kbps      : 1500,
+ h264_size         : { 1280, 720 },
  extra_uvch264     : "",
   }, {
- framerate         : 30,  // Actually 15 fps
- decoded_framerate : 0,
- bitrate_mbps      : 0.75,
- h264_caps         : "width=864,height=480",
- decoded_caps      : "width=640,height=480",
+ bitrate_kbps      : 750,
+ h264_size         : { 640, 480 },
  extra_uvch264     : "",
   }, {
- framerate         : 30,  // Actually 15 fps
- decoded_framerate : 0,
- bitrate_mbps      : 0.25,
- h264_caps         : "width=432,height=240",
- decoded_caps      : "width=640,height=480",
+ bitrate_kbps      : 250,
+ h264_size         : { 320, 240 },
  extra_uvch264     : "",
- // TODO theamk: figure out if we can decrease the framerate somehow (currenly,
- // values other than 30 just prevent piepline from starting)
 }};
 
+}
+
+class Device {
+ public:
+  enum class Type {
+    kTest,
+    kJoule,
+    kC920,
+    kGstreamer,
+    kV4l2,
+  };
+
+  Device(const std::string& name, const Size& size, const Bitrate& bitrate)
+      : size_(size),
+        bitrate_(bitrate) {
+    if (name == "TEST") {
+      type_ = Type::kTest;
+    } else if (name == "JOULE") {
+      type_ = Type::kJoule;
+    } else if (boost::starts_with(name, "c920:")) {
+      type_ = Type::kC920;
+      data_ = boost::erase_first_copy(name, "c920:");
+    } else if (boost::starts_with(name, "gstreamer:")) {
+      type_ = Type::kGstreamer;
+      data_ = boost::erase_first_copy(name, "gstreamer:");
+    } else if (boost::starts_with(name, "v4l2:")) {
+      type_ = Type::kV4l2;
+      data_ = boost::erase_first_copy(name, "v4l2:");
+    } else {
+      base::Fail("Unknown device type: " + name);
+    }
+  }
+
+  /// Return true if the primary stream is h264 encoded already.
+  bool is_primary_h264() const {
+    switch (type_) {
+      case Type::kTest:
+      case Type::kJoule:
+      case Type::kGstreamer:
+      case Type::kV4l2: {
+        return false;
+      }
+      case Type::kC920: {
+        return true;
+      }
+    }
+    base::AssertNotReached();
+  }
+
+  /// This is required to return a gstreamer source which emits two
+  /// separate streams, one on the un-nammed current stream which may
+  /// or may not be h264 encoded already, and a secondary one on the
+  /// decoded_pad(), which must be un-decoded.
+  std::string gstreamer_source() const {
+    const std::string final_tee = "! tee name=dec-tee ";
+    switch (type_) {
+      case Type::kTest: {
+        return "videotestsrc name=testsrc is-live=1 pattern=ball " + final_tee;
+      }
+      case Type::kJoule: {
+        return (
+            boost::format(
+                "icamerasrc device-name=0 io-mode=3 ! "
+                "video/x-raw,format=NV12,width=%d,height=%d "
+                "! vaapipostproc dmabuf-alloc-tiled=true " + final_tee) %
+            size_.width % size_.height).str();
+      }
+      case Type::kC920: {
+        std::ostringstream result;
+        result <<
+            boost::format(
+                "uvch264src device=%s name=src auto-start=true "
+                "message-forward=true ") %
+            gst::PipelineEscape(data_);
+        // Desired I-frame interval for C920. 0 for camera-default. 1.0
+        // seems to be the smallest possible -- any smaller numbers just
+        // cause the setting to be ignored.
+        if (bitrate_.iframe_interval_s > 0.0) {
+          result <<
+              boost::format("iframe-period=%d ") %
+              static_cast<int>(bitrate_.iframe_interval_s * 1000.0);
+        }
+        if (bitrate_.bitrate_kbps > 0) {
+          result <<
+              boost::format(
+                  "average-bitrate=%d initial-bitrate=%d peak-bitrate=%d ") %
+              (bitrate_.bitrate_kbps * 1000) %
+              (bitrate_.bitrate_kbps * 1000) %
+              (bitrate_.bitrate_kbps * bitrate_.peak_scale * 1000);
+        }
+        result << "src.vidsrc";
+        return result.str();
+      }
+      case Type::kGstreamer: {
+        return data_;
+      }
+      case Type::kV4l2: {
+        return (
+            boost::format(
+                "v4l2src name=src device=%s ! videoconvert " + final_tee) %
+            gst::PipelineEscape(data_)).str();
+      }
+    }
+    base::AssertNotReached();
+  }
+
+  std::string decoded_pad() const {
+    switch (type_) {
+      case Type::kTest:
+      case Type::kJoule:
+      case Type::kGstreamer:
+      case Type::kV4l2:
+        return "dec-tee";
+      case Type::kC920:
+        return "src.vfsrc";
+    }
+    base::AssertNotReached();
+  }
+
+ private:
+  Type type_;
+  std::string data_;
+  Size size_;
+  Bitrate bitrate_;
+};
+
+class H264Encoder {
+ public:
+  enum class Type {
+    kX264,
+    kVaapi,
+    kGstreamer,
+  };
+
+  H264Encoder(const std::string& name,
+              const Size& size,
+              const Bitrate& bitrate)
+      : size_(size), bitrate_(bitrate) {
+    if (name == "X264") {
+      type_ = Type::kX264;
+    } else if (name == "VAAPI") {
+      type_ = Type::kVaapi;
+    } else if (boost::starts_with(name, "gstreamer:")) {
+      type_ = Type::kGstreamer;
+      data_ = boost::erase_first_copy(name, "gstreamer:");
+    } else {
+      base::Fail("Unknown encoder type: " + name);
+    }
+  }
+
+  std::string gstreamer_element() const {
+    const int key_int =
+        std::max(1, static_cast<int>(
+                     0.5 + kFrameRate * bitrate_.iframe_interval_s));
+
+    switch (type_) {
+      case Type::kX264: {
+        std::ostringstream ostr;
+        ostr << "! queue ! x264enc byte-stream=true speed-preset=ultrafast"
+            " intra-refresh=true threads=1 sync-lookahead=0"
+            " bframes=0 tune=zerolatency ";
+
+        if (bitrate_.iframe_interval_s > 0.0) {
+          ostr << boost::format("key-int-max=%d ") % key_int;
+        }
+
+        return ostr.str();
+      }
+      case Type::kVaapi: {
+        std::ostringstream ostr;
+        ostr <<
+            boost::format(
+                "! vaapih264enc bitrate=%d tune=none rate-control=vbr ") %
+            bitrate_.bitrate_kbps;
+        if (bitrate_.iframe_interval_s > 0.0) {
+          ostr << boost::format("keyframe-period=%d ") % key_int;
+        }
+
+        return ostr.str();
+      }
+      case Type::kGstreamer: {
+        return data_;
+      }
+    }
+    base::AssertNotReached();
+  }
+
+ private:
+  Type type_;
+  std::string data_;
+  Size size_;
+  Bitrate bitrate_;
 };
 
 class CameraDriver::Impl : boost::noncopyable {
@@ -114,23 +312,14 @@ class CameraDriver::Impl : boost::noncopyable {
     }
     const Preset& preset = kPresets[i_preset];
 
-    if (parameters_.framerate < 0) {
-      parameters_.framerate = preset.framerate;
+    if (parameters_.bitrate_kbps < 0) {
+      parameters_.bitrate_kbps = preset.bitrate_kbps;
     }
-    if (parameters_.decoded_framerate < 0) {
-      parameters_.decoded_framerate = preset.decoded_framerate;
+    if (parameters_.h264_width < 0) {
+      parameters_.h264_width = preset.h264_size.width;
     }
-    if (parameters_.bitrate_mbps < 0) {
-      parameters_.bitrate_mbps = preset.bitrate_mbps;
-    }
-    if (!parameters_.h264_caps.size()) {
-      parameters_.h264_caps = preset.h264_caps;
-    }
-    if (!parameters_.decoded_caps.size()) {
-      parameters_.decoded_caps = preset.decoded_caps;
-    }
-    if (!parameters_.extra_uvch264.size()) {
-      parameters_.extra_uvch264 = preset.extra_uvch264;
+    if (parameters_.h264_height < 0) {
+      parameters_.h264_height = preset.h264_size.height;
     }
 
     parent_service_.post(std::bind(handler, base::ErrorCode()));
@@ -153,89 +342,27 @@ class CameraDriver::Impl : boost::noncopyable {
 
  private:
   std::string MakeLaunchCmd() {
+    if (!parameters_.gstreamer_pipeline.empty()) {
+      return parameters_.gstreamer_pipeline;
+    }
+
     std::ostringstream out;
 
-    std::string device = parameters_.device;
-    if (device == "")  {
-      device = "/dev/video0";
+    const Size size(parameters_.h264_width, parameters_.h264_height);
+    const Bitrate bitrate(parameters_.bitrate_kbps * parameters_.bitrate_scale,
+                          parameters_.bitrate_peak_scale,
+                          parameters_.iframe_interval_s);
+
+    Device device(parameters_.device, size, bitrate);
+
+    out << device.gstreamer_source();
+
+    if (!device.is_primary_h264()) {
+      // Do h264 encoding.
+      H264Encoder encoder(parameters_.h264_encoder, size, bitrate);
+      out << encoder.gstreamer_element();
     }
 
-    bool is_test = device == "TEST";
-    bool is_dumb = parameters_.raw_gstreamer || parameters_.dumb_camera || is_test;
-    dumb_camera_ = is_dumb;
-
-    int bitrate_bps = static_cast<int>(
-        ::round(parameters_.bitrate_mbps * parameters_.bitrate_scale
-                * 1000 * 1000));
-
-    if (parameters_.raw_gstreamer) {
-      out << device << " ! videoconvert ";
-    } else if (is_test) {
-      out << "videotestsrc name=testsrc is-live=1 pattern=ball ";
-    } else if (is_dumb) {
-      out << "v4l2src name=src device=" << gst::PipelineEscape(device)
-          << " ! videoconvert ";
-    } else {
-      out << "uvch264src device=" << gst::PipelineEscape(device)
-          << " name=src auto-start=true message-forward=true";
-      if (parameters_.iframe_interval_s > 0) {
-        out << " iframe-period=" <<
-            static_cast<int>(parameters_.iframe_interval_s * 1000.0);
-      }
-      if (bitrate_bps > 0) {
-        int bitrate_peak_bps = static_cast<int>(
-            ::round(bitrate_bps * parameters_.peak_bitrate_scale));
-        out << " average-bitrate=" << bitrate_bps
-            << " initial-bitrate=" << bitrate_bps
-            << " peak-bitrate=" << bitrate_peak_bps;
-      }
-      out << " " << parameters_.extra_uvch264
-          << " src.vfsrc ";
-    }
-
-    // Make decoded image endpoint
-    double decoded_fps =
-        (parameters_.decoded_framerate > 0)
-        ? parameters_.decoded_framerate
-        : parameters_.framerate;
-    out << "! video/x-raw,format=I420,framerate="
-        << gst::FormatFraction(decoded_fps) << ","
-        << parameters_.decoded_caps << " ";
-
-    if (is_dumb) {
-      out << "! tee name=dec-tee ";
-    };
-    if (parameters_.analyze) {
-      out << " ! videoanalyse name=input-analyze ";
-    }
-    out << "! queue ! appsink name=raw-sink ";
-
-
-    // Make H264 endpoint
-    if (is_dumb) {
-      out << "dec-tee. ! videoconvert ! queue "
-          << " ! x264enc byte-stream=true speed-preset=ultrafast"
-          << " intra-refresh=true threads=1 sync-lookahead=0"
-          << " bframes=0 tune=zerolatency  ";
-      if (parameters_.iframe_interval_s) {
-        int key_int = 0.5 + decoded_fps * parameters_.iframe_interval_s;
-        out << "key-int-max=" << std::max(1, key_int) << " ";
-      }
-      if (bitrate_bps > 0) {
-        out << "bitrate=" << (bitrate_bps / 1000) << " ";
-      }
-    } else {
-      out << "src.vidsrc";
-    }
-    out << "! video/x-h264,framerate="
-        << gst::FormatFraction(parameters_.framerate);
-    if (!is_dumb) {
-      // If this is not a dumb camera, force a h264 resolution (if it is a
-      // dumb camera, the h264 resolution is forced to be the the same as
-      // input resultion)
-      out << "," << parameters_.h264_caps;
-    };
-    out << " ! h264parse ";
 
     if (parameters_.write_video != "" ||
         parameters_.custom_h264_consumer != "") {
@@ -266,9 +393,20 @@ class CameraDriver::Impl : boost::noncopyable {
       out << "! queue ! " << parameters_.custom_h264_consumer
           << " h264-tee. ";
     }
-    // And pass it to our app (with the right caps)
-    out << "! queue ! appsink name=h264-sink "
-        << " caps=video/x-h264,stream-format=byte-stream,alignment=au ";
+
+    out << "! h264parse ! appsink name=h264-sink ";
+    out << "caps=video/x-h264,stream-format=byte-stream,alignment=au,";
+    out << "profile=constrained-baseline ";
+
+    // Now let's switch and get our decoded data to our app.
+
+    out << (device.decoded_pad() + ". ");
+
+    if (parameters_.analyze) {
+      out << "! videoanalyse name=input-analyze ";
+    }
+    out << "! queue ! appsink name=raw-sink ";
+
     return out.str();
   }
 
@@ -438,7 +576,7 @@ class CameraDriver::Impl : boost::noncopyable {
       unusual_flags &=~ GST_BUFFER_FLAG_DISCONT;
     }
     if (unusual_flags) {
-      log_.notice("unusual buffer flags 0x%X (total 0x%X) in frame %d",
+      log_.notice("unusual buffer flags   0x%X (total   0x%X) in frame   %d",
                   unusual_flags, flags, total_h264_frames_);
     }
 

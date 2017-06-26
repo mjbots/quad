@@ -48,81 +48,83 @@ class CameraDriver : boost::noncopyable {
   struct Parameters {
     double stats_interval_s = 1.0;
 
-    // may be set to TEST to use test source
+    // The device to use.  This may have a number of special values:
+    //  "TEST" - use the test source
+    //  "JOULE" - use the joule camera
+    //  "c920:" - a C920 webcam
+    //  "gstreamer:" - use a custom gstreamer pipeline as the source
+    //    it is required to emit a primary stream and a secondary
+    //    decoded stream on the "dec-tee" pad.  For now, the primary
+    //    stream must be un-encoded.
+    //  "v4l2:" - a V4L2 device
     std::string device;
-
-    // C920 camera is somewhat picky about framerate/framesize combinations,
-    // so we provide a number of presets which define the default values of
-    // the field.
 
     // Camera quality preset index. Values from 0 to (# of presets - 1).
     // Smaller preset indices indicate higher data rate.
     int preset = 1;
+
     // Bitrate scaling. The bandwith passed to the driver a product of this
-    // value and a bitrate_mbps value (which may come from preset);
+    // value and a bitrate_kbps value (which may come from preset);
     double bitrate_scale = 1.0;
+
+    // For encoders that support it, the maximum instantaneous rate
+    // relative to the standard rate.
+    double bitrate_peak_scale = 1.5;
+
+    // Desired I-frame interval.  0 for default.
+    double iframe_interval_s = 1.0;
 
     /// Preset override fields. -1 / empty string for preset default.
     //{
-    // Desired framerate.
-    double framerate = -1;
-    // The viewfinder framerate (0 is same as primary)
-    double decoded_framerate = -1;
-    // Desired bitrate, megabits/sec. 0 for camera-default (3), -1 for
+    // Desired bitrate, kbits/sec. 0 for camera-default (3), -1 for
     // preset-default.
-    double bitrate_mbps = -1;
-    // Partial caps for h264 stream. Only applicable to h264 camera.
-    // Empty string for preset-default.
-    std::string h264_caps;
-    // Partial caps for decoded stream, specifies primary caps for dumb camera.
-    // Empty string for preset-default.
-    std::string decoded_caps;
-    // Extra parameters to uvch264src
-    std::string extra_uvch264;
+    int bitrate_kbps = -1;
+
+    int h264_width = -1;
+    int h264_height = -1;
     //}
 
-    // Desired I-frame interval. 0 for camera-default. 1.0 seems to be the
-    // smallest possible  -- any smaller numbers just cause the setting to
-    // be ignored.
-    double iframe_interval_s = 1.0;
-    // ratio of peak bitrate to average bitrate. 1.0 makes them identical.
-    double peak_bitrate_scale = 1.5;
+    // The encoder to use.  This may have a number of special values:
+    //  "X264" - a default x264enc based encoder
+    //  "VAAPI" - a default VAAPI based encoder
+    //  "gstreamer:" - use a custom gstreamer pipeline
+    std::string h264_encoder = "X264";
+
 
     // If non-empty, write video file to this location
     std::string write_video;
-    // If True, use regular v4l driver and encode h264 in software
-    bool dumb_camera = false;
-    // If True, treat "device" as custom gstreamer pipeline string.
-    bool raw_gstreamer = false;
+
     // If non-empty, gstreamer pipeline that is fed h264 data
     std::string custom_h264_consumer;
     // If True, calculate and log frame properties (like average brightness)
     // (this operates off uncompressed camera output)
     bool analyze = false;
 
+    // If set, use a completely custom gstreamer pipeline.  This has
+    // many undocumented constraints.
+    std::string gstreamer_pipeline;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(stats_interval_s));
       a->Visit(MJ_NVP(device));
 
+
       a->Visit(MJ_NVP(preset));
       a->Visit(MJ_NVP(bitrate_scale));
-
-      a->Visit(MJ_NVP(framerate));
-      a->Visit(MJ_NVP(decoded_framerate));
-      a->Visit(MJ_NVP(bitrate_mbps));
-      a->Visit(MJ_NVP(h264_caps));
-      a->Visit(MJ_NVP(decoded_caps));
-      a->Visit(MJ_NVP(extra_uvch264));
-
+      a->Visit(MJ_NVP(bitrate_peak_scale));
       a->Visit(MJ_NVP(iframe_interval_s));
-      a->Visit(MJ_NVP(peak_bitrate_scale));
+
+      a->Visit(MJ_NVP(bitrate_kbps));
+      a->Visit(MJ_NVP(h264_width));
+      a->Visit(MJ_NVP(h264_height));
+
+      a->Visit(MJ_NVP(h264_encoder));
 
       a->Visit(MJ_NVP(write_video));
-      a->Visit(MJ_NVP(dumb_camera));
-      a->Visit(MJ_NVP(raw_gstreamer));
       a->Visit(MJ_NVP(custom_h264_consumer));
       a->Visit(MJ_NVP(analyze));
+      a->Visit(MJ_NVP(gstreamer_pipeline));
     }
   };
 

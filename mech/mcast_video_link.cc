@@ -265,8 +265,8 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
     // tweak data_size to re-distribute data evenly across all packets
     int data_size = len / num_packets + 1;
 
-    log_.debug("TXing frame %d: %d bytes, is_key=%d, split into %d packets %d"
-               "(/%d) bytes long",
+    log_.debug("TXing frame    %d:       %d bytes, is_key=  %d, split into   %d packets      %d"
+               "(/          %d) bytes long",
                total_frames_, len, key_frame, num_packets, data_size,
                max_data_size);
 
@@ -683,7 +683,7 @@ class RxFrameBuffer : boost::noncopyable {
   ReceivedFrameInfo info_;
   boost::posix_time::ptime first_rx_time_ = boost::posix_time::not_a_date_time;
   std::vector<std::unique_ptr<DataPacket>> packets_;
-  std::bitset<64> missing_;
+  std::bitset<128> missing_;
   int rx_count_ = 0;
 };
 
