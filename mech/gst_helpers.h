@@ -18,7 +18,8 @@
 // Not intended to be included in component's headers.
 
 #include <boost/date_time/posix_time/posix_time.hpp>
-#include <boost/format.hpp>
+
+#include <fmt/format.h>
 
 #include <gst/gst.h>
 
@@ -73,10 +74,10 @@ struct VideoAnalyzeMessage {
   }
 
   std::string toString() const {
-    return (boost::format("count=%d luma_avg=%.1f luma_var=%.1f")
-            % frame_count
-            % (luma_average * 100.0)
-            % (luma_variance * 100.0)).str();
+    return fmt::format("count={} luma_avg={:.1f} luma_var={:.1f}",
+                       frame_count,
+                       (luma_average * 100.0),
+                       (luma_variance * 100.0));
   }
 };
 

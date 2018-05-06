@@ -16,6 +16,8 @@
 
 #include "mjmech_imu_driver.h"
 
+#include <fmt/format.h>
+
 #include "base/common.h"
 #include "base/fail.h"
 #include "base/i2c_factory.h"
@@ -124,8 +126,8 @@ class MjmechImuDriver::Impl : boost::noncopyable {
     const uint8_t whoami = buffer_[0];
     if (whoami != 0xb1) {
       auto error = base::ErrorCode::einval(
-          (boost::format("Incorrect whoami got 0x%02X expected 0xb1") %
-           static_cast<int>(whoami)).str());
+          fmt::format("Incorrect whoami got 0x{:02X} expected 0xb1",
+                      static_cast<int>(whoami)));
       service_.post(std::bind(handler, error));
       return;
     }

@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include <boost/format.hpp>
+#include <fmt/format.h>
 
 #include "base/common.h"
 #include "base/component_archives.h"
@@ -145,9 +145,9 @@ class SocketTesterBase : boost::noncopyable {
     send_timer_.expires_at(last_send_time_);
     send_timer_.async_wait([=](const boost::system::error_code& ec) {
         base::FailIf(ec);
-        std::string data = (
-            boost::format("%08d %s\n") % send_count_
-            % std::string(base_parameters_.send_len - 10, 'z')).str();
+        std::string data =
+            fmt::format("{:08d} {}\n", send_count_,
+                        std::string(base_parameters_.send_len - 10, 'z'));
         SendData(data);
         stats_["tx_count"]++;
         stats_["tx_size"] += data.size();

@@ -20,8 +20,9 @@
 #include <boost/asio/read_until.hpp>
 #include <boost/asio/streambuf.hpp>
 #include <boost/asio/write.hpp>
-#include <boost/format.hpp>
 #include <boost/signals2/signal.hpp>
+
+#include <fmt/format.h>
 
 #include "base/command_sequencer.h"
 #include "base/common.h"
@@ -531,14 +532,14 @@ class HerkuleX : public HerkuleXProtocol {
                       std::function<void (base::ErrorCode,
                                           MemReadResponse)> handler) {
     auto post_error = [&](base::ErrorCode ec) {
-      ec.Append(boost::format("when reading servo 0x%02x") %
-                static_cast<int>(to_send.servo));
+      ec.Append(fmt::format("when reading servo 0x{:02x}",
+                            static_cast<int>(to_send.servo)));
       this->Post(std::bind(handler, ec, MemReadResponse()));
     };
 
     if (ec) {
-      ec.Append(boost::format("when reading register %d") %
-                static_cast<int>(reg));
+      ec.Append(fmt::format("when reading register {}",
+                            static_cast<int>(reg)));
       post_error(ec);
       return;
     }
@@ -546,29 +547,29 @@ class HerkuleX : public HerkuleXProtocol {
     if (result.servo != to_send.servo && to_send.servo != MagicID::BROADCAST) {
       post_error(
           MakeSynchronizationError(
-              (boost::format("Synchronization error, sent request for servo "
-                             "0x%02x, response from 0x%02x") %
-               static_cast<int>(to_send.servo) %
-               static_cast<int>(result.servo)).str()));
+              fmt::format("Synchronization error, sent request for servo "
+                          "0x{:02x}, response from 0x{:02x}",
+                          static_cast<int>(to_send.servo),
+                          static_cast<int>(result.servo))));
       return;
     }
 
     if (result.command != (0x40 | to_send.command)) {
       post_error(
           MakeSynchronizationError(
-              (boost::format(
-                  "Expected response command 0x%02x, received 0x%02x") %
-               static_cast<int>(0x40 | to_send.command) %
-               static_cast<int>(result.command)).str()));
+              fmt::format(
+                  "Expected response command 0x{:02x}, received 0x{:02x}",
+                  static_cast<int>(0x40 | to_send.command),
+                  static_cast<int>(result.command))));
       return;
     }
 
     if (static_cast<int>(result.data.size()) != (length + 4)) {
       post_error(
           MakeSynchronizationError(
-              (boost::format("Expected length response %d, received %d") %
-               static_cast<int>(length + 4) %
-               result.data.size()).str()));
+              fmt::format("Expected length response {}, received {}",
+                          static_cast<int>(length + 4),
+                          result.data.size())));
       return;
     }
 
@@ -577,18 +578,18 @@ class HerkuleX : public HerkuleXProtocol {
     if (response.register_start != reg) {
       post_error(
           MakeSynchronizationError(
-              (boost::format("Expected register 0x%02x, received 0x%02x") %
-               static_cast<int>(reg) %
-               static_cast<int>(response.register_start)).str()));
+              fmt::format("Expected register 0x{:02x}, received 0x{:02x}",
+                          static_cast<int>(reg),
+                          static_cast<int>(response.register_start))));
       return;
     }
 
     if (response.length != length) {
       post_error(
           MakeSynchronizationError(
-              (boost::format("Expected length %d, received %d") %
-               static_cast<int>(length) %
-               static_cast<int>(response.length)).str()));
+              fmt::format("Expected length {}, received {}",
+                          static_cast<int>(length),
+                          static_cast<int>(response.length))));
       return;
     }
 
@@ -637,30 +638,30 @@ class HerkuleX : public HerkuleXProtocol {
     if (result.servo != to_send.servo && to_send.servo != MagicID::BROADCAST) {
       post_error(
           MakeSynchronizationError(
-              (boost::format(
-                  "Synchronization error, send status to servo 0x%02x, "
-                  "response from 0x%02x") %
-               static_cast<int>(to_send.servo) %
-               static_cast<int>(result.servo)).str()));
+              fmt::format(
+                  "Synchronization error, send status to servo 0x{:02x}, "
+                  "response from 0x{:02x}",
+                  static_cast<int>(to_send.servo),
+                  static_cast<int>(result.servo))));
       return;
     }
 
     if (result.command != Command::ACK_STAT) {
       post_error(
           MakeSynchronizationError(
-              (boost::format(
-                  "Expected response command 0x%02x, received 0x%02x") %
-               static_cast<int>(Command::ACK_STAT) %
-               static_cast<int>(result.command)).str()));
+              fmt::format(
+                  "Expected response command 0x{:02x}, received 0x{:02x}",
+                  static_cast<int>(Command::ACK_STAT),
+                  static_cast<int>(result.command))));
       return;
     }
 
     if (result.data.size() != 2) {
       post_error(
           MakeSynchronizationError(
-              (boost::format("Received status of incorrect size, expected 2, "
-                             "got %d") %
-               result.data.size()).str()));
+              fmt::format("Received status of incorrect size, expected 2, "
+                          "got {}",
+                          result.data.size())));
       return;
     }
     handler(base::ErrorCode(), Base::StatusResponse(result));

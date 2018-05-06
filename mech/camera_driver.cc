@@ -20,7 +20,8 @@
 #include <gst/gst.h>
 
 #include <boost/algorithm/string/predicate.hpp>
-#include <boost/format.hpp>
+
+#include <fmt/format.h>
 
 #include "base/common.h"
 #include "base/context_full.h"
@@ -143,35 +144,36 @@ class Device {
         return "videotestsrc name=testsrc is-live=1 pattern=ball " + final_tee;
       }
       case Type::kJoule: {
-        return (
-            boost::format(
+        return
+            fmt::format(
                 "icamerasrc device-name=0 io-mode=3 ! "
-                "video/x-raw,format=NV12,width=%d,height=%d "
-                "! vaapipostproc dmabuf-alloc-tiled=true " + final_tee) %
-            size_.width % size_.height).str();
+                "video/x-raw,format=NV12,width={},height={} "
+                "! vaapipostproc dmabuf-alloc-tiled=true " + final_tee,
+                size_.width, size_.height);
       }
       case Type::kC920: {
         std::ostringstream result;
         result <<
-            boost::format(
-                "uvch264src device=%s name=src auto-start=true "
-                "message-forward=true ") %
-            gst::PipelineEscape(data_);
+            fmt::format(
+                "uvch264src device={} name=src auto-start=true "
+                "message-forward=true ",
+                gst::PipelineEscape(data_));
         // Desired I-frame interval for C920. 0 for camera-default. 1.0
         // seems to be the smallest possible -- any smaller numbers just
         // cause the setting to be ignored.
         if (bitrate_.iframe_interval_s > 0.0) {
           result <<
-              boost::format("iframe-period=%d ") %
-              static_cast<int>(bitrate_.iframe_interval_s * 1000.0);
+              fmt::format(
+                  "iframe-period={} ",
+                  static_cast<int>(bitrate_.iframe_interval_s * 1000.0));
         }
         if (bitrate_.bitrate_kbps > 0) {
           result <<
-              boost::format(
-                  "average-bitrate=%d initial-bitrate=%d peak-bitrate=%d ") %
-              (bitrate_.bitrate_kbps * 1000) %
-              (bitrate_.bitrate_kbps * 1000) %
-              (bitrate_.bitrate_kbps * bitrate_.peak_scale * 1000);
+              fmt::format(
+                  "average-bitrate={} initial-bitrate={} peak-bitrate={} ",
+                  (bitrate_.bitrate_kbps * 1000),
+                  (bitrate_.bitrate_kbps * 1000),
+                  (bitrate_.bitrate_kbps * bitrate_.peak_scale * 1000));
         }
         result << "src.vidsrc";
         return result.str();
@@ -180,10 +182,10 @@ class Device {
         return data_;
       }
       case Type::kV4l2: {
-        return (
-            boost::format(
-                "v4l2src name=src device=%s ! videoconvert " + final_tee) %
-            gst::PipelineEscape(data_)).str();
+        return
+            fmt::format(
+                "v4l2src name=src device={} ! videoconvert " + final_tee,
+                gst::PipelineEscape(data_));
       }
     }
     base::AssertNotReached();
@@ -246,7 +248,7 @@ class H264Encoder {
             " bframes=0 tune=zerolatency ";
 
         if (bitrate_.iframe_interval_s > 0.0) {
-          ostr << boost::format("key-int-max=%d ") % key_int;
+          ostr << fmt::format("key-int-max={} ", key_int);
         }
 
         return ostr.str();
@@ -254,11 +256,11 @@ class H264Encoder {
       case Type::kVaapi: {
         std::ostringstream ostr;
         ostr <<
-            boost::format(
-                "! vaapih264enc bitrate=%d tune=none rate-control=vbr ") %
-            bitrate_.bitrate_kbps;
+            fmt::format(
+                "! vaapih264enc bitrate={} tune=none rate-control=vbr ",
+                bitrate_.bitrate_kbps);
         if (bitrate_.iframe_interval_s > 0.0) {
-          ostr << boost::format("keyframe-period=%d ") % key_int;
+          ostr << fmt::format("keyframe-period={} ", key_int);
         }
 
         return ostr.str();
@@ -305,8 +307,8 @@ class CameraDriver::Impl : boost::noncopyable {
     base::ErrorCode error;
 
     if (i_preset < 0 || i_preset > kMaxPresets) {
-      std::string msg = (boost::format("Preset %d is not in the range 0..%d")
-                         % i_preset % kMaxPresets).str();
+      std::string msg = fmt::format("Preset {} is not in the range 0..{}",
+                                    i_preset, kMaxPresets);
       parent_service_.post(std::bind(handler, base::ErrorCode::einval(msg)));
       return;
     }

@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2018 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,12 +14,16 @@
 
 #include "error_code.h"
 
-#include <boost/format.hpp>
+#include <sstream>
+
+#include "stringify.h"
 
 namespace mjmech {
 namespace base {
-void ErrorCode::Append(const boost::format& fmt) {
-  Append(fmt.str());
-}
+
+ErrorCode::ErrorCode(const boost::system::error_code& ec)
+    : ec_(ec),
+      message_(Stringify(ec) + " " + ec.message()) {}
+
 }
 }

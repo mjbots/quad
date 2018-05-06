@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2018 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -93,11 +93,7 @@ struct Frame : boost::noncopyable {
       : transform{translation, rotation},
         parent(parent) {}
 
-  std::string str() const {
-    return (boost::format("<Frame t=%s r=%s>") %
-            transform.translation.str() %
-            transform.rotation.str()).str();
-  }
+  std::string str() const;
 
   template <typename T>
   T MapToParent(const T& t) const { return transform.Apply(t); }

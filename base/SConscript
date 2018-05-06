@@ -1,4 +1,4 @@
-# Copyright 2014-2016 Josh Pieper, jjp@pobox.com.
+# Copyright 2014-2018 Josh Pieper, jjp@pobox.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 
 import os
 
-Import('canonenv')
+Import('canonenv', 'libfmt', 'libfmt_so')
 env = canonenv.Clone()
 
 env.Append(CPPPATH=['.'])
@@ -30,7 +30,9 @@ SOURCES = [
     'linux_i2c_generator.cc',
     'linux_input.cc',
     'logging.cc',
+    'point3d.cc',
     'program_options.cc',
+    'quaternion.cc',
     'telemetry_log.cc',
     'telemetry_remote_debug_server.cc',
     'udp_data_link.cc',
@@ -72,23 +74,23 @@ crenv.Append(LIBS=['boost_coroutine',
 testenv = crenv.Clone()
 testenv.Append(LIBS=['boost_unit_test_framework'])
 
-test_base = testenv.Program('test_base', TESTS + libbase)
+test_base = testenv.Program('test_base', TESTS + libbase + libfmt)
 testenv.Command('test_base.passed', test_base,
                 '$SOURCE && touch $TARGET')
 
 comm_manual_test = crenv.Program('comm_manual_test',
-                                 ['test/comm_manual_test.cc'] + libbase)
+                                 ['test/comm_manual_test.cc'] + libbase + libfmt)
 telemetry_log_test = crenv.Program(
     'telemetry_log_manual_test',
-    ['test/telemetry_log_manual_test.cc'] + libbase)
+    ['test/telemetry_log_manual_test.cc'] + libbase + libfmt)
 
 linux_input_manual_test = crenv.Program(
     'linux_input_manual_test',
-    ['test/linux_input_manual_test.cc'] + libbase)
+    ['test/linux_input_manual_test.cc'] + libbase + libfmt)
 
 i2c_factory_manual_test = env.Program(
     'i2c_factory_manual_test',
-    ['test/i2c_factory_manual_test.cc'] + libbase)
+    ['test/i2c_factory_manual_test.cc'] + libbase + libfmt)
 
 
 module_main_file = File('module_main.cc')
@@ -105,6 +107,6 @@ def ModuleMain(env, root, cname):
     return env.Program(os.path.basename(root), module_main + libs)
 Export("ModuleMain")
 
-env['MODULE_MAIN_LIBS'] = libbase
+env['MODULE_MAIN_LIBS'] = libbase + libfmt
 env['MODULE_MAIN_NSPREFIX'] = 'base::'
 ModuleMain(env, 'test/udp_manual_test', 'UdpManualTest')

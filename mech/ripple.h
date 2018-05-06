@@ -37,6 +37,8 @@
 
 #include <map>
 
+#include <boost/optional.hpp>
+
 #include "gait.h"
 
 namespace mjmech {

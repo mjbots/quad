@@ -37,6 +37,8 @@ struct RecordingInputSource {
   struct Context {
     std::istream& istr;
     std::ostringstream ostr;
+
+    Context(std::istream& istr_in) : istr(istr_in) {}
   };
   std::shared_ptr<Context> context;
 };

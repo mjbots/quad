@@ -17,6 +17,7 @@
 #include "common.h"
 #include "fail.h"
 #include "now.h"
+#include "stringify.h"
 
 /*
 Precise semantics:
@@ -157,7 +158,7 @@ void UdpDataLink::HandleUdpPacket(
   if (iter == peers_.end()) {
     last_peer_id_++;
     PeerInfo new_peer;
-    new_peer.name = boost::lexical_cast<std::string>(sender);
+    new_peer.name = Stringify(sender);
     new_peer.endpoint = sender;
     new_peer.id = last_peer_id_;
     auto rv = peers_.insert(std::make_pair(sender, new_peer));

@@ -14,6 +14,8 @@
 
 #include "turret.h"
 
+#include <fmt/format.h>
+
 #include "base/common.h"
 #include "base/deadline_timer.h"
 #include "base/fail.h"
@@ -217,9 +219,9 @@ class Turret::Impl : boost::noncopyable {
                                           data_.disable_period_s * 2);
       }
       log_.warn(
-          (boost::format(
-              "device unresponsive, disabling for %d seconds") %
-           data_.disable_period_s).str());
+          fmt::format(
+              "device unresponsive, disabling for {} seconds",
+              data_.disable_period_s));
       disable_until_ = base::Now(service_) +
           base::ConvertSecondsToDuration(data_.disable_period_s);
     }

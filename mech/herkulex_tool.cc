@@ -21,6 +21,8 @@
 #include <boost/asio/posix/stream_descriptor.hpp>
 #include <boost/program_options.hpp>
 
+#include <fmt/format.h>
+
 #include "base/common.h"
 #include "base/concrete_comm_factory.h"
 #include "base/error_wrap.h"
@@ -86,7 +88,7 @@ HC::Register ParseRegister(const std::string& args) {
     reg_address = std::stoi(address_str, 0, 0);
     if (reg_address < 0 || reg_address > 0xfe) {
       throw std::runtime_error(
-          (boost::format("Address out of range: %d") % reg_address).str());
+          fmt::format("Address out of range: {}", reg_address));
     }
     if (!size_str.empty()) {
       reg_size = std::stoi(size_str, 0, 0);
@@ -97,8 +99,7 @@ HC::Register ParseRegister(const std::string& args) {
     auto it = constants.ram_registers.find(args);
     if (it == constants.ram_registers.end()) {
       throw std::runtime_error(
-          (boost::format("Could not parse RAM address '%s'") %
-           args).str());
+          fmt::format("Could not parse RAM address '{}'", args));
     }
     return it->second;
   }
@@ -116,11 +117,11 @@ void MemReadCommand(CommandContext& ctx, Servo::Command command) {
   auto response = ctx.servo.MemRead(
       command, ctx.options.address,
       reg.position, reg.length, ctx.yield);
-  std::cout << (boost::format("Servo %d: Address %d: ") %
-                static_cast<int>(ctx.options.address) %
-                static_cast<int>(reg.position));
+  std::cout << fmt::format("Servo {}: Address {}: ",
+                           static_cast<int>(ctx.options.address),
+                           static_cast<int>(reg.position));
   for (char c: response.register_data) {
-    std::cout << boost::format(" %02X") % static_cast<int>(c);
+    std::cout << fmt::format(" {:02X}", static_cast<int>(c));
   }
   if (response.register_data.size() > 1) {
     int value = 0;
@@ -136,7 +137,7 @@ void MemReadCommand(CommandContext& ctx, Servo::Command command) {
       }
     }
 
-    std::cout << boost::format(" (%d)") % value;
+    std::cout << fmt::format(" ({})", value);
   }
   std::cout << "\n";
 }
@@ -174,17 +175,17 @@ const std::map<std::string, Command> g_commands = {
       } } },
   { "status", { kNoArgs, [](CommandContext& ctx) {
         auto response = ctx.servo.Status(ctx.options.address, ctx.yield);
-        std::cout << (boost::format("Servo %d: (0x%02x 0x%02x)\n") %
-                      static_cast<int>(ctx.options.address) %
-                      static_cast<int>(response.reg48) %
-                      static_cast<int>(response.reg49));
+        std::cout << fmt::format("Servo {}: (0x{:02x} 0x{:02x})\n",
+                                 static_cast<int>(ctx.options.address),
+                                 static_cast<int>(response.reg48),
+                                 static_cast<int>(response.reg49));
       } } },
   { "voltage", { kNoArgs, [](CommandContext& ctx) {
         int value = ctx.servo.RamRead(ctx.options.address, HC().voltage(),
                                       ctx.yield);
-        std::cout << (boost::format("Servo %d: %d\n") %
-                      static_cast<int>(ctx.options.address) %
-                      value);
+        std::cout << fmt::format("Servo {}: {}\n",
+                                 static_cast<int>(ctx.options.address),
+                                 value);
       } } },
   { "ram_read", { kArg, std::bind(MemReadCommand, pl::_1, Servo::RAM_READ) } },
   { "eep_read", { kArg, std::bind(MemReadCommand, pl::_1, Servo::EEP_READ) } },
@@ -218,7 +219,7 @@ const std::map<std::string, Command> g_commands = {
         for (int i = 0; i < 254; i++) {
           try {
             ctx.servo.Status(i, ctx.yield);
-            std::cout << boost::format("%d ") % i;
+            std::cout << fmt::format("%d ", i);
             std::cout.flush();
           } catch (boost::system::system_error& ec) {
             if (ec.code() != boost::asio::error::operation_aborted) {
@@ -253,11 +254,12 @@ const std::map<std::string, Command> g_commands = {
   { "list_registers", { kNoArgs, [](CommandContext& ctx) {
         HC constants;
         for (const auto& pair: constants.ram_registers) {
-          std::cout << boost::format("%-30s 0x%02X length=%d stride=%d") %
-              pair.first %
-              static_cast<int>(pair.second.position) %
-              static_cast<int>(pair.second.length) %
-              static_cast<int>(pair.second.bit_align) << "\n";
+          std::cout << fmt::format("{:<30s} 0x{:02X} length={} stride={}",
+                                   pair.first,
+                                   static_cast<int>(pair.second.position),
+                                   static_cast<int>(pair.second.length),
+                                   static_cast<int>(pair.second.bit_align))
+                    << "\n";
         }
       } } },
 };

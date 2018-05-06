@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2018 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,27 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "tf.h"
 
-#include <string>
+#include <fmt/format.h>
 
 namespace mjmech {
 namespace base {
 
-class ErrorCode;
-
-/// Terminate the program.
-void AssertNotReached() __attribute__ ((noreturn));
-
-/// Terminate the program and display a backtrace.
-void Fail(const std::string& message) __attribute__ ((noreturn));
-
-/// Terminate a program if the given error code is set.
-void FailIf(const ErrorCode&);
-
-/// Terminate the program if @p terminate is true, formatting the
-/// current errno as part of the message.
-void FailIfErrno(bool terminate);
+std::string Frame::str() const {
+  return fmt::format("<Frame t=%s r=%s>",
+                     transform.translation.str(),
+                     transform.rotation.str());
+}
 
 }
 }

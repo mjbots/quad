@@ -17,7 +17,6 @@
 #include <cmath>
 
 #include <boost/assert.hpp>
-#include <boost/format.hpp>
 
 #include <Eigen/Core>
 
@@ -38,9 +37,7 @@ class Quaternion {
   Quaternion()
       : w_(1.0), x_(0.), y_(0.), z_(0.) {}
 
-  std::string str() const {
-    return (boost::format("%f %f %f %f") % w_ % x_ % y_ % z_).str();
-  }
+  std::string str() const;
 
   Point3D Rotate(const Point3D& vector3d) const {
     Quaternion p(0.0,

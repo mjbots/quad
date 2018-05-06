@@ -22,7 +22,7 @@
 #include <gst/app/gstappsrc.h>
 #include <gst/rtsp-server/rtsp-server.h>
 
-#include <boost/format.hpp>
+#include <fmt/format.h>
 
 #include "base/common.h"
 #include "base/fail.h"
@@ -77,8 +77,8 @@ class RtspServer::Impl : boost::noncopyable {
 
     this->server_ = gst_rtsp_server_new();
     if (parameters_.port >= 0) {
-      std::string service = (
-          boost::format("%d") % parameters_.port).str();
+      std::string service =
+          fmt::format("{}", parameters_.port);
       gst_rtsp_server_set_service(server_, service.c_str());
     }
 
@@ -108,8 +108,7 @@ class RtspServer::Impl : boost::noncopyable {
     }
     BOOST_ASSERT(id > 0);
     log_.noticeStream() <<
-        boost::format("RTSP server ready at rtsp://127.0.0.1:%d/video"
-                      ) % port;
+        fmt::format("RTSP server ready at rtsp://127.0.0.1:{}/video", port);
   }
 
   void ConsumeH264Sample(GstSample* sample) {
@@ -323,10 +322,10 @@ class RtspServer::Impl : boost::noncopyable {
         char* struct_info =
             mstruct ? gst_structure_to_string(mstruct) : g_strdup("no-struct");
         log_.noticeStream()
-            << boost::format("RTSP bus Message '%s' from '%s': %s")
-            % GST_MESSAGE_TYPE_NAME(message)
-            % GST_MESSAGE_SRC_NAME(message)
-            % struct_info;
+            << fmt::format("RTSP bus Message '{}' from '{}': {}",
+                           GST_MESSAGE_TYPE_NAME(message),
+                           GST_MESSAGE_SRC_NAME(message),
+                           struct_info);
         g_free(struct_info);
         break;
       }
@@ -379,9 +378,9 @@ class RtspServer::Impl : boost::noncopyable {
       GstAppSrc *src, guint64 pos, gpointer user_data) {
     char* name = gst_element_get_name(src);
     static_cast<RtspServer::Impl*>(user_data)->
-        log_.warnStream() << boost::format(
-            "RTSP appsource '%s' says: seek me to %d. "
-            "This is not suppored, trouble ahead.") % name % pos;
+        log_.warnStream() << fmt::format(
+            "RTSP appsource '{}' says: seek me to {}. "
+            "This is not suppored, trouble ahead.", name, pos);
     g_free(name);
   }
 

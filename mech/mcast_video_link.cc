@@ -21,7 +21,6 @@
 
 #include <gst/gst.h>
 
-#include <boost/format.hpp>
 #include <boost/crc.hpp>
 
 #include "base/common.h"

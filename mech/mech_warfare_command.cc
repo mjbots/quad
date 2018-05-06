@@ -21,6 +21,8 @@
 
 #include <boost/property_tree/json_parser.hpp>
 
+#include <fmt/format.h>
+
 #include "base/deadline_timer.h"
 #include "base/fail.h"
 #include "base/json_archive.h"
@@ -440,21 +442,21 @@ class Commander::Impl {
         TurretCommand::AgitatorMode::kOn : agitator_off_mode();
 
     if (options_.verbose) {
-      std::cout << boost::format(
-          "x=%4.0f y=%4.0f r=%4.0f z=%4.0f bx=%4.0f by=%4.0f") %
-          command.translate_x_mm_s %
-          command.translate_y_mm_s %
-          command.rotate_deg_s %
-          command.body_z_mm %
-          command.body_x_mm %
-          command.body_y_mm;
+      std::cout << fmt::format(
+          "x={:4.0f} y={:4.0f} r={:4.0f} z={:4.0f} bx={:4.0f} by={:4.0f}",
+          command.translate_x_mm_s,
+          command.translate_y_mm_s,
+          command.rotate_deg_s,
+          command.body_z_mm,
+          command.body_x_mm,
+          command.body_y_mm);
       if (message.turret.rate) {
-        std::cout << boost::format(
-            " r=%4.0f,%4.0f") %
-            message.turret.rate->x_deg_s %
-            message.turret.rate->y_deg_s;
+        std::cout << fmt::format(
+            " r={:4.0f},{:4.0f}",
+            message.turret.rate->x_deg_s,
+            message.turret.rate->y_deg_s);
       } else {
-        std::cout << boost::format(" r=%4s,%4s") % "" % "";
+        std::cout << fmt::format(" r={:4s},{:4s}", "", "");
       }
       std::cout << "\r";
       std::cout.flush();
@@ -532,16 +534,16 @@ class Commander::Impl {
     }
 
     if (options_.verbose) {
-      std::cout << boost::format(
-          "x=%4.0f y=%4.0f tx=%4.0f ty=%4.0f bx=%4.0f by=%4.0f %s %s") %
-          command.drive_mm_s.x %
-          command.drive_mm_s.y %
-          command.turret_rate_dps.yaw %
-          command.turret_rate_dps.pitch %
-          command.body_offset_mm.x %
-          command.body_offset_mm.y %
-          (do_fire ? "FIRE" : "    ") %
-          (command.freeze_rotation ? "FREEZE" : "      ");
+      std::cout << fmt::format(
+          "x={:4.0f} y={:4.0f} tx={:4.0f} ty={:4.0f} bx={:4.0f} by={:4.0f} {} {}",
+          command.drive_mm_s.x,
+          command.drive_mm_s.y,
+          command.turret_rate_dps.yaw,
+          command.turret_rate_dps.pitch,
+          command.body_offset_mm.x,
+          command.body_offset_mm.y,
+          (do_fire ? "FIRE" : "    "),
+          (command.freeze_rotation ? "FREEZE" : "      "));
       std::cout << "\r";
       std::cout.flush();
     }

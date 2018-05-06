@@ -14,11 +14,14 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
 #include "base/component_archives.h"
 #include "base/fail.h"
 #include "base/logging.h"
 #include "base/now.h"
 #include "base/program_options_archive.h"
+#include "base/stringify.h"
 
 #include "camera_driver.h"
 #include "gst_main_loop.h"
@@ -177,7 +180,7 @@ class VideoLoopbackApp : boost::noncopyable {
         parameters_.debug_telemetry_expire_s);
     tel->SetTelemetry(
         "debug",
-        (boost::format("%s") % base::Now(service_)).str(),
+        base::Stringify(base::Now(service_)),
         next);
   }
 

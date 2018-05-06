@@ -15,8 +15,9 @@
 #pragma once
 
 #include <boost/date_time/posix_time/posix_time.hpp>
-#include <boost/format.hpp>
 #include <boost/iostreams/stream.hpp>
+
+#include <fmt/format.h>
 
 #include "recording_stream.h"
 #include "telemetry_format.h"
@@ -39,7 +40,7 @@ class TelemetrySchemaReader {
 
   void Read() {
     uint32_t flags = stream_.Read<uint32_t>();
-    out_ << boost::format("[SchemaFlags]: %08X;\n") % flags;
+    out_ << fmt::format("[SchemaFlags]: {:08X};\n", flags);
 
     ReadSchemaObject(0, kAllInfo);
     out_ << "\n";
@@ -171,14 +172,14 @@ class TelemetrySchemaReader {
 
     std::string flags_str;
     if (field_flags) {
-      flags_str = (boost::format(" f=%08X") % field_flags).str();
+      flags_str = fmt::format(" f={:08X}", field_flags);
     }
     if (DisplayNames(data_policy)) {
-      out_ << boost::format("%s%s") % instr % field_name;
+      out_ << fmt::format("{}{}", instr, field_name);
     }
 
     if (DisplayTypes(data_policy)) {
-      out_ << boost::format(": %s%s") % FieldTypeStr(field_type) % flags_str;
+      out_ << fmt::format(": {}{}", FieldTypeStr(field_type), flags_str);
     }
 
     switch (field_type) {
@@ -222,7 +223,7 @@ class TelemetrySchemaReader {
             static_cast<uint32_t>(TF::BlockOffsets::kMaxBlockSize)) {
           throw std::runtime_error("corrupt array size");
         }
-        out_ << boost::format("[%d]\n") % nelements;
+        out_ << fmt::format("[{}]\n", nelements);
 
         RenderVariableSize(indent, nelements, data_policy);
 
@@ -275,7 +276,7 @@ class TelemetrySchemaReader {
           }
           if (DisplayData(data_policy)) {
             if (items.count(value)) {
-              out_ << boost::format("%s (%d)") % items[value] % value;
+              out_ << fmt::format("{} ({})", items[value], value);
             } else {
               out_ << value;
             }
@@ -298,16 +299,14 @@ class TelemetrySchemaReader {
   }
 
   void ReadSchemaObject(int indent_in, DataPolicy data_policy) {
-    out_ << boost::format("%s{") % std::string(indent_in, ' ');
+    out_ << fmt::format("{}{{", std::string(indent_in, ' '));
     if (DisplayNames(data_policy)) { out_ << "\n"; }
 
     int indent = indent_in + 2;
     std::string instr = std::string(indent, ' ');
     uint32_t flags = stream_.Read<uint32_t>();
     if (data_policy != kDataOnly && flags != 0) {
-      out_ << boost::format("%s[Flags]: %08X;\n") %
-          instr %
-          flags;
+      out_ << fmt::format("{}[Flags]: {:08X};\n", instr, flags);
     }
     bool done = false;
     while (!done) {
@@ -320,7 +319,7 @@ class TelemetrySchemaReader {
     }
 
     if (DisplayNames(data_policy)) {
-      out_ << boost::format("%s") % std::string(indent_in, ' ');
+      out_ << fmt::format("{}", std::string(indent_in, ' '));
     }
     out_ << "}";
   }

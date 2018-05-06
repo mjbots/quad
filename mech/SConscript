@@ -1,4 +1,4 @@
-# Copyright 2014-2015 Josh Pieper, jjp@pobox.com.
+# Copyright 2014-2018 Josh Pieper, jjp@pobox.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,46 +15,13 @@
 import sys
 
 Import('canonenv')
+Import('libfmt')
 Import('libbase')
 Import('ModuleMain')
 
 env = canonenv.Clone()
 
 env.Append(CPPPATH=['.'])
-
-def SetupCustomGStreamer(gsenv):
-    # We do not want to use stock gstreamer -- it has hard-to-catch bugs like
-    # streams stopping after few minutes of operation. We require a custom-built
-    # one from 'mj-gstreamer-build' project.
-    gstreamer_root = '/opt/gstreamer-1.4.5'
-    gs_min_revision = 1
-    try:
-        gs_rev = open(gstreamer_root + '/mj-gstreamer-revision',
-                      'r').read().strip()
-    except IOError:
-        print >>sys.stderr, (
-            'ERROR: custom-compiled gstreamer not found. try '
-            'install_packages.sh')
-        sys.exit(1)
-
-    if int(gs_rev) < gs_min_revision:
-        print >>sys.stderr, \
-            'ERROR: custom-compiled gstreamer has wrong revision'
-        print >>sys.stderr, \
-            'try removing %s, then re-run install_packages.sh' \
-            % gstreamer_root
-        sys.exit(1)
-
-    gsenv['GS_LIB'] = gstreamer_root + '/lib'
-    gsenv.Append(RPATH = ['$GS_LIB'])
-
-    for lib in [
-            'gstreamer-rtsp-server-1.0', 'gstreamer-rtsp-1.0',
-            'gstreamer-sdp-1.0',
-            'gstreamer-1.0', 'gstreamer-base-1.0', 'gstreamer-app-1.0',
-            'glib-2.0', 'gobject-2.0']:
-        gsenv.ParseConfig('PKG_CONFIG_PATH=$GS_LIB/pkgconfig pkg-config '
-                          '--cflags --libs ' + lib)
 
 def SetupGStreamer(gsenv):
     for lib in [
@@ -72,10 +39,7 @@ crenv.Append(LIBS=['boost_coroutine',
                    ])
 
 gsenv = env.Clone()
-if gsenv['UBUNTU_RELEASE'] == 'xenial':
-    SetupGStreamer(gsenv)
-else:
-    SetupCustomGStreamer(gsenv)
+SetupGStreamer(gsenv)
 Export('gsenv')
 
 SOURCES = [
@@ -108,7 +72,7 @@ Export('libmech')
 Export('libmech_so')
 
 herkulex_tool = crenv.Program('herkulex_tool',
-                              ['herkulex_tool.cc'] + libmech + libbase)
+                              ['herkulex_tool.cc'] + libmech + libbase + libfmt)
 
 TESTS = ['test/' + x for x in [
         'herkulex_test.cc',
@@ -120,12 +84,12 @@ TESTS = ['test/' + x for x in [
 testenv = crenv.Clone()
 testenv.Append(LIBS=['boost_unit_test_framework'])
 
-test_mech = testenv.Program('test_mech', TESTS + libmech + libbase)
+test_mech = testenv.Program('test_mech', TESTS + libmech + libbase + libfmt)
 testenv.Command('test_mech.passed', test_mech,
                 '$SOURCE && touch $TARGET')
 
 for env in (crenv, gsenv):
-    env['MODULE_MAIN_LIBS'] = libmech + libbase
+    env['MODULE_MAIN_LIBS'] = libmech + libbase + libfmt
     env['MODULE_MAIN_NSPREFIX'] = 'mech::'
 
 command_env = gsenv.Clone()

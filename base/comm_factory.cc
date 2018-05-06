@@ -26,7 +26,9 @@
 #include <boost/asio/posix/stream_descriptor.hpp>
 #include <boost/asio/serial_port.hpp>
 #include <boost/enable_shared_from_this.hpp>
-#include <boost/format.hpp>
+#include <boost/optional.hpp>
+
+#include <fmt/format.h>
 
 namespace mjmech {
 namespace base {
@@ -143,7 +145,7 @@ class TcpStream : public AsyncStream {
         resolver_(service),
         socket_(service) {
     tcp::resolver::query query(parameters.host,
-                               (boost::format("%d") % parameters.port).str());
+                               fmt::format("{}", parameters.port));
     resolver_.async_resolve(
         query, std::bind(&TcpStream::HandleResolve, this, _1, _2));
   }
@@ -171,8 +173,8 @@ class TcpStream : public AsyncStream {
   void HandleResolve(ErrorCode ec,
                      tcp::resolver::iterator it) {
     if (ec) {
-      ec.Append(boost::format("when resolving: %s:%d") %
-                parameters_.host % parameters_.port);
+      ec.Append(fmt::format("when resolving: {}:{}",
+                            parameters_.host, parameters_.port));
       service_.post(std::bind(start_handler_, ec));
       return;
     }
@@ -182,8 +184,8 @@ class TcpStream : public AsyncStream {
 
   void HandleConnect(ErrorCode ec) {
     if (ec) {
-      ec.Append(boost::format("when connecting to: %s:%d") %
-                parameters_.host % parameters_.port);
+      ec.Append(fmt::format("when connecting to: {}:{}",
+                            parameters_.host, parameters_.port));
     }
     service_.post(std::bind(start_handler_, ec));
   }
@@ -560,8 +562,8 @@ class StdioDebugStream : public AsyncStream {
             std::size_t count = 0;
             for (auto it = Iterator::begin(buffer);
                  count < size; ++it, ++count) {
-              std::cout << boost::format(" %02X") %
-                  static_cast<int>(static_cast<uint8_t>(*it));
+              std::cout << fmt::format(
+                  " {:02X}", static_cast<int>(static_cast<uint8_t>(*it)));
             }
           }
 
@@ -586,8 +588,8 @@ class StdioDebugStream : public AsyncStream {
             std::size_t count = 0;
             for (auto it = Iterator::begin(buffer);
                  count < size; ++it, ++count) {
-              std::cout << boost::format(" %02X") %
-                  static_cast<int>(static_cast<uint8_t>(*it));
+              std::cout << fmt::format(
+                  " {:02X}", static_cast<int>(static_cast<uint8_t>(*it)));
             }
           }
 

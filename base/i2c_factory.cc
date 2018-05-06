@@ -1,4 +1,4 @@
-// Copyright 2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2016-2018 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 
 #include "i2c_factory.h"
 
-#include <boost/format.hpp>
+#include <fmt/format.h>
 
 #include "program_options.h"
 
@@ -69,8 +69,8 @@ void I2CFactory::AsyncCreate(const Parameters& parameters,
         std::bind(
             handler,
             ErrorCode::einval(
-                (boost::format("unknown type '%s'") %
-                 parameters.type_).str()),
+                fmt::format("unknown type '{}'",
+                            parameters.type_)),
             SharedI2C()));
     return;
   }

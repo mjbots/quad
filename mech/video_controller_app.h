@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include <boost/format.hpp>
+#include <fmt/format.h>
 
 #include "base/component_archives.h"
 #include "base/fail.h"
@@ -153,15 +153,15 @@ class VideoControllerApp : boost::noncopyable {
           it->second;
 
       m_.display->SetOsdText(
-          (boost::format("Servo: %.1f/%.1f\n"
-                         "Fire: %.0f(s)\n"
-                         "Turret: %.0f(deg)\n"
-                         "Mode: %s") %
-           telemetry.servo_min_voltage_V %
-           telemetry.servo_max_voltage_V %
-           telemetry.total_fire_time_s %
-           telemetry.turret_absolute_deg %
-           mode_str).str());
+          fmt::format("Servo: {:.1f}/{:.1f}\n"
+                      "Fire: {:.0f}(s)\n"
+                      "Turret: {:.0f}(deg)\n"
+                      "Mode: {}",
+                      telemetry.servo_min_voltage_V,
+                      telemetry.servo_max_voltage_V,
+                      telemetry.total_fire_time_s,
+                      telemetry.turret_absolute_deg,
+                      mode_str));
     }
   }
 

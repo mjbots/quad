@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2018 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,8 +13,6 @@
 // limitations under the License.
 
 #pragma once
-
-#include <boost/format.hpp>
 
 #include "common.h"
 #include "visitor.h"
@@ -38,9 +36,7 @@ struct Point3D {
     BOOST_ASSERT(false);
   }
 
-  std::string str() const {
-    return (boost::format("<Point3D x/y/z %f/%f/%f") % x % y % z).str();
-  }
+  std::string str() const;
 
   Point3D operator+(const Point3D& other) const {
     return Point3D{x + other.x, y + other.y, z + other.z};

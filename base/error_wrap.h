@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2018 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,12 +14,18 @@
 
 #pragma once
 
+#include <sstream>
+
 #include <boost/asio/spawn.hpp>
-#include <boost/format.hpp>
 #include <boost/system/system_error.hpp>
+
+#include <fmt/format.h>
+
+#include "stringify.h"
 
 namespace mjmech {
 namespace base {
+
 /// The following routine can be used to wrap coroutines such that
 /// boost::system_error information is captured.  The default
 /// boost::exception_ptr ignores this exception, making it challenging
@@ -32,8 +38,8 @@ auto ErrorWrap(Coroutine coro) {
     } catch (boost::system::system_error& e) {
       std::throw_with_nested(
           std::runtime_error(
-              (boost::format("system_error: %s: %s") %
-               e.what() % e.code()).str()));
+              fmt::format("system_error: {}: {}",
+                          e.what(), Stringify(e.code()))));
     } catch (std::runtime_error& e) {
       std::throw_with_nested(std::runtime_error(e.what()));
     }

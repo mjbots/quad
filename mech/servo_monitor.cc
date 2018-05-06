@@ -17,6 +17,8 @@
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
 
+#include <fmt/format.h>
+
 #include "base/common.h"
 #include "base/deadline_timer.h"
 #include "base/fail.h"
@@ -239,16 +241,17 @@ class ServoMonitor::Impl : boost::noncopyable {
 
   void CheckFaults(const HerkuleXBase::MemReadResponse& response) {
     if (response.reg48) {
-      log_.warn((boost::format("ServoMonitor: %02X err=%s")
-                 % response.servo % FaultToString(response)).str());
+      log_.warn(fmt::format("ServoMonitor: {:02X} err={}",
+                            response.servo,
+                            FaultToString(response)));
       servo_->ClearStatus(response.servo,
                           std::bind(&Impl::HandleClear, this,
                                     std::placeholders::_1));
     }
 
     if (!response.motor_on && expect_torque_on_) {
-      log_.warn((boost::format("%02X has motor unexpectedly off!") %
-                 response.servo).str());
+      log_.warn(fmt::format("{:02X} has motor unexpectedly off!",
+                            response.servo));
     }
   }
 

@@ -18,7 +18,7 @@
 
 #include <thread>
 
-#include <boost/format.hpp>
+#include <fmt/format.h>
 
 #include "program_options_archive.h"
 
@@ -91,9 +91,9 @@ class LinuxI2C : public AsyncI2C {
           std::bind(
               handler,
               ErrorCode::einval(
-                  (boost::format("asked for length %d got %d") %
-                   static_cast<int>(size) %
-                   static_cast<int>(data.block[0])).str()),
+                  fmt::format("asked for length {} got {}",
+                              static_cast<int>(size),
+                              static_cast<int>(data.block[0]))),
               0));
       return;
     }

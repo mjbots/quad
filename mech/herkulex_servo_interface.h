@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
 #include "base/fail.h"
 #include "base/program_options_archive.h"
 
@@ -114,7 +116,7 @@ class HerkuleXServoInterface : public ServoInterface {
                  PoseHandler handler) {
     if (ec && ec != boost::asio::error::operation_aborted) {
       if (address) {
-        ec.Append(boost::format("when getting pose from servo %d") % *address);
+        ec.Append(fmt::format("when getting pose from servo {}", *address));
       }
       handler(ec, {});
       return;
@@ -152,7 +154,7 @@ class HerkuleXServoInterface : public ServoInterface {
                         TemperatureHandler handler) {
     if (ec && ec != boost::asio::error::operation_aborted) {
       if (address) {
-        ec.Append(boost::format("when getting temp from servo %d") % *address);
+        ec.Append(fmt::format("when getting temp from servo {}", *address));
       }
       handler(ec, {});
       return;
@@ -186,7 +188,7 @@ class HerkuleXServoInterface : public ServoInterface {
   static std::string FormatIDs(const std::vector<int>& ids) {
     std::string result;
     result += "[";
-    for (int id: ids) { result += (boost::format("%d,") % id).str(); }
+    for (int id: ids) { result += fmt::format("{}", id); }
     result += "]";
     return result;
   }
@@ -199,8 +201,8 @@ class HerkuleXServoInterface : public ServoInterface {
                     VoltageHandler handler) {
     if (ec && ec != boost::asio::error::operation_aborted) {
       if (address) {
-        ec.Append(boost::format("when getting voltage from servo  %d") %
-                  *address);
+        ec.Append(fmt::format("when getting voltage from servo  {}",
+                              *address));
       }
       handler(ec, {});
       return;

@@ -19,8 +19,9 @@
 #include <boost/asio/read_until.hpp>
 #include <boost/asio/posix/stream_descriptor.hpp>
 #include <boost/asio/streambuf.hpp>
-#include <boost/format.hpp>
 #include <boost/program_options.hpp>
+
+#include <fmt/format.h>
 
 #include "base/fail.h"
 #include "base/linux_i2c_generator.h"
@@ -88,7 +89,7 @@ class I2CInterface {
     FailIf(ec);
     std::cout << "rx complete:";
     for (std::size_t i = 0; i < length; i++) {
-      std::cout << boost::format(" %02X") % static_cast<int>(buffer_[i]);
+      std::cout << fmt::format(" {:02X}", static_cast<int>(buffer_[i]));
     }
     std::cout << "\n";
   }

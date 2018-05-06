@@ -20,7 +20,6 @@
 #include <gst/gst.h>
 
 #include <boost/asio/deadline_timer.hpp>
-#include <boost/format.hpp>
 
 #include "base/common.h"
 #include "base/fail.h"

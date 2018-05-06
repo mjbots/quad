@@ -30,7 +30,7 @@
 #include <snappy.h>
 #include <snappy-sinksource.h>
 
-#include <boost/format.hpp>
+#include <fmt/format.h>
 
 #include "circular_buffer.h"
 #include "fail.h"
@@ -519,18 +519,18 @@ void TelemetryLog::WriteSchema(uint32_t identifier,
   auto it = impl_->identifier_map_.find(record_name);
   if (it != impl_->identifier_map_.end()) {
     if (identifier != it->second) {
-      Fail(boost::format(
-               "Attempt to write schema for '%s' with identifier %d "
-               "but already allocated as %d") %
-           record_name % identifier % it->second);
+      Fail(fmt::format(
+               "Attempt to write schema for '{}' with identifier {} "
+               "but already allocated as {}",
+               record_name, identifier, it->second));
     }
   } else {
     auto rit = impl_->reverse_identifier_map_.find(identifier);
     if (rit != impl_->reverse_identifier_map_.end()) {
-      Fail(boost::format(
-               "Attempt to write schema for '%s' but identifier %d "
-               "already used for '%s'") %
-           record_name % identifier % it->second);
+      Fail(fmt::format(
+               "Attempt to write schema for '{}' but identifier {} "
+               "already used for '{}'",
+               record_name, identifier, it->second));
     } else {
       // Guess we might as well mark this identifier as being used.
       impl_->identifier_map_[record_name] = identifier;

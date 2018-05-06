@@ -15,6 +15,7 @@
 import subprocess
 
 Import('gsenv')
+Import('libfmt')
 Import('libbase')
 Import('libmech')
 
@@ -61,4 +62,4 @@ SOURCES = [
 sim_objects = env.Object(SOURCES)
 
 simulator = env.Program(
-    'simulator', ['simulator.cc'] + SOURCES + libmech + libbase)
+    'simulator', ['simulator.cc'] + SOURCES + libmech + libbase + libfmt)

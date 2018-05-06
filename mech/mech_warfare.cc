@@ -16,6 +16,8 @@
 
 #include <boost/property_tree/json_parser.hpp>
 
+#include <fmt/format.h>
+
 #include "base/common.h"
 #include "base/context_full.h"
 #include "base/now.h"
@@ -102,7 +104,7 @@ class MechWarfare::Impl : boost::noncopyable {
         if (type == "Mammal") {
           MammalIK::Config config;
 
-          std::string field = (boost::format("ikconfig.leg.%d") % i).str();
+          std::string field = fmt::format("ikconfig.leg.{}", i);
           auto optional_child = tree.get_child_optional(field);
           if (!optional_child) {
             throw base::SystemError::einval("could not locate field: " + field);
@@ -116,7 +118,7 @@ class MechWarfare::Impl : boost::noncopyable {
         } else if (type == "Lizard") {
           LizardIK::Config config;
 
-          std::string field = (boost::format("ikconfig.leg.%d") % i).str();
+          std::string field = fmt::format("ikconfig.leg.{}", i);
           auto optional_child = tree.get_child_optional(field);
           if (!optional_child) {
             throw base::SystemError::einval("could not locate field: " + field);
@@ -368,11 +370,9 @@ class MechWarfare::Impl : boost::noncopyable {
     const int expected =
         static_cast<int>(parent_->parameters_.servo_min_voltage_counts);
     if (measured != expected) {
-      log_.warn((boost::format(
-                     "Servo %d has misconfigured min_voltage 0x%02X != 0x%02X") %
-                 servo_id %
-                 measured %
-                 expected).str());
+      log_.warn(fmt::format(
+                    "Servo {} has misconfigured min_voltage 0x{:02X} != 0x{:02X}",
+                    servo_id, measured, expected));
     }
 
     DoNextServoConfigure();

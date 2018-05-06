@@ -14,8 +14,9 @@
 
 #include "ripple.h"
 
-#include <boost/format.hpp>
 #include <boost/test/auto_unit_test.hpp>
+
+#include <fmt/format.h>
 
 namespace {
 using namespace mjmech::base;
@@ -46,8 +47,8 @@ void SanityCheckState(const T& state) {
     } else if (leg.mode == Leg::Mode::kSwing) {
     } else {
       BOOST_CHECK_MESSAGE(false,
-                          (boost::format("unknown leg mode %d") %
-                           static_cast<int>(leg.mode)).str());
+                          fmt::format("unknown leg mode {}",
+                                      static_cast<int>(leg.mode)));
     }
   }
 

@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2018 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,8 +16,6 @@
 
 #include <string>
 
-#include <boost/format/format_fwd.hpp>
-#include <boost/lexical_cast.hpp>
 #include <boost/system/error_code.hpp>
 
 namespace mjmech {
@@ -29,9 +27,7 @@ class ErrorCode {
   /// This constructor is purposefully non-explicit, so that we can
   /// transparently capture the boost variety and later allow context
   /// to be added.
-  ErrorCode(const boost::system::error_code& ec)
-      : ec_(ec),
-        message_(boost::lexical_cast<std::string>(ec_) + " " + ec.message()) {}
+  ErrorCode(const boost::system::error_code& ec);
 
   ErrorCode(int val, const boost::system::error_category& category,
             const std::string& message = "")
@@ -77,7 +73,6 @@ class ErrorCode {
   // additional textual context.
   void AppendError(const ErrorCode& ec) { Append(ec.message()); }
   void Append(const boost::system::error_code& ec) { Append(ec.message()); }
-  void Append(const boost::format&);
   void Append(const std::string& message) {
     if (!message_.empty()) { message_ += "\n"; }
     message_ += message;

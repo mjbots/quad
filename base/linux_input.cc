@@ -17,7 +17,8 @@
 #include <linux/input.h>
 
 #include <boost/asio/posix/stream_descriptor.hpp>
-#include <boost/format.hpp>
+
+#include <fmt/format.h>
 
 namespace mjmech {
 namespace base {
@@ -186,7 +187,7 @@ void LinuxInput::cancel() {
 }
 
 std::ostream& operator<<(std::ostream& ostr, const LinuxInput& rhs) {
-  ostr << boost::format("<LinuxInput '%s'>") % rhs.name();
+  ostr << fmt::format("<LinuxInput '{}'>", rhs.name());
   return ostr;
 }
 
@@ -212,7 +213,7 @@ std::string MapEvType(int ev_type) {
     case EV_KEY: { return "EV_KEY"; }
     case EV_REL: { return "EV_REL"; }
     case EV_ABS: { return "EV_ABS"; }
-    default: { return (boost::format("EV_%02X") % ev_type).str(); }
+    default: { return fmt::format("EV_{:02X}", ev_type); }
   }
 }
 
@@ -222,12 +223,12 @@ std::string MapSyn(int code) {
     case SYN_CONFIG: { return "SYN_CONFIG"; }
     case SYN_MT_REPORT: { return "SYN_MT_REPORT"; }
     case SYN_DROPPED: { return "SYN_DROPPED"; }
-    default: { return (boost::format("SYN_%02X") % code).str(); }
+    default: { return fmt::format("SYN_{:02X}", code); }
   }
 }
 
 std::string MapKey(int code) {
-  return (boost::format("KEY_%03X") % code).str();
+  return fmt::format("KEY_{:03X}", code);
 }
 
 std::string MapRel(int code) {
@@ -242,7 +243,7 @@ std::string MapRel(int code) {
     case REL_DIAL: { return "REL_DIAL"; }
     case REL_WHEEL: { return "REL_WHEEL"; }
     case REL_MISC: { return "REL_MISC"; }
-    default: { return (boost::format("REL_%02X") % code).str(); }
+    default: { return fmt::format("REL_{:02X}", code); }
   }
 }
 
@@ -263,12 +264,12 @@ std::string MapAbs(int code) {
     case ABS_HAT3X: { return "ABS_HAT3X"; }
     case ABS_HAT3Y: { return "ABS_HAT3Y"; }
 
-    default: { return (boost::format("ABS_%02X") % code).str(); }
+    default: { return fmt::format("ABS_{:02X}", code); }
   }
 }
 
 std::string MapUnknown(int code) {
-  return (boost::format("%03X") % code).str();
+  return fmt::format("{:03X}", code);
 }
 
 std::function<std::string (int)> MakeCodeMapper(int ev_type) {
@@ -283,23 +284,27 @@ std::function<std::string (int)> MakeCodeMapper(int ev_type) {
 }
 
 std::ostream& operator<<(std::ostream& ostr, const LinuxInput::AbsInfo& rhs) {
-  ostr << boost::format("<AbsInfo %s val=%d min=%d max=%d scaled=%f>") %
-      MapAbs(rhs.axis) % rhs.value % rhs.minimum % rhs.maximum % rhs.scaled();
+  ostr << fmt::format("<AbsInfo {} val={} min={} max={} scaled={}>",
+                      MapAbs(rhs.axis),
+                      rhs.value,
+                      rhs.minimum,
+                      rhs.maximum,
+                      rhs.scaled());
   return ostr;
 }
 
 std::ostream& operator<<(std::ostream& ostr, const LinuxInput::Features& rhs) {
-  ostr << boost::format("<Features type=%s %s>") %
-      MapEvType(rhs.ev_type) %
-      MapBitmask(rhs.capabilities, MakeCodeMapper(rhs.ev_type));
+  ostr << fmt::format("<Features type={} {}>",
+                      MapEvType(rhs.ev_type),
+                      MapBitmask(rhs.capabilities, MakeCodeMapper(rhs.ev_type)));
   return ostr;
 }
 
 std::ostream& operator<<(std::ostream& ostr, const LinuxInput::Event& rhs) {
-  ostr << boost::format("<Event ev_type=%s code=%s value=%d>") %
-      MapEvType(rhs.ev_type) %
-      MakeCodeMapper(rhs.ev_type)(rhs.code) %
-      rhs.value;
+  ostr << fmt::format("<Event ev_type={} code={} value={}>",
+                      MapEvType(rhs.ev_type),
+                      MakeCodeMapper(rhs.ev_type)(rhs.code),
+                      rhs.value);
   return ostr;
 }
 

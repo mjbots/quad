@@ -20,7 +20,7 @@
 
 #include <iostream>
 
-#include <boost/format.hpp>
+#include "error_code.h"
 
 namespace mjmech {
 namespace base {
@@ -78,10 +78,6 @@ void Fail(const std::string& message) {
   std::cerr << "\n" << message << "\n\n";
 
   ::abort();
-}
-
-void Fail(const boost::format& fmt) {
-  Fail(fmt.str());
 }
 
 void FailIf(const ErrorCode& ec) {

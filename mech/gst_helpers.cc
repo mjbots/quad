@@ -18,7 +18,7 @@
 #include <gst/app/gstappsink.h>
 #include <gst/app/gstappsrc.h>
 
-#include <boost/format.hpp>
+#include <fmt/format.h>
 
 #include "base/fail.h"
 
@@ -37,7 +37,7 @@ std::string FormatFraction(double val) {
   BOOST_ASSERT(val > 0);
   gint n = 0, d = 0;
   gst_util_double_to_fraction(val, &n, &d);
-  return (boost::format("%d/%d") % n % d).str();
+  return fmt::format("{}/{}", n, d);
 }
 
 std::string MuxerForVideoName(const std::string& name) {
@@ -90,9 +90,9 @@ PipelineWrapper::PipelineWrapper(
   pipeline_ = gst_parse_launch(launch_cmd.c_str(), &error);
   if (!pipeline_ || error) {
     base::Fail(
-        boost::format("Failed to launch gstreamer pipeline: error %d: %s"
-                      "\nPipeline command was: %s\n")
-        % error->code % error->message % launch_cmd);
+        fmt::format("Failed to launch gstreamer pipeline: error {}: {}"
+                    "\nPipeline command was: {}\n",
+                    error->code, error->message, launch_cmd));
   }
   BOOST_ASSERT(error == NULL);
 
@@ -121,8 +121,8 @@ GstElement* PipelineWrapper::GetElementByName(const char* name) {
   GstElement* target =
       gst_bin_get_by_name_recurse_up(GST_BIN(pipeline_), name);
   if (!target) {
-    base::Fail(boost::format("Cannot find element '%s' in a pipeline")
-               % name);
+    base::Fail(fmt::format("Cannot find element '{}' in a pipeline",
+                           name));
   }
   return target;
 }
@@ -316,8 +316,9 @@ void PipelineWrapper::HandleBusMessage(GstBus *bus, GstMessage *message) {
       gchar *dbg = NULL;
       gst_message_parse_error(message, &err, &dbg);
       if (err) {
-        error_msg = (boost::format("%s\nDebug details: %s")
-                     % err->message % (dbg ? dbg : "(NONE)")).str();
+        error_msg = fmt::format("{}\nDebug details: {}",
+                                err->message,
+                                (dbg ? dbg : "(NONE)"));
         g_error_free(err);
       }
       if (dbg) { g_free(dbg); }
@@ -355,9 +356,10 @@ void PipelineWrapper::HandleBusMessage(GstBus *bus, GstMessage *message) {
     char* struct_info =
         mstruct ? gst_structure_to_string(mstruct) : g_strdup("no-struct");
     bus_log_.debugStream() <<
-        boost::format("message '%s' from '%s': %s") %
-        GST_MESSAGE_TYPE_NAME(message) % GST_MESSAGE_SRC_NAME(message)
-        % struct_info;
+        fmt::format("message '{}' from '{}': {}",
+                    GST_MESSAGE_TYPE_NAME(message),
+                    GST_MESSAGE_SRC_NAME(message),
+                    struct_info);
     g_free(struct_info);
   }
 }

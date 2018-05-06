@@ -1,4 +1,4 @@
-// Copyright 2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2018 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,25 +14,18 @@
 
 #pragma once
 
+#include <sstream>
 #include <string>
-
-#include <boost/program_options.hpp>
 
 namespace mjmech {
 namespace base {
 
-/// Take all options in @p source, and create options corresponding to
-/// them in @p destination, prefixing the long option name with @p
-/// destination_prefix.
-void MergeProgramOptions(
-    boost::program_options::options_description* source,
-    const std::string& destination_prefix,
-    boost::program_options::options_description* destination);
-
-void SetOption(
-    boost::program_options::options_description* source,
-    const std::string& key,
-    const std::string& value);
+template <typename T>
+std::string Stringify(const T& rhs) {
+  std::ostringstream ostr;
+  ostr << rhs;
+  return ostr.str();
+}
 
 }
 }

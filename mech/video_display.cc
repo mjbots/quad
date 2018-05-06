@@ -23,7 +23,8 @@
 #include <gst/app/gstappsrc.h>
 
 #include <boost/algorithm/string/predicate.hpp>
-#include <boost/format.hpp>
+
+#include <fmt/format.h>
 
 #include "base/common.h"
 #include "base/fail.h"
@@ -77,7 +78,7 @@ class VideoDisplay::Impl : boost::noncopyable {
     }
 
     if (!parameters_.raw_frame_base.empty()) {
-      std::string fname = (boost::format("%s-%05d.raw") % parameters_.raw_frame_base % raw_frame_count_++).str();
+      std::string fname = fmt::format("{}-{:05d}.raw", parameters_.raw_frame_base, raw_frame_count_++);
       std::ofstream of(fname);
       BOOST_ASSERT(of);
       of.write(&frame->front(), frame->size());
