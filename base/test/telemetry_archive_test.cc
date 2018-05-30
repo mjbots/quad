@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "telemetry_archive.h"
+#include "base/telemetry_archive.h"
 
 #include <iostream>
 
 #include <boost/test/auto_unit_test.hpp>
 
-#include "telemetry_util.h"
-#include "visitor.h"
+#include "base/telemetry_util.h"
+#include "base/visitor.h"
 
 using namespace mjmech::base;
 

@@ -12,76 +12,75 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "signal_result.h"
+#include "base/signal_result.h"
 
-#include <boost/asio/spawn.hpp>
 #include <boost/test/auto_unit_test.hpp>
 
 using namespace mjmech::base;
 
-BOOST_AUTO_TEST_CASE(TestSignalResultCoroutine1) {
-  boost::asio::io_service service;
+// BOOST_AUTO_TEST_CASE(TestSignalResultCoroutine1) {
+//   boost::asio::io_service service;
 
-  boost::signals2::signal<void (const int*)> signal;
+//   boost::signals2::signal<void (const int*)> signal;
 
-  bool done = false;
+//   bool done = false;
 
-  boost::asio::spawn(service, [&](boost::asio::yield_context yield) {
-      int result = SignalResult::Wait(service, &signal, 1.0, yield);
-      BOOST_CHECK_EQUAL(result, 3);
-      done = true;
-    });
+//   boost::asio::spawn(service, [&](boost::asio::yield_context yield) {
+//       int result = SignalResult::Wait(service, &signal, 1.0, yield);
+//       BOOST_CHECK_EQUAL(result, 3);
+//       done = true;
+//     });
 
-  boost::asio::spawn(service, [&](boost::asio::yield_context yield) {
-      int result = 3;
-      BOOST_CHECK_EQUAL(done, false);
-      signal(&result);
+//   boost::asio::spawn(service, [&](boost::asio::yield_context yield) {
+//       int result = 3;
+//       BOOST_CHECK_EQUAL(done, false);
+//       signal(&result);
 
-      // When a signal is emitted, the result should have been made
-      // available immediately.
-      BOOST_CHECK_EQUAL(done, true);
-    });
+//       // When a signal is emitted, the result should have been made
+//       // available immediately.
+//       BOOST_CHECK_EQUAL(done, true);
+//     });
 
-  service.run();
-}
+//   service.run();
+// }
 
-BOOST_AUTO_TEST_CASE(TestSignalResultCoroutine2) {
-  boost::asio::io_service service;
+// BOOST_AUTO_TEST_CASE(TestSignalResultCoroutine2) {
+//   boost::asio::io_service service;
 
-  boost::signals2::signal<void (const int*)> signal;
+//   boost::signals2::signal<void (const int*)> signal;
 
-  bool done = false;
-  bool timeout = false;
+//   bool done = false;
+//   bool timeout = false;
 
-  boost::asio::spawn(service, [&](boost::asio::yield_context yield) {
-      try {
-        SignalResult::Wait(service, &signal, 1.0, yield);
-        BOOST_CHECK(false);
-        done = true;
-      } catch (TimeoutError& e) {
-        timeout = true;
-      }
-    });
+//   boost::asio::spawn(service, [&](boost::asio::yield_context yield) {
+//       try {
+//         SignalResult::Wait(service, &signal, 1.0, yield);
+//         BOOST_CHECK(false);
+//         done = true;
+//       } catch (TimeoutError& e) {
+//         timeout = true;
+//       }
+//     });
 
-  boost::asio::spawn(service, [&](boost::asio::yield_context yield) {
-      BOOST_CHECK_EQUAL(done, false);
-      BOOST_CHECK_EQUAL(timeout, false);
+//   boost::asio::spawn(service, [&](boost::asio::yield_context yield) {
+//       BOOST_CHECK_EQUAL(done, false);
+//       BOOST_CHECK_EQUAL(timeout, false);
 
-      DeadlineTimer timer(service);
-      timer.expires_from_now(boost::posix_time::milliseconds(900));
-      timer.async_wait(yield);
-      BOOST_CHECK_EQUAL(timeout, false);
+//       DeadlineTimer timer(service);
+//       timer.expires_from_now(boost::posix_time::milliseconds(900));
+//       timer.async_wait(yield);
+//       BOOST_CHECK_EQUAL(timeout, false);
 
-      timer.expires_from_now(boost::posix_time::milliseconds(200));
-      timer.async_wait(yield);
-      BOOST_CHECK_EQUAL(timeout, true);
-    });
+//       timer.expires_from_now(boost::posix_time::milliseconds(200));
+//       timer.async_wait(yield);
+//       BOOST_CHECK_EQUAL(timeout, true);
+//     });
 
 
-  service.run();
-  BOOST_CHECK_EQUAL(done, false);
-  BOOST_CHECK_EQUAL(timeout, true);
-}
+//   service.run();
+//   BOOST_CHECK_EQUAL(done, false);
+//   BOOST_CHECK_EQUAL(timeout, true);
+// }
 
 BOOST_AUTO_TEST_CASE(TestSignalResultCallback1) {
   boost::asio::io_service service;

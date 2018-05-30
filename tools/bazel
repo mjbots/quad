@@ -1,0 +1,130 @@
+#!/usr/bin/python3 -B
+
+# Copyright 2018 Josh Pieper, jjp@pobox.com.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+SCRIPT_PATH = os.path.basename(__file__)
+
+def find_workspace_dir():
+    path = SCRIPT_PATH
+    while True:
+        maybe_workspace = os.path.join(path, 'WORKSPACE')
+        if os.path.exists(maybe_workspace):
+            return path
+
+        assert path != ''
+
+        old_path = path
+        path = os.path.dirname(path)
+        assert path != old_path
+
+
+WORKSPACE_DIR = find_workspace_dir()
+
+def maybe_copy(maybe_filename, dest):
+    if not os.path.exists(maybe_filename):
+        return
+
+    with open(maybe_filename, 'rb') as f:
+        dest.write(f.read())
+
+
+def get_workspace_var(var):
+    search = re.compile(r'^{}\s*=\s*"(.*)"'.format(var))
+
+    with open(os.path.join(WORKSPACE_DIR, 'WORKSPACE'), 'r') as f:
+        for line in f:
+            match = re.search(search, line)
+            if not match:
+                continue
+
+            return match.group(1)
+
+    raise RuntimeError('Must supply a {} in the WORKSPACE'.format(var))
+
+
+BAZEL_REMOTE_SOURCE = 'https://github.com/bazelbuild/bazel/releases/download'
+
+BAZEL_BIN_CACHE = os.path.expanduser('~/.cache/bazel')
+BAZEL_VERSION = get_workspace_var('BAZEL_VERSION')
+BAZEL_VERSION_SHA = get_workspace_var('BAZEL_VERSION_SHA')
+
+
+def build_bazel(dest):
+    dist_tempfile = tempfile.NamedTemporaryFile(suffix='.zip')
+
+    url = '{}/{}/bazel-{}-dist.zip'.format(
+        BAZEL_REMOTE_SOURCE, BAZEL_VERSION, BAZEL_VERSION)
+
+    print('Downloading and building bazel {} from {}'.format(
+        BAZEL_VERSION, url),
+          file=sys.stderr, flush=True)
+
+    subprocess.check_call(['curl', '-L', url, '-o', dist_tempfile.name])
+
+    actual_sha256 = subprocess.check_output([
+        'sha256sum', dist_tempfile.name]).decode('utf-8').split(' ')[0]
+
+    if actual_sha256 != BAZEL_VERSION_SHA.lower():
+        raise RuntimeError(
+            'bazel sha256 does not match, expected {} got {}'.format(
+                BAZEL_VERSION_SHA, actual_sha256))
+
+    package_dir = tempfile.TemporaryDirectory()
+
+    subprocess.check_call([
+        'unzip',
+        dist_tempfile.name,
+    ], cwd=package_dir.name)
+
+    subprocess.check_call([
+        'bash', 'compile.sh',
+    ], cwd=package_dir.name)
+
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+
+    shutil.move(os.path.join(package_dir.name, 'output', 'bazel'),
+                dest)
+
+
+def main():
+    bazel_bin_loc = os.path.join(BAZEL_BIN_CACHE, BAZEL_VERSION)
+
+    if not os.path.exists(bazel_bin_loc):
+        build_bazel(bazel_bin_loc)
+
+    bazelrc_name = os.path.join(WORKSPACE_DIR, '_bazelrc_generated')
+    bazelrc = open(bazelrc_name, 'wb')
+
+    maybe_copy(os.path.join(WORKSPACE_DIR, 'tools/default_bazelrc'), bazelrc)
+    maybe_copy('/etc/bazelrc', bazelrc)
+    maybe_copy(os.path.expanduser('~/.bazelrc'), bazelrc)
+    maybe_copy(os.path.join(WORKSPACE_DIR, 'tools/bazel.rc'), bazelrc)
+
+    bazelrc.flush()
+
+    os.execv(bazel_bin_loc,
+             ['bazel', '--bazelrc=' + bazelrc_name] + sys.argv[1:])
+    assert False
+
+
+if __name__ == '__main__':
+    main()

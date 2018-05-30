@@ -15,6 +15,7 @@
 #pragma once
 
 #include <functional>
+#include <vector>
 
 #include "point3d.h"
 #include "quaternion.h"
@@ -60,8 +61,7 @@ class AttitudeEstimator {
                process_noise_bias,
                process_noise_bias).finished())),
         measurement_noise_accel_(measurement_noise_accel),
-        measurement_noise_stationary_(measurement_noise_stationary),
-        initial_bias_uncertainty_(initial_noise_bias) {
+        measurement_noise_stationary_(measurement_noise_stationary) {
   }
 
   std::vector<std::string> state_names() const {
@@ -235,7 +235,6 @@ class AttitudeEstimator {
   Filter filter_;
   double measurement_noise_accel_;
   double measurement_noise_stationary_;
-  double initial_bias_uncertainty_;
 
   Point3D current_gyro_rps_;
 };

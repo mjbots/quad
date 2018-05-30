@@ -12,15 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "comm_factory.h"
+#include "base/comm_factory.h"
 
 #include <functional>
 
 #include <boost/property_tree/json_parser.hpp>
-
-#include "property_tree_archive.h"
-
 #include <boost/test/auto_unit_test.hpp>
+
+#include "base/property_tree_archive.h"
 
 namespace pl = std::placeholders;
 using namespace mjmech::base;

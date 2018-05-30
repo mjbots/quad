@@ -217,8 +217,7 @@ const std::string kControlCommandPrefix = "MVC1";
 class McastVideoLinkTransmitter::Impl : boost::noncopyable {
  public:
   Impl(McastVideoLinkTransmitter* parent, boost::asio::io_service& service)
-      : parent_(parent),
-        service_(service),
+      : service_(service),
         parameters_(parent->parameters_),
         main_id_(std::this_thread::get_id()),
         tx_timer_(service) {}
@@ -423,7 +422,7 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
 
   // Variables which are only set in constructor or in Start()
   DataPacketSignal packet_signal_;
-  McastVideoLinkTransmitter* const parent_;
+  // McastVideoLinkTransmitter* const parent_;
   boost::asio::io_service& service_;
   const Parameters& parameters_;
   std::thread::id main_id_;
@@ -847,7 +846,7 @@ void McastVideoLinkReceiver::AsyncStart(base::ErrorHandler handler) {
 }
 
 void McastVideoLinkReceiver::SendControlCommand(const std::string& command) {
-  SendControlCommand(command);
+  impl_->SendControlCommand(command);
 }
 
 

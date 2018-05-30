@@ -49,8 +49,7 @@ UdpSocket::UdpSocket(boost::asio::io_service& service,
                      const ParseResult& listen_p,
                      bool server_mode,
                      const Parameters& parameters)
-    : service_(service),
-      log_(log),
+    : log_(log),
       parameters_(parameters),
       socket_(service) {
 
@@ -122,7 +121,7 @@ void UdpSocket::PrepareSocket() {
     log_.debug("Setting do-not-fragment option");
     // Despite the strange parameter name, this sets DF bit in packets. See
     // ip(7).
-    int fd = socket_.native();
+    int fd = socket_.native_handle();
     int val = IP_PMTUDISC_DO;
     int result = ::setsockopt(fd, IPPROTO_IP, IP_MTU_DISCOVER,
                               &val, sizeof(val));
@@ -135,9 +134,6 @@ void UdpSocket::PrepareSocket() {
     log_.debug("Setting do-not-route option");
     socket_.set_option(boost::asio::socket_base::do_not_route(true));
   }
-
-  boost::asio::socket_base::non_blocking_io command(true);
-  socket_.io_control(command);
 }
 
 

@@ -28,12 +28,12 @@
 namespace mjmech {
 namespace mech {
 
-namespace {
-const int kMaxFeatures = 50;
-const int kMinFeatures = 10;
-const double kQualityLevel = 0.01;
-const double kMinDistance = 3.0;
-}
+// namespace {
+// const int kMaxFeatures = 50;
+// const int kMinFeatures = 10;
+// const double kQualityLevel = 0.01;
+// const double kMinDistance = 3.0;
+// }
 
 class TargetTracker::Impl : public CameraFrameConsumer {
  public:

@@ -16,6 +16,7 @@
 
 #include <string>
 
+#include <boost/asio/io_service.hpp>
 #include <boost/asio/ip/udp.hpp>
 #include <boost/signals2/signal.hpp>
 #include <boost/optional.hpp>
@@ -143,7 +144,6 @@ class UdpSocket {
   void PrepareSocket();
   void PrepareToSendTo(const endpoint&);
 
-  boost::asio::io_service& service_;
   LogRef log_;
   Parameters parameters_;
   udp::socket socket_;

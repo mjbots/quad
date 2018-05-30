@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "linux_input.h"
+#include "base/linux_input.h"
 
 #include <linux/input.h>
 
@@ -20,7 +20,7 @@
 
 #include <boost/program_options.hpp>
 
-#include "fail.h"
+#include "base/fail.h"
 
 namespace {
 using namespace mjmech::base;

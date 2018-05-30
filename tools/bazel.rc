@@ -1,0 +1,5 @@
+build --python_path=/usr/bin/python3
+test --python_path=/usr/bin/python3
+
+build --crosstool_top=@rpi_bazel//tools/cc_toolchain:toolchain
+test --crosstool_top=@rpi_bazel//tools/cc_toolchain:toolchain

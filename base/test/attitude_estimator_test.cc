@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "attitude_estimator.h"
+#include "base/attitude_estimator.h"
 
 #include <boost/test/auto_unit_test.hpp>
 

@@ -49,7 +49,7 @@ std::unique_ptr<I2CFactory::Parameters> I2CFactory::MakeParameters() const {
 
   for (const auto& pair: impl_->generators_) {
     result->generators_[pair.first] =
-        std::move(pair.second->MakeParameters());
+        pair.second->MakeParameters();
   }
 
   for (auto& pair: result->generators_) {

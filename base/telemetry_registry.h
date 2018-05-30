@@ -49,7 +49,7 @@ class TelemetryRegistry : boost::noncopyable {
 
     records_.insert(
         std::make_pair(
-            record_name, std::move(std::unique_ptr<Base>(ptr))));
+            record_name, std::unique_ptr<Base>(ptr)));
 
     return result;
   };

@@ -117,21 +117,14 @@ class StreamFactory : boost::noncopyable {
 
   /// Create a new stream given the current set of configuration.
   template <typename Handler>
-  BOOST_ASIO_INITFN_RESULT_TYPE(Handler,
-                                void(boost::system::error_code, SharedStream))
-  AsyncCreate(const Parameters& parameters,
-              Handler handler) {
-    boost::asio::detail::async_result_init<
-      Handler,
-      void (boost::system::error_code, SharedStream)> init(
-          BOOST_ASIO_MOVE_CAST(Handler)(handler));
-
+  void AsyncCreate(const Parameters& parameters,
+                   Handler handler) {
     try {
       bool visited = false;
       TryCreate try_create(
           this,
           parameters,
-          [handler=init.handler](ErrorCode ec, SharedStream stream) mutable {
+          [handler](ErrorCode ec, SharedStream stream) mutable {
             handler(ec.error_code(), stream);
           },
           &visited);
@@ -141,10 +134,8 @@ class StreamFactory : boost::noncopyable {
             "Unknown stream type: '" + parameters.type + "'");
       }
     } catch (SystemError& e) {
-      init.handler(e.error_code(), SharedStream());
+      handler(e.error_code(), SharedStream());
     }
-
-    return init.result.get();
   }
 
  private:

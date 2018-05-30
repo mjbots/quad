@@ -14,12 +14,12 @@
 
 #include <iostream>
 
-#include "telemetry_log.h"
-#include "telemetry_log_registrar.h"
-#include "telemetry_registry.h"
-#include "visitor.h"
-
 #include <boost/program_options.hpp>
+
+#include "base/telemetry_log.h"
+#include "base/telemetry_log_registrar.h"
+#include "base/telemetry_registry.h"
+#include "base/visitor.h"
 
 namespace {
 using namespace mjmech::base;

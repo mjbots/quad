@@ -43,9 +43,7 @@ const char* kLaunchCmd =
 class RtspServer::Impl : boost::noncopyable {
  public:
   Impl(RtspServer* parent, boost::asio::io_service& service)
-      : parent_(parent),
-        parameters_(parent->parameters_),
-        service_(service),
+      : parameters_(parent->parameters_),
         parent_id_(std::this_thread::get_id()) {}
 
   ~Impl() {
@@ -384,9 +382,7 @@ class RtspServer::Impl : boost::noncopyable {
     g_free(name);
   }
 
-  RtspServer* const parent_;
   const Parameters& parameters_;
-  boost::asio::io_service& service_;
   const std::thread::id parent_id_;
   std::thread::id gst_id_;
 
@@ -402,7 +398,7 @@ class RtspServer::Impl : boost::noncopyable {
   GstRTSPMediaFactory* factory_ = NULL;;
   // Constructed media. When this is non-null, this ensures factory
   // is alive even if there are no clients.
-  GstRTSPMedia* factory_media_ = NULL;;
+  // GstRTSPMedia* factory_media_ = NULL;;
 
   // Mutex for all appsrc_ variables, as they may be changed from various
   // threads (via push_h264_sample function).

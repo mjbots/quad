@@ -21,7 +21,7 @@
 #include <assert.h>
 #endif
 
-#include "gsl/gsl-lite.h"
+#include "base/gsl/gsl-lite.h"
 #include "common.h"
 #ifndef MJMECH_DISABLE_BOOST
 #include "error_code.h"

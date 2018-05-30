@@ -37,8 +37,7 @@ namespace {
 class I2CInterface {
  public:
   I2CInterface(boost::asio::io_service& service)
-      : service_(service),
-        in_(service, dup(0)),
+      : in_(service, dup(0)),
         out_(service, dup(1)) {}
 
   void Start() {
@@ -99,7 +98,6 @@ class I2CInterface {
     std::cout << "tx complete\n";
   }
 
-  boost::asio::io_service& service_;
   boost::asio::posix::stream_descriptor in_;
   boost::asio::posix::stream_descriptor out_;
   boost::asio::streambuf streambuf_;

@@ -47,7 +47,7 @@ class ProgramOptionsArchiveValue : public boost::program_options::value_semantic
     nvp_.set_value(boost::any_cast<decltype(nvp_.get_value())>(value_store));
   }
 
-#if BOOST_VERSION >= 106100
+#if BOOST_VERSION >= 106100 && BOOST_VERSION <= 106400
   virtual bool adjacent_tokens_only() const override {
     return false;
   }

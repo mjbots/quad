@@ -73,38 +73,20 @@ class AsyncStream : boost::noncopyable {
   virtual boost::asio::io_service& get_io_service() = 0;
 
   template <typename Buffers, typename Handler>
-  BOOST_ASIO_INITFN_RESULT_TYPE(Handler,
-                                void(boost::system::error_code, std::size_t))
-  async_read_some(Buffers buffers, Handler handler) {
-    boost::asio::detail::async_result_init<
-      Handler,
-      void (boost::system::error_code, std::size_t)> init(
-          BOOST_ASIO_MOVE_CAST(Handler)(handler));
-
+  void async_read_some(Buffers buffers, Handler handler) {
     this->virtual_async_read_some(
         buffers,
-        [handler=init.handler](ErrorCode ec, std::size_t size) mutable {
+        [handler](ErrorCode ec, std::size_t size) mutable {
           handler(ec.error_code(), size);
         });
-
-    return init.result.get();
   }
 
   template <typename Buffers, typename Handler>
-  BOOST_ASIO_INITFN_RESULT_TYPE(Handler,
-                                void(boost::system::error_code, std::size_t))
-  async_write_some(Buffers buffers, Handler handler) {
-    boost::asio::detail::async_result_init<
-      Handler,
-      void (boost::system::error_code, std::size_t)> init(
-          BOOST_ASIO_MOVE_CAST(Handler)(handler));
-
+  void async_write_some(Buffers buffers, Handler handler) {
     this->virtual_async_write_some(
-        buffers, [init](ErrorCode ec, std::size_t size) mutable {
-          init.handler(ec.error_code(), size);
+        buffers, [handler](ErrorCode ec, std::size_t size) mutable {
+          handler(ec.error_code(), size);
         });
-
-    return init.result.get();
   }
 
   virtual void cancel() = 0;

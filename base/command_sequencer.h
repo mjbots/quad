@@ -34,6 +34,8 @@ class CommandSequencer : boost::noncopyable {
     MaybeStart();
   };
 
+  boost::asio::io_service& get_io_service() { return service_; }
+
  private:
   void WaitingFinished() {
     BOOST_ASSERT(waiting_);
@@ -79,7 +81,7 @@ class CommandSequencer : boost::noncopyable {
         concrete_->handler_(std::forward<Args>(args)...);
 
         BOOST_ASSERT(concrete_->parent_->waiting_);
-        concrete_->parent_->service_.post(
+        concrete_->parent_->get_io_service().post(
             std::bind(&CommandSequencer::WaitingFinished, concrete_->parent_));
       }
 

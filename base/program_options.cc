@@ -45,7 +45,7 @@ class ProgramOptionsArchiveWrapValue :
   virtual void notify(const boost::any& value_store) const override {
     base_->notify(value_store);
   }
-#if BOOST_VERSION >= 106100
+#if BOOST_VERSION >= 106100 && BOOST_VERSION <= 106400
   virtual bool adjacent_tokens_only() const override {
     return base_->adjacent_tokens_only();
   }

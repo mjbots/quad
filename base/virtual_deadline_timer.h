@@ -107,7 +107,7 @@ class AsioTimerService : public VirtualDeadlineTimerService {
 
   boost::system::error_code wait(
       implementation_type& impl,
-      boost::system::error_code& ec) {
+      boost::system::error_code& ec) override {
     base().wait(data(impl), ec);
     return ec;
   }
@@ -186,7 +186,7 @@ class VirtualDeadlineTimerServiceHolder
     return child_->cancel(impl, ec);
   }
 
-  duration_type expires_from_now(const implementation_type& impl) {
+  duration_type expires_from_now(const implementation_type& impl) const {
     return child_->expires_from_now(impl);
   }
 
@@ -196,7 +196,7 @@ class VirtualDeadlineTimerServiceHolder
     return child_->expires_from_now(impl, duration, ec);
   }
 
-  time_type expires_at(const implementation_type& impl) {
+  time_type expires_at(const implementation_type& impl) const {
     return child_->expires_at(impl);
   }
 
@@ -212,21 +212,12 @@ class VirtualDeadlineTimerServiceHolder
   }
 
   template <typename Handler>
-  BOOST_ASIO_INITFN_RESULT_TYPE(Handler,
-                                void(boost::system::error_code))
-  async_wait(implementation_type& impl, Handler handler) {
-    boost::asio::detail::async_result_init<
-      Handler,
-      void (boost::system::error_code)> init(
-          BOOST_ASIO_MOVE_CAST(Handler)(handler));
-
+  void async_wait(implementation_type& impl, Handler handler) {
     this->child_->async_wait(
         impl,
-        [handler=init.handler](ErrorCode ec) mutable {
+        [handler](ErrorCode ec) mutable {
           handler(ec.error_code());
         });
-
-    return init.result.get();
   }
 
   void shutdown_service() override {

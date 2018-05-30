@@ -120,7 +120,7 @@ class TelemetryLog::ThreadWriter : boost::noncopyable {
         fd_(fd),
         pipe_(MakePipe()),
         thread_(std::bind(&ThreadWriter::Run, this)) {
-    BOOST_ASSERT(fd >= 0);
+    BOOST_ASSERT(fd != nullptr);
   }
 
   ~ThreadWriter() {

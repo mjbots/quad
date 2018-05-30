@@ -34,18 +34,10 @@ class SignalResult : boost::noncopyable {
  public:
 
   template <typename Handler, typename T>
-  static
-  BOOST_ASIO_INITFN_RESULT_TYPE(Handler,
-                                void(boost::system::error_code, T))
-  Wait(boost::asio::io_service& service,
-       boost::signals2::signal<void (const T*)>* signal,
-       double timeout_s,
-       Handler handler) {
-    boost::asio::detail::async_result_init<
-      Handler,
-      void (boost::system::error_code, T)> init(
-          BOOST_ASIO_MOVE_CAST(Handler)(handler));
-
+  static void Wait(boost::asio::io_service& service,
+                   boost::signals2::signal<void (const T*)>* signal,
+                   double timeout_s,
+                   Handler handler) {
     struct Context {
       base::DeadlineTimer timer;
       bool active = true;
@@ -66,7 +58,7 @@ class SignalResult : boost::noncopyable {
 
     context->timer.expires_from_now(ConvertSecondsToDuration(timeout_s));
     context->timer.async_wait(
-        [handler=init.handler, context](
+        [handler, context](
             boost::system::error_code ec) mutable -> void {
         if (ec == boost::asio::error::operation_aborted) { return; }
         if (!context->active) { return; }
@@ -77,22 +69,13 @@ class SignalResult : boost::noncopyable {
       });
 
     context->connection =
-        signal->connect([handler=init.handler, context](
+        signal->connect([handler, context](
                             const T* value) mutable -> void {
             if (!context->active) { return; }
             context->active = false;
             context->connection.disconnect();
             handler(boost::system::error_code(), *value);
           });
-
-    try {
-      return init.result.get();
-    } catch (boost::system::system_error& e) {
-      if (e.code() == boost::asio::error::operation_aborted) {
-        throw TimeoutError();
-      }
-      throw;
-    }
   }
 };
 }

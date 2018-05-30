@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <boost/test/auto_unit_test.hpp>
+#include "base/tf.h"
 
-#include "tf.h"
+#include <boost/test/auto_unit_test.hpp>
 
 namespace {
 using namespace mjmech::base;

@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "telemetry_log.h"
+#include "base/telemetry_log.h"
 
 #include <boost/asio/deadline_timer.hpp>
+#include <boost/asio/io_service.hpp>
 #include <boost/asio/posix/stream_descriptor.hpp>
 #include <boost/asio/read.hpp>
 #include <boost/asio/read_until.hpp>

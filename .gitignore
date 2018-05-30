@@ -16,3 +16,7 @@ mjmech-data
 *.b#?
 *.pro
 logs
+#*
+.#*
+_bazelrc_generated
+/bazel-*

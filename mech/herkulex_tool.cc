@@ -286,6 +286,9 @@ class CommandValue : public boost::program_options::value_semantic {
         CommandText{name_, command_arg_ == kArg ?
               new_tokens.at(0) : ""});
   }
+  virtual bool adjacent_tokens_only() const {
+    return false;
+  }
 
  private:
   const std::string name_;

@@ -25,8 +25,8 @@
 #include "base/program_options_archive.h"
 #include "base/visitor.h"
 
-#include "udp_socket.h"
-#include "udp_data_link.h"
+#include "base/udp_socket.h"
+#include "base/udp_data_link.h"
 
 namespace mjmech {
 namespace base {
