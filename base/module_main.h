@@ -1,4 +1,4 @@
-// Copyright 2014-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2018 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include MODULE_HEADER_FILE
+#pragma once
 
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/filesystem.hpp>
@@ -27,14 +27,14 @@
 #include "program_options_archive.h"
 
 namespace mjmech {
-namespace {
-using namespace mjmech::base;
+namespace base {
 
+template <typename Module>
 int safe_main(int argc, char**argv) {
   namespace po = boost::program_options;
 
   Context context;
-  MODULE_CLASS_NAME module(context);
+  Module module(context);
 
   std::string config_file;
   std::string log_file;
@@ -136,12 +136,11 @@ int safe_main(int argc, char**argv) {
   context.service.run();
   return 0;
 }
-}
-}
 
+template <typename Module>
 int main(int argc, char**argv) {
   try {
-    return mjmech::safe_main(argc, argv);
+    return safe_main<Module>(argc, argv);
   } catch (std::exception& e) {
     std::cerr << "Error: " << e.what() << "\n";
     return 1;
@@ -149,4 +148,6 @@ int main(int argc, char**argv) {
     std::cerr << "Unknown error.\n";
     return 2;
   }
+}
+}
 }

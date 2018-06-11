@@ -21,5 +21,5 @@ def bazel_deps_repository(name):
     native.git_repository(
         name = name,
         remote = "/home/josh/prog/bazel_deps",
-        commit = "6b8f903c47f807948f17adbb8bed14b4bbcefe7b",
+        commit = "206a1e8c476d8399f9865217179aac7580d329d3",
     )

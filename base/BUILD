@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+package(default_visibility = ["//visibility:public"])
+
 cc_library(
     name = "base",
     srcs = [
@@ -80,3 +82,5 @@ cc_test(
         "@boost//:test",
     ],
 )
+
+exports_files(["module_main.cc"])
