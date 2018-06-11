@@ -25,7 +25,6 @@
 
 #include "base/common.h"
 #include "base/concrete_comm_factory.h"
-#include "base/error_wrap.h"
 #include "base/program_options.h"
 #include "base/program_options_archive.h"
 
@@ -46,14 +45,25 @@ typedef HerkuleX Servo;
 typedef HerkuleXConstants HC;
 
 struct CommandContext {
+  CommandContext(boost::asio::io_service& service_in,
+                 const Options& options_in,
+                 Servo& servo_in,
+                 ServoInterface& servo_interface_in,
+                 const std::string& args_in)
+      : service(service_in),
+        options(options_in),
+        servo(servo_in),
+        servo_interface(servo_interface_in),
+        args(args_in) {}
+
   boost::asio::io_service& service;
   const Options& options;
   Servo& servo;
   ServoInterface& servo_interface;
   std::string args;
-  boost::asio::yield_context yield;
 };
-typedef std::function<void (CommandContext&)> CommandFunction;
+typedef std::function<
+  void (CommandContext&, ErrorHandler)> CommandFunction;
 
 enum CommandArg {
   kNoArgs,
@@ -109,40 +119,47 @@ HC::Register ParseRegister(const std::string& args) {
         static_cast<uint8_t>(reg_size)};
 }
 
-void DoStdio(CommandContext&);
+void DoStdio(CommandContext&, ErrorHandler);
 
-void MemReadCommand(CommandContext& ctx, Servo::Command command) {
+void MemReadCommand(CommandContext& ctx, ErrorHandler handler,
+                    Servo::Command command) {
   HC::Register reg = ParseRegister(ctx.args);
 
-  auto response = ctx.servo.MemRead(
+  ctx.servo.MemRead(
       command, ctx.options.address,
-      reg.position, reg.length, ctx.yield);
-  std::cout << fmt::format("Servo {}: Address {}: ",
-                           static_cast<int>(ctx.options.address),
-                           static_cast<int>(reg.position));
-  for (char c: response.register_data) {
-    std::cout << fmt::format(" {:02X}", static_cast<int>(c));
-  }
-  if (response.register_data.size() > 1) {
-    int value = 0;
-    for (size_t i = 0; i < response.register_data.size(); i++) {
-      value |= (static_cast<uint8_t>(
-                    response.register_data[i]) << (i * reg.bit_align));
-    }
+      reg.position, reg.length,
+      [handler, ctx, reg](const auto& ec, const auto response) {
+        FailIf(ec);
 
-    if (reg.sign) {
-      const int most_positive = 1 << (reg.bit_align * reg.length - 1);
-      if (value >= most_positive) {
-        value = value - (1 << (reg.bit_align * reg.length));
-      }
-    }
+        std::cout << fmt::format("Servo {}: Address {}: ",
+                                 static_cast<int>(ctx.options.address),
+                                 static_cast<int>(reg.position));
+        for (char c: response.register_data) {
+          std::cout << fmt::format(" {:02X}", static_cast<int>(c));
+        }
+        if (response.register_data.size() > 1) {
+          int value = 0;
+          for (size_t i = 0; i < response.register_data.size(); i++) {
+            value |= (static_cast<uint8_t>(
+                          response.register_data[i]) << (i * reg.bit_align));
+          }
 
-    std::cout << fmt::format(" ({})", value);
-  }
-  std::cout << "\n";
+          if (reg.sign) {
+            const int most_positive = 1 << (reg.bit_align * reg.length - 1);
+            if (value >= most_positive) {
+              value = value - (1 << (reg.bit_align * reg.length));
+            }
+          }
+
+          std::cout << fmt::format(" ({})", value);
+        }
+        std::cout << "\n";
+        handler(ec);
+      });
 }
 
-void MemWriteCommand(CommandContext& ctx, Servo::Command command) {
+void MemWriteCommand(CommandContext& ctx, ErrorHandler handler,
+                     Servo::Command command) {
   std::vector<std::string> args;
   boost::split(args, ctx.args, boost::is_any_of(":"));
   if (args.size() < 2) {
@@ -159,39 +176,92 @@ void MemWriteCommand(CommandContext& ctx, Servo::Command command) {
   }
 
   ctx.servo.MemWrite(command, ctx.options.address,
-                     reg.position, ostr.str(), ctx.yield);
+                     reg.position, ostr.str(), handler);
 }
+
+class EnumerateCommand : public std::enable_shared_from_this<EnumerateCommand> {
+ public:
+  EnumerateCommand(CommandContext& context, ErrorHandler handler)
+      : context_(context),
+        handler_(handler) {}
+
+  void Start() {
+    if (next_address_ == 254) {
+      std::cout << "\n";
+      handler_(ErrorCode());
+      return;
+    }
+
+    const auto to_send = next_address_;
+    next_address_++;
+
+    context_.servo.Status(
+        to_send, std::bind(
+            &EnumerateCommand::HandleStatus, shared_from_this(),
+            pl::_1, pl::_2, to_send));
+  }
+
+ private:
+  void HandleStatus(const ErrorCode& ec,
+                    Servo::StatusResponse response, int address) {
+    if (ec == boost::asio::error::operation_aborted) {
+    } else {
+      FailIf(ec);
+
+      std::cout << fmt::format("%d ", address);
+      std::cout.flush();
+    }
+
+    Start();
+  }
+
+  CommandContext& context_;
+  ErrorHandler handler_;
+  int next_address_ = 0;
+};
 
 const std::map<std::string, Command> g_commands = {
   { "stdio", { kNoArgs, DoStdio } },
-  { "sleep", { kArg, [](CommandContext& ctx) {
-        DeadlineTimer timer(ctx.service);
+  { "sleep", { kArg, [](CommandContext& ctx, ErrorHandler handler) {
+        auto timer = std::make_shared<DeadlineTimer>(ctx.service);
         double delay_s = std::stod(ctx.args);
-        timer.expires_from_now(ConvertSecondsToDuration(delay_s));
-        timer.async_wait(ctx.yield);
+        timer->expires_from_now(ConvertSecondsToDuration(delay_s));
+        timer->async_wait([timer, handler](const ErrorCode& ec) {
+            handler(ec);
+          });
       } } },
-  { "reboot", { kNoArgs, [](CommandContext& ctx) {
-        ctx.servo.Reboot(ctx.options.address, ctx.yield);
+  { "reboot", { kNoArgs, [](CommandContext& ctx, ErrorHandler handler) {
+        ctx.servo.Reboot(ctx.options.address, handler);
       } } },
-  { "status", { kNoArgs, [](CommandContext& ctx) {
-        auto response = ctx.servo.Status(ctx.options.address, ctx.yield);
-        std::cout << fmt::format("Servo {}: (0x{:02x} 0x{:02x})\n",
-                                 static_cast<int>(ctx.options.address),
-                                 static_cast<int>(response.reg48),
-                                 static_cast<int>(response.reg49));
+  { "status", { kNoArgs, [](CommandContext& ctx, ErrorHandler handler) {
+        ctx.servo.Status(
+            ctx.options.address,
+            [handler, address=ctx.options.address](
+                const ErrorCode& ec, Servo::StatusResponse response) {
+              std::cout << fmt::format("Servo {}: (0x{:02x} 0x{:02x})\n",
+                                       static_cast<int>(address),
+                                       static_cast<int>(response.reg48),
+                                       static_cast<int>(response.reg49));
+              handler(ec);
+            });
       } } },
-  { "voltage", { kNoArgs, [](CommandContext& ctx) {
-        int value = ctx.servo.RamRead(ctx.options.address, HC().voltage(),
-                                      ctx.yield);
-        std::cout << fmt::format("Servo {}: {}\n",
-                                 static_cast<int>(ctx.options.address),
-                                 value);
+  { "voltage", { kNoArgs, [](CommandContext& ctx, ErrorHandler handler) {
+        ctx.servo.RamRead(
+            ctx.options.address, HC().voltage(),
+            [handler, address=ctx.options.address](
+                const ErrorCode& ec, int value) {
+              std::cout << fmt::format(
+                  "Servo {}: {}\n",
+                  static_cast<int>(address),
+                  value);
+              handler(ec);
+            });
       } } },
-  { "ram_read", { kArg, std::bind(MemReadCommand, pl::_1, Servo::RAM_READ) } },
-  { "eep_read", { kArg, std::bind(MemReadCommand, pl::_1, Servo::EEP_READ) } },
-  { "ram_write", { kArg, std::bind(MemWriteCommand, pl::_1, Servo::RAM_WRITE) } },
-  { "eep_write", { kArg, std::bind(MemWriteCommand, pl::_1, Servo::EEP_WRITE) } },
-  { "value_write", { kArg, [](CommandContext& ctx) {
+  { "ram_read", { kArg, std::bind(MemReadCommand, pl::_1, pl::_2, Servo::RAM_READ) } },
+  { "eep_read", { kArg, std::bind(MemReadCommand, pl::_1, pl::_2, Servo::EEP_READ) } },
+  { "ram_write", { kArg, std::bind(MemWriteCommand, pl::_1, pl::_2, Servo::RAM_WRITE) } },
+  { "eep_write", { kArg, std::bind(MemWriteCommand, pl::_1, pl::_2, Servo::EEP_WRITE) } },
+  { "value_write", { kArg, [](CommandContext& ctx, ErrorHandler handler) {
         std::vector<std::string> args;
         boost::split(args, ctx.args, boost::is_any_of(":"));
         if (args.size() < 2) {
@@ -208,28 +278,18 @@ const std::map<std::string, Command> g_commands = {
         }
 
         ctx.servo.MemWrite(ctx.servo.RAM_WRITE, ctx.options.address,
-                           reg.position, ostr.str(), ctx.yield);
+                           reg.position, ostr.str(), handler);
       } } },
-  { "set_address", { kArg, [](CommandContext& ctx) {
+  { "set_address", { kArg, [](CommandContext& ctx, ErrorHandler handler) {
         int new_address = std::stoi(ctx.args, 0, 0);
         ctx.servo.EepWrite(ctx.options.address, HC::id(),
-                           new_address, ctx.yield);
+                           new_address, handler);
       } } },
-  { "enumerate", { kNoArgs, [](CommandContext& ctx) {
-        for (int i = 0; i < 254; i++) {
-          try {
-            ctx.servo.Status(i, ctx.yield);
-            std::cout << fmt::format("%d ", i);
-            std::cout.flush();
-          } catch (boost::system::system_error& ec) {
-            if (ec.code() != boost::asio::error::operation_aborted) {
-              throw;
-            }
-          }
-        }
-        std::cout << "\n";
+  { "enumerate", { kNoArgs, [](CommandContext& ctx, ErrorHandler handler) {
+        auto command = std::make_shared<EnumerateCommand>(ctx, handler);
+        command->Start();
       } } },
-  { "set_pose", { kArg, [](CommandContext& ctx) {
+  { "set_pose", { kArg, [](CommandContext& ctx, ErrorHandler handler) {
         std::vector<std::string> args;
         boost::split(args, ctx.args, boost::is_any_of(","));
 
@@ -242,16 +302,9 @@ const std::map<std::string, Command> g_commands = {
                   std::stod(fields.at(1))});
         }
 
-        boost::asio::detail::async_result_init<
-          boost::asio::yield_context,
-          void (boost::system::error_code)> init(
-              BOOST_ASIO_MOVE_CAST(boost::asio::yield_context)(ctx.yield));
-
-        ctx.servo_interface.SetPose(joints, ErrorHandler(init.handler));
-
-        init.result.get();
+        ctx.servo_interface.SetPose(joints, handler);
       } } },
-  { "list_registers", { kNoArgs, [](CommandContext& ctx) {
+  { "list_registers", { kNoArgs, [](CommandContext& ctx, ErrorHandler handler) {
         HC constants;
         for (const auto& pair: constants.ram_registers) {
           std::cout << fmt::format("{:<30s} 0x{:02X} length={} stride={}",
@@ -261,6 +314,7 @@ const std::map<std::string, Command> g_commands = {
                                    static_cast<int>(pair.second.bit_align))
                     << "\n";
         }
+        handler(ErrorCode());
       } } },
 };
 
@@ -296,21 +350,65 @@ class CommandValue : public boost::program_options::value_semantic {
   std::vector<CommandText>* const output_;
 };
 
+class CommandRunner {
+ public:
+  CommandRunner() {
+    // Default to something moderately useful.
+    mjmech::base::SetOption(servo_.options(), "stream.type", "serial");
+  }
+
+  template <typename Commands>
+  void Run(const Commands& commands) {
+    std::copy(commands.begin(), commands.end(), std::back_inserter(commands_));
+
+    servo_.AsyncStart([this](ErrorCode ec) {
+        FailIf(ec);
+        this->Start();
+      });
+
+    service_.run();
+  }
+
+  Options* options() { return &options_; }
+  Servo* servo() { return &servo_; }
+
+ private:
+  void Start() {
+    if (commands_.empty()) {
+      service_.stop();
+      return;
+    }
+
+    const auto this_command = commands_.front();
+    commands_.pop_front();
+
+    auto ctx = std::make_shared<CommandContext>(
+      service_, options_, servo_, servo_interface_,
+      this_command.args);
+    auto it = g_commands.find(this_command.name);
+    BOOST_ASSERT(it != g_commands.end());
+
+    it->second.function(*ctx, [this, ctx](const auto& ec) {
+        FailIf(ec);
+        this->Start();
+      });
+  }
+
+  boost::asio::io_service service_;
+  ConcreteStreamFactory factory_{service_};
+  Servo servo_{service_, factory_};
+  HerkuleXServoInterface<Servo> servo_interface_{&servo_};
+  Options options_;
+  std::deque<CommandText> commands_;
+};
+
 int work(int argc, char** argv) {
-  boost::asio::io_service service;
-  ConcreteStreamFactory factory(service);
-  Servo servo(service, factory);
-  HerkuleXServoInterface<Servo> servo_interface(&servo);
-
-  // Default to something moderately useful.
-  mjmech::base::SetOption(servo.options(), "stream.type", "serial");
-
-  Options options;
+  CommandRunner runner;
 
   po::options_description desc("Allowable options");
   desc.add_options()
       ("help,h", "display usage mesage")
-      ("address,a", po::value(&options.address)->default_value(options.address),
+      ("address,a", po::value(&runner.options()->address)->default_value(runner.options()->address),
        "servo to communicate with")
       ;
 
@@ -321,7 +419,7 @@ int work(int argc, char** argv) {
             pair.first, pair.second.args, &command_sequence), "");
   }
 
-  MergeProgramOptions(servo.options(), "servo.", &desc);
+  MergeProgramOptions(runner.servo()->options(), "servo.", &desc);
 
   po::variables_map vm;
   po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -332,37 +430,30 @@ int work(int argc, char** argv) {
     return 0;
   }
 
-  boost::asio::spawn(service, ErrorWrap([&](boost::asio::yield_context yield) {
-        servo.AsyncStart(yield);
+  runner.Run(command_sequence);
 
-        for (const auto& command: command_sequence) {
-          CommandContext ctx{
-            service, options, servo, servo_interface,
-                command.args, yield};
-          auto it = g_commands.find(command.name);
-          BOOST_ASSERT(it != g_commands.end());
-          try {
-            it->second.function(ctx);
-          } catch (boost::system::system_error& se) {
-            std::cerr << "error: " << se.what() << "\n";
-          }
-        }
-
-        service.stop();
-      }));
-
-  service.run();
   return 0;
 }
 
-void DoStdio(CommandContext& ctx) {
-  boost::asio::posix::stream_descriptor descriptor(ctx.service, ::dup(0));
-  std::string last_line;
-  while (true) {
-    boost::asio::streambuf stream;
-    boost::asio::async_read_until(descriptor, stream, '\n', ctx.yield);
+class StdioHandler : public std::enable_shared_from_this<StdioHandler> {
+ public:
+  StdioHandler(CommandContext& context, ErrorHandler handler)
+      : context_(context),
+        final_handler_(handler) {}
+
+  void Start() {
+    boost::asio::async_read_until(
+        descriptor_, stream_, '\n',
+        std::bind(&StdioHandler::HandleRead, shared_from_this(),
+                  std::placeholders::_1));
+  }
+
+ private:
+  void HandleRead(const ErrorCode& ec) {
+    FailIf(ec);
+
     std::ostringstream ostr;
-    ostr << &stream;
+    ostr << &stream_;
 
     std::string line = ostr.str();
     BOOST_ASSERT(!line.empty());
@@ -370,10 +461,10 @@ void DoStdio(CommandContext& ctx) {
     line = line.substr(0, line.size() - 1); // strip newline
 
     if (line.empty()) {
-      line = last_line;
+      line = last_line_;
     }
 
-    last_line = line;
+    last_line_ = line;
 
     std::size_t pos = line.find_first_of(' ');
     std::string command_name;
@@ -385,20 +476,34 @@ void DoStdio(CommandContext& ctx) {
       args = line.substr(pos + 1);
     }
 
-    CommandContext sub_context{
-      ctx.service, ctx.options, ctx.servo, ctx.servo_interface,
-          args, ctx.yield};
+    auto sub_context = std::make_shared<CommandContext>(
+      context_.service, context_.options, context_.servo, context_.servo_interface,
+      args);
     auto it = g_commands.find(command_name);
     if (it == g_commands.end()) {
       std::cerr << "Unknown command: '" + command_name + "'\n";
+      Start();
     } else {
-      try {
-        it->second.function(sub_context);
-      } catch (boost::system::system_error& se) {
-        std::cerr << "error: " << se.what() << "\n";
-      }
+      it->second.function(
+          *sub_context,
+          [self=shared_from_this(), sub_context](ErrorCode ec) {
+            FailIf(ec);
+            self->Start();
+          });
     }
   }
+
+  CommandContext& context_;
+  boost::asio::posix::stream_descriptor descriptor_{
+    context_.service, ::dup(0)};
+  std::string last_line_;
+  ErrorHandler final_handler_;
+  boost::asio::streambuf stream_;
+};
+
+void DoStdio(CommandContext& ctx, ErrorHandler handler) {
+  auto stdio = std::make_shared<StdioHandler>(ctx, handler);
+  stdio->Start();
 }
 }
 
