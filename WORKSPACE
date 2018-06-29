@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-workspace(name = "mech")
+workspace(name = "com_github_mjbots_mech")
 
 BAZEL_VERSION = "0.13.0"
 BAZEL_VERSION_SHA = "82e9035084660b9c683187618a29aa896f8b05b5f16ae4be42a80b5e5b6a7690"

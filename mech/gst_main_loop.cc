@@ -25,8 +25,44 @@
 #include "base/fail.h"
 #include "base/logging.h"
 
+extern "C" {
+extern void gst_plugin_coreelements_register();
+extern void gst_plugin_videotestsrc_register();
+extern void gst_plugin_videoconvert_register();
+extern void gst_plugin_x264_register();
+extern void gst_plugin_videoparsersbad_register();
+extern void gst_plugin_app_register();
+extern void gst_plugin_libav_register();
+extern void gst_plugin_pango_register();
+extern void gst_plugin_xvimagesink_register();
+
+#ifdef COM_GITHUB_MJBOTS_RASPBERRYPI
+extern void gst_plugin_rpicamsrc_register();
+#endif
+}
+
 namespace mjmech {
 namespace mech {
+
+namespace {
+bool RegisterPlugins() {
+  gst_plugin_coreelements_register();
+  gst_plugin_videotestsrc_register();
+  gst_plugin_videoconvert_register();
+  gst_plugin_x264_register();
+  gst_plugin_videoparsersbad_register();
+  gst_plugin_app_register();
+  gst_plugin_libav_register();
+  gst_plugin_pango_register();
+  gst_plugin_xvimagesink_register();
+
+#ifdef COM_GITHUB_MJBOTS_RASPBERRYPI
+  gst_plugin_rpicamsrc_register();
+#endif
+
+  return true;
+}
+}
 
 class GstMainLoop::Impl :
       public std::enable_shared_from_this<Impl>,
@@ -194,6 +230,8 @@ class GstMainLoop::Impl :
           "GStreamer",
           static_cast<GLogLevelFlags>(G_LOG_LEVEL_ERROR | G_LOG_LEVEL_CRITICAL));
     }
+
+    RegisterPlugins();
   }
 
 

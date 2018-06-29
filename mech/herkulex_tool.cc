@@ -507,6 +507,7 @@ void DoStdio(CommandContext& ctx, ErrorHandler handler) {
 }
 }
 
+extern "C" {
 int main(int argc, char** argv) {
   try {
     return work(argc, argv);
@@ -515,4 +516,5 @@ int main(int argc, char** argv) {
     return 1;
   }
   return 0;
+}
 }

@@ -137,6 +137,7 @@ int safe_main(int argc, char**argv) {
   return 0;
 }
 
+
 template <typename Module>
 int main(int argc, char**argv) {
   try {

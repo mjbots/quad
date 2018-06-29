@@ -23,8 +23,10 @@ def module_main(name, prefix, cname, deps):
 
 #include "base/module_main.h"
 
+extern "C" {{
 int main(int argc, char**argv) {{
         return mjmech::base::main<{cname}>(argc, argv);
+}}
 }}
 EOF
         """.format(name=name, cname=cname, prefix=prefix),

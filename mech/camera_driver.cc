@@ -94,6 +94,7 @@ class Device {
     kC920,
     kGstreamer,
     kV4l2,
+    kRaspberryPi,
   };
 
   Device(const std::string& name, const Size& size, const Bitrate& bitrate)
@@ -112,6 +113,8 @@ class Device {
     } else if (boost::starts_with(name, "v4l2:")) {
       type_ = Type::kV4l2;
       data_ = boost::erase_first_copy(name, "v4l2:");
+    } else if (boost::starts_with(name, "rpi:")) {
+      type_ = Type::kRaspberryPi;
     } else {
       base::Fail("Unknown device type: " + name);
     }
@@ -126,7 +129,8 @@ class Device {
       case Type::kV4l2: {
         return false;
       }
-      case Type::kC920: {
+      case Type::kC920:
+      case Type::kRaspberryPi: {
         return true;
       }
     }
@@ -136,7 +140,7 @@ class Device {
   /// This is required to return a gstreamer source which emits two
   /// separate streams, one on the un-nammed current stream which may
   /// or may not be h264 encoded already, and a secondary one on the
-  /// decoded_pad(), which must be un-decoded.
+  /// decoded_pad(), which must be decoded.
   std::string gstreamer_source() const {
     const std::string final_tee = "! tee name=dec-tee ";
     switch (type_) {
@@ -187,6 +191,17 @@ class Device {
                 "v4l2src name=src device={} ! videoconvert " + final_tee,
                 gst::PipelineEscape(data_));
       }
+      case Type::kRaspberryPi: {
+        return
+            fmt::format(
+                "rpicamsrc bitrate={} ! "
+                "video/x-h264,width={},height={} ! "
+                "tee name=pi264-tee "
+                "pi264-tee. ! h264parse ! avdec_h264 ! videoconvert ! "
+                "tee name=dec-tee pi264-tee. ",
+                bitrate_.bitrate_kbps * 1000,
+                size_.width, size_.height);
+      }
     }
     base::AssertNotReached();
   }
@@ -197,6 +212,7 @@ class Device {
       case Type::kJoule:
       case Type::kGstreamer:
       case Type::kV4l2:
+      case Type::kRaspberryPi:
         return "dec-tee";
       case Type::kC920:
         return "src.vfsrc";
@@ -573,8 +589,9 @@ class CameraDriver::Impl : boost::noncopyable {
 
     int flags = GST_BUFFER_FLAGS(buf);
     int unusual_flags = flags &~ GST_BUFFER_FLAG_DELTA_UNIT;
+    unusual_flags = unusual_flags &~ GST_BUFFER_FLAG_TAG_MEMORY;
     if ((total_h264_frames_ <= 1) || !dumb_camera_) {
-      // somehow, our camera alwasy reports DISCONT flag
+      // somehow, our camera alwasy reports these flags
       unusual_flags &=~ GST_BUFFER_FLAG_DISCONT;
     }
     if (unusual_flags) {

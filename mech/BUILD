@@ -41,11 +41,21 @@ cc_library(
         "//base",
         "@gstreamer",
         "@gst-plugins-base//:gstapp",
+        "@gst-plugins-base//:plugins",
+        "@gst-plugins-bad//:plugins",
+        "@gst-plugins-ugly//:plugins",
+        "@gst-libav//:plugins",
         "@gst-rtsp-server//:rtsp-server",
-    ],
+    ] + select({
+        "//conditions:default" : [],
+        "//:raspberrypi" : ["@gst-rpicamsrc"],
+    }),
     copts = [
         "-Wno-gnu-designator",
-    ],
+    ] + select({
+        "//conditions:default" : [],
+        "//:raspberrypi" : ["-DCOM_GITHUB_MJBOTS_RASPBERRYPI"],
+    }),
 )
 
 cc_binary(
@@ -64,6 +74,13 @@ module_main(
 module_main(
     name = "video_sender_app",
     cname = "mjmech::mech::VideoSenderApp",
+    prefix = "mech",
+    deps = [":mech"],
+)
+
+module_main(
+    name = "video_controller_app",
+    cname = "mjmech::mech::VideoControllerApp",
     prefix = "mech",
     deps = [":mech"],
 )

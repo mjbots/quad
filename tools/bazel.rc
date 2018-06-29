@@ -3,3 +3,15 @@ test --python_path=/usr/bin/python3
 
 build --crosstool_top=@rpi_bazel//tools/cc_toolchain:toolchain
 test --crosstool_top=@rpi_bazel//tools/cc_toolchain:toolchain
+
+build --define CLANG=true
+test --define CLANG=true
+
+build:pi --cpu=armeabihf
+test:pi --cpu=armeabihf
+
+build:pi --define COM_GITHUB_MJBOTS_RASPBERRYPI=1
+test:pi --define COM_GITHUB_MJBOTS_RASPBERRYPI=1
+
+build --strip=never
+test --strip=never

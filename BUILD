@@ -14,13 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+package(default_visibility = ["//visibility:public"])
 
-def rpi_bazel_repository(name):
-    commit = "32aeb600bd082e8f80613bfcbe38f3b4222b02ff"
-    http_archive(
-        name = name,
-        url = "https://github.com/mjbots/rpi_bazel/archive/{}.zip".format(commit),
-        sha256 = "37c81f86ed38d53a0dfa51ecf7f7f38a4c25d682ffc05271704e5dc9fa6691d3",
-        strip_prefix = "rpi_bazel-{}".format(commit),
-    )
+config_setting(
+    name = "raspberrypi",
+    values = {
+        "cpu" : "armeabihf",
+    },
+)
