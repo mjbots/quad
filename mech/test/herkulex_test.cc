@@ -129,51 +129,88 @@ BOOST_FIXTURE_TEST_CASE(HerkuleXTest, Fixture) {
   BOOST_CHECK_EQUAL(status.exceeded_allowed_pot_limit, false);
 }
 
-// BOOST_FIXTURE_TEST_CASE(HerkuleXMemRead, Fixture) {
-//   // Listen for the request, and reply with a response when necessary.
-//   boost::asio::spawn(service_, ErrorWrap([&](boost::asio::yield_context yield) {
-//         for (int i = 0; i < 2; i++) {
-//           while (streambuf_.size() < 9) {
-//             SignalResult::Wait(service_, &data_received_, 1.0, yield);
-//           }
+namespace {
+class Responder : public Fixture {
+ public:
+  void Start() {
+    if (count_ >= 2) { return; }
 
-//           std::istream istr(&streambuf_);
-//           char received[9];
-//           istr.read(received, sizeof(received));
-//           BOOST_REQUIRE_EQUAL(istr.gcount(), sizeof(received));
-//           BOOST_CHECK_EQUAL(std::string(received, 9),
-//                             "\xff\xff\x09\xfd\x04\xc4\x3a\x35\x01");
+    SignalResult::Wait(service_, &data_received_, 1.0,
+                       std::bind(&Responder::Handle, this, pl::_1));
+  }
 
-//           std::string response(
-//               "\xff\xff\x0c\xfd\x44\xc2\x3c\x35\x01\x01\x00\x42", 12);
-//           boost::asio::async_write(*stream_,
-//                                    boost::asio::buffer(response), yield);
-//         }
-//       }));
+  void Handle(const ErrorCode& ec) {
+    FailIf(ec);
 
-//   bool done = false;
+    if (streambuf_.size() < 9) {
+      Start();
+      return;
+    }
 
-//   using HC = HerkuleXConstants;
 
-//   boost::asio::spawn(service_, ErrorWrap([&](boost::asio::yield_context yield) {
-//         herkulex_.AsyncStart(yield);
+    count_++;
 
-//         auto response = herkulex_.MemRead(herkulex_.RAM_READ, 0xfd, 0x35, 1,
-//                                           yield);
-//         BOOST_CHECK_EQUAL(response.register_start, 0x35);
-//         BOOST_CHECK_EQUAL(response.length, 1);
-//         BOOST_CHECK_EQUAL(response.register_data, std::string("\x01"));
-//         BOOST_CHECK_EQUAL(response.reg48, 0);
-//         BOOST_CHECK_EQUAL(response.reg49, 0x42);
-//         BOOST_CHECK_EQUAL(response.inposition, true);
+    std::istream istr(&streambuf_);
+    char received[9] = {};
+    istr.read(received, sizeof(received));
+    BOOST_REQUIRE_EQUAL(istr.gcount(), sizeof(received));
+    BOOST_CHECK_EQUAL(std::string(received, 9),
+                      "\xff\xff\x09\xfd\x04\xc4\x3a\x35\x01");
 
-//         int value = herkulex_.RamRead(0xfd, HC::cal_diff(), yield);
-//         BOOST_CHECK_EQUAL(value, 1);
+    boost::asio::async_write(*stream_, boost::asio::buffer(response_),
+                             std::bind(&Responder::HandleWrite, this, pl::_1));
+  }
 
-//         done = true;
-//       }));
+  void HandleWrite(const ErrorCode& ec) {
+    FailIf(ec);
 
-//   service_.run();
+    Start();
+  }
 
-//   BOOST_CHECK_EQUAL(done, true);
-// }
+
+  int count_ = 0;
+  std::string response_{
+    "\xff\xff\x0c\xfd\x44\xc2\x3c\x35\x01\x01\x00\x42", 12};
+};
+}
+
+BOOST_FIXTURE_TEST_CASE(HerkuleXMemRead, Responder) {
+  // Listen for the request, and reply with a response when necessary.
+  Start();
+
+  bool done = false;
+
+  using HC = HerkuleXConstants;
+
+  herkulex_.AsyncStart(FailFunctor());
+
+  bool read = false;
+  herkulex_.MemRead(
+      herkulex_.RAM_READ, 0xfd, 0x35, 1,
+      [&](const ErrorCode& ec, const auto& response) {
+        BOOST_CHECK_EQUAL(response.register_start, 0x35);
+        BOOST_CHECK_EQUAL(response.length, 1);
+        BOOST_CHECK_EQUAL(response.register_data, std::string("\x01"));
+        BOOST_CHECK_EQUAL(response.reg48, 0);
+        BOOST_CHECK_EQUAL(response.reg49, 0x42);
+        BOOST_CHECK_EQUAL(response.inposition, true);
+        read = true;
+      });
+
+  Poll();
+  BOOST_ASSERT(read);
+  read = false;
+
+
+  herkulex_.RamRead(
+      0xfd, HC::cal_diff(),
+      [&](const ErrorCode& ec, int value) {
+        FailIf(ec);
+        BOOST_CHECK_EQUAL(value, 1);
+        read = true;
+      });
+
+  Poll();
+  BOOST_ASSERT(read);
+  BOOST_CHECK_EQUAL(done, true);
+}

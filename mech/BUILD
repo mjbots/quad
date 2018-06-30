@@ -62,8 +62,8 @@ cc_test(
     name = "mech_test",
     srcs = ["test/" + x for x in [
         "herkulex_test.cc",
-#        "leg_ik_test.cc",
-#        "ripple_test.cc",
+        "leg_ik_test.cc",
+        "ripple_test.cc",
         "test_main.cc",
     ]],
     deps = [
