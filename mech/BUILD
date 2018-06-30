@@ -58,6 +58,20 @@ cc_library(
     }),
 )
 
+cc_test(
+    name = "mech_test",
+    srcs = ["test/" + x for x in [
+        "herkulex_test.cc",
+#        "leg_ik_test.cc",
+#        "ripple_test.cc",
+        "test_main.cc",
+    ]],
+    deps = [
+        ":mech",
+        "@boost//:test",
+    ],
+)
+
 cc_binary(
     name = "herkulex_tool",
     srcs = ["herkulex_tool.cc"],
@@ -81,6 +95,13 @@ module_main(
 module_main(
     name = "video_controller_app",
     cname = "mjmech::mech::VideoControllerApp",
+    prefix = "mech",
+    deps = [":mech"],
+)
+
+module_main(
+    name = "mech_warfare",
+    cname = "mjmech::mech::MechWarfare",
     prefix = "mech",
     deps = [":mech"],
 )

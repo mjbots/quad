@@ -41,6 +41,8 @@ class TargetTracker::Impl : public CameraFrameConsumer {
       : parent_(parent),
         service_(context.service) {}
 
+  ~Impl() override {}
+
   void AsyncStart(base::ErrorHandler handler) {
     enabled_ = true;
     service_.post(std::bind(handler, base::ErrorCode()));

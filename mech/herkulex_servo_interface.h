@@ -31,6 +31,9 @@ class HerkuleXServoInterface : public ServoInterface {
   HerkuleXServoInterface(Servo* servo) : servo_(servo) {
     base::ProgramOptionsArchive(&options_).Accept(&parameters_);
   }
+
+  ~HerkuleXServoInterface() override {}
+
   Servo* servo() { return servo_; }
   const Servo* servo() const { return servo_; }
 

@@ -12,17 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "herkulex.h"
+#include "mech/herkulex.h"
 
-#include <boost/asio/spawn.hpp>
+#include <functional>
+
 #include <boost/test/auto_unit_test.hpp>
 
 #include "base/comm_factory_generators.h"
 #include "base/concrete_comm_factory.h"
-#include "base/error_wrap.h"
+#include "base/error_code.h"
+#include "base/fail_functor.h"
 
 using namespace mjmech::base;
 using namespace mjmech::mech;
+namespace pl = std::placeholders;
 
 namespace {
 class Fixture {
@@ -34,18 +37,30 @@ class Fixture {
     stream_ = factory_.pipe_generator()->GetStream(
         service_, "test", PipeGenerator::Mode::kDirectionB);
 
-    boost::asio::spawn(service_,
-                       ErrorWrap([=](boost::asio::yield_context yield) {
-        char buf[4096] = {};
-        while (true) {
-          std::size_t bytes_read =
-              stream_->async_read_some(boost::asio::buffer(buf), yield);
-          std::ostream ostr(&streambuf_);
-          ostr.write(buf, bytes_read);
-          bool gotit = true;
-          data_received_(&gotit);
-        }
-        }));
+    StartRead();
+  }
+
+  void StartRead() {
+    stream_->async_read_some(
+        boost::asio::buffer(buf_),
+        std::bind(&Fixture::HandleRead, this, pl::_1, pl::_2));
+  }
+
+  void HandleRead(ErrorCode ec, size_t bytes_read) {
+    FailIf(ec);
+
+    std::ostream ostr(&streambuf_);
+    ostr.write(buf_, bytes_read);
+
+    bool gotit = true;
+    data_received_(&gotit);
+
+    StartRead();
+  }
+
+  void Poll() {
+    service_.poll();
+    service_.reset();
   }
 
   boost::asio::io_service service_;
@@ -56,104 +71,109 @@ class Fixture {
   SharedStream stream_;
   boost::asio::streambuf streambuf_;
   boost::signals2::signal<void (const bool*)> data_received_;
+
+  char buf_[4096] = {};
 };
 }
 
 BOOST_FIXTURE_TEST_CASE(HerkuleXTest, Fixture) {
-  boost::asio::spawn(service_, ErrorWrap([&](boost::asio::yield_context yield) {
-      herkulex_.AsyncStart(yield);
+  herkulex_.AsyncStart(FailIf);
 
-      Servo::Packet packet;
-      packet.servo = 0xfd;
-      packet.command = Servo::STAT;
-      packet.data = "";
-      herkulex_.SendPacket(packet, yield);
+  Poll();
 
-      // The packet should have ended up in our streambuf now.
-      {
-        std::ostringstream ostr;
-        ostr << &streambuf_;
-        std::string data = ostr.str();
-        BOOST_CHECK_EQUAL(data.size(), 7);
-        BOOST_CHECK_EQUAL(data, "\xff\xff\x07\xfd\x07\xfc\x02");
-      }
+  Servo::Packet packet;
+  packet.servo = 0xfd;
+  packet.command = Servo::STAT;
+  packet.data = "";
+  herkulex_.SendPacket(packet, FailIf);
 
-      // Start listening for a packet.
-      boost::optional<Servo::Packet> listen;
-      boost::asio::spawn(service_,
-                         ErrorWrap([&](boost::asio::yield_context yield) {
-          listen = herkulex_.ReceivePacket(yield);
-          }));
+  Poll();
 
-      BOOST_CHECK(!listen);
+  // The packet should have ended up in our streambuf now.
+  {
+    std::ostringstream ostr;
+    ostr << &streambuf_;
+    std::string data = ostr.str();
+    BOOST_CHECK_EQUAL(data.size(), 7);
+    BOOST_CHECK_EQUAL(data, "\xff\xff\x07\xfd\x07\xfc\x02");
+  }
 
-      // Send out a response over the wire.
-      std::string response("\xff\xff\x09\xfd\x47\xf2\x0c\x01\x40");
-      boost::asio::async_write(*stream_,  boost::asio::buffer(response), yield);
+  boost::optional<Servo::Packet> listen;
+  herkulex_.ReceivePacket([&](const ErrorCode& ec, const auto& result) {
+      FailIf(ec);
+      listen = result;
+    });
 
-      // At this point, the other coroutine should have finished with
-      // a receipt.
-      BOOST_REQUIRE(listen);
-      BOOST_CHECK_EQUAL(listen->data, "\x01\x40");
-      BOOST_CHECK_EQUAL(listen->servo, 0xfd);
-      BOOST_CHECK_EQUAL(listen->command, Servo::ACK_STAT);
-      BOOST_CHECK_EQUAL(listen->cksum_good, true);
+  Poll();
 
-      Servo::StatusResponse status(*listen);
-      BOOST_CHECK_EQUAL(status.reg48, 0x01);
-      BOOST_CHECK_EQUAL(status.reg49, 0x40);
-      BOOST_CHECK_EQUAL(status.exceeded_input_voltage_limit, true);
-      BOOST_CHECK_EQUAL(status.exceeded_allowed_pot_limit, false);
-      }));
+  BOOST_CHECK(!listen);
 
-  service_.run();
+  // Send out a response over the wire.
+  std::string response("\xff\xff\x09\xfd\x47\xf2\x0c\x01\x40");
+  boost::asio::async_write(*stream_,  boost::asio::buffer(response), FailFunctor());
+
+  Poll();
+
+  // At this point, the other coroutine should have finished with
+  // a receipt.
+  BOOST_REQUIRE(listen);
+  BOOST_CHECK_EQUAL(listen->data, "\x01\x40");
+  BOOST_CHECK_EQUAL(listen->servo, 0xfd);
+  BOOST_CHECK_EQUAL(listen->command, Servo::ACK_STAT);
+  BOOST_CHECK_EQUAL(listen->cksum_good, true);
+
+  Servo::StatusResponse status(*listen);
+  BOOST_CHECK_EQUAL(status.reg48, 0x01);
+  BOOST_CHECK_EQUAL(status.reg49, 0x40);
+  BOOST_CHECK_EQUAL(status.exceeded_input_voltage_limit, true);
+  BOOST_CHECK_EQUAL(status.exceeded_allowed_pot_limit, false);
 }
 
-BOOST_FIXTURE_TEST_CASE(HerkuleXMemRead, Fixture) {
-  // Listen for the request, and reply with a response when necessary.
-  boost::asio::spawn(service_, ErrorWrap([&](boost::asio::yield_context yield) {
-        for (int i = 0; i < 2; i++) {
-          while (streambuf_.size() < 9) {
-            SignalResult::Wait(service_, &data_received_, 1.0, yield);
-          }
+// BOOST_FIXTURE_TEST_CASE(HerkuleXMemRead, Fixture) {
+//   // Listen for the request, and reply with a response when necessary.
+//   boost::asio::spawn(service_, ErrorWrap([&](boost::asio::yield_context yield) {
+//         for (int i = 0; i < 2; i++) {
+//           while (streambuf_.size() < 9) {
+//             SignalResult::Wait(service_, &data_received_, 1.0, yield);
+//           }
 
-          std::istream istr(&streambuf_);
-          char received[9];
-          istr.read(received, sizeof(received));
-          BOOST_REQUIRE_EQUAL(istr.gcount(), sizeof(received));
-          BOOST_CHECK_EQUAL(std::string(received, 9),
-                            "\xff\xff\x09\xfd\x04\xc4\x3a\x35\x01");
+//           std::istream istr(&streambuf_);
+//           char received[9];
+//           istr.read(received, sizeof(received));
+//           BOOST_REQUIRE_EQUAL(istr.gcount(), sizeof(received));
+//           BOOST_CHECK_EQUAL(std::string(received, 9),
+//                             "\xff\xff\x09\xfd\x04\xc4\x3a\x35\x01");
 
-          std::string response(
-              "\xff\xff\x0c\xfd\x44\xc2\x3c\x35\x01\x01\x00\x42", 12);
-          boost::asio::async_write(*stream_,
-                                   boost::asio::buffer(response), yield);
-        }
-      }));
+//           std::string response(
+//               "\xff\xff\x0c\xfd\x44\xc2\x3c\x35\x01\x01\x00\x42", 12);
+//           boost::asio::async_write(*stream_,
+//                                    boost::asio::buffer(response), yield);
+//         }
+//       }));
 
-  bool done = false;
+//   bool done = false;
 
-  using HC = HerkuleXConstants;
+//   using HC = HerkuleXConstants;
 
-  boost::asio::spawn(service_, ErrorWrap([&](boost::asio::yield_context yield) {
-        herkulex_.AsyncStart(yield);
+//   boost::asio::spawn(service_, ErrorWrap([&](boost::asio::yield_context yield) {
+//         herkulex_.AsyncStart(yield);
 
-        auto response = herkulex_.MemRead(herkulex_.RAM_READ, 0xfd, 0x35, 1,
-                                          yield);
-        BOOST_CHECK_EQUAL(response.register_start, 0x35);
-        BOOST_CHECK_EQUAL(response.length, 1);
-        BOOST_CHECK_EQUAL(response.register_data, std::string("\x01"));
-        BOOST_CHECK_EQUAL(response.reg48, 0);
-        BOOST_CHECK_EQUAL(response.reg49, 0x42);
-        BOOST_CHECK_EQUAL(response.inposition, true);
+//         auto response = herkulex_.MemRead(herkulex_.RAM_READ, 0xfd, 0x35, 1,
+//                                           yield);
+//         BOOST_CHECK_EQUAL(response.register_start, 0x35);
+//         BOOST_CHECK_EQUAL(response.length, 1);
+//         BOOST_CHECK_EQUAL(response.register_data, std::string("\x01"));
+//         BOOST_CHECK_EQUAL(response.reg48, 0);
+//         BOOST_CHECK_EQUAL(response.reg49, 0x42);
+//         BOOST_CHECK_EQUAL(response.inposition, true);
 
-        int value = herkulex_.RamRead(0xfd, HC::cal_diff(), yield);
-        BOOST_CHECK_EQUAL(value, 1);
+//         int value = herkulex_.RamRead(0xfd, HC::cal_diff(), yield);
+//         BOOST_CHECK_EQUAL(value, 1);
 
-        done = true;
-      }));
+//         done = true;
+//       }));
 
-  service_.run();
+//   service_.run();
 
-  BOOST_CHECK_EQUAL(done, true);
-}
+//   BOOST_CHECK_EQUAL(done, true);
+// }

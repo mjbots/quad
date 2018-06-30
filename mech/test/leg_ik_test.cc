@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "leg_ik.h"
+#include "mech/leg_ik.h"
 
 #include <boost/test/auto_unit_test.hpp>
 

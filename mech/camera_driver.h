@@ -174,6 +174,8 @@ class CameraDriver : boost::noncopyable {
 // This interface class can consume camera frames.
 class CameraFrameConsumer : boost::noncopyable {
  public:
+  virtual ~CameraFrameConsumer() {}
+
   // Consume an h264 frame. Invoked from an internal thread.
   virtual void ConsumeH264Sample(GstSample*) {};
 

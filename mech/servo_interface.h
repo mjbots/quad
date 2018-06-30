@@ -24,6 +24,8 @@ namespace mjmech {
 namespace mech {
 class ServoInterface : boost::noncopyable {
  public:
+  virtual ~ServoInterface() {}
+
   struct Joint {
     int address;
     double angle_deg;
