@@ -18,10 +18,10 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 
 def bazel_deps_repository(name):
-    commit = "ec53ce9d36df6e51f559605f6428a58cad159809"
+    commit = "5532da15eb54efe61b41e6d22ffa5178d9e6b90a"
     http_archive(
         name = name,
         url = "https://github.com/mjbots/bazel_deps/archive/{}.zip".format(commit),
-        sha256 = "d6c5cdc7790581e1cdcaeaa62082af25cafaa1c9da06fcf2fb745527d1662f67",
+        sha256 = "7fd83e6418f6420e1f266a5563a3a89ea257578fbaa8ef9706bd4fae58a7d1c8",
         strip_prefix = "bazel_deps-{}".format(commit),
     )
