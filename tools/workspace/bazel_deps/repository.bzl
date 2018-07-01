@@ -20,6 +20,6 @@ def bazel_deps_repository(name):
     github_archive(
         name = name,
         repo = "mjbots/bazel_deps",
-        commit = "92f6cf285fc3557efae44f3e3d2b4b67b04d3107",
-        sha256 = "d7ffafb9402441c5bda640b9fa6a4bde573fb0438060560f61d1aadbe1247a70",
+        commit = "0be31faa1b561586143b35cf61da9096002b1d12",
+        sha256 = "60937074f5977b21a8df429eb85a376061aeb19bb9ada326c689abaaaf08432e",
     )
