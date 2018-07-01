@@ -194,12 +194,17 @@ class Device {
       case Type::kRaspberryPi: {
         return
             fmt::format(
-                "rpicamsrc bitrate={} ! "
+                "rpicamsrc bitrate={} "
+                "keyframe-interval={} "
+                "intra-refresh-type=cyclic "
+                "inline-headers=true "
+                "video-stabilisation=true ! "
                 "video/x-h264,width={},height={} ! "
                 "tee name=pi264-tee "
                 "pi264-tee. ! h264parse ! avdec_h264 ! videoconvert ! "
                 "tee name=dec-tee pi264-tee. ",
                 bitrate_.bitrate_kbps * 1000,
+                static_cast<int>(kFrameRate * bitrate_.iframe_interval_s),
                 size_.width, size_.height);
       }
     }
