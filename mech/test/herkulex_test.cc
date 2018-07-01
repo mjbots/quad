@@ -132,16 +132,18 @@ BOOST_FIXTURE_TEST_CASE(HerkuleXTest, Fixture) {
 namespace {
 class Responder : public Fixture {
  public:
+  Responder() {
+    Start();
+  }
+
   void Start() {
     if (count_ >= 2) { return; }
 
-    SignalResult::Wait(service_, &data_received_, 1.0,
-                       std::bind(&Responder::Handle, this, pl::_1));
+    data_received_.connect(
+        std::bind(&Responder::Handle, this, pl::_1));
   }
 
-  void Handle(const ErrorCode& ec) {
-    FailIf(ec);
-
+  void Handle(const bool*) {
     if (streambuf_.size() < 9) {
       Start();
       return;
@@ -175,14 +177,11 @@ class Responder : public Fixture {
 }
 
 BOOST_FIXTURE_TEST_CASE(HerkuleXMemRead, Responder) {
-  // Listen for the request, and reply with a response when necessary.
-  Start();
-
-  bool done = false;
-
   using HC = HerkuleXConstants;
 
   herkulex_.AsyncStart(FailFunctor());
+
+  Poll();
 
   bool read = false;
   herkulex_.MemRead(
@@ -201,7 +200,6 @@ BOOST_FIXTURE_TEST_CASE(HerkuleXMemRead, Responder) {
   BOOST_ASSERT(read);
   read = false;
 
-
   herkulex_.RamRead(
       0xfd, HC::cal_diff(),
       [&](const ErrorCode& ec, int value) {
@@ -212,5 +210,4 @@ BOOST_FIXTURE_TEST_CASE(HerkuleXMemRead, Responder) {
 
   Poll();
   BOOST_ASSERT(read);
-  BOOST_CHECK_EQUAL(done, true);
 }
