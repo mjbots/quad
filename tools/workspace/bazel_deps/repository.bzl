@@ -14,14 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
-
+load("//tools/workspace:github_archive.bzl", "github_archive")
 
 def bazel_deps_repository(name):
-    commit = "5532da15eb54efe61b41e6d22ffa5178d9e6b90a"
-    http_archive(
+    github_archive(
         name = name,
-        url = "https://github.com/mjbots/bazel_deps/archive/{}.zip".format(commit),
-        sha256 = "7fd83e6418f6420e1f266a5563a3a89ea257578fbaa8ef9706bd4fae58a7d1c8",
-        strip_prefix = "bazel_deps-{}".format(commit),
+        repo = "mjbots/bazel_deps",
+        commit = "92f6cf285fc3557efae44f3e3d2b4b67b04d3107",
+        sha256 = "d7ffafb9402441c5bda640b9fa6a4bde573fb0438060560f61d1aadbe1247a70",
     )
