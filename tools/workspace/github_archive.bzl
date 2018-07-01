@@ -16,7 +16,8 @@
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
-def github_archive(name, repo, commit, local_override=None, **kwargs):
+def github_archive(name, repo, commit, local_override=None,
+                   sha256=None, **kwargs):
     """Like 'http_archive', but for github repositories.
 
     If 'local_override' is set, then reference a local repository at
@@ -34,4 +35,5 @@ def github_archive(name, repo, commit, local_override=None, **kwargs):
             url = "https://github.com/{repo}/archive/{commit}.zip".format(
                 repo=repo, commit=commit),
             strip_prefix = "{}-{}".format(repo.rsplit('/', 1)[-1], commit),
+            sha256 = sha256 or "0000000000000000000000000000000000000000000000000000000000000000",
             **kwargs)
