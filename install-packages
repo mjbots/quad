@@ -20,31 +20,19 @@
 Install packages necessary for mjmech.
 '''
 
-import datetime
 import optparse
-import os
 import re
-import shutil
 import subprocess
 import sys
-import tempfile
-import time
-
-
-GS_MIN_REVISION = 1
-GSTREAMER_ROOT = '/opt/gstreamer-1.4.5'
-DART5_ROOT = '/opt/dart-5'
 
 # Verbosity level:
 #  0 - print summaries and all commands which change state ('sudo' commands)
 #  1 - print every command executed
 g_verbosity = 0
 
-
 def split(val):
     return [y for y in [x.strip() for x in re.split('\s+', val)]
             if y != '']
-
 
 def call(*args, **kwargs):
     if g_verbosity >= 1:
@@ -88,236 +76,6 @@ def check_output(*args, **kwargs):
             print result
     return result
 
-
-def do_install_gstreamer(options):
-    print 'Need to install gstreamer into', GSTREAMER_ROOT
-
-    if options.test:
-        sys.exit(1)
-
-    if not options.yes:
-        response = raw_input('Continue? (y/n) ')
-        if response != 'y':
-            print 'cancelled'
-            sys.exit(1)
-
-    tar_name = 'mj-' + os.path.basename(GSTREAMER_ROOT) + '-'
-    tar_name += (check_output('uname -m') + '-' +
-                 check_output('lsb_release -c -s') +
-                 '.tar.bz2')
-
-    # Note: if wget fails for some reason, just copy the tar file
-    # into /tmp
-    tmp_tar_name = os.path.join('/tmp', tar_name)
-    if not os.path.exists(tmp_tar_name):
-        print 'Fetching gstreamer tar...'
-        url = 'https://raw.githubusercontent.com/mjbots/mj-gstreamer-build'
-        url += '/master/tars/' + tar_name
-
-        wget_cmd = 'wget -O "%s.partial" "%s"' % (tmp_tar_name, url)
-        if call(wget_cmd) != 0:
-            # Sometimes, github fails with "503: backend read error"
-            # Wait a bit, then retry.
-            time.sleep(30)
-            check_call(wget_cmd)
-
-        os.rename(tmp_tar_name + '.partial', tmp_tar_name)
-
-    print 'Verifying gstreamer tar', tmp_tar_name
-    gstreamer_root_rel = GSTREAMER_ROOT[1:]
-    revision = check_output(
-        'tar xOf "%s" "%s/mj-gstreamer-revision"' % (
-            tmp_tar_name, gstreamer_root_rel))
-    print ' .. revision found:', revision
-    if int(revision) < GS_MIN_REVISION:
-        print 'Incorrect revision'
-        sys.exit(1)
-
-    print 'Unpacking gstreamer tar...'
-    # move old directory out-of-the-way
-    if os.path.exists(GSTREAMER_ROOT):
-        print 'renaming old directory'
-        os.rename(GSTREAMER_ROOT,
-                  GSTREAMER_ROOT + datetime.datetime.now().strftime('%Y-%H%M%S'))
-
-    # This .tar file starts at disk root, but we only extract files
-    # under GSTREAMER_ROOT for security.
-    check_call(
-        'sudo tar xf "%s" -C / "%s"' % (tmp_tar_name, gstreamer_root_rel),
-        is_sudo=True)
-
-
-def do_install_gst_packages(options):
-    gst_pkglist = check_output("apt-get --dry-run install \
-            gstreamer1.0 gstreamer1.0-plugins-good \
-            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
-            gstreamer1.0-plugins-base gstreamer1.0-libav | \
-            grep ^Inst | cut -d ' ' -f 2 | \
-            egrep -v 'gstreamer|-gst-' | grep -v -- '-doc$' || true").strip()
-    if gst_pkglist != '':
-        print 'Need to install some gstreamer media driver packages'
-        if options.test:
-            sys.exit(1)
-
-        cmd = 'sudo apt-get install %s %s' % (
-            '-y' if options.yes else '',
-            gst_pkglist.replace('\n', ' '))
-        check_call(cmd, is_sudo=True)
-
-    else:
-        print 'All gstreamer media packages are up to date'
-
-
-def find_version(dep, filetest):
-    for line in open(filetest).readlines():
-        result = re.search(dep['verre'], line)
-        if result:
-            return result.group(1)
-
-    return None
-
-
-def version_compare(ver1, ver2):
-    '''Compares version strings that are of the form x.y.z, it returns
-    -1, 0, or 1 depending upon if ver1 is <, ==, or > ver2.'''
-
-    ver1_fields = [int(x) for x in ver1.split('.')]
-    ver2_fields = [int(x) for x in ver2.split('.')]
-    for v1, v2 in zip(ver1_fields, ver2_fields):
-        if v1 < v2:
-            return -1
-        if v1 > v2:
-            return 1
-
-    if len(ver1_fields) > len(ver2_fields):
-        return 1
-    elif len(ver1_fields) < len(ver2_fields):
-        return -1
-    return 0
-
-
-def dart_dep_exists(options, dep):
-    # Check if the file is present in our install directory (we do not
-    # want to use system-wide files -- we do not know which version is it)
-    filetest = os.path.join(DART5_ROOT, dep['filetest'])
-
-    if not os.path.exists(filetest):
-        print 'Could not find:', dep['filetest']
-        return False
-
-    # Then search for the version string if we have one.
-    if 'verre' not in dep:
-        return True
-
-    ver = find_version(dep, filetest)
-    if not ver:
-        raise RuntimeError('Could not find version for ' + dep['name'])
-
-    if version_compare(ver, dep['minver']) < 0:
-        print 'Version of "%s" too old %s < %s' % (
-            dep['name'], ver, dep['minver'])
-        return False
-
-    return True
-
-
-def ensure_dart_dep(options, dep):
-    print 'Checking dart package:', dep['name']
-
-    exists = dart_dep_exists(options, dep)
-
-    if exists:
-        return
-
-    if options.test:
-        print 'Would install new version of:', dep['name']
-        return
-
-    print 'Installing new version of:', dep['name']
-
-    if not os.path.exists(DART5_ROOT):
-        check_call('sudo install -d -o %s %s' % (os.getuid(), DART5_ROOT),
-                   is_sudo=True)
-
-    checkout_name = dep['name'].rsplit('/', 1)[1]
-    tempdir = tempfile.mkdtemp(prefix='dartbuild-' + checkout_name + '-')
-    checkout_dir = os.path.join(tempdir, checkout_name)
-    build_dir = os.path.join(checkout_dir, 'build')
-
-    try:
-        # We would like to only fetch one revision for speed and to reduce
-        # network load, but this seems impossible:
-        # http://git.661346.n2.nabble.com/Fetch-by-SHA-missing-td5604552.html
-        check_call('git clone https://github.com/%s.git %s' % (
-            dep['name'], checkout_dir),
-            is_chatty=True)
-        check_call('git checkout --detach %s' % (dep['rev']),
-                   cwd=checkout_dir, is_chatty=True)
-        os.mkdir(build_dir)
-        check_call('PKG_CONFIG_PATH=%s/lib/pkgconfig '
-                   'cmake -DCMAKE_INSTALL_PREFIX:PATH=%s %s .. && make -j2' % (
-                       DART5_ROOT, DART5_ROOT, dep.get('cmake_flags', '')),
-                   cwd=build_dir, is_chatty=True)
-        check_call('make install',
-                   cwd=build_dir, is_chatty=True)
-    finally:
-        if options.keep_temp:
-            print 'NOT deleting tempdir', tempdir
-        else:
-            shutil.rmtree(tempdir, ignore_errors=True)
-
-    now_exists = dart_dep_exists(options, dep)
-    if now_exists:
-        print 'Package "%s" installed successfully' % dep['name']
-    else:
-        raise RuntimeError('Unable to install "%s"' % dep['name'])
-
-
-def do_install_dart(options):
-    # We would prefer to use ubuntu packages here, as we don't really
-    # have any special requirements, but the trusty ubuntu packages
-    # depend upon boost 1.54, when we'd prefer to keep boost 1.55
-    # installed.
-    #
-    # Thus we install from source all the packages we need.
-
-    deps = [
-        {'name': 'danfis/libccd',
-         'rev': '2cd2f6b2b5533de370698ea460e4d3b902c45242',
-         'filetest': 'lib/pkgconfig/ccd.pc',
-         'cmake_flags': '-DCMAKE_INSTALL_LIBDIR:PATH=lib',
-         'verre': '^Version: (.*)$',
-         'minver': '2.0' },
-        {'name': 'flexible-collision-library/fcl',
-         'rev': '8d6d89910a6ef65991f3bd7550db1381e6da3ff4',
-         'filetest': 'lib/pkgconfig/fcl.pc',
-         'verre': '^Version: (.*)$',
-         'minver': '0.3.2' },
-        {'name': 'ros/urdfdom_headers',
-         'rev': 'dd546d901a440c10e507685ddf057bc5c93e0a27',
-         'filetest': 'lib/pkgconfig/urdfdom_headers.pc',
-         'verre': '^Version: (.*)$',
-         'minver': '0.4.0' },
-        {'name': 'dartsim/console_bridge',
-         'rev': '2fbb56a17a1e2e689983e32486ed219f19f732f3',
-         'filetest': 'include/console_bridge/console.h',
-         'cmake_flags': '-DCMAKE_INSTALL_LIBDIR:PATH=lib'},
-        {'name': 'ros/urdfdom',
-         'rev': '0e20f330fa2a9fd51e6de555ad2124222c50f31d',
-         'filetest': 'lib/pkgconfig/urdfdom.pc',
-         'verre': '^Version: (.*)$',
-         'minver': '0.4.0' },
-        {'name': 'dartsim/dart',
-         'rev': 'ed746f6ac1ae5a2e0ca2e5c0ed9e16f1f33e4fd9',
-         'filetest': 'lib/pkgconfig/dart.pc',
-         'verre': '^Version: (.*)$',
-         'minver': '5.1.1' },
-        ]
-
-    for dep in deps:
-        ensure_dart_dep(options, dep)
-
-
 def main():
     global g_verbosity
 
@@ -334,51 +92,16 @@ def main():
                       help='also install system packages')
     parser.add_option('--test', '-t', action='store_true',
                       help='just test if anything needs installing')
-    parser.add_option('--dart', '-D', type='int', metavar='[0|1]',
-                      help='Enable dart compilation (default %default)',
-                      default=int(not os.uname()[4].startswith('arm')))
-    parser.add_option('--keep-temp', action='store_true',
-                      help='Do not delete temporary files')
     options, args = parser.parse_args()
 
     g_verbosity += options.verbose - options.quiet
 
     PKGLIST = split('''
-    scons libeigen3-dev libsnappy-dev python-snappy libi2c-dev
-    pyside-tools liblog4cpp5-dev
-    libassimp-dev libtinyxml-dev libtinyxml2-dev libnlopt-dev
-    freeglut3-dev libflann-dev libxmu-dev libxi-dev
-    python-matplotlib ipython ipython-qtconsole
-    python-blessings
-    gcc-arm-none-eabi
-    libopencv-dev
-''')
+    clang-6.0 lld-6.0 openjdk-8-jdk-headless openjdk-8-jre-headless
+    bison flex libi2c-dev
+    ''')
 
     ubuntu_release = subprocess.check_output(["lsb_release", "-cs"]).strip()
-
-    if ubuntu_release == 'trusty':
-        PKGLIST += split('''
-    libboost1.55-dev
-    libboost-system1.55-dev libboost-program-options1.55-dev
-    libboost-coroutine1.55-dev libboost-context1.55-dev
-    libboost-test1.55-dev libboost-python1.55-dev
-    libboost-serialization1.55-dev
-    libboost-date-time1.55-dev libboost-filesystem1.55-dev
-    libboost-thread1.55-dev libboost-chrono1.55-dev
-    libboost-atomic1.55-dev libboost-test1.55-dev
-    libboost-regex1.55-dev
-''')
-
-    if ubuntu_release == 'xenial':
-        PKGLIST += ['libboost-all-dev',
-                    'libboost-dev',
-                    'libgstrtspserver-1.0-dev',
-                    'python-dev']
-
-    if options.dart:
-        PKGLIST += split('''
-libopenscenegraph-dev libopenthreads-dev cmake
-''')
 
     if options.system:
         PKGLIST += split('''
@@ -399,21 +122,6 @@ libopenscenegraph-dev libopenthreads-dev cmake
         check_call(cmd, is_sudo=True)
     else:
         print 'All packages up to date'
-
-    gstreamer_revision = os.path.join(GSTREAMER_ROOT, 'mj-gstreamer-revision')
-    revision = (open(gstreamer_revision).read() if
-                os.path.exists(gstreamer_revision) else 0)
-
-    if ubuntu_release != 'xenial':
-        if revision < GS_MIN_REVISION:
-            do_install_gstreamer(options)
-        else:
-            print 'gstreamer in %s is up to date' % GSTREAMER_ROOT
-
-        do_install_gst_packages(options)
-
-    if options.dart:
-        do_install_dart(options)
 
 
 if __name__ == '__main__':
