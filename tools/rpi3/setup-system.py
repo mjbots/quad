@@ -38,6 +38,7 @@ def run(*args, **kwargs):
 
 def ensure_present(filename, line):
     '''Ensure the given line is present in the named file.'''
+
     current_content = [
         x.strip() for x in open(filename, encoding='utf-8').readlines()]
     if line.strip() in current_content:
@@ -56,11 +57,12 @@ def ensure_present(filename, line):
 def ensure_contents(filename, contents):
     '''Ensure the given file has exactly the given contents'''
 
-    existing = open(filename, encoding='utf-8').read()
-    if existing == contents:
-        return
+    if os.path.exists(filename):
+        existing = open(filename, encoding='utf-8').read()
+        if existing == contents:
+            return
 
-    shutil.copy(filename, filename + ORIG_SUFFIX)
+        shutil.copy(filename, filename + ORIG_SUFFIX)
 
     print('ensure_contents({}): Updating'.format(filename))
 
@@ -95,6 +97,8 @@ def set_config_var(name, value):
 def main():
     if os.getuid() != 0:
         raise RuntimeError('must be run as root')
+
+    run('apt install --yes hostapd dnsmasq')
 
     # P1 Camera - Yes
     run('raspi-config nonint do_camera 0')
