@@ -17,10 +17,10 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 def rpi_bazel_repository(name):
-    commit = "32aeb600bd082e8f80613bfcbe38f3b4222b02ff"
+    commit = "d81f4be4cfa8a95f459e8af923194fcc74b6a16b"
     http_archive(
         name = name,
         url = "https://github.com/mjbots/rpi_bazel/archive/{}.zip".format(commit),
-        sha256 = "37c81f86ed38d53a0dfa51ecf7f7f38a4c25d682ffc05271704e5dc9fa6691d3",
+        sha256 = "12eedf68b4069cffcb4e1ff540c1140b36f8cb51189ece8d7e727b8deb0e1220",
         strip_prefix = "rpi_bazel-{}".format(commit),
     )
