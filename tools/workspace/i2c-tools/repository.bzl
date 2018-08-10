@@ -14,12 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//tools/workspace:github_archive.bzl", "github_archive")
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
-def bazel_deps_repository(name):
-    github_archive(
+
+def i2c_tools_repository(name):
+    http_archive(
         name = name,
-        repo = "mjbots/bazel_deps",
-        commit = "e207839c760943426199d8d9076e4b78a9b51a33",
-        sha256 = "87f3d618e17494db8dba09275c2f300e74edb7e0ba7f5f3cad0882bf873c300b",
+        urls = [
+            "https://mirrors.edge.kernel.org/pub/software/utils/i2c-tools/i2c-tools-4.0.tar.xz",
+        ],
+        sha256 = "d900ca1c11c51ea20caa50b096f948008b8a7ad832311b23353e21baa7af28d6",
+        strip_prefix = "i2c-tools-4.0",
+        build_file = Label("//tools/workspace/i2c-tools:package.BUILD"),
     )

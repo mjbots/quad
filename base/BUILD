@@ -49,6 +49,7 @@ cc_library(
         "@boost//:system",
         "@eigen",
         "@fmt",
+        "@i2c-tools",
         "@log4cpp",
         "@snappy",
     ],

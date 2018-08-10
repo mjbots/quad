@@ -17,6 +17,7 @@
 load("//tools/workspace/rpi_bazel:repository.bzl", "rpi_bazel_repository")
 load("//tools/workspace/bazel_deps:repository.bzl", "bazel_deps_repository")
 load("//tools/workspace/gst-rpicamsrc:repository.bzl", "gst_rpicamsrc_repository")
+load("//tools/workspace/i2c-tools:repository.bzl", "i2c_tools_repository")
 load("//tools/workspace/raspberrypi-firmware:repository.bzl", "raspberrypi_firmware_repository")
 
 def add_default_repositories(excludes = []):
@@ -26,5 +27,7 @@ def add_default_repositories(excludes = []):
         bazel_deps_repository(name = "com_github_mjbots_bazel_deps")
     if "gst-rpicamsrc" not in excludes:
         gst_rpicamsrc_repository(name = "gst-rpicamsrc")
+    if "i2c-tools" not in excludes:
+        i2c_tools_repository(name = "i2c-tools")
     if "raspberrypi-firmware" not in excludes:
         raspberrypi_firmware_repository(name = "raspberrypi-firmware")

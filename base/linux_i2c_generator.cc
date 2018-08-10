@@ -14,7 +14,12 @@
 
 #include "linux_i2c_generator.h"
 
+#include <linux/i2c.h>
 #include <linux/i2c-dev.h>
+
+extern "C" {
+#include <i2c/smbus.h>
+}
 
 #include <thread>
 

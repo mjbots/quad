@@ -14,12 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//tools/workspace:github_archive.bzl", "github_archive")
+package(default_visibility = ["//visibility:public"])
 
-def bazel_deps_repository(name):
-    github_archive(
-        name = name,
-        repo = "mjbots/bazel_deps",
-        commit = "e207839c760943426199d8d9076e4b78a9b51a33",
-        sha256 = "87f3d618e17494db8dba09275c2f300e74edb7e0ba7f5f3cad0882bf873c300b",
-    )
+cc_library(
+    name = "i2c-tools",
+    hdrs = glob(['include/**/*.h']),
+    strip_include_prefix = "include",
+    srcs = ["lib/smbus.c"],
+)
