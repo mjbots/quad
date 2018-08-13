@@ -105,7 +105,10 @@ def main():
 
     ubuntu_release = subprocess.check_output(["lsb_release", "-cs"]).strip()
 
-    if ubuntu_release != 'xenial':
+    if options.verbose:
+        print('Ubuntu release:', ubuntu_release)
+
+    if ubuntu_release != b'xenial':
         PKGLIST += split('''
         python3-snappy python3-ipython python3-qtconsole
         ''')
