@@ -17,6 +17,7 @@
 package(default_visibility = ["//visibility:public"])
 
 load("//base:module_main.bzl", "module_main")
+load("@bazel_tools//tools/build_defs/pkg:pkg.bzl", "pkg_tar")
 
 cc_library(
     name = "mech",
@@ -29,6 +30,7 @@ cc_library(
         "herkulex.cc",
         "mcast_video_link.cc",
         "mech_warfare.cc",
+        "mech_warfare_command.cc",
         "mjmech_imu_driver.cc",
         "rtsp_server.cc",
         "servo_monitor.cc",
@@ -104,4 +106,29 @@ module_main(
     cname = "mjmech::mech::MechWarfare",
     prefix = "mech",
     deps = [":mech"],
+)
+
+module_main(
+    name = "mw_command",
+    cname = "mjmech::mech::MWCommand",
+    prefix = "mech",
+    deps = [":mech"],
+)
+
+pkg_tar(
+    name = "deploy",
+    extension = "tar",
+    include_runfiles = True,
+    package_dir = "mech",
+    srcs = [
+        ":video_sender_app",
+        ":mech_warfare",
+        ":herkulex_tool",
+    ],
+    files = {
+        "//configs:real.cfg": "configs/real.cfg",
+        "//configs:mw.ini": "configs/mw.ini",
+        "//configs:mw_lizard.ini": "configs/mw_lizard.ini",
+        "//configs:lizard.cfg": "configs/lizard.cfg",
+    },
 )
