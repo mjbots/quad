@@ -208,7 +208,7 @@ class EnumerateCommand : public std::enable_shared_from_this<EnumerateCommand> {
     } else {
       FailIf(ec);
 
-      std::cout << fmt::format("%d ", address);
+      std::cout << fmt::format("{:d} ", address);
       std::cout.flush();
     }
 
