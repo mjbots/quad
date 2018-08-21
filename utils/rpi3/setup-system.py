@@ -149,6 +149,7 @@ iface wlan0 inet static
     network 192.168.16.0
     broadcast 192.168.16.255
     post-up iw dev wlan0 set power_save off || true
+    post-up iw dev wlan0 set retry long 1 || true
     post-up ip route add 239.89.108.0/24 dev wlan0
 ''')
 
