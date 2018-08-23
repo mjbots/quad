@@ -39,3 +39,5 @@ genrule(
     output_to_bindir = 1,
     cmd = "pyside-uic $< > $@",
 )
+
+exports_files(["start-robot.sh"])

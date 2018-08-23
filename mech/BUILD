@@ -130,5 +130,6 @@ pkg_tar(
         "//configs:mw.ini": "configs/mw.ini",
         "//configs:mw_lizard.ini": "configs/mw_lizard.ini",
         "//configs:lizard.cfg": "configs/lizard.cfg",
+        "//utils:start-robot.sh": "start-robot.sh",
     },
 )
