@@ -24,6 +24,7 @@
 #include "base/visitor.h"
 
 #include "gst_main_loop.h"
+#include "target_tracker_data.h"
 
 struct _GstSample;
 typedef struct _GstSample GstSample;
@@ -73,6 +74,9 @@ class VideoDisplay : boost::noncopyable {
     // If True, do not display the target.
     bool disable_target = false;
 
+    // If True, do not display the tracker.
+    bool disable_tracker = false;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(stats_interval_s));
@@ -83,6 +87,7 @@ class VideoDisplay : boost::noncopyable {
       a->Visit(MJ_NVP(hide_video));
       a->Visit(MJ_NVP(analyze));
       a->Visit(MJ_NVP(disable_target));
+      a->Visit(MJ_NVP(disable_tracker));
     }
   };
 
@@ -132,6 +137,9 @@ class VideoDisplay : boost::noncopyable {
   // Display the given text in the OSD text area in the lower left of
   // the window.
   void SetOsdText(const std::string&);
+
+  // Display the given target information.
+  void SetTrackerTarget(const TargetTrackerData&);
 
   // Position the center target by the given number of pixels offset
   // from the center.

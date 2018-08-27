@@ -48,6 +48,9 @@ cc_library(
         "@gst-plugins-ugly//:plugins",
         "@gst-libav//:plugins",
         "@gst-rtsp-server//:rtsp-server",
+        "@opencv//:core",
+        "@opencv//:aruco",
+        "@opencv//:imgcodecs",
     ] + select({
         "//conditions:default" : [],
         "//:raspberrypi" : ["@gst-rpicamsrc"],
@@ -78,6 +81,20 @@ cc_binary(
     name = "herkulex_tool",
     srcs = ["herkulex_tool.cc"],
     deps = [":mech"],
+)
+
+cc_binary(
+    name = "aruco_test",
+    srcs = ["aruco_test.cc"],
+    deps = ["@boost", "@boost//:timer",
+            "@opencv//:aruco", "@opencv//:imgcodecs"],
+)
+
+cc_binary(
+    name = "aruco_draw",
+    srcs = ["aruco_draw.cc"],
+    deps = ["@boost", "@boost//:timer",
+            "@opencv//:aruco", "@opencv//:imgcodecs"],
 )
 
 module_main(

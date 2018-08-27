@@ -202,6 +202,7 @@ class MechWarfare::Impl : boost::noncopyable {
     telemetry.servo_min_voltage_V = servo_min_voltage_V_;
     telemetry.servo_max_voltage_V = servo_max_voltage_V_;
     telemetry.mech_mode = static_cast<int>(data_.mode);
+    telemetry.target_data = parent_->m_.video->target_tracker()->data();
 
     telemetry_->SetTelemetry(
         "mech",

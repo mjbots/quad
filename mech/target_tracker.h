@@ -30,8 +30,8 @@ class TargetTracker : boost::noncopyable {
   void AsyncStart(base::ErrorHandler);
 
   struct Parameters {
-    int region_width = 100;
-    int region_height = 100;
+    int region_width = 420;
+    int region_height = 420;
 
     template <typename Archive>
     void Serialize(Archive* a)  {
@@ -45,9 +45,6 @@ class TargetTracker : boost::noncopyable {
   // Get a frameconsumer interface. pointer has same lifetime
   // as this object.
   std::weak_ptr<CameraFrameConsumer> get_frame_consumer();
-
-  void StartTracking(const base::Point3D&);
-  void StopTracking();
 
   const TargetTrackerData& data() const;
   TargetTrackerDataSignal* data_signal();

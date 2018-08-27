@@ -25,34 +25,23 @@ namespace mech {
 struct TargetTrackerData {
   boost::posix_time::ptime timestamp;
 
-  enum State {
-    kIdle,
-    kStarting,
-    kTracking,
+  struct Target {
+    base::Point3D center;
+    std::vector<base::Point3D> corners;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(center));
+      a->Visit(MJ_NVP(corners));
+    }
   };
 
-  static std::map<State, const char*> StateMapper() {
-    return std::map<State, const char*>{
-      { kIdle, "kIdle" },
-      { kStarting, "kStarting" },
-      { kTracking, "kTracking" },
-    };
-  }
-
-  State state = kIdle;
-
-  base::Point3D initial;
-  base::Point3D current;
-
-  std::vector<base::Point3D> features;
+  boost::optional<Target> target;
 
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(timestamp));
-    a->Visit(MJ_ENUM(state, StateMapper));
-    a->Visit(MJ_NVP(initial));
-    a->Visit(MJ_NVP(current));
-    a->Visit(MJ_NVP(features));
+    a->Visit(MJ_NVP(target));
   }
 };
 

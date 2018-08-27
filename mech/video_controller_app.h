@@ -162,6 +162,7 @@ class VideoControllerApp : boost::noncopyable {
                       telemetry.total_fire_time_s,
                       telemetry.turret_absolute_deg,
                       mode_str));
+      m_.display->SetTrackerTarget(telemetry.target_data);
     }
   }
 

@@ -95,6 +95,26 @@ class VideoDisplay::Impl : boost::noncopyable {
     }
   }
 
+  void SetTrackerTarget(const TargetTrackerData& target_data) {
+    if (!overlaytracked_) { return; }
+
+    if (target_data.target) {
+      g_object_set(overlaytracked_,
+                   "text", "X", NULL);
+      g_object_set(overlaytracked_,
+                   "deltax",
+                   static_cast<int>(target_data.target->center.x),
+                   NULL);
+      g_object_set(overlaytracked_,
+                   "deltay",
+                   static_cast<int>(target_data.target->center.y),
+                   NULL);
+    } else {
+      g_object_set(overlaytracked_,
+                   "text", "", NULL);
+    }
+  }
+
   void SetTargetOffset(int x, int y) {
     if (overlaytarget_) {
       g_object_set(overlaytarget_,
@@ -161,6 +181,12 @@ class VideoDisplay::Impl : boost::noncopyable {
       out << "! textoverlay name=target shaded_background=1 font_desc=8 "
           << "   valignment=center halignment=center line-alignment=center "
           << "   text=\"O\" ";
+    }
+
+    if (!parameters_.disable_tracker) {
+      out << "! textoverlay name=tracked shaded_background=1 font_desc=8 "
+          << "  valignment=top halignment=left line-alignment=center "
+          << "  text=\"\" ";
     }
 
     // Maybe pass it to our app for OSD.
@@ -254,6 +280,9 @@ class VideoDisplay::Impl : boost::noncopyable {
     if (!parameters_.disable_target) {
       overlaytarget_ = pipeline_->GetElementByName("target");
     }
+    if (!parameters_.disable_tracker) {
+      overlaytracked_ = pipeline_->GetElementByName("tracked");
+    }
 
     pipeline_->Start();
 
@@ -322,6 +351,7 @@ class VideoDisplay::Impl : boost::noncopyable {
 
   GstElement* overlaytext_ = nullptr;
   GstElement* overlaytarget_ = nullptr;
+  GstElement* overlaytracked_ = nullptr;
 
   int raw_frame_count_ = 0;
 };
@@ -346,6 +376,10 @@ void VideoDisplay::HandleIncomingFrame(std::shared_ptr<std::string>& data) {
 
 void VideoDisplay::SetOsdText(const std::string& text) {
   impl_->SetOsdText(text);
+}
+
+void VideoDisplay::SetTrackerTarget(const TargetTrackerData& target_data) {
+  impl_->SetTrackerTarget(target_data);
 }
 
 void VideoDisplay::SetTargetOffset(int x, int y) {

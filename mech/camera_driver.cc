@@ -428,7 +428,7 @@ class CameraDriver::Impl : boost::noncopyable {
     if (parameters_.analyze) {
       out << "! videoanalyse name=input-analyze ";
     }
-    out << "! queue ! appsink name=raw-sink ";
+    out << "! queue max-size-buffers=1 ! appsink name=raw-sink ";
 
     return out.str();
   }

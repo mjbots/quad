@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include "target_tracker_data.h"
+
 namespace mjmech {
 namespace mech {
 
@@ -33,6 +35,8 @@ struct MechTelemetry {
   // An enum from MechWarfare::Impl::Data::Mode
   uint8_t mech_mode = 0;
 
+  TargetTrackerData target_data;
+
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(timestamp));
@@ -41,6 +45,7 @@ struct MechTelemetry {
     a->Visit(MJ_NVP(turret_absolute_deg));
     a->Visit(MJ_NVP(total_fire_time_s));
     a->Visit(MJ_NVP(mech_mode));
+    a->Visit(MJ_NVP(target_data));
   }
 };
 

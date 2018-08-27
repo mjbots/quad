@@ -31,7 +31,7 @@ namespace mech {
 class VideoSenderApp : boost::noncopyable {
  public:
   template <typename Context>
-    VideoSenderApp(Context& context)
+  VideoSenderApp(Context& context)
     : service_(context.service) {
     m_.gst_main.reset(new GstMainLoop(context));
     m_.camera.reset(new CameraDriver(context));
@@ -49,6 +49,8 @@ class VideoSenderApp : boost::noncopyable {
 
     m_.camera->AddFrameConsumer(m_.rtsp->get_frame_consumer());
     m_.camera->AddFrameConsumer(m_.video_link->get_frame_consumer());
+
+    log_.debug("Adding target tracker");
     m_.camera->AddFrameConsumer(m_.target_tracker->get_frame_consumer());
 
     m_.camera->stats_signal()->connect(
