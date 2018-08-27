@@ -199,6 +199,7 @@ BOOST_AUTO_TEST_CASE(TelemetryArchiveSimpleReadDataTest) {
   Test1 data;
   data.value_i32 = 99;
   data.value_f64 = 4.0;
+  data.value_optional = SubTest1();
   std::string result = write_archive.Serialize(&data);
 
   TelemetrySimpleReadArchive<Test1> dut;

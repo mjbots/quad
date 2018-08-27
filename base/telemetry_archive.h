@@ -285,7 +285,7 @@ class TelemetrySimpleReadArchive {
       if (!present) {
         *value = boost::none;
       } else {
-        typedef typename std::decay<decltype(pair.get_value())>::type ValueType;
+        typedef typename std::decay<decltype(pair.get_value())>::type::value_type ValueType;
         *value = ValueType();
         Base::Visit(detail::MakeFakeNvp(&(**value)));
       }
