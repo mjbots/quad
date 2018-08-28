@@ -115,6 +115,7 @@ class Device {
       data_ = boost::erase_first_copy(name, "v4l2:");
     } else if (boost::starts_with(name, "rpi:")) {
       type_ = Type::kRaspberryPi;
+      data_ = boost::erase_first_copy(name, "rpi:");
     } else {
       base::Fail("Unknown device type: " + name);
     }
@@ -198,13 +199,15 @@ class Device {
                 "keyframe-interval={} "
                 "intra-refresh-type=cyclic "
                 "inline-headers=true "
-                "video-stabilisation=true ! "
+                " {} "
+                " ! "
                 "video/x-h264,width={},height={} ! "
                 "tee name=pi264-tee "
                 "pi264-tee. ! h264parse ! avdec_h264 ! videoconvert ! "
                 "tee name=dec-tee pi264-tee. ",
                 bitrate_.bitrate_kbps * 1000,
                 static_cast<int>(kFrameRate * bitrate_.iframe_interval_s),
+                data_,
                 size_.width, size_.height);
       }
     }
