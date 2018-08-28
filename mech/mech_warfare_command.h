@@ -45,14 +45,14 @@ struct MechMessage {
 struct OptOptions {
   double period_s = 0.1;
   double deadband = 0.20;
-  double max_translate_x_mm_s = 300.0;
-  double max_translate_y_mm_s = 300.0;
+  double max_translate_x_mm_s = 200.0;
+  double max_translate_y_mm_s = 200.0;
   double max_rotate_deg_s = 100.0;
   double max_body_z_mm = 30.0;
   double min_body_z_mm = -60.0;
   double idle_body_y_mm = 5.0;
   double forward_body_y_mm = 15.0;
-  double reverse_body_y_mm = -5.0;
+  double reverse_body_y_mm = -10.0;
   double max_body_x_mm = 30;
   double max_body_y_mm = 30;
   double max_body_pitch_deg = 20;

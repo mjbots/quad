@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include "base/point3d.h"
+
 #include "mech_defines.h"
 #include "turret_command.h"
 
@@ -41,6 +43,8 @@ class Turret : boost::noncopyable {
   void SetCommand(const TurretCommand&);
   void SetFireControl(const TurretCommand::FireControl&);
 
+  void UpdateTrackedTarget(const boost::optional<base::Point3D>& target);
+
   void StartBias();
 
   struct Parameters {
@@ -55,10 +59,13 @@ class Turret : boost::noncopyable {
     double max_x_deg = 120;
     double min_y_deg = -35;
     double max_y_deg = 35;
+    double target_time_constant_s = 1.0;
 
     double fire_duration_s = 0.2;
     double agitator_pwm = 0.5;
     double fire_motor_pwm = 0.75;
+    // TODO(josh.pieper): This should be in the camera somewhere.
+    double pixels_per_degree = 1280 / 90.0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -73,9 +80,11 @@ class Turret : boost::noncopyable {
       a->Visit(MJ_NVP(max_x_deg));
       a->Visit(MJ_NVP(min_y_deg));
       a->Visit(MJ_NVP(max_y_deg));
+      a->Visit(MJ_NVP(target_time_constant_s));
       a->Visit(MJ_NVP(fire_duration_s));
       a->Visit(MJ_NVP(agitator_pwm));
       a->Visit(MJ_NVP(fire_motor_pwm));
+      a->Visit(MJ_NVP(pixels_per_degree));
     }
   };
 
@@ -87,8 +96,14 @@ class Turret : boost::noncopyable {
     bool fire_enabled = false;
     int fire_count = 0;
 
+    // The current state of the gimbal.
     TurretCommand::Imu imu;
     TurretCommand::Absolute absolute;
+
+    // The current target_relative command, if that mode is active.
+    boost::optional<TurretCommand::TargetRelative> target_relative;
+    TurretCommand::Rate target_relative_rate;
+    boost::posix_time::ptime target_relative_last_time;
 
     int last_sequence = -1;
     bool last_rate = false;
@@ -108,6 +123,9 @@ class Turret : boost::noncopyable {
       a->Visit(MJ_NVP(fire_count));
       a->Visit(MJ_NVP(imu));
       a->Visit(MJ_NVP(absolute));
+      a->Visit(MJ_NVP(target_relative));
+      a->Visit(MJ_NVP(target_relative_rate));
+      a->Visit(MJ_NVP(target_relative_last_time));
       a->Visit(MJ_NVP(last_sequence));
       a->Visit(MJ_NVP(last_rate));
       a->Visit(MJ_NVP(disable_period_s));

@@ -77,7 +77,7 @@ struct AxisMapping {
 
   int crouch = -1;
   int manual = -1;
-  int body = -1;
+  int target_relative = -1;
   int freeze = -1;
   int pause = -1;
   int target_move = -1;
@@ -127,7 +127,7 @@ AxisMapping GetAxisMapping(const LinuxInput* input) {
 
     result.crouch = BTN_THUMB;
     result.manual = BTN_PINKIE;
-    result.body = BTN_BASE;
+    result.target_relative = BTN_BASE;
     result.freeze = BTN_TOP2;
     result.pause = BTN_BASE4;
     result.target_move = BTN_THUMB2;
@@ -162,7 +162,7 @@ AxisMapping GetAxisMapping(const LinuxInput* input) {
 
     result.crouch = BTN_A;
     result.manual = BTN_TR;
-    result.body = ABS_Z;
+    result.target_relative = ABS_Z;
     result.freeze = BTN_TL;
     result.pause = BTN_START;
     result.target_move = BTN_X;
@@ -329,11 +329,15 @@ class Commander::Impl {
     return it->second;
   }
 
-  bool body_enabled() const {
-    if (IsAxis(mapping_.body)) {
-      return linux_input_->abs_info(mapping_.body).scaled() > 0.0;
+  bool target_relative_enabled() const {
+    if (IsAxis(mapping_.target_relative)) {
+      return linux_input_->abs_info(mapping_.target_relative).scaled() > 0.0;
     }
-    return key_pressed(mapping_.body);
+    return key_pressed(mapping_.target_relative);
+  }
+
+  bool body_enabled() const {
+    return false;
   }
 
   bool freeze_enabled() const {
@@ -496,22 +500,32 @@ class Commander::Impl {
                mapping_.sign_translate_y,
                command_.translate_y_mm_s,
                -options_.max_translate_y_mm_s, options_.max_translate_y_mm_s);
-      MaybeMapNonLinear(
-          &command.turret_rate_dps.yaw, mapping_.turret_x,
-          mapping_.sign_turret_x,
-          0,
-          -options_.max_turret_rate_deg_s,
-          options_.max_turret_rate_deg_s,
-          options_.turret_linear_transition_point,
-          options_.turret_linear_fine_percent);
-      MaybeMapNonLinear(
-          &command.turret_rate_dps.pitch, mapping_.turret_y,
-          mapping_.sign_turret_y,
-          0,
-          -options_.max_turret_rate_deg_s,
-          options_.max_turret_rate_deg_s,
-          options_.turret_linear_transition_point,
-          options_.turret_linear_fine_percent);
+
+      if (target_relative_enabled()) {
+        base::Point3D target_relative;
+        target_relative.x = target_x_ + 1280 / 2;
+        target_relative.y = target_y_ + 720 / 2;
+        command.turret_target_relative = target_relative;
+      } else {
+        base::Euler rate_dps;
+        MaybeMapNonLinear(
+            &rate_dps.yaw, mapping_.turret_x,
+            mapping_.sign_turret_x,
+            0,
+            -options_.max_turret_rate_deg_s,
+            options_.max_turret_rate_deg_s,
+            options_.turret_linear_transition_point,
+            options_.turret_linear_fine_percent);
+        MaybeMapNonLinear(
+            &rate_dps.pitch, mapping_.turret_y,
+            mapping_.sign_turret_y,
+            0,
+            -options_.max_turret_rate_deg_s,
+            options_.max_turret_rate_deg_s,
+            options_.turret_linear_transition_point,
+            options_.turret_linear_fine_percent);
+        command.turret_rate_dps = rate_dps;
+      }
     }
 
     if (key_map_[mapping_.crouch]) {
@@ -534,12 +548,25 @@ class Commander::Impl {
     }
 
     if (options_.verbose) {
+      auto format_turret = [](const auto& command) {
+        std::string result;
+        if (command.turret_rate_dps) {
+          result += fmt::format("rate={:4.0f}/{:4.0f}",
+                                command.turret_rate_dps->yaw,
+                                command.turret_rate_dps->pitch);
+        } else if (command.turret_target_relative) {
+          result += fmt::format("tgt={:.0f}/{:.0f}",
+                                command.turret_target_relative->x,
+                                command.turret_target_relative->y);
+        }
+        return result;
+      };
+
       std::cout << fmt::format(
-          "x={:4.0f} y={:4.0f} tx={:4.0f} ty={:4.0f} bx={:4.0f} by={:4.0f} {} {}",
+          "x={:4.0f} y={:4.0f} t={} bx={:4.0f} by={:4.0f} {} {}",
           command.drive_mm_s.x,
           command.drive_mm_s.y,
-          command.turret_rate_dps.yaw,
-          command.turret_rate_dps.pitch,
+          format_turret(command),
           command.body_offset_mm.x,
           command.body_offset_mm.y,
           (do_fire ? "FIRE" : "    "),

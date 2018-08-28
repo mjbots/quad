@@ -145,6 +145,8 @@ class VideoDisplay : boost::noncopyable {
   // from the center.
   void SetTargetOffset(int x, int y);
 
+  base::Point3D size() const;
+
  private:
   boost::signals2::signal<void (const Stats*)> stats_signal_;
   boost::signals2::signal<void (Stats*)> pre_stats_signal_;

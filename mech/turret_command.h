@@ -60,6 +60,21 @@ struct TurretCommand {
   };
   boost::optional<Absolute> absolute;
 
+  /// If set, the TargetRelative coordinate takes precedence over all
+  /// other commands.  It attempts to position any detected target at
+  /// the given absolute x and y image coordinates.
+  struct TargetRelative {
+    int x = 0;
+    int y = 0;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(x));
+      a->Visit(MJ_NVP(y));
+    }
+  };
+  boost::optional<TargetRelative> target_relative;
+
   struct Fire {
     /// The sequence number must be updated to something different
     /// for a new fire command to take effect.  This number should
@@ -132,6 +147,7 @@ struct TurretCommand {
     a->Visit(MJ_NVP(rate));
     a->Visit(MJ_NVP(imu));
     a->Visit(MJ_NVP(absolute));
+    a->Visit(MJ_NVP(target_relative));
     a->Visit(MJ_NVP(fire_control));
   }
 };

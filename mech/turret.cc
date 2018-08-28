@@ -339,6 +339,54 @@ class Turret::Impl : boost::noncopyable {
         std::bind(&Impl::HandleWrite, this, std::placeholders::_1));
   }
 
+  void WriteRate(double x_deg_s, double y_deg_s) {
+    const double pitch_dps = y_deg_s;
+    const int pitch_command = static_cast<int>(pitch_dps * 1000.0);
+    servo_->RamWrite(
+        parameters_.gimbal_address, PitchRateCommand, pitch_command,
+        std::bind(&Impl::HandleWrite, this, std::placeholders::_1));
+
+    const double yaw_dps = x_deg_s;
+    const int yaw_command = static_cast<int>(yaw_dps * 1000.0);
+    servo_->RamWrite(
+        parameters_.gimbal_address, YawRateCommand, yaw_command,
+        std::bind(&Impl::HandleWrite, this, std::placeholders::_1));
+  }
+
+  void UpdateTrackedTarget(const boost::optional<base::Point3D>& target) {
+    log_.debug(fmt::format("UpdateTrackedTarget vision={}, target={}",
+                           !!target, !!data_.target_relative));
+
+    // If we're not in target relative mode, then nothing to do here.
+    if (!data_.target_relative) { return; }
+
+    const auto now = base::Now(service_);
+
+    if (!target) {
+      // We don't currently have a target.  Just scale our rates by
+      // our time constant.
+      const double delta_s = base::ConvertDurationToDouble(now - data_.target_relative_last_time);
+      const double factor = std::pow(0.5, (delta_s / parameters_.target_time_constant_s));
+      data_.target_relative_rate.x_deg_s *= factor;
+      data_.target_relative_rate.y_deg_s *= factor;
+    } else {
+      // Update the rates with the new target position.
+      const double delta_x = target->x - data_.target_relative->x;
+      const double delta_y = target->y - data_.target_relative->y;
+      data_.target_relative_rate.x_deg_s =
+          (delta_x / parameters_.pixels_per_degree) /
+          parameters_.target_time_constant_s;
+      data_.target_relative_rate.y_deg_s =
+          -(delta_y / parameters_.pixels_per_degree) /
+          parameters_.target_time_constant_s;
+    }
+
+    WriteRate(data_.target_relative_rate.x_deg_s,
+              data_.target_relative_rate.y_deg_s);
+
+    data_.target_relative_last_time = now;
+  }
+
   base::LogRef log_ = base::GetLogInstance("turret");
   Turret* const parent_;
   boost::asio::io_service& service_;
@@ -373,7 +421,9 @@ void Turret::SetCommand(const TurretCommand& command) {
 
   if (impl_->is_disabled()) { return; }
 
-  if (impl_->data_.last_rate && !command.rate) {
+  const bool this_rate = command.rate || command.target_relative;
+
+  if (impl_->data_.last_rate && !this_rate) {
     // Since we no longer want to be commanding a rate, ensure that
     // the gimbal is not advancing on its own.
     impl_->data_.last_rate = false;
@@ -385,7 +435,15 @@ void Turret::SetCommand(const TurretCommand& command) {
         std::bind(&Impl::HandleWrite, impl_.get(), std::placeholders::_1));
   }
 
-  if (command.absolute) {
+  if (!command.target_relative) {
+    impl_->data_.target_relative = boost::none;
+  }
+
+  if (command.target_relative) {
+    impl_->data_.target_relative = command.target_relative;
+    impl_->data_.target_relative_rate = {};
+    impl_->data_.target_relative_last_time = base::Now(impl_->service_);
+  } else if (command.absolute) {
     const double limited_pitch_deg =
         std::max(impl_->parameters_.min_y_deg,
                  std::min(impl_->parameters_.max_y_deg,
@@ -423,17 +481,7 @@ void Turret::SetCommand(const TurretCommand& command) {
   } else if (command.rate) {
     // Finally, rate if we have one.
 
-    const double pitch_dps = command.rate->y_deg_s;
-    const int pitch_command = static_cast<int>(pitch_dps * 1000.0);
-    impl_->servo_->RamWrite(
-        impl_->parameters_.gimbal_address, PitchRateCommand, pitch_command,
-        std::bind(&Impl::HandleWrite, impl_.get(), std::placeholders::_1));
-
-    const double yaw_dps = command.rate->x_deg_s;
-    const int yaw_command = static_cast<int>(yaw_dps * 1000.0);
-    impl_->servo_->RamWrite(
-        impl_->parameters_.gimbal_address, YawRateCommand, yaw_command,
-        std::bind(&Impl::HandleWrite, impl_.get(), std::placeholders::_1));
+    impl_->WriteRate(command.rate->x_deg_s, command.rate->y_deg_s);
     impl_->data_.last_rate = true;
   }
 
@@ -442,6 +490,11 @@ void Turret::SetCommand(const TurretCommand& command) {
 
 void Turret::SetFireControl(const TurretCommand::FireControl& command) {
   impl_->SetFireControl(command);
+}
+
+void Turret::UpdateTrackedTarget(
+    const boost::optional<base::Point3D>& target) {
+  impl_->UpdateTrackedTarget(target);
 }
 
 void Turret::StartBias() {

@@ -24,7 +24,8 @@ namespace mech {
 struct DriveCommand {
   /// Body coordinates relative to camera field of view.
   base::Point3D drive_mm_s;
-  base::Euler turret_rate_dps;
+  boost::optional<base::Euler> turret_rate_dps;
+  boost::optional<base::Point3D> turret_target_relative;
 
   base::Point3D body_offset_mm;
   base::Euler body_attitude_deg;
@@ -37,6 +38,7 @@ struct DriveCommand {
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(drive_mm_s));
     a->Visit(MJ_NVP(turret_rate_dps));
+    a->Visit(MJ_NVP(turret_target_relative));
     a->Visit(MJ_NVP(body_offset_mm));
     a->Visit(MJ_NVP(body_attitude_deg));
     a->Visit(MJ_NVP(fire_control));

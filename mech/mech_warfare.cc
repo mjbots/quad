@@ -218,9 +218,16 @@ class MechWarfare::Impl : boost::noncopyable {
     Command gait;
 
     turret.fire_control = data_.current_drive.fire_control;
-    turret.rate = TurretCommand::Rate();
-    turret.rate->x_deg_s = data_.current_drive.turret_rate_dps.yaw;
-    turret.rate->y_deg_s = data_.current_drive.turret_rate_dps.pitch;
+    if (data_.current_drive.turret_target_relative) {
+      TurretCommand::TargetRelative relative;
+      relative.x = data_.current_drive.turret_target_relative->x;
+      relative.y = data_.current_drive.turret_target_relative->y;
+      turret.target_relative = relative;
+    } else if (data_.current_drive.turret_rate_dps) {
+      turret.rate = TurretCommand::Rate();
+      turret.rate->x_deg_s = data_.current_drive.turret_rate_dps->yaw;
+      turret.rate->y_deg_s = data_.current_drive.turret_rate_dps->pitch;
+    }
 
     const auto body_offset_mm =
         data_.current_drive.body_offset_mm + p.body_offset_mm;
@@ -303,6 +310,8 @@ class MechWarfare::Impl : boost::noncopyable {
 
     std::string data(receive_buffer_, size);
     StartRead();
+
+    log_.debug("got data: " + data);
 
     boost::property_tree::ptree tree;
     try {
@@ -510,6 +519,16 @@ MechWarfare::MechWarfare(base::Context& context)
   m_.servo_monitor->data_signal()->connect(
       std::bind(&Impl::HandleServoData, impl_.get(),
                 std::placeholders::_1));
+
+  m_.video->target_tracker()->data_signal()->connect([this](const TargetTrackerData* data) {
+      boost::optional<base::Point3D> point3d;
+      if (data->target) {
+        point3d = base::Point3D(data->target->center.x,
+                                data->target->center.y,
+                                0.0);
+      }
+      m_.turret->UpdateTrackedTarget(point3d);
+    });
 
   base::ProgramOptionsArchive(&impl_->options_).Accept(&parameters_);
 }
