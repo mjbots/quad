@@ -65,6 +65,19 @@ ConvertSecondsToDuration(double time_s) {
       boost::posix_time::time_duration(0, 0, 0, counts);
 }
 
+inline double
+ConvertDurationToDouble(boost::posix_time::time_duration time) {
+  if (time.is_pos_infinity()) {
+    return std::numeric_limits<double>::infinity();
+  } else if (time.is_neg_infinity()) {
+    return -std::numeric_limits<double>::infinity();
+  } else if (time.is_special()) {
+    return std::numeric_limits<double>::signaling_NaN();
+  }
+
+  return time.total_microseconds() / 1e6;
+}
+
 inline double ConvertDurationToSeconds(
     boost::posix_time::time_duration duration) {
   return duration.total_microseconds() / 1e6;
