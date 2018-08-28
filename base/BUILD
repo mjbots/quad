@@ -84,4 +84,10 @@ cc_test(
     ],
 )
 
+cc_binary(
+    name = "linux_input_manual_test",
+    srcs = ["test/linux_input_manual_test.cc"],
+    deps = [":base"],
+)
+
 exports_files(["module_main.cc"])
