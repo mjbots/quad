@@ -18,7 +18,7 @@
 
 #include <gst/gst.h>
 
-#include <boost/format.hpp>
+#include <fmt/format.h>
 
 #include <opencv2/aruco.hpp>
 #include <opencv2/core.hpp>
@@ -96,7 +96,7 @@ class TargetTracker::Impl : public CameraFrameConsumer {
 
   void HandleImage(const cv::Mat& mat) {
     // We are in a background thread.
-    log_.debug((boost::format("got frame %d") % frame_count_).str());
+    log_.debug(fmt::format("got frame {:d}", frame_count_));
 
     auto data = [&]() {
       std::lock_guard<std::mutex> guard(mutex_);

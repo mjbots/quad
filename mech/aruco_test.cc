@@ -14,8 +14,9 @@
 
 #include <iostream>
 
+#include <fmt/format.h>
+
 #include <boost/assert.hpp>
-#include <boost/format.hpp>
 #include <boost/timer/timer.hpp>
 
 #include <opencv2/aruco.hpp>
@@ -53,7 +54,7 @@ int main(int argc, char** argv) {
   std::cout << markerIds.size() << "\n";
   for (const auto& marker : markerCorners) {
     for (const auto& corner : marker) {
-      std::cout << boost::format("(%f,%f) ") % corner.x % corner.y;
+      std::cout << fmt::format("({:f},{:f}) ", corner.x, corner.y);
     }
     std::cout << "\n";
   }

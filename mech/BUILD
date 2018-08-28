@@ -86,7 +86,7 @@ cc_binary(
 cc_binary(
     name = "aruco_test",
     srcs = ["aruco_test.cc"],
-    deps = ["@boost", "@boost//:timer",
+    deps = ["@boost", "@boost//:timer", "@fmt",
             "@opencv//:aruco", "@opencv//:imgcodecs"],
 )
 
