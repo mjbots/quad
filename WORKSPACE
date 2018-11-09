@@ -16,8 +16,8 @@
 
 workspace(name = "com_github_mjbots_mech")
 
-BAZEL_VERSION = "0.15.1"
-BAZEL_VERSION_SHA = "c62b351fa4c1ba5aeb34d0a137176f8e8f1d89a32f548a10e96c11df176ffc6c"
+BAZEL_VERSION = "0.19.0"
+BAZEL_VERSION_SHA = "001371df816005e907670f483f810ee935176bdc811a5ffa2314c59766b68ec4"
 
 load("//tools/workspace:default.bzl", "add_default_repositories")
 
