@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,14 +14,18 @@
 
 #include "servo_monitor.h"
 
+#include <optional>
+
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
 
 #include <fmt/format.h>
 
+#include "mjlib/base/fail.h"
+#include "mjlib/base/system_error.h"
+#include "mjlib/io/deadline_timer.h"
+
 #include "base/common.h"
-#include "base/deadline_timer.h"
-#include "base/fail.h"
 #include "base/logging.h"
 #include "base/now.h"
 
@@ -53,8 +57,8 @@ class ServoMonitor::Impl : boost::noncopyable {
                                 std::placeholders::_1));
   }
 
-  void HandleTimeout(base::ErrorCode ec) {
-    FailIf(ec);
+  void HandleTimeout(mjlib::base::error_code ec) {
+    mjlib::base::FailIf(ec);
     Start();
 
     // We shouldn't have any outstanding requests by the time we get
@@ -70,7 +74,7 @@ class ServoMonitor::Impl : boost::noncopyable {
   void DoIdle() {
     // Pick out the next servo to use.  Find one that exists and isn't
     // on parole.
-    boost::optional<int> next_servo = FindNext();
+    std::optional<int> next_servo = FindNext();
 
     if (!next_servo) {
       // Nothing is ready, let's just stick around in this state until
@@ -103,7 +107,7 @@ class ServoMonitor::Impl : boost::noncopyable {
   }
 
   void HandleVoltage(int requested_servo,
-                     base::ErrorCode ec,
+                     mjlib::base::error_code ec,
                      const HerkuleXBase::MemReadResponse& response) {
     BOOST_ASSERT(outstanding_);
     outstanding_ = false;
@@ -114,7 +118,7 @@ class ServoMonitor::Impl : boost::noncopyable {
       UpdateServoTimeout(requested_servo, now);
       return;
     }
-    FailIf(ec);
+    mjlib::base::FailIf(ec);
 
     auto& servo = servo_data_[requested_servo];
 
@@ -135,7 +139,7 @@ class ServoMonitor::Impl : boost::noncopyable {
 
   void HandleTemperature(
       int requested_servo,
-      base::ErrorCode ec,
+      mjlib::base::error_code ec,
       const HerkuleXBase::MemReadResponse& response) {
     BOOST_ASSERT(outstanding_);
     outstanding_ = false;
@@ -146,7 +150,7 @@ class ServoMonitor::Impl : boost::noncopyable {
       UpdateServoTimeout(requested_servo, now);
       return;
     }
-    FailIf(ec);
+    mjlib::base::FailIf(ec);
 
     auto& servo = servo_data_[requested_servo];
 
@@ -195,7 +199,7 @@ class ServoMonitor::Impl : boost::noncopyable {
     servo.last_update = now;
   }
 
-  boost::optional<int> FindNext() const {
+  std::optional<int> FindNext() const {
     const auto now = base::Now(service_);
 
     int start = state_.last_servo;
@@ -219,7 +223,7 @@ class ServoMonitor::Impl : boost::noncopyable {
     } while (current != start);
 
     // Oops, nothing is ready.
-    return boost::none;
+    return std::nullopt;
   }
 
   void EmitData() {
@@ -255,8 +259,8 @@ class ServoMonitor::Impl : boost::noncopyable {
     }
   }
 
-  void HandleClear(base::ErrorCode ec) {
-    FailIf(ec);
+  void HandleClear(mjlib::base::error_code ec) {
+    mjlib::base::FailIf(ec);
   }
 
   std::string FaultToString(const HerkuleXBase::MemReadResponse& response) {
@@ -293,7 +297,7 @@ class ServoMonitor::Impl : boost::noncopyable {
 
   base::LogRef log_ = base::GetLogInstance("ServoMonitor");
 
-  base::DeadlineTimer timer_;
+  mjlib::io::DeadlineTimer timer_;
 
   struct Servo {
     boost::posix_time::ptime last_update;
@@ -330,10 +334,10 @@ ServoMonitor::ServoMonitor(boost::asio::io_service& service,
 
 ServoMonitor::~ServoMonitor() {}
 
-void ServoMonitor::AsyncStart(base::ErrorHandler handler) {
+void ServoMonitor::AsyncStart(mjlib::io::ErrorCallback handler) {
   impl_->SetupInitialServos();
   impl_->Start();
-  impl_->service_.post(std::bind(handler, base::ErrorCode()));
+  impl_->service_.post(std::bind(handler, mjlib::base::error_code()));
 }
 
 ServoMonitor::Parameters* ServoMonitor::parameters() {
@@ -364,7 +368,7 @@ std::vector<int> ServoMonitor::SplitServoIds(const std::string& input) {
       int end = std::stoi(field.substr(pos + 1));
       if (start < 0 || start > 254 ||
           end < 0 || end > 254) {
-        throw base::SystemError::einval("invalid servo spec");
+        throw mjlib::base::system_error::einval("invalid servo spec");
       }
       for (int i = start; i <= end; i++) { ids.push_back(i); }
     }

@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,13 +27,16 @@
 #include <mutex>
 #include <thread>
 
+#include <boost/assert.hpp>
+
 #include <snappy.h>
 #include <snappy-sinksource.h>
 
 #include <fmt/format.h>
 
+#include "mjlib/base/fail.h"
+
 #include "circular_buffer.h"
-#include "fail.h"
 
 namespace mjmech {
 namespace base {
@@ -173,13 +176,13 @@ class TelemetryLog::ThreadWriter : boost::noncopyable {
  private:
   static FILE* OpenName(const std::string& name) {
     FILE* result = ::fopen(name.c_str(), "wb");
-    FailIfErrno(result == nullptr);
+    mjlib::base::FailIfErrno(result == nullptr);
     return result;
   }
 
   static Pipe MakePipe() {
     int fds[2] = {};
-    FailIfErrno(::pipe(fds) < 0);
+    mjlib::base::FailIfErrno(::pipe(fds) < 0);
 
     // We make the writing side non-blocking.
     ::fcntl(fds[1], F_SETFL, O_NONBLOCK);
@@ -192,7 +195,7 @@ class TelemetryLog::ThreadWriter : boost::noncopyable {
 
   static FILE* OpenFd(int fd) {
     FILE* result = ::fdopen(fd, "wb");
-    FailIfErrno(result == nullptr);
+    mjlib::base::FailIfErrno(result == nullptr);
     return result;
   }
 
@@ -229,13 +232,13 @@ class TelemetryLog::ThreadWriter : boost::noncopyable {
 
     size_t result = ::fwrite(TelemetryFormat::kHeader,
              ::strlen(TelemetryFormat::kHeader), 1, fd_);
-    FailIfErrno(result == 0);
+    mjlib::base::FailIfErrno(result == 0);
 
     while (true) {
       char c = {};
       int err = ::read(pipe_.read, &c, 1);
       if (err < 0 && errno != EINTR) {
-        FailIfErrno(true);
+        mjlib::base::FailIfErrno(true);
       }
 
       {
@@ -274,7 +277,7 @@ class TelemetryLog::ThreadWriter : boost::noncopyable {
     std::memset(&act, 0, sizeof(act));
     act.sa_sigaction = timer_handler;
     act.sa_flags = SA_SIGINFO;
-    FailIfErrno(sigaction(kTelemetryLogSignal, &act, nullptr) < 0);
+    mjlib::base::FailIfErrno(sigaction(kTelemetryLogSignal, &act, nullptr) < 0);
 
     struct sigevent sevp;
     std::memset(&sevp, 0, sizeof(sevp));
@@ -282,7 +285,7 @@ class TelemetryLog::ThreadWriter : boost::noncopyable {
     sevp.sigev_value.sival_ptr = this;
     sevp.sigev_signo = kTelemetryLogSignal;
 
-    FailIfErrno(::timer_create(CLOCK_MONOTONIC, &sevp, &timer_id_) < 0);
+    mjlib::base::FailIfErrno(::timer_create(CLOCK_MONOTONIC, &sevp, &timer_id_) < 0);
 
     struct itimerspec value;
     std::memset(&value, 0, sizeof(value));
@@ -290,7 +293,7 @@ class TelemetryLog::ThreadWriter : boost::noncopyable {
     value.it_interval.tv_nsec =
         static_cast<long>((kFlushTimeout_s - value.it_interval.tv_sec) * 1e9);
     value.it_value = value.it_interval;
-    FailIfErrno(::timer_settime(timer_id_, 0, &value, nullptr) < 0);
+    mjlib::base::FailIfErrno(::timer_settime(timer_id_, 0, &value, nullptr) < 0);
   }
 
   void HandleTimer() {
@@ -350,7 +353,7 @@ class TelemetryLog::ThreadWriter : boost::noncopyable {
     const char* ptr = &(*stream.data())[stream.start()];
     size_t size = stream.size();
     size_t result = ::fwrite(ptr, size, 1, fd_);
-    FailIfErrno(result == 0);
+    mjlib::base::FailIfErrno(result == 0);
 
     child_offset_ += size;
     impl_->ReclaimBuffer(std::move(buffer));
@@ -419,7 +422,7 @@ uint64_t TelemetryLog::Impl::position() const {
 
 void TelemetryLog::Impl::WriteIndex() {
   auto buffer = parent_->GetBuffer();
-  TelemetryWriteStream<OStream> stream(*buffer);
+  mjlib::telemetry::TelemetryWriteStream stream(*buffer);
 
   uint32_t flags = 0;
   stream.Write(flags);
@@ -450,7 +453,7 @@ void TelemetryLog::Impl::WriteIndex() {
   parent_->WriteBlock(TelemetryFormat::BlockType::kBlockIndex, std::move(buffer));
 }
 
-void timer_handler(int signum, siginfo_t* si, void *) {
+void timer_handler(int, siginfo_t* si, void *) {
   auto writer =
       static_cast<TelemetryLog::ThreadWriter*>(si->si_value.sival_ptr);
   writer->DoTimer();
@@ -519,7 +522,7 @@ void TelemetryLog::WriteSchema(uint32_t identifier,
   auto it = impl_->identifier_map_.find(record_name);
   if (it != impl_->identifier_map_.end()) {
     if (identifier != it->second) {
-      Fail(fmt::format(
+      mjlib::base::Fail(fmt::format(
                "Attempt to write schema for '{}' with identifier {} "
                "but already allocated as {}",
                record_name, identifier, it->second));
@@ -527,7 +530,7 @@ void TelemetryLog::WriteSchema(uint32_t identifier,
   } else {
     auto rit = impl_->reverse_identifier_map_.find(identifier);
     if (rit != impl_->reverse_identifier_map_.end()) {
-      Fail(fmt::format(
+      mjlib::base::Fail(fmt::format(
                "Attempt to write schema for '{}' but identifier {} "
                "already used for '{}'",
                record_name, identifier, it->second));
@@ -542,16 +545,16 @@ void TelemetryLog::WriteSchema(uint32_t identifier,
       record_name, identifier, block_schema_flags,
       schema, impl_->position());
 
-  FastOStringStream ostr_schema;
-  TelemetryWriteStream<FastOStringStream> stream_schema(ostr_schema);
+  mjlib::base::FastOStringStream ostr_schema;
+  mjlib::telemetry::TelemetryWriteStream stream_schema(ostr_schema);
   stream_schema.Write(identifier);
   stream_schema.Write(block_schema_flags);
-  stream_schema.Write(record_name);
+  stream_schema.WriteString(record_name);
   stream_schema.RawWrite(schema.data(), schema.size());
 
   auto buffer = GetBuffer();
 
-  TelemetryWriteStream<OStream> stream(*buffer);
+  mjlib::telemetry::TelemetryWriteStream stream(*buffer);
   stream.Write(static_cast<uint16_t>(TelemetryFormat::BlockType::kBlockSchema));
   stream.Write(static_cast<uint32_t>(ostr_schema.str().size()));
   stream.RawWrite(ostr_schema.str().data(), ostr_schema.str().size());
@@ -566,7 +569,7 @@ void TelemetryLog::WriteData(uint32_t identifier,
 
   // If you're using this API, we'll assume you don't care about
   // performance or the number of copies too much.
-  buffer->write(serialized_data.data(), serialized_data.size());
+  buffer->write(serialized_data);
 
   WriteData(identifier, flags, std::move(buffer));
 }
@@ -575,7 +578,7 @@ void TelemetryLog::WriteBlock(TelemetryFormat::BlockType block_type,
                               const std::string& data) {
   auto buffer = GetBuffer();
 
-  TelemetryWriteStream<OStream> stream(*buffer);
+  mjlib::telemetry::TelemetryWriteStream stream(*buffer);
   stream.Write(static_cast<uint16_t>(block_type));
   stream.Write(static_cast<uint32_t>(data.size()));
   stream.RawWrite(data.data(), data.size());
@@ -599,13 +602,13 @@ std::unique_ptr<TelemetryLog::OStream> TelemetryLog::GetBuffer() {
 }
 
 namespace {
-class FakeStream : boost::noncopyable {
+class FakeStream : public mjlib::base::WriteStream {
  public:
   FakeStream(char* data) : data_(data) {}
 
-  void write(const char* data, size_t size) {
-    std::memcpy(&data_[offset_], data, size);
-    offset_ += size;
+  void write(const std::string_view& data) override {
+    std::memcpy(&data_[offset_], data.data(), data.size());
+    offset_ += data.size();
   }
 
  private:
@@ -635,11 +638,11 @@ class OStreamSink : public snappy::Sink {
       // We can take the short-cut.
       ostream_->data()->resize(ostream_->data()->size() + n);
     } else {
-      ostream_->write(bytes, n);
+      ostream_->write(std::string_view(bytes, n));
     }
   }
 
-  virtual char* GetAppendBuffer(size_t length, char* scratch) {
+  virtual char* GetAppendBuffer(size_t length, char*) {
     // Ensure that we are big enough.
     ostream_->data()->reserve(ostream_->data()->size() + length);
     return (&ostream_->data()->back()) + 1;
@@ -687,7 +690,7 @@ void TelemetryLog::WriteData(uint32_t identifier,
 
   FakeStream stream(
       &(*buffer->data())[0] + buffer->start() - header_size);
-  TelemetryWriteStream<FakeStream> writer(stream);
+  mjlib::telemetry::TelemetryWriteStream writer(stream);
   writer.Write(static_cast<uint16_t>(TelemetryFormat::BlockType::kBlockData));
   writer.Write(static_cast<uint32_t>(data_size + header_size - 6));
   writer.Write(identifier);
@@ -712,7 +715,7 @@ void TelemetryLog::WriteBlock(TelemetryFormat::BlockType block_type,
 
   FakeStream stream(
       &(*buffer->data())[0] + buffer->start() - kBlockHeaderSize);
-  TelemetryWriteStream<FakeStream> writer(stream);
+  mjlib::telemetry::TelemetryWriteStream writer(stream);
   writer.Write(static_cast<uint16_t>(block_type));
   writer.Write(static_cast<uint32_t>(data_size));
   buffer->set_start(buffer->start() - kBlockHeaderSize);

@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,10 +14,11 @@
 
 #pragma once
 
+#include "mjlib/base/system_error.h"
+#include "mjlib/base/visitor.h"
+
 #include "base/common.h"
-#include "base/error_code.h"
 #include "base/tf.h"
-#include "base/visitor.h"
 
 namespace mjmech {
 namespace mech {
@@ -108,7 +109,7 @@ class LizardIK : public IKSolver {
     if (config_.coxa.length_mm == 0.0 ||
         config_.femur.length_mm == 0.0 ||
         config_.tibia.length_mm == 0.0) {
-      throw base::SystemError::einval("invalid lizard leg config");
+      throw mjlib::base::system_error::einval("invalid lizard leg config");
     }
   }
 
@@ -277,7 +278,7 @@ class MammalIK : public IKSolver {
     // Make some basic sanity checks.
     if (config_.femur.length_mm == 0.0 ||
         config_.tibia.length_mm == 0.0) {
-      throw base::SystemError::einval("invalid mammal leg config");
+      throw mjlib::base::system_error::einval("invalid mammal leg config");
     }
   }
 
@@ -470,7 +471,7 @@ class MammalIK : public IKSolver {
       for (const auto& joint: joints.joints) {
         if (joint.ident == ident) { return joint.angle_deg; }
       }
-      BOOST_ASSERT(false);
+      mjlib::base::AssertNotReached();
     };
 
     const double shoulder_deg =

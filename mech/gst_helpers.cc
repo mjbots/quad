@@ -1,4 +1,5 @@
 // Copyright 2014-2015 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,7 +21,7 @@
 
 #include <fmt/format.h>
 
-#include "base/fail.h"
+#include "mjlib/base/fail.h"
 
 namespace mjmech {
 namespace mech {
@@ -30,7 +31,7 @@ std::string PipelineEscape(const std::string& s) {
   if (s.find(' ') == std::string::npos) {
     return s;
   }
-  base::Fail("string escaping not implemented");
+  mjlib::base::Fail("string escaping not implemented");
 }
 
 std::string FormatFraction(double val) {
@@ -67,7 +68,7 @@ std::string MuxerForVideoName(const std::string& name) {
     // errors, and broken in VLC.
     return "mpegpsmux";
   } else {
-    base::Fail(
+    mjlib::base::Fail(
         std::string("Unknown h264 savefile extension ") + tail);
   }
 }
@@ -89,7 +90,7 @@ PipelineWrapper::PipelineWrapper(
   GError* error = NULL;
   pipeline_ = gst_parse_launch(launch_cmd.c_str(), &error);
   if (!pipeline_ || error) {
-    base::Fail(
+    mjlib::base::Fail(
         fmt::format("Failed to launch gstreamer pipeline: error {}: {}"
                     "\nPipeline command was: {}\n",
                     error->code, error->message, launch_cmd));
@@ -121,7 +122,7 @@ GstElement* PipelineWrapper::GetElementByName(const char* name) {
   GstElement* target =
       gst_bin_get_by_name_recurse_up(GST_BIN(pipeline_), name);
   if (!target) {
-    base::Fail(fmt::format("Cannot find element '{}' in a pipeline",
+    mjlib::base::Fail(fmt::format("Cannot find element '{}' in a pipeline",
                            name));
   }
   return target;
@@ -134,7 +135,7 @@ void PipelineWrapper::ConnectElementSignal(
   GstElement* target = GetElementByName(element_name);
   int id = g_signal_connect(
       target, signal_name, callback, user_data);
-  BOOST_ASSERT(id > 0);
+  BOOST_VERIFY(id > 0);
   gst_object_unref(target);
 }
 
@@ -160,7 +161,7 @@ static GstFlowReturn appsink_new_sample_wrapper(
   GstSample* sample = NULL;
   g_signal_emit_by_name(sink, "pull-sample", &sample);
   if (!sample) {
-    base::Fail("app sink has emitted a new-sample signal, but pull-sample"
+    mjlib::base::Fail("app sink has emitted a new-sample signal, but pull-sample"
                " failed.");
     return GST_FLOW_OK;
   }
@@ -204,7 +205,7 @@ PipelineWrapper::SetupAppsrc(
   if (!caps_str.empty()) {
     GstCaps* caps = gst_caps_from_string(caps_str.c_str());
     if (!(caps && GST_CAPS_IS_SIMPLE(caps))) {
-      base::Fail("cannot parse caps: '" + caps_str + "'");
+      mjlib::base::Fail("cannot parse caps: '" + caps_str + "'");
     }
     gst_app_src_set_caps(src, caps);
     gst_caps_unref(caps);
@@ -246,7 +247,7 @@ void PipelineWrapper::SendAppsrcSample(void* obj, void* data, int len) {
 
   GstFlowReturn ret = gst_app_src_push_buffer(src, buffer);
   if (ret != GST_FLOW_OK) {
-    base::Fail("could not push buffer");
+    mjlib::base::Fail("could not push buffer");
   }
 }
 
@@ -277,7 +278,7 @@ void PipelineWrapper::RegisterVideoAnalyzeMessageHandler(
             "luma-average", G_TYPE_DOUBLE, &msg.luma_average,
             "luma-variance", G_TYPE_DOUBLE, &msg.luma_variance,
             NULL);
-        BOOST_ASSERT(ok);
+        BOOST_VERIFY(ok);
         handler(msg);
         return true;
       }
@@ -292,20 +293,20 @@ gboolean PipelineWrapper::handle_bus_message_wrapper(
   return TRUE;
 }
 
-void PipelineWrapper::HandleBusMessage(GstBus *bus, GstMessage *message) {
+void PipelineWrapper::HandleBusMessage(GstBus *, GstMessage *message) {
   BOOST_ASSERT(std::this_thread::get_id() == gst_loop_->thread_id());
   bool print_message = true;
   switch (GST_MESSAGE_TYPE(message)) {
     case GST_MESSAGE_EOS: {
       if (!quit_request_) {
-        base::Fail("Unexpected EOS on pipeline");
+        mjlib::base::Fail("Unexpected EOS on pipeline");
       };
       log_.debug("got EOS -- stopping pipeline");
       GstStateChangeReturn rv =
           gst_element_set_state(pipeline_, GST_STATE_NULL);
       // note: 0 is failure, 1 is success, 2 is async (=fill do later)
       // note: when going to STATE_NULL, we will never get _ASYNC
-      BOOST_ASSERT(rv == GST_STATE_CHANGE_SUCCESS);
+      BOOST_VERIFY(rv == GST_STATE_CHANGE_SUCCESS);
       quit_request_.reset();
       print_message = false;
       break;
@@ -323,7 +324,7 @@ void PipelineWrapper::HandleBusMessage(GstBus *bus, GstMessage *message) {
       }
       if (dbg) { g_free(dbg); }
 
-      base::Fail("gstreamer pipeline error: " + error_msg);
+      mjlib::base::Fail("gstreamer pipeline error: " + error_msg);
       break;
     }
     case GST_MESSAGE_ELEMENT: {

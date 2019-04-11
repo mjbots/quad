@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,10 +14,11 @@
 
 #include "ahrs.h"
 
+#include "mjlib/base/program_options_archive.h"
+
 #include "base/attitude_estimator.h"
 #include "base/common.h"
 #include "base/now.h"
-#include "base/program_options_archive.h"
 #include "base/telemetry_registry.h"
 
 namespace mjmech {
@@ -89,7 +90,7 @@ class Ahrs::Impl : boost::noncopyable {
   Impl(boost::asio::io_service& service,
        base::TelemetryRegistry* registry)
       : service_(service) {
-    base::ProgramOptionsArchive(&options_).Accept(&parameters_);
+    mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
 
     registry->Register("ahrs", &ahrs_data_signal_);
     registry->Register("ahrs_debug", &ahrs_debug_signal_);
@@ -267,9 +268,9 @@ Ahrs::Ahrs(boost::asio::io_service& service,
     : impl_(new Impl(service, registry)) {}
 Ahrs::~Ahrs() {}
 
-void Ahrs::AsyncStart(base::ErrorHandler handler) {
+void Ahrs::AsyncStart(mjlib::io::ErrorCallback handler) {
   impl_->Start();
-  impl_->service_.post(std::bind(handler, base::ErrorCode()));
+  impl_->service_.post(std::bind(handler, mjlib::base::error_code()));
 }
 
 boost::program_options::options_description*

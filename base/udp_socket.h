@@ -1,4 +1,5 @@
 // Copyright 2015 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,15 +15,16 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 
 #include <boost/asio/io_service.hpp>
 #include <boost/asio/ip/udp.hpp>
 #include <boost/signals2/signal.hpp>
-#include <boost/optional.hpp>
+
+#include "mjlib/base/error_code.h"
 
 #include "logging.h"
-#include "error_code.h"
 
 namespace mjmech {
 namespace base {
@@ -128,8 +130,8 @@ class UdpSocket {
   };
 
   struct ParseResult {
-    boost::optional<boost::asio::ip::address> address;
-    boost::optional<int> port;
+    std::optional<boost::asio::ip::address> address;
+    std::optional<int> port;
   };
 
   // Parse host:port string. May raise.
@@ -139,8 +141,8 @@ class UdpSocket {
  private:
   typedef boost::asio::ip::udp udp;
   void StartNextRead();
-  void HandleRead(ErrorCode, std::size_t size);
-  void HandleWrite(std::shared_ptr<std::string>, ErrorCode);
+  void HandleRead(mjlib::base::error_code, std::size_t size);
+  void HandleWrite(std::shared_ptr<std::string>, mjlib::base::error_code);
   void PrepareSocket();
   void PrepareToSendTo(const endpoint&);
 
@@ -149,7 +151,7 @@ class UdpSocket {
   udp::socket socket_;
   char receive_buffer_[0x10000] = {};
   endpoint receive_endpoint_;
-  boost::optional<endpoint> rx_multicast_addr_;
+  std::optional<endpoint> rx_multicast_addr_;
 
   bool reading_loop_running_ = false;
   bool v4_multicast_ready_ = false;

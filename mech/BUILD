@@ -1,6 +1,6 @@
 # -*- python -*-
 
-# Copyright 2018 Josh Pieper, jjp@pobox.com.
+# Copyright 2018-2019 Josh Pieper, jjp@pobox.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -86,7 +86,7 @@ cc_binary(
 cc_binary(
     name = "aruco_test",
     srcs = ["aruco_test.cc"],
-    deps = ["@boost", "@boost//:timer", "@fmt",
+    deps = ["@boost", "@boost//:timer", "@boost//:system", "@fmt",
             "@opencv//:aruco", "@opencv//:imgcodecs"],
 )
 

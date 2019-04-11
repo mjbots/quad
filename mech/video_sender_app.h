@@ -1,4 +1,5 @@
 // Copyright 2015-2016 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,10 +15,11 @@
 
 #pragma once
 
+#include "mjlib/base/fail.h"
+#include "mjlib/base/program_options_archive.h"
+
 #include "base/component_archives.h"
-#include "base/fail.h"
 #include "base/logging.h"
-#include "base/program_options_archive.h"
 
 #include "camera_driver.h"
 #include "gst_main_loop.h"
@@ -56,10 +58,10 @@ class VideoSenderApp : boost::noncopyable {
     m_.camera->stats_signal()->connect(
        std::bind(&VideoSenderApp::HandleStats, this, std::placeholders::_1));
 
-    base::ProgramOptionsArchive(&options_).Accept(&parameters_);
+    mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
   }
 
-  void AsyncStart(base::ErrorHandler handler) {
+  void AsyncStart(mjlib::io::ErrorCallback handler) {
     parameters_.children.Start(handler);
   }
 
@@ -122,7 +124,7 @@ class VideoSenderApp : boost::noncopyable {
           std::cerr << "First stat report was bad, hope next one is better: "
                     << errors.str() << "\n";
         } else {
-          base::Fail("status report had errors:\n " + errors.str());
+          mjlib::base::Fail("status report had errors:\n " + errors.str());
         };
       }
     }

@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,8 +18,8 @@
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/signals2/signal.hpp>
 
-#include "base/comm.h"
-#include "base/visitor.h"
+#include "mjlib/base/visitor.h"
+#include "mjlib/io/async_types.h"
 
 #include "herkulex.h"
 
@@ -32,12 +32,12 @@ class ServoMonitor : boost::noncopyable {
     virtual ~HerkuleXServo() {}
 
     typedef boost::function<
-      void (base::ErrorCode, HerkuleXBase::MemReadResponse)> MemReadHandler;
+      void (mjlib::base::error_code, HerkuleXBase::MemReadResponse)> MemReadHandler;
 
     virtual void RamRead(
         uint8_t servo, uint8_t reg, uint8_t length, MemReadHandler) = 0;
 
-    virtual void ClearStatus(uint8_t servo, base::ErrorHandler) = 0;
+    virtual void ClearStatus(uint8_t servo, mjlib::io::ErrorCallback) = 0;
   };
 
   template <typename T>
@@ -52,7 +52,7 @@ class ServoMonitor : boost::noncopyable {
                      servo, reg, length, handler);
     }
 
-    virtual void ClearStatus(uint8_t servo, base::ErrorHandler handler) {
+    virtual void ClearStatus(uint8_t servo, mjlib::io::ErrorCallback handler) {
       base_->MemWrite(HerkuleXBase::RAM_WRITE,
                       servo, HerkuleXConstants::status_error().position,
                       std::string(2, '\x00'), handler);
@@ -76,7 +76,7 @@ class ServoMonitor : boost::noncopyable {
 
   ~ServoMonitor();
 
-  void AsyncStart(base::ErrorHandler handler);
+  void AsyncStart(mjlib::io::ErrorCallback handler);
 
   struct Parameters {
     /// Query individual servos at this rate.

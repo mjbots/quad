@@ -1,4 +1,5 @@
 // Copyright 2015-2016 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,8 +27,9 @@
 
 #include <fmt/format.h>
 
+#include "mjlib/base/fail.h"
+
 #include "base/common.h"
-#include "base/fail.h"
 #include "base/logging.h"
 #include "base/now.h"
 
@@ -50,13 +52,13 @@ class VideoDisplay::Impl : boost::noncopyable {
     }
   }
 
-  void AsyncStart(base::ErrorHandler handler) {
+  void AsyncStart(mjlib::io::ErrorCallback handler) {
     BOOST_ASSERT(std::this_thread::get_id() == parent_id_);
     BOOST_ASSERT(!gst_loop_);
 
     started_ = true;
     parameters_ = parent_->parameters_;
-    parent_service_.post(std::bind(handler, base::ErrorCode()));
+    parent_service_.post(std::bind(handler, mjlib::base::error_code()));
   }
 
   void HandleGstReady(GstMainLoopRef& loop_ref) {
@@ -74,7 +76,7 @@ class VideoDisplay::Impl : boost::noncopyable {
       return;
     }
     if (!h264_src_) {
-      base::Fail("got raw frame from video link, but other input is selected");
+      mjlib::base::Fail("got raw frame from video link, but other input is selected");
     }
 
     if (!parameters_.raw_frame_base.empty()) {
@@ -347,7 +349,7 @@ class VideoDisplay::Impl : boost::noncopyable {
 
   std::mutex stats_mutex_;
   std::shared_ptr<Stats> stats_;
-  boost::optional<boost::posix_time::ptime> last_decoded_time_;
+  std::optional<boost::posix_time::ptime> last_decoded_time_;
 
   GstElement* overlaytext_ = nullptr;
   GstElement* overlaytarget_ = nullptr;
@@ -362,7 +364,7 @@ VideoDisplay::VideoDisplay(boost::asio::io_service& service)
 
 VideoDisplay::~VideoDisplay() {}
 
-void VideoDisplay::AsyncStart(base::ErrorHandler handler) {
+void VideoDisplay::AsyncStart(mjlib::io::ErrorCallback handler) {
   impl_->AsyncStart(handler);
 }
 

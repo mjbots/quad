@@ -1,6 +1,6 @@
 # -*- python -*-
 
-# Copyright 2018 Josh Pieper, jjp@pobox.com.
+# Copyright 2018-2019 Josh Pieper, jjp@pobox.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,12 +19,8 @@ package(default_visibility = ["//visibility:public"])
 cc_library(
     name = "base",
     srcs = [
-        "comm_factory.cc",
-        "concrete_comm_factory.cc",
         "context.cc",
         "debug_i2c_generator.cc",
-        "error_code.cc",
-        "fail.cc",
         "i2c_factory.cc",
         "linux_i2c_generator.cc",
         "linux_input.cc",
@@ -36,7 +32,6 @@ cc_library(
         "telemetry_remote_debug_server.cc",
         "udp_data_link.cc",
         "udp_socket.cc",
-        "virtual_deadline_timer.cc",
     ],
     hdrs = glob([
         "*.h",
@@ -51,7 +46,21 @@ cc_library(
         "@fmt",
         "@i2c-tools",
         "@log4cpp",
+        "@moteus//mjlib/base:error_code",
+        "@moteus//mjlib/base:fail",
+        "@moteus//mjlib/base:fast_stream",
+        "@moteus//mjlib/base:program_options_archive",
+        "@moteus//mjlib/base:recording_stream",
+        "@moteus//mjlib/base:system_error",
+        "@moteus//mjlib/base:visitor",
+        "@moteus//mjlib/base:visit_archive",
+        "@moteus//mjlib/io:async_types",
+        "@moteus//mjlib/io:debug_time",
+        "@moteus//mjlib/io:stream_factory",
+        "@moteus//mjlib/telemetry:telemetry_archive",
+        "@moteus//mjlib/telemetry:telemetry_util",
         "@snappy",
+        "@org_llvm_libcxx//:libcxx",
     ],
     defines = [
         "BOOST_ASIO_ENABLE_OLD_SERVICES",
@@ -62,21 +71,16 @@ cc_test(
     name = "base_test",
     srcs = ["test/" + x for x in [
         "attitude_estimator_test.cc",
-        "comm_test.cc",
-        "debug_deadline_service_test.cc",
         "json_archive_test.cc",
-        "now_test.cc",
         "program_options_test.cc",
         "quaternion_test.cc",
         "signal_result_test.cc",
-        "telemetry_archive_test.cc",
         "telemetry_log_registrar_test.cc",
         "telemetry_log_test.cc",
         "telemetry_registry_test.cc",
         "test_main.cc",
         "tf_test.cc",
         "ukf_filter_test.cc",
-        "virtual_deadline_timer_test.cc",
     ]],
     deps = [
         ":base",

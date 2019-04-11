@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,19 +14,20 @@
 
 #pragma once
 
+#include <optional>
 #include <tuple>
 #include <vector>
 
 #include <boost/property_tree/ptree.hpp>
 
-#include "error_code.h"
-#include "visit_archive.h"
-#include "visitor.h"
+#include "mjlib/base/system_error.h"
+#include "mjlib/base/visit_archive.h"
+#include "mjlib/base/visitor.h"
 
 namespace mjmech {
 namespace base {
 class PropertyTreeWriteArchive
-    : public VisitArchive<PropertyTreeWriteArchive> {
+    : public mjlib::base::VisitArchive<PropertyTreeWriteArchive> {
  public:
   typedef boost::property_tree::ptree ptree;
 
@@ -78,7 +79,7 @@ class PropertyTreeWriteArchive
 };
 
 class PropertyTreeReadArchive
-    : public VisitArchive<PropertyTreeReadArchive> {
+    : public mjlib::base::VisitArchive<PropertyTreeReadArchive> {
  public:
   enum {
     kErrorOnMissing = 1 << 0,
@@ -156,17 +157,17 @@ class PropertyTreeReadArchive
 
   template <typename NameValuePair, typename T>
   void VisitHelper(const NameValuePair& pair,
-                   boost::optional<T>*,
+                   std::optional<T>*,
                    int) {
     auto optional = pair.value();
     auto optional_child = tree_.get_child_optional(pair.name());
     if (!optional_child) {
-      *optional = boost::none;
+      *optional = std::nullopt;
       return;
     }
     auto child = *optional_child;
     if (child.template get_value<std::string>() == "null") {
-      *optional = boost::none;
+      *optional = std::nullopt;
       return;
     }
     T value;
@@ -188,7 +189,7 @@ class PropertyTreeReadArchive
  private:
   void HandleMissing(const char* name) {
     if (flags_ & kErrorOnMissing) {
-      throw SystemError::einval(
+      throw mjlib::base::system_error::einval(
           std::string("missing field: '") + name + "'");
     }
   }

@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,14 +14,15 @@
 #pragma once
 
 #include <map>
+#include <optional>
 
 #include <boost/asio.hpp>
-#include <boost/optional.hpp>
 #include <boost/program_options.hpp>
 #include <boost/signals2/signal.hpp>
 
+#include "mjlib/base/visitor.h"
+
 #include "base/linux_input.h"
-#include "base/visitor.h"
 
 #include "drive_command.h"
 #include "gait.h"
@@ -94,7 +95,7 @@ class Commander {
   Commander(boost::asio::io_service& service);
   virtual ~Commander();
 
-  void AsyncStart(base::ErrorHandler);
+  void AsyncStart(mjlib::io::ErrorCallback);
   void SendMechMessage(const MechMessage&);
 
   struct Parameters {

@@ -1,4 +1,4 @@
-// Copyright 2014-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,10 +19,11 @@
 #include <boost/program_options.hpp>
 #include <boost/signals2/signal.hpp>
 
-#include "base/comm.h"
+#include "mjlib/base/visitor.h"
+#include "mjlib/io/async_types.h"
+
 #include "base/i2c_factory.h"
 #include "base/point3d.h"
-#include "base/visitor.h"
 
 namespace mjmech {
 namespace mech {
@@ -49,7 +50,7 @@ class MjmechImuDriver : boost::noncopyable {
                   base::I2CFactory*);
   ~MjmechImuDriver();
 
-  void AsyncStart(base::ErrorHandler handler);
+  void AsyncStart(mjlib::io::ErrorCallback handler);
 
   boost::program_options::options_description* options();
 

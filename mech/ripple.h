@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -36,8 +36,9 @@
 #pragma once
 
 #include <map>
+#include <optional>
 
-#include <boost/optional.hpp>
+#include "mjlib/base/visitor.h"
 
 #include "gait.h"
 
@@ -99,10 +100,10 @@ struct RippleState : public CommonState {
   int action = 0;
 
   struct Leg : public mjmech::mech::Leg::State {
-    boost::optional<base::Point3D> swing_start_pos;
-    boost::optional<base::Point3D> swing_end_pos;
+    std::optional<base::Point3D> swing_start_pos;
+    std::optional<base::Point3D> swing_end_pos;
 
-    bool operator==(const Leg& rhs) const { return true; }
+    bool operator==(const Leg&) const { return true; }
   };
 
   std::vector<Leg> legs;
@@ -131,7 +132,7 @@ struct RippleState : public CommonState {
       } else if (frame == nullptr) {
         return static_cast<base::Frame*>(nullptr);
       }
-      BOOST_ASSERT(false);
+      mjlib::base::AssertNotReached();
     };
 
     for (auto& leg: legs) {
@@ -163,7 +164,7 @@ class RippleGait : public Gait {
 
   virtual Result SetCommand(const Command& command) override {
     Command command_copy = command;
-    boost::optional<Options> options = SelectCommandOptions(&command_copy);
+    std::optional<Options> options = SelectCommandOptions(&command_copy);
 
     if (!options) {
       return kNotSupported;
@@ -291,9 +292,9 @@ class RippleGait : public Gait {
 
   struct Action;
 
-  boost::optional<Options> SelectCommandOptions(Command* command) const {
-    if (config_.leg_order.empty()) { return boost::none; }
-    if (command->time_rate_percent > 100.0) { return boost::none; }
+  std::optional<Options> SelectCommandOptions(Command* command) const {
+    if (config_.leg_order.empty()) { return std::nullopt; }
+    if (command->time_rate_percent > 100.0) { return std::nullopt; }
 
     // First, iterate, solving IK for all legs in time until we
     // find the point at which the first leg is unsolvable.
@@ -304,10 +305,10 @@ class RippleGait : public Gait {
     RippleState my_state = idle_state_;
     ApplyBodyCommand(&my_state, *command);
 
-    boost::optional<double> end_time_s = 0.0;
-    end_time_s = boost::none; // work around maybe-uninitialized
-    boost::optional<double> min_observed_speed = 0.0;
-    min_observed_speed = boost::none; // work around maybe-uninitialized
+    std::optional<double> end_time_s = 0.0;
+    end_time_s = std::nullopt; // work around maybe-uninitialized
+    std::optional<double> min_observed_speed = 0.0;
+    min_observed_speed = std::nullopt; // work around maybe-uninitialized
 
     std::map<std::pair<int, int>, double> old_joint_angle_deg;
 
@@ -348,8 +349,8 @@ class RippleGait : public Gait {
             break;
           }
 
-          boost::optional<double> largest_change_deg = 0.0;
-          largest_change_deg = boost::none;
+          std::optional<double> largest_change_deg = 0.0;
+          largest_change_deg = std::nullopt;
 
           for (const auto& joint: result.joints) {
             auto old_result_it =
@@ -385,7 +386,7 @@ class RippleGait : public Gait {
     }
 
     if (!min_observed_speed) {
-      return boost::none;
+      return std::nullopt;
     }
 
     Options result;

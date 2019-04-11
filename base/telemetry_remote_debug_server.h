@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,8 @@
 #include <boost/asio/ip/udp.hpp>
 #include <boost/signals2/signal.hpp>
 
-#include "comm.h"
+#include "mjlib/io/async_types.h"
+
 #include "json_archive.h"
 
 namespace mjmech {
@@ -42,7 +43,7 @@ class TelemetryRemoteDebugServer : boost::noncopyable {
 
   Parameters* parameters();
 
-  void AsyncStart(ErrorHandler handler);
+  void AsyncStart(mjlib::io::ErrorCallback handler);
 
   template <typename T>
   void Register(const std::string& name,
@@ -70,7 +71,7 @@ class TelemetryRemoteDebugServer : boost::noncopyable {
     struct Reply {
       template <typename Archive>
       void Serialize(Archive* a) {
-        a->Visit(MakeNameValuePair(parent->value, parent->name.c_str()));
+        a->Visit(mjlib::base::MakeNameValuePair(parent->value, parent->name.c_str()));
       }
 
       Response* parent;

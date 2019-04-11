@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@
 #include <set>
 #include <vector>
 
-#include "base/comm.h"
-#include "base/error_code.h"
+#include "mjlib/base/error_code.h"
+#include "mjlib/io/async_types.h"
 
 namespace mjmech {
 namespace mech {
@@ -30,7 +30,7 @@ class ServoInterface : boost::noncopyable {
     int address;
     double angle_deg;
   };
-  virtual void SetPose(const std::vector<Joint>&, base::ErrorHandler) = 0;
+  virtual void SetPose(const std::vector<Joint>&, mjlib::io::ErrorCallback) = 0;
 
   enum PowerState {
     kPowerFree,
@@ -38,10 +38,10 @@ class ServoInterface : boost::noncopyable {
     kPowerEnable,
   };
   virtual void EnablePower(PowerState power_state, const std::vector<int>&,
-                           base::ErrorHandler) = 0;
+                           mjlib::io::ErrorCallback) = 0;
 
   typedef std::function<
-    void (base::ErrorCode, std::vector<Joint>)> PoseHandler;
+    void (mjlib::base::error_code, std::vector<Joint>)> PoseHandler;
 
   virtual void GetPose(const std::vector<int>&, PoseHandler) = 0;
 
@@ -51,7 +51,7 @@ class ServoInterface : boost::noncopyable {
   };
 
   typedef std::function<
-    void (base::ErrorCode, std::vector<Temperature>)> TemperatureHandler;
+    void (mjlib::base::error_code, std::vector<Temperature>)> TemperatureHandler;
   virtual void GetTemperature(const std::vector<int>&, TemperatureHandler) = 0;
 
   struct Voltage {
@@ -60,7 +60,7 @@ class ServoInterface : boost::noncopyable {
   };
 
   typedef std::function<void (
-      base::ErrorCode, std::vector<Voltage>)> VoltageHandler;
+      mjlib::base::error_code, std::vector<Voltage>)> VoltageHandler;
 
   virtual void GetVoltage(const std::vector<int>&, VoltageHandler) = 0;
 };

@@ -1,4 +1,5 @@
 // Copyright 2015 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,10 +24,12 @@
 
 #include <boost/crc.hpp>
 
+#include "mjlib/base/fail.h"
+#include "mjlib/base/system_error.h"
+#include "mjlib/io/deadline_timer.h"
+
 #include "base/common.h"
 #include "base/context_full.h"
-#include "base/deadline_timer.h"
-#include "base/fail.h"
 #include "base/now.h"
 
 #include "base/logging.h"
@@ -225,7 +228,7 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
   ~Impl() {
   }
 
-  void AsyncStart(base::ErrorHandler handler) {
+  void AsyncStart(mjlib::io::ErrorCallback handler) {
     link_.reset(new base::UdpDataLink(
                     service_, log_, parameters_.link));
     link_->data_signal()->connect(
@@ -236,7 +239,7 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
       log_.info("video_link tx disabled -- repeat_count is zero");
     }
     started_ = true;
-    service_.post(std::bind(handler, base::ErrorCode()));
+    service_.post(std::bind(handler, mjlib::base::error_code()));
   }
 
   void HandleVideoPacket(uint8_t* data, int video_len, bool key_frame) {
@@ -345,7 +348,7 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
 
  private:
   void TxNextPacket(boost::system::error_code ec) {
-    base::FailIf(ec);
+    mjlib::base::FailIf(ec);
     BOOST_ASSERT(std::this_thread::get_id() == main_id_);
     std::lock_guard<std::mutex> guard(queue_mutex_);
 
@@ -399,12 +402,12 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
 
   // NOTE: This requires that the queue_mutex_ lock be held.
   std::string MakeTelemetryData() const {
-    base::FastOStringStream ostr;
-    base::TelemetryWriteStream<base::FastOStringStream> os(ostr);
+    mjlib::base::FastOStringStream ostr;
+    mjlib::telemetry::TelemetryWriteStream os(ostr);
 
     for (const auto& pair: telemetry_) {
-      os.Write(pair.first); // name
-      os.Write(pair.second.data); // data
+      os.WriteString(pair.first); // name
+      os.WriteString(pair.second.data); // data
     }
 
     return ostr.str();
@@ -438,7 +441,7 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
   std::deque<DataPacket> to_tx_;
   // All packets must be sent by this time.
   boost::posix_time::ptime tx_deadline_;
-  base::DeadlineTimer tx_timer_;
+  mjlib::io::DeadlineTimer tx_timer_;
   bool tx_running_ = false;
 
   struct Telemetry {
@@ -466,8 +469,8 @@ class McastVideoLinkTransmitter::FrameConsumerImpl :
     GstMapInfo info;
     memset(&info, 0, sizeof(info));
     bool ok = gst_memory_map(mem, &info, GST_MAP_READ);
-    BOOST_ASSERT(ok);
-    BOOST_ASSERT(info.size == len);
+    BOOST_VERIFY(ok);
+    BOOST_VERIFY(info.size == len);
 
     impl_->HandleVideoPacket(info.data, info.size, key_frame);
 
@@ -475,7 +478,7 @@ class McastVideoLinkTransmitter::FrameConsumerImpl :
     gst_memory_unref(mem);
   }
 
-  virtual void PreEmitStats(CameraDriver::CameraStats* stats) {
+  virtual void PreEmitStats(CameraDriver::CameraStats*) {
     //impl_->PreEmitStats(stats);
   }
 
@@ -510,7 +513,7 @@ McastVideoLinkTransmitter::McastVideoLinkTransmitter(base::Context& context)
 
 McastVideoLinkTransmitter::~McastVideoLinkTransmitter() {}
 
-void McastVideoLinkTransmitter::AsyncStart(base::ErrorHandler handler) {
+void McastVideoLinkTransmitter::AsyncStart(mjlib::io::ErrorCallback handler) {
   impl_->AsyncStart(handler);
 }
 
@@ -586,7 +589,7 @@ class RxFrameBuffer : boost::noncopyable {
     info_.repeat_count = header.repeat_count;
     info_.frame_crc32 = header.frame_crc32;
 
-    BOOST_ASSERT(info_.total_packets <= static_cast<int>(missing_.size()));
+    BOOST_VERIFY(info_.total_packets <= static_cast<int>(missing_.size()));
     packets_.resize(info_.total_packets);
     for (int i=0; i<info_.total_packets; i++) {
       missing_.set(i);
@@ -608,7 +611,7 @@ class RxFrameBuffer : boost::noncopyable {
   };
 
   FrameResult AssembleFrame(base::LogRef& log) {
-    BOOST_ASSERT(missing_.none());
+    BOOST_VERIFY(missing_.none());
     int aux_len = 0;
     int video_len = 0;
     for (auto& packet: packets_) {
@@ -624,7 +627,7 @@ class RxFrameBuffer : boost::noncopyable {
     int video_pos = 0;
     int idx = 0;
     for (auto& packet: packets_) {
-      BOOST_ASSERT(packet->header().packet_index == idx);
+      BOOST_VERIFY(packet->header().packet_index == idx);
       idx++;
       ::memcpy(&(*result.aux)[aux_pos],
                packet->aux(),
@@ -635,8 +638,8 @@ class RxFrameBuffer : boost::noncopyable {
       aux_pos += packet->aux_len();
       video_pos += packet->payload_len();
     }
-    BOOST_ASSERT(aux_pos == aux_len);
-    BOOST_ASSERT(video_pos == video_len);
+    BOOST_VERIFY(aux_pos == aux_len);
+    BOOST_VERIFY(video_pos == video_len);
 
     boost::crc_32_type crc32;
     crc32.process_bytes(&(*result.video)[0], video_len);
@@ -699,14 +702,14 @@ class McastVideoLinkReceiver::Impl : boost::noncopyable {
   ~Impl() {
   }
 
-  void AsyncStart(base::ErrorHandler handler) {
+  void AsyncStart(mjlib::io::ErrorCallback handler) {
     link_.reset(new base::UdpDataLink(
                     service_, log_, parameters_.link));
     link_->data_signal()->connect(
         std::bind(&Impl::HandlePacket, this, std::placeholders::_1,
                   std::placeholders::_2));
     started_ = true;
-    service_.post(std::bind(handler, base::ErrorCode()));
+    service_.post(std::bind(handler, mjlib::base::error_code()));
   }
 
   DataPacketSignal* packet_signal() { return &packet_signal_; }
@@ -802,8 +805,8 @@ class McastVideoLinkReceiver::Impl : boost::noncopyable {
   }
 
   void DoAux(const std::string& aux) {
-    base::FastIStringStream istr(aux);
-    base::TelemetryReadStream<base::FastIStringStream> is(istr);
+    mjlib::base::FastIStringStream istr(aux);
+    mjlib::telemetry::TelemetryReadStream is(istr);
 
     try {
       while (istr.remaining()) {
@@ -811,8 +814,8 @@ class McastVideoLinkReceiver::Impl : boost::noncopyable {
         const std::string data = is.ReadString();
         (*parent_->telemetry_ready_signal())(name, data);
       }
-    } catch (base::SystemError& se) {
-      log_.warn("corrupt aux data: " + se.error_code().message());
+    } catch (mjlib::base::system_error& se) {
+      log_.warn("corrupt aux data: " + se.code().message());
     }
   }
 
@@ -841,7 +844,7 @@ McastVideoLinkReceiver::McastVideoLinkReceiver(base::Context& context)
 
 McastVideoLinkReceiver::~McastVideoLinkReceiver() {}
 
-void McastVideoLinkReceiver::AsyncStart(base::ErrorHandler handler) {
+void McastVideoLinkReceiver::AsyncStart(mjlib::io::ErrorCallback handler) {
   impl_->AsyncStart(handler);
 }
 

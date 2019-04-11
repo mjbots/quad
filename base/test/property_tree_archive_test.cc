@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -143,7 +143,7 @@ BOOST_AUTO_TEST_CASE(VectorPropertyTreeTest) {
 namespace {
 struct OptionalContainer {
   int foo = 3;
-  boost::optional<TestData> optional_sub;
+  std::optional<TestData> optional_sub;
 
   template <typename Archive>
   void Serialize(Archive* a) {

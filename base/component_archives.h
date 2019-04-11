@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -37,18 +37,19 @@ struct EnableArchive {
 
   template <typename T>
   auto Helper(const char* name, T* value, int)
-      -> decltype((*value)->AsyncStart(ErrorHandler())) {
+      -> decltype((*value)->AsyncStart(mjlib::io::ErrorCallback())) {
     enabled[name] = true;
   }
 
   template <typename T>
-  void Helper(const char* name, T* value, long) {}
+  void Helper(const char*, T*, long) {}
 
   std::map<std::string, bool>& enabled;
 };
 
 struct StartArchive {
-  StartArchive(std::map<std::string, bool>& enabled, ErrorHandler handler)
+  StartArchive(std::map<std::string, bool>& enabled,
+               mjlib::io::ErrorCallback handler)
       : enabled(enabled),
         joiner(std::make_shared<ErrorHandlerJoiner>(handler)) {}
 
@@ -65,7 +66,7 @@ struct StartArchive {
 
   template <typename T>
   auto Helper(const char* name, T* value, int)
-      -> decltype((*value)->AsyncStart(ErrorHandler())) {
+      -> decltype((*value)->AsyncStart(mjlib::io::ErrorCallback())) {
     if (enabled[name]) {
       (*value)->AsyncStart(
           joiner->Wrap(std::string("starting: '") + name + "'"));
@@ -73,7 +74,7 @@ struct StartArchive {
   }
 
   template <typename T>
-  void Helper(const char* name, T* value, long) {}
+  void Helper(const char*, T*, long) {}
 
   std::map<std::string, bool>& enabled;
   std::shared_ptr<ErrorHandlerJoiner> joiner;
@@ -86,7 +87,7 @@ struct ComponentParameters {
   template <typename Archive>
   void Serialize(Archive* a) {
     for (auto& pair: enabled) {
-      a->Visit(MakeNameValuePair(
+      a->Visit(mjlib::base::MakeNameValuePair(
                    &pair.second, (pair.first + "_enable").c_str()));
     }
 
@@ -97,7 +98,7 @@ struct ComponentParameters {
     EnableArchive(enabled).Accept(members);
   }
 
-  void Start(ErrorHandler handler) {
+  void Start(mjlib::io::ErrorCallback handler) {
     StartArchive(enabled, handler).Accept(members_);
   }
 

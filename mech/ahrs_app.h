@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ class AhrsApp : boost::noncopyable {
     base::MergeProgramOptions(m_.ahrs->options(), "ahrs.", &options_);
   }
 
-  void AsyncStart(base::ErrorHandler handler) {
+  void AsyncStart(mjlib::io::ErrorCallback handler) {
     parameters_.children.Start(handler);
   }
 

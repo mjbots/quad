@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 #include <boost/property_tree/json_parser.hpp>
 
-#include "fail.h"
+#include "mjlib/base/fail.h"
 
 namespace mjmech {
 namespace base {
@@ -35,8 +35,8 @@ class TelemetryRemoteDebugServer::Impl : boost::noncopyable {
                   std::placeholders::_2));
   }
 
-  void HandleRead(ErrorCode ec, std::size_t size) {
-    FailIf(ec);
+  void HandleRead(mjlib::base::error_code ec, std::size_t size) {
+    mjlib::base::FailIf(ec);
 
     std::string data(receive_buffer_, size);
     udp::endpoint from = receive_endpoint_;
@@ -115,8 +115,8 @@ class TelemetryRemoteDebugServer::Impl : boost::noncopyable {
   }
 
   void HandleWrite(std::shared_ptr<std::string>,
-                   ErrorCode ec) {
-    FailIf(ec);
+                   mjlib::base::error_code ec) {
+    mjlib::base::FailIf(ec);
   }
 
   boost::asio::io_service& service_;
@@ -139,13 +139,13 @@ TelemetryRemoteDebugServer::parameters() {
   return &impl_->parameters_;
 }
 
-void TelemetryRemoteDebugServer::AsyncStart(ErrorHandler handler) {
+void TelemetryRemoteDebugServer::AsyncStart(mjlib::io::ErrorCallback handler) {
   impl_->socket_.open(udp::v4());
   udp::endpoint endpoint(udp::v4(), impl_->parameters_.port);
   impl_->socket_.bind(endpoint);
   impl_->StartRead();
 
-  impl_->service_.post(std::bind(handler, ErrorCode()));
+  impl_->service_.post(std::bind(handler, mjlib::base::error_code()));
 }
 
 void TelemetryRemoteDebugServer::RegisterHandler(

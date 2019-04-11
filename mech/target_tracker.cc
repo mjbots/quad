@@ -1,4 +1,4 @@
-// Copyright 2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2016-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -42,10 +42,10 @@ class TargetTracker::Impl : public CameraFrameConsumer {
 
   ~Impl() override {}
 
-  void AsyncStart(base::ErrorHandler handler) {
+  void AsyncStart(mjlib::io::ErrorCallback handler) {
     log_.debug("AsyncStart");
     enabled_ = true;
-    service_.post(std::bind(handler, base::ErrorCode()));
+    service_.post(std::bind(handler, mjlib::base::error_code()));
   }
 
   // The CameraFrameConsumer interface.
@@ -120,7 +120,7 @@ class TargetTracker::Impl : public CameraFrameConsumer {
         aruco_parameters_);
 
     if (marker_ids.empty()) {
-      data.target = boost::none;
+      data.target = std::nullopt;
     } else {
       // For now, just pick the first one we see.
       BOOST_ASSERT(!marker_corners.empty());
@@ -172,7 +172,7 @@ TargetTracker::TargetTracker(base::Context& context)
 
 TargetTracker::~TargetTracker() {}
 
-void TargetTracker::AsyncStart(base::ErrorHandler handler) {
+void TargetTracker::AsyncStart(mjlib::io::ErrorCallback handler) {
   impl_->AsyncStart(handler);
 }
 

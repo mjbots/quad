@@ -1,4 +1,5 @@
 // Copyright 2014-2015 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,9 +21,10 @@
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/signals2/signal.hpp>
 
-#include "base/comm.h"
+#include "mjlib/base/visitor.h"
+#include "mjlib/io/async_types.h"
+
 #include "base/context.h"
-#include "base/visitor.h"
 
 #include "gst_main_loop.h"
 
@@ -39,7 +41,7 @@ class CameraDriver : boost::noncopyable {
   CameraDriver(base::Context& context);
   ~CameraDriver();
 
-  void AsyncStart(base::ErrorHandler handler);
+  void AsyncStart(mjlib::io::ErrorCallback handler);
 
   // Register a frame consumer. Pointer must be valid for the lifetime
   // of an object. Must be called before AsyncStart.
@@ -184,7 +186,7 @@ class CameraFrameConsumer : boost::noncopyable {
 
   // Going to emit stats soon. The argument is a mutable
   // stats pointer. Invoked from main gst thread.
-  virtual void PreEmitStats(CameraDriver::CameraStats* stats) {};
+  virtual void PreEmitStats(CameraDriver::CameraStats*) {};
 };
 
 }

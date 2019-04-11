@@ -1,4 +1,4 @@
-// Copyright 2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2016-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,10 +14,13 @@
 
 #pragma once
 
+#include <optional>
+
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 
+#include "mjlib/base/visitor.h"
+
 #include "base/point3d.h"
-#include "base/visitor.h"
 
 namespace mjmech {
 namespace mech {
@@ -36,7 +39,7 @@ struct TargetTrackerData {
     }
   };
 
-  boost::optional<Target> target;
+  std::optional<Target> target;
 
   template <typename Archive>
   void Serialize(Archive* a) {

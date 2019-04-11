@@ -1,4 +1,4 @@
-// Copyright 2014-2018 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,11 +20,13 @@
 
 #include <fmt/format.h>
 
+#include "mjlib/base/fail.h"
+#include "mjlib/base/program_options_archive.h"
+
 #include "context_full.h"
-#include "fail.h"
 #include "handler_util.h"
 #include "logging.h"
-#include "program_options_archive.h"
+#include "program_options.h"
 
 namespace mjmech {
 namespace base {
@@ -53,7 +55,7 @@ int safe_main(int argc, char**argv) {
       ;
 
   AddLoggingOptions(&desc);
-  ProgramOptionsArchive(&desc, "remote_debug.").Accept(
+  mjlib::base::ProgramOptionsArchive(&desc, "remote_debug.").Accept(
       context.remote_debug->parameters());
   MergeProgramOptions(module.options(), "", &desc);
 
@@ -125,8 +127,8 @@ int safe_main(int argc, char**argv) {
 
   std::shared_ptr<ErrorHandlerJoiner> joiner =
       std::make_shared<ErrorHandlerJoiner>(
-          [=](ErrorCode ec) {
-            FailIf(ec);
+          [=](mjlib::base::error_code ec) {
+            mjlib::base::FailIf(ec);
             if (debug) { std::cout << "Started!\n"; }
           });
 

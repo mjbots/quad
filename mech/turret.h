@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,6 +13,10 @@
 // limitations under the License.
 
 #pragma once
+
+#include <optional>
+
+#include "mjlib/base/visitor.h"
 
 #include "base/point3d.h"
 
@@ -38,12 +42,12 @@ class Turret : boost::noncopyable {
 
   ~Turret();
 
-  void AsyncStart(base::ErrorHandler);
+  void AsyncStart(mjlib::io::ErrorCallback);
 
   void SetCommand(const TurretCommand&);
   void SetFireControl(const TurretCommand::FireControl&);
 
-  void UpdateTrackedTarget(const boost::optional<base::Point3D>& target);
+  void UpdateTrackedTarget(const std::optional<base::Point3D>& target);
 
   void StartBias();
 
@@ -101,7 +105,7 @@ class Turret : boost::noncopyable {
     TurretCommand::Absolute absolute;
 
     // The current target_relative command, if that mode is active.
-    boost::optional<TurretCommand::TargetRelative> target_relative;
+    std::optional<TurretCommand::TargetRelative> target_relative;
     TurretCommand::Rate target_relative_rate;
     boost::posix_time::ptime target_relative_last_time;
 

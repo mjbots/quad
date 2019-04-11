@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,12 +15,13 @@
 #include "mech/herkulex.h"
 
 #include <functional>
+#include <optional>
 
 #include <boost/test/auto_unit_test.hpp>
 
-#include "base/comm_factory_generators.h"
-#include "base/concrete_comm_factory.h"
-#include "base/error_code.h"
+#include "mjlib/base/error_code.h"
+#include "mjlib/io/stream_factory.h"
+
 #include "base/fail_functor.h"
 
 using namespace mjmech::base;
@@ -32,10 +33,19 @@ class Fixture {
  public:
   Fixture() {
     SetOption(herkulex_.options(), "stream.type", "pipe");
-    SetOption(herkulex_.options(), "stream.pipe.key", "test");
+    SetOption(herkulex_.options(), "stream.pipe_key", "test");
 
-    stream_ = factory_.pipe_generator()->GetStream(
-        service_, "test", PipeGenerator::Mode::kDirectionB);
+    mjlib::io::StreamFactory::Options options;
+    options.type = mjlib::io::StreamFactory::Type::kPipe;
+    options.pipe_key = "test";
+    options.pipe_direction = 1;
+    factory_.AsyncCreate(options, [this](auto& ec, auto stream) {
+        mjlib::base::FailIf(ec);
+        stream_ = stream;
+      });
+
+    Poll();
+    BOOST_VERIFY(!!stream_);
 
     StartRead();
   }
@@ -46,8 +56,8 @@ class Fixture {
         std::bind(&Fixture::HandleRead, this, pl::_1, pl::_2));
   }
 
-  void HandleRead(ErrorCode ec, size_t bytes_read) {
-    FailIf(ec);
+  void HandleRead(mjlib::base::error_code ec, size_t bytes_read) {
+    mjlib::base::FailIf(ec);
 
     std::ostream ostr(&streambuf_);
     ostr.write(buf_, bytes_read);
@@ -64,11 +74,11 @@ class Fixture {
   }
 
   boost::asio::io_service service_;
-  typedef ConcreteStreamFactory Factory;
+  typedef mjlib::io::StreamFactory Factory;
   Factory factory_{service_};
   typedef HerkuleX Servo;
   Servo herkulex_{service_, factory_};
-  SharedStream stream_;
+  mjlib::io::SharedStream stream_;
   boost::asio::streambuf streambuf_;
   boost::signals2::signal<void (const bool*)> data_received_;
 
@@ -77,7 +87,7 @@ class Fixture {
 }
 
 BOOST_FIXTURE_TEST_CASE(HerkuleXTest, Fixture) {
-  herkulex_.AsyncStart(FailIf);
+  herkulex_.AsyncStart(mjlib::base::FailIf);
 
   Poll();
 
@@ -85,7 +95,7 @@ BOOST_FIXTURE_TEST_CASE(HerkuleXTest, Fixture) {
   packet.servo = 0xfd;
   packet.command = Servo::STAT;
   packet.data = "";
-  herkulex_.SendPacket(packet, FailIf);
+  herkulex_.SendPacket(packet, mjlib::base::FailIf);
 
   Poll();
 
@@ -98,9 +108,9 @@ BOOST_FIXTURE_TEST_CASE(HerkuleXTest, Fixture) {
     BOOST_CHECK_EQUAL(data, "\xff\xff\x07\xfd\x07\xfc\x02");
   }
 
-  boost::optional<Servo::Packet> listen;
-  herkulex_.ReceivePacket([&](const ErrorCode& ec, const auto& result) {
-      FailIf(ec);
+  std::optional<Servo::Packet> listen;
+  herkulex_.ReceivePacket([&](const mjlib::base::error_code& ec, const auto& result) {
+      mjlib::base::FailIf(ec);
       listen = result;
     });
 
@@ -163,8 +173,8 @@ class Responder : public Fixture {
                              std::bind(&Responder::HandleWrite, this, pl::_1));
   }
 
-  void HandleWrite(const ErrorCode& ec) {
-    FailIf(ec);
+  void HandleWrite(const mjlib::base::error_code& ec) {
+    mjlib::base::FailIf(ec);
 
     Start();
   }
@@ -186,7 +196,8 @@ BOOST_FIXTURE_TEST_CASE(HerkuleXMemRead, Responder) {
   bool read = false;
   herkulex_.MemRead(
       herkulex_.RAM_READ, 0xfd, 0x35, 1,
-      [&](const ErrorCode& ec, const auto& response) {
+      [&](const mjlib::base::error_code& ec, const auto& response) {
+        BOOST_TEST(!ec);
         BOOST_CHECK_EQUAL(response.register_start, 0x35);
         BOOST_CHECK_EQUAL(response.length, 1);
         BOOST_CHECK_EQUAL(response.register_data, std::string("\x01"));
@@ -202,8 +213,8 @@ BOOST_FIXTURE_TEST_CASE(HerkuleXMemRead, Responder) {
 
   herkulex_.RamRead(
       0xfd, HC::cal_diff(),
-      [&](const ErrorCode& ec, int value) {
-        FailIf(ec);
+      [&](const mjlib::base::error_code& ec, int value) {
+        mjlib::base::FailIf(ec);
         BOOST_CHECK_EQUAL(value, 1);
         read = true;
       });

@@ -1,4 +1,4 @@
-// Copyright 2016-2018 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2016-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -68,7 +68,7 @@ void I2CFactory::AsyncCreate(const Parameters& parameters,
     impl_->service_.post(
         std::bind(
             handler,
-            ErrorCode::einval(
+            mjlib::base::error_code::einval(
                 fmt::format("unknown type '{}'",
                             parameters.type_)),
             SharedI2C()));

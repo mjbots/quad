@@ -16,10 +16,10 @@
 
 load("//tools/workspace:github_archive.bzl", "github_archive")
 
-def rpi_bazel_repository(name):
+def moteus_repository(name):
     github_archive(
         name = name,
-        repo = "mjbots/rpi_bazel",
-        commit = "6e9076206b43a35533cadc0d2b713721750d9499",
-        sha256 = "4d0ba8116c4fb3e524a9e0e83dea61dfd9375782b5ba71c978021715ee864991",
+        repo = "mjbots/moteus",
+        commit = "6998f586ea8b1e71ebd6413bba9c5f096fe4a5f2",
+        sha256 = "c99600eb485093a826bf69e71b42071bfe2c5817d8d3664ecaba8bb4483a68a1",
     )

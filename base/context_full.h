@@ -1,4 +1,5 @@
-// Copyright 2015-2016 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2015-2016 Mikhail Afanasyev.
+// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,9 +15,10 @@
 
 #pragma once
 
-#include "context.h"
+#include "base/context.h"
 
-#include "concrete_comm_factory.h"
+#include "mjlib/io/stream_factory.h"
+
 #include "i2c_factory.h"
 #include "telemetry_log.h"
 #include "telemetry_registry.h"

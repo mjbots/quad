@@ -1,4 +1,4 @@
-// Copyright 2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2016-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -49,7 +49,7 @@ class I2CInterface {
   void SetI2C(SharedI2C i2c) { i2c_ = i2c; }
 
  private:
-  void HandleLine(ErrorCode ec, std::size_t size) {
+  void HandleLine(mjlib::base::error_code ec, std::size_t size) {
     FailIf(ec);
 
     std::istream in(&streambuf_);
@@ -84,7 +84,7 @@ class I2CInterface {
     Start();
   }
 
-  void HandleRead(ErrorCode ec, std::size_t length) {
+  void HandleRead(mjlib::base::error_code ec, std::size_t length) {
     FailIf(ec);
     std::cout << "rx complete:";
     for (std::size_t i = 0; i < length; i++) {
@@ -93,7 +93,7 @@ class I2CInterface {
     std::cout << "\n";
   }
 
-  void HandleWrite(ErrorCode ec, std::size_t length) {
+  void HandleWrite(mjlib::base::error_code ec, std::size_t length) {
     FailIf(ec);
     std::cout << "tx complete\n";
   }
@@ -135,7 +135,7 @@ int main(int argc, char** argv) {
 
   interface.Start();
 
-  factory.AsyncCreate(*parameters, [&](ErrorCode ec, SharedI2C i2c) {
+  factory.AsyncCreate(*parameters, [&](mjlib::base::error_code ec, SharedI2C i2c) {
       FailIf(ec);
       interface.SetI2C(i2c);
       std::cout << "connected!\n";

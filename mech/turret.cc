@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,9 +16,10 @@
 
 #include <fmt/format.h>
 
+#include "mjlib/base/fail.h"
+#include "mjlib/io/deadline_timer.h"
+
 #include "base/common.h"
-#include "base/deadline_timer.h"
-#include "base/fail.h"
 #include "base/logging.h"
 #include "base/now.h"
 
@@ -85,9 +86,9 @@ class Turret::Impl : boost::noncopyable {
                                 std::placeholders::_1));
   }
 
-  void HandleTimer(const base::ErrorCode& ec) {
+  void HandleTimer(const mjlib::base::error_code& ec) {
     if (ec == boost::asio::error::operation_aborted) { return; }
-    base::FailIf(ec);
+    mjlib::base::FailIf(ec);
     StartTimer();
 
     if (is_disabled()) { return; }
@@ -103,15 +104,15 @@ class Turret::Impl : boost::noncopyable {
         servo_->RAM_READ, parameters_.gimbal_address,
         ImuPitch.position,
         ImuPitch.length + ImuYaw.length + AbsoluteYaw.length,
-        [this](base::ErrorCode ec, Mech::ServoBase::MemReadResponse response) {
+        [this](mjlib::base::error_code ec, Mech::ServoBase::MemReadResponse response) {
           HandleCurrent(ec, response);
         });
   }
 
-  void HandleCommand(base::ErrorCode ec,
+  void HandleCommand(mjlib::base::error_code ec,
                      Mech::ServoBase::MemReadResponse response) {
     if (CheckTemporaryError(ec)) { return; }
-    FailIf(ec);
+    mjlib::base::FailIf(ec);
 
     Parser parser = response;
 
@@ -121,7 +122,7 @@ class Turret::Impl : boost::noncopyable {
     Emit();
   }
 
-  bool CheckTemporaryError(const base::ErrorCode& ec) {
+  bool CheckTemporaryError(const mjlib::base::error_code& ec) {
     if (ec == boost::asio::error::operation_aborted ||
         ec == herkulex_error::synchronization_error) {
       TemporarilyDisableTurret(ec);
@@ -132,10 +133,10 @@ class Turret::Impl : boost::noncopyable {
     return false;
   }
 
-  void HandleCurrent(base::ErrorCode ec,
+  void HandleCurrent(mjlib::base::error_code ec,
                      Mech::ServoBase::MemReadResponse response) {
     if (CheckTemporaryError(ec)) { return; }
-    FailIf(ec);
+    mjlib::base::FailIf(ec);
 
     Parser parser = response;
 
@@ -149,15 +150,15 @@ class Turret::Impl : boost::noncopyable {
     servo_->MemRead(
         servo_->RAM_READ, parameters_.gimbal_address,
         FirePwm.position, 2,
-        [this](base::ErrorCode ec, Mech::ServoBase::MemReadResponse response) {
+        [this](mjlib::base::error_code ec, Mech::ServoBase::MemReadResponse response) {
           HandleFireControl(ec, response);
         });
   }
 
-  void HandleFireControl(base::ErrorCode ec,
+  void HandleFireControl(mjlib::base::error_code ec,
                          Mech::ServoBase::MemReadResponse response) {
     if (CheckTemporaryError(ec)) { return; }
-    FailIf(ec);
+    mjlib::base::FailIf(ec);
 
     data_.fire_enabled = response.register_data.at(0) != 0;
     data_.agitator_enabled = response.register_data.at(1) != 0;
@@ -173,8 +174,8 @@ class Turret::Impl : boost::noncopyable {
     parent_->turret_data_signal_(&data_);
   }
 
-  void HandleWrite(base::ErrorCode ec) {
-    FailIf(ec);
+  void HandleWrite(mjlib::base::error_code ec) {
+    mjlib::base::FailIf(ec);
   }
 
   static std::string MakeCommand(const TurretCommand::Imu& command) {
@@ -207,7 +208,7 @@ class Turret::Impl : boost::noncopyable {
                   std::placeholders::_1));
   }
 
-  void TemporarilyDisableTurret(const base::ErrorCode& ec) {
+  void TemporarilyDisableTurret(const mjlib::base::error_code& ec) {
     log_.warn("error reading turret: " + ec.message());
     error_count_++;
 
@@ -274,11 +275,11 @@ class Turret::Impl : boost::noncopyable {
             // we should probably capture the command around so that we
             // can keep trying to execute it as the gimbal moves into
             // position.
-            base::Fail("Unsupported fire control command");
+            mjlib::base::Fail("Unsupported fire control command");
             break;
           }
         }
-        base::AssertNotReached();
+        mjlib::base::AssertNotReached();
       }();
 
       if ((command.fire.command == FM::kNow1 ||
@@ -331,7 +332,7 @@ class Turret::Impl : boost::noncopyable {
             }
           }
         }
-        base::AssertNotReached();
+        mjlib::base::AssertNotReached();
       }() * 255);
 
     servo_->RamWrite(
@@ -353,7 +354,7 @@ class Turret::Impl : boost::noncopyable {
         std::bind(&Impl::HandleWrite, this, std::placeholders::_1));
   }
 
-  void UpdateTrackedTarget(const boost::optional<base::Point3D>& target) {
+  void UpdateTrackedTarget(const std::optional<base::Point3D>& target) {
     log_.debug(fmt::format("UpdateTrackedTarget vision={}, target={}",
                            !!target, !!data_.target_relative));
 
@@ -391,7 +392,7 @@ class Turret::Impl : boost::noncopyable {
   Turret* const parent_;
   boost::asio::io_service& service_;
   Mech::ServoBase* const servo_;
-  base::DeadlineTimer timer_;
+  mjlib::io::DeadlineTimer timer_;
   Parameters parameters_;
   boost::posix_time::ptime disable_until_;
   int poll_count_ = 0;
@@ -406,10 +407,10 @@ Turret::Turret(boost::asio::io_service& service,
 
 Turret::~Turret() {}
 
-void Turret::AsyncStart(base::ErrorHandler handler) {
+void Turret::AsyncStart(mjlib::io::ErrorCallback handler) {
   impl_->StartTimer();
 
-  impl_->service_.post(std::bind(handler, base::ErrorCode()));
+  impl_->service_.post(std::bind(handler, mjlib::base::error_code()));
 }
 
 void Turret::SetCommand(const TurretCommand& command) {
@@ -436,7 +437,7 @@ void Turret::SetCommand(const TurretCommand& command) {
   }
 
   if (!command.target_relative) {
-    impl_->data_.target_relative = boost::none;
+    impl_->data_.target_relative = std::nullopt;
   }
 
   if (command.target_relative) {
@@ -493,7 +494,7 @@ void Turret::SetFireControl(const TurretCommand::FireControl& command) {
 }
 
 void Turret::UpdateTrackedTarget(
-    const boost::optional<base::Point3D>& target) {
+    const std::optional<base::Point3D>& target) {
   impl_->UpdateTrackedTarget(target);
 }
 

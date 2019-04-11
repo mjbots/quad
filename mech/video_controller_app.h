@@ -1,4 +1,5 @@
 // Copyright 2015-2016 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,12 +17,14 @@
 
 #include <fmt/format.h>
 
+#include "mjlib/base/fail.h"
+#include "mjlib/base/fast_stream.h"
+#include "mjlib/base/program_options_archive.h"
+#include "mjlib/base/system_error.h"
+#include "mjlib/telemetry/telemetry_archive.h"
+
 #include "base/component_archives.h"
-#include "base/fail.h"
-#include "base/fast_stream.h"
 #include "base/logging.h"
-#include "base/program_options_archive.h"
-#include "base/telemetry_archive.h"
 
 #include "gst_main_loop.h"
 #include "mcast_video_link.h"
@@ -56,10 +59,10 @@ class VideoControllerApp : boost::noncopyable {
        std::bind(&VideoControllerApp::HandleStats, this,
                  std::placeholders::_1));
 
-    base::ProgramOptionsArchive(&options_).Accept(&parameters_);
+    mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
   }
 
-  void AsyncStart(base::ErrorHandler handler) {
+  void AsyncStart(mjlib::io::ErrorCallback handler) {
     parameters_.children.Start(handler);
   }
 
@@ -120,7 +123,7 @@ class VideoControllerApp : boost::noncopyable {
           std::cerr << "First stat report was bad, hope next one is better: "
                     << errors.str() << "\n";
         } else {
-          base::Fail("status report had errors:\n " + errors.str());
+          mjlib::base::Fail("status report had errors:\n " + errors.str());
         };
       }
     }
@@ -133,14 +136,14 @@ class VideoControllerApp : boost::noncopyable {
   void HandleTelemetry(const std::string& name,
                        const std::string& data) {
     if (name == "mech") {
-      base::FastIStringStream istr(data);
+      mjlib::base::FastIStringStream istr(data);
 
       MechTelemetry telemetry;
       try {
-        base::TelemetrySimpleReadArchive<MechTelemetry>::Deserialize(
+        mjlib::telemetry::TelemetrySimpleReadArchive<MechTelemetry>::Deserialize(
             &telemetry, istr);
-      } catch (base::SystemError& se) {
-        log_.warn("invalid telemetry: " + se.error_code().message());
+      } catch (mjlib::base::system_error& se) {
+        log_.warn("invalid telemetry: " + se.code().message());
         return;
       }
 

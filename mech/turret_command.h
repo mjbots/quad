@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,6 +13,10 @@
 // limitations under the License.
 
 #pragma once
+
+#include <optional>
+
+#include "mjlib/base/visitor.h"
 
 namespace mjmech {
 namespace mech {
@@ -30,7 +34,7 @@ struct TurretCommand {
       a->Visit(MJ_NVP(y_deg_s));
     }
   };
-  boost::optional<Rate> rate;
+  std::optional<Rate> rate;
 
   /// If set, the IMU coordinate value takes precedence over the
   /// Rate value.
@@ -44,7 +48,7 @@ struct TurretCommand {
       a->Visit(MJ_NVP(y_deg));
     }
   };
-  boost::optional<Imu> imu;
+  std::optional<Imu> imu;
 
   /// If set, the Absolute coordinate value takes precedence over
   /// the IMU and Rate values.
@@ -58,7 +62,7 @@ struct TurretCommand {
       a->Visit(MJ_NVP(y_deg));
     }
   };
-  boost::optional<Absolute> absolute;
+  std::optional<Absolute> absolute;
 
   /// If set, the TargetRelative coordinate takes precedence over all
   /// other commands.  It attempts to position any detected target at
@@ -73,7 +77,7 @@ struct TurretCommand {
       a->Visit(MJ_NVP(y));
     }
   };
-  boost::optional<TargetRelative> target_relative;
+  std::optional<TargetRelative> target_relative;
 
   struct Fire {
     /// The sequence number must be updated to something different

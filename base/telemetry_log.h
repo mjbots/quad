@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@
 #include <cstdint>
 #include <string>
 
-#include "fast_stream.h"
-#include "telemetry_format.h"
+#include "mjlib/base/fast_stream.h"
+#include "mjlib/telemetry/telemetry_format.h"
 
 namespace mjmech {
 namespace base {
@@ -28,6 +28,8 @@ namespace base {
 /// Write log files with a format as described in telemetry_format.h.
 class TelemetryLog : boost::noncopyable {
  public:
+  using TelemetryFormat = mjlib::telemetry::TelemetryFormat;
+
   class ThreadWriter;
 
   enum LogFlags {
@@ -104,9 +106,12 @@ class TelemetryLog : boost::noncopyable {
   /// high-performance writing where no additional copies are
   /// necessary.
 
-  class OStream : public FastOStringStream {
+  class OStream : public mjlib::base::FastOStringStream {
+   public:
+    virtual ~OStream() {}
+
    private:
-    OStream() {};
+    OStream() {}
 
     void set_start(size_t start) { start_ = start; }
     size_t start() const { return start_; }

@@ -1,4 +1,4 @@
-// Copyright 2018 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2018-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,8 @@
 
 #pragma once
 
-#include "base/error_code.h"
+#include "mjlib/base/error_code.h"
+#include "mjlib/base/fail.h"
 
 namespace mjmech {
 namespace base {
@@ -22,8 +23,8 @@ namespace base {
 class FailFunctor {
  public:
   template <typename... Args>
-  void operator()(const base::ErrorCode& ec, Args...) {
-    base::FailIf(ec);
+  void operator()(const mjlib::base::error_code& ec, Args...) {
+    mjlib::base::FailIf(ec);
   }
 };
 

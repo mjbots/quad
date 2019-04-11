@@ -1,4 +1,4 @@
-// Copyright 2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2016-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 
 #include "debug_i2c_generator.h"
 
-#include "program_options_archive.h"
+#include "mjlib/base/program_options_archive.h"
 
 namespace po = boost::program_options;
 
@@ -22,7 +22,7 @@ namespace mjmech {
 namespace base {
 
 DebugI2CGenerator::Parameters::Parameters() {
-  ProgramOptionsArchive(&options_description_).Accept(this);
+  mjlib::base::ProgramOptionsArchive(&options_description_).Accept(this);
 }
 
 DebugI2CGenerator::DebugI2CGenerator(boost::asio::io_service& service)
@@ -44,10 +44,10 @@ void DebugI2CGenerator::AsyncCreate(
     service_.post(
         std::bind(
             handler,
-            ErrorCode::einval(
+            mjlib::base::error_code::einval(
                 "unknown key '" + parameters.key + "'"), SharedI2C()));
   } else {
-    service_.post(std::bind(handler, ErrorCode(), it->second));
+    service_.post(std::bind(handler, mjlib::base::error_code(), it->second));
   }
 }
 

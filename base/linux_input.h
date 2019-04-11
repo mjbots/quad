@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@
 #include <boost/dynamic_bitset.hpp>
 #include <boost/noncopyable.hpp>
 
-#include "comm.h"
+#include "mjlib/io/async_types.h"
 
 namespace mjmech {
 namespace base {
@@ -85,7 +85,7 @@ class LinuxInput : boost::noncopyable {
   /// Read one event asynchronously.  This function returns
   /// immediately, @p handler will be invoked using io_service::post
   /// and @p event must be valid until the handler is invoked.
-  void AsyncRead(Event* event, ErrorHandler handler);
+  void AsyncRead(Event* event, mjlib::io::ErrorCallback handler);
 
   /// Cancel all asynchronous operations associated with this device.
   void cancel();

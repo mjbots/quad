@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@
 
 #include <boost/program_options.hpp>
 
-#include "base/fail.h"
+#include "mjlib/base/fail.h"
 
 namespace {
 using namespace mjmech::base;
@@ -36,8 +36,8 @@ class Reader {
                            std::placeholders::_1));
   }
 
-  void HandleRead(ErrorCode ec) {
-    FailIf(ec);
+  void HandleRead(mjlib::base::error_code ec) {
+    mjlib::base::FailIf(ec);
 
     std::cout << event_ << "\n";
     if (event_.ev_type == EV_ABS && absinfo_) {

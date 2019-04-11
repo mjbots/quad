@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 #pragma once
 
 #include <numeric>
+#include <optional>
 
 #include <boost/asio/read.hpp>
 #include <boost/asio/read_until.hpp>
@@ -24,14 +25,15 @@
 
 #include <fmt/format.h>
 
+#include "mjlib/base/fail.h"
+#include "mjlib/base/program_options_archive.h"
+#include "mjlib/base/visitor.h"
+#include "mjlib/io/stream_factory.h"
+
 #include "base/command_sequencer.h"
 #include "base/common.h"
-#include "base/concrete_comm_factory.h"
-#include "base/fail.h"
 #include "base/program_options.h"
-#include "base/program_options_archive.h"
 #include "base/signal_result.h"
-#include "base/visitor.h"
 
 namespace mjmech {
 namespace mech {
@@ -67,7 +69,7 @@ class HerkuleXBase : boost::noncopyable {
     bool cksum_good = false;
   };
 
-  typedef boost::optional<Packet> OptionalPacket;
+  typedef std::optional<Packet> OptionalPacket;
 
   struct StatusResponse : public Packet {
     StatusResponse() {}
@@ -203,12 +205,13 @@ struct HerkuleXConstants {
 class HerkuleXProtocol : public HerkuleXBase {
  public:
   HerkuleXProtocol(boost::asio::io_service& service,
-                   base::ConcreteStreamFactory& factory)
+                   mjlib::io::StreamFactory& factory)
       : service_(service),
         factory_(factory),
         sequencer_(service) {
-    base::ProgramOptionsArchive(&options_).Accept(&parameters_);
-    base::MergeProgramOptions(stream_parameters_.options(), "stream.", &options_);
+    mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
+    mjlib::base::ProgramOptionsArchive(&stream_options_).Accept(&stream_parameters_);
+    base::MergeProgramOptions(&stream_options_, "stream.", &options_);
   }
 
   struct Parameters {
@@ -259,7 +262,7 @@ class HerkuleXProtocol : public HerkuleXBase {
         [=](PacketHandler packet_handler) {
           RawSendPacket(
               to_send,
-              [=](base::ErrorCode ec) {
+              [=](mjlib::base::error_code ec) {
                 if (ec) {
                   packet_handler(ec, Packet());
                   return;
@@ -277,9 +280,9 @@ class HerkuleXProtocol : public HerkuleXBase {
   void Post(Handler handler) { service_.post(handler); }
 
  private:
-  void RawSendPacket(const Packet& packet, base::ErrorHandler handler) {
+  void RawSendPacket(const Packet& packet, mjlib::io::ErrorCallback handler) {
     if (!stream_) {
-      service_.post(std::bind(handler, base::ErrorCode()));
+      service_.post(std::bind(handler, mjlib::base::error_code()));
       return;
     }
 
@@ -304,15 +307,14 @@ class HerkuleXProtocol : public HerkuleXBase {
     boost::asio::async_write(
         *stream_,
         boost::asio::buffer(buffer_, 7 + packet.data.size()),
-        [handler](const boost::system::error_code& ec,
-                  size_t written) mutable {
+        [handler](const boost::system::error_code& ec, size_t) mutable {
           handler(ec);
         });
   }
 
-  void HandleStart(base::ErrorHandler handler,
-                   base::ErrorCode ec,
-                   base::SharedStream stream) {
+  void HandleStart(mjlib::io::ErrorCallback handler,
+                   mjlib::base::error_code ec,
+                   mjlib::io::SharedStream stream) {
     if (ec) {
       service_.post(std::bind(handler, ec));
       return;
@@ -323,7 +325,7 @@ class HerkuleXProtocol : public HerkuleXBase {
 
     ReadLoop1();
 
-    service_.post(std::bind(handler, base::ErrorCode()));
+    service_.post(std::bind(handler, mjlib::base::error_code()));
   }
 
   void ReadLoop1() {
@@ -335,7 +337,7 @@ class HerkuleXProtocol : public HerkuleXBase {
                   std::placeholders::_2));
   }
 
-  void ReadLoop2(base::ErrorCode ec, std::size_t) {
+  void ReadLoop2(mjlib::base::error_code ec, std::size_t) {
     if (ec == boost::asio::error::not_found) {
       // We're just seeing junk.  It would be nice to log, but for
       // now, just go back and read some more.
@@ -343,7 +345,7 @@ class HerkuleXProtocol : public HerkuleXBase {
       ReadLoop1();
       return;
     }
-    FailIf(ec);
+    mjlib::base::FailIf(ec);
 
     // Clear out the streambuf until we have our delimeter.
     std::istream istr(&rx_streambuf_);
@@ -352,7 +354,7 @@ class HerkuleXProtocol : public HerkuleXBase {
       char c = 0;
       istr.read(&c, 1);
       if (istr.gcount() != 1) {
-        base::Fail("inconsistent header");
+        mjlib::base::Fail("inconsistent header");
       }
       buf = buf + std::string(&c, 1);
       if (buf.size() > 2) {
@@ -369,18 +371,18 @@ class HerkuleXProtocol : public HerkuleXBase {
                     std::placeholders::_1,
                     std::placeholders::_2));
     } else {
-      ReadLoop3(base::ErrorCode(), 0);
+      ReadLoop3(mjlib::base::error_code(), 0);
     }
   }
 
-  void ReadLoop3(base::ErrorCode ec, std::size_t) {
-    FailIf(ec);
+  void ReadLoop3(mjlib::base::error_code ec, std::size_t) {
+    mjlib::base::FailIf(ec);
 
     std::array<char, 5> header = {};
     std::istream istr(&rx_streambuf_);
     istr.read(&header[0], 5);
     if (istr.gcount() != 5) {
-      base::Fail("inconsistent header");
+      mjlib::base::Fail("inconsistent header");
     }
 
     const uint8_t size = header[0];
@@ -404,13 +406,13 @@ class HerkuleXProtocol : public HerkuleXBase {
                     std::placeholders::_1,
                     std::placeholders::_2, header));
     } else {
-      ReadLoop4(base::ErrorCode(), 0, header);
+      ReadLoop4(mjlib::base::error_code(), 0, header);
     }
   }
 
-  void ReadLoop4(base::ErrorCode ec, std::size_t,
+  void ReadLoop4(mjlib::base::error_code ec, std::size_t,
                  std::array<char, 5> header) {
-    FailIf(ec);
+    mjlib::base::FailIf(ec);
 
     const uint8_t size = header[0];
     const uint8_t servo = header[1];
@@ -446,12 +448,13 @@ class HerkuleXProtocol : public HerkuleXBase {
   }
 
   boost::asio::io_service& service_;
-  base::ConcreteStreamFactory& factory_;
+  mjlib::io::StreamFactory& factory_;
   Parameters parameters_;
-  base::ConcreteStreamFactory::Parameters stream_parameters_;
+  mjlib::io::StreamFactory::Options stream_parameters_;
   boost::program_options::options_description options_;
+  boost::program_options::options_description stream_options_;
   base::CommandSequencer sequencer_;
-  base::SharedStream stream_;
+  mjlib::io::SharedStream stream_;
   boost::signals2::signal<void (const Packet*)> read_signal_;
   char buffer_[256] = {};
   boost::asio::streambuf rx_streambuf_{512};
@@ -485,14 +488,14 @@ class HerkuleX : public HerkuleXProtocol {
                            reg, length, to_send, handler));
   }
 
-  void MemReadHandler(base::ErrorCode ec,
+  void MemReadHandler(mjlib::base::error_code ec,
                       Base::Packet result,
                       uint8_t reg,
                       uint8_t length,
                       Base::Packet to_send,
-                      std::function<void (base::ErrorCode,
+                      std::function<void (mjlib::base::error_code,
                                           MemReadResponse)> handler) {
-    auto post_error = [&](base::ErrorCode ec) {
+    auto post_error = [&](mjlib::base::error_code ec) {
       ec.Append(fmt::format("when reading servo 0x{:02x}",
                             static_cast<int>(to_send.servo)));
       this->Post(std::bind(handler, ec, MemReadResponse()));
@@ -554,7 +557,7 @@ class HerkuleX : public HerkuleXProtocol {
       return;
     }
 
-    handler(base::ErrorCode(), response);
+    handler(mjlib::base::error_code(), response);
   }
 
   typedef std::function<void (const boost::system::error_code&,
@@ -574,11 +577,11 @@ class HerkuleX : public HerkuleXProtocol {
   }
 
   void HandleStatusResponse(
-      base::ErrorCode ec,
+      mjlib::base::error_code ec,
       Base::StatusResponse result,
       Base::Packet to_send,
       StatusHandler handler) {
-    auto post_error = [&](base::ErrorCode ec) {
+    auto post_error = [&](mjlib::base::error_code ec) {
       this->Post(std::bind(handler, ec, Base::StatusResponse()));
     };
 
@@ -616,7 +619,7 @@ class HerkuleX : public HerkuleXProtocol {
                           result.data.size())));
       return;
     }
-    handler(base::ErrorCode(), Base::StatusResponse(result));
+    handler(mjlib::base::error_code(), Base::StatusResponse(result));
   }
 
   template <typename Handler>
@@ -625,7 +628,7 @@ class HerkuleX : public HerkuleXProtocol {
     to_send.servo = servo;
     to_send.command = Command::REBOOT;
 
-    this->SendPacket(to_send, base::ErrorHandler(handler));
+    this->SendPacket(to_send, mjlib::io::ErrorCallback(handler));
   }
 
   template <typename Handler>
@@ -645,7 +648,7 @@ class HerkuleX : public HerkuleXProtocol {
 
     to_send.data = ostr.str();
 
-    this->SendPacket(to_send, base::ErrorHandler(handler));
+    this->SendPacket(to_send, mjlib::io::ErrorCallback(handler));
   }
 
   template <typename T, typename Handler>
@@ -661,7 +664,7 @@ class HerkuleX : public HerkuleXProtocol {
     }
 
     MemWrite(command, servo, field.position, ostr.str(),
-             base::ErrorHandler(handler));
+             mjlib::io::ErrorCallback(handler));
   }
 
   template <typename T, typename Handler>
@@ -674,14 +677,14 @@ class HerkuleX : public HerkuleXProtocol {
     MemWriteValue(Command::EEP_WRITE, servo, field, value, handler);
   }
 
-  typedef std::function<void (base::ErrorCode, int)> IntHandler;
+  typedef std::function<void (mjlib::base::error_code, int)> IntHandler;
 
   template <typename T, typename Handler>
   void MemReadValue(uint8_t command, uint8_t servo, T field,
                     Handler handler) {
     MemRead(
         command, servo, field.position, field.length,
-        [field, handler](base::ErrorCode ec, MemReadResponse response) mutable {
+        [field, handler](mjlib::base::error_code ec, MemReadResponse response) mutable {
           if (ec) {
             handler(ec, 0);
             return;
@@ -694,7 +697,7 @@ class HerkuleX : public HerkuleXProtocol {
                            response.register_data[i]) << (i * field.bit_align));
           }
 
-          handler(base::ErrorCode(), result);
+          handler(mjlib::base::error_code(), result);
         });
   }
 
@@ -733,11 +736,11 @@ class HerkuleX : public HerkuleXProtocol {
     to_send.data = data.str();
     to_send.command = Command::S_JOG;
 
-    this->SendPacket(to_send, base::ErrorHandler(handler));
+    this->SendPacket(to_send, mjlib::io::ErrorCallback(handler));
   }
 
-  static base::ErrorCode MakeSynchronizationError(const std::string& message) {
-    base::ErrorCode result(herkulex_error::synchronization_error);
+  static mjlib::base::error_code MakeSynchronizationError(const std::string& message) {
+    mjlib::base::error_code result(herkulex_error::synchronization_error);
     result.Append(message);
     return result;
   }

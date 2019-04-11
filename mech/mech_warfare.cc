@@ -1,4 +1,4 @@
-// Copyright 2014-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,14 +14,18 @@
 
 #include "mech_warfare.h"
 
+#include <optional>
+
 #include <boost/property_tree/json_parser.hpp>
 
 #include <fmt/format.h>
 
+#include "mjlib/base/fail.h"
+#include "mjlib/base/program_options_archive.h"
+
 #include "base/common.h"
 #include "base/context_full.h"
 #include "base/now.h"
-#include "base/program_options_archive.h"
 #include "base/property_tree_archive.h"
 
 #include "drive_command.h"
@@ -61,7 +65,7 @@ class MechWarfare::Impl : boost::noncopyable {
     context_.telemetry_registry->Register("mech_warfare", &data_signal_);
   }
 
-  void AsyncStart(base::ErrorHandler handler) {
+  void AsyncStart(mjlib::io::ErrorCallback handler) {
     try {
       RippleConfig ripple_config;
       ripple_config = LoadRippleConfig();
@@ -71,8 +75,8 @@ class MechWarfare::Impl : boost::noncopyable {
 
       NetworkListen();
       StartTimer();
-    } catch (base::SystemError& se) {
-      service_.post(std::bind(handler, se.error_code()));
+    } catch (mjlib::base::system_error& se) {
+      service_.post(std::bind(handler, se.code()));
       return;
     }
 
@@ -84,14 +88,14 @@ class MechWarfare::Impl : boost::noncopyable {
     try {
       std::ifstream inf(parent_->parameters_.gait_config);
       if (!inf.is_open()) {
-        throw base::SystemError::syserrno("error opening config");
+        throw mjlib::base::system_error::syserrno("error opening config");
       }
 
       boost::property_tree::ptree tree;
       boost::property_tree::read_json(inf, tree);
       auto optional_child = tree.get_child_optional("gaitconfig.ripple");
       if (!optional_child) {
-        throw base::SystemError::einval("could not find ripple config in file");
+        throw mjlib::base::system_error::einval("could not find ripple config in file");
       }
 
       base::PropertyTreeReadArchive(
@@ -107,7 +111,7 @@ class MechWarfare::Impl : boost::noncopyable {
           std::string field = fmt::format("ikconfig.leg.{}", i);
           auto optional_child = tree.get_child_optional(field);
           if (!optional_child) {
-            throw base::SystemError::einval("could not locate field: " + field);
+            throw mjlib::base::system_error::einval("could not locate field: " + field);
           }
 
           base::PropertyTreeReadArchive(
@@ -121,7 +125,7 @@ class MechWarfare::Impl : boost::noncopyable {
           std::string field = fmt::format("ikconfig.leg.{}", i);
           auto optional_child = tree.get_child_optional(field);
           if (!optional_child) {
-            throw base::SystemError::einval("could not locate field: " + field);
+            throw mjlib::base::system_error::einval("could not locate field: " + field);
           }
 
           base::PropertyTreeReadArchive(
@@ -130,11 +134,11 @@ class MechWarfare::Impl : boost::noncopyable {
           leg_configs[i].leg_ik =
               boost::shared_ptr<IKSolver>(new LizardIK(config));
         } else {
-          throw base::SystemError::einval("unknown iktype: " + type);
+          throw mjlib::base::system_error::einval("unknown iktype: " + type);
         }
       }
-    } catch (base::SystemError& se) {
-      se.error_code().Append(
+    } catch (mjlib::base::system_error& se) {
+      se.code().Append(
           "while opening config: '" + parent_->parameters_.gait_config + "'");
       throw;
     }
@@ -166,9 +170,9 @@ class MechWarfare::Impl : boost::noncopyable {
                                 std::placeholders::_1));
   }
 
-  void HandleTimer(base::ErrorCode ec) {
+  void HandleTimer(mjlib::base::error_code ec) {
     if (ec == boost::asio::error::operation_aborted) { return; }
-    FailIf(ec);
+    mjlib::base::FailIf(ec);
 
     StartTimer();
 
@@ -206,9 +210,9 @@ class MechWarfare::Impl : boost::noncopyable {
 
     telemetry_->SetTelemetry(
         "mech",
-        base::TelemetryWriteArchive<MechTelemetry>::Serialize(&telemetry),
+        mjlib::telemetry::TelemetryWriteArchive<MechTelemetry>::Serialize(&telemetry),
         base::Now(service_) +
-        base::ConvertSecondsToDuration(kTelemetryTimeoutS));
+        mjlib::base::ConvertSecondsToDuration(kTelemetryTimeoutS));
   }
 
   void DoDrive() {
@@ -305,8 +309,8 @@ class MechWarfare::Impl : boost::noncopyable {
     parent_->m_.gait_driver->SetCommand(gait);
   }
 
-  void HandleRead(base::ErrorCode ec, std::size_t size) {
-    FailIf(ec);
+  void HandleRead(mjlib::base::error_code ec, std::size_t size) {
+    mjlib::base::FailIf(ec);
 
     std::string data(receive_buffer_, size);
     StartRead();
@@ -367,13 +371,13 @@ class MechWarfare::Impl : boost::noncopyable {
   }
 
   void HandleServoConfigure(int servo_id,
-                            base::ErrorCode ec,
+                            mjlib::base::error_code ec,
                             int value) {
     if (ec == boost::asio::error::operation_aborted ||
         ec == herkulex_error::synchronization_error) {
       // Ignore this.
     } else {
-      base::FailIf(ec);
+      mjlib::base::FailIf(ec);
     }
 
     const int measured = value;
@@ -484,7 +488,7 @@ class MechWarfare::Impl : boost::noncopyable {
   char receive_buffer_[3000] = {};
   boost::asio::ip::udp::endpoint receive_endpoint_;
 
-  base::DeadlineTimer timer_;
+  mjlib::io::DeadlineTimer timer_;
 
   std::shared_ptr<McastTelemetryInterface> telemetry_;
 
@@ -521,7 +525,7 @@ MechWarfare::MechWarfare(base::Context& context)
                 std::placeholders::_1));
 
   m_.video->target_tracker()->data_signal()->connect([this](const TargetTrackerData* data) {
-      boost::optional<base::Point3D> point3d;
+      std::optional<base::Point3D> point3d;
       if (data->target) {
         point3d = base::Point3D(data->target->center.x,
                                 data->target->center.y,
@@ -530,12 +534,12 @@ MechWarfare::MechWarfare(base::Context& context)
       m_.turret->UpdateTrackedTarget(point3d);
     });
 
-  base::ProgramOptionsArchive(&impl_->options_).Accept(&parameters_);
+  mjlib::base::ProgramOptionsArchive(&impl_->options_).Accept(&parameters_);
 }
 
 MechWarfare::~MechWarfare() {}
 
-void MechWarfare::AsyncStart(base::ErrorHandler handler) {
+void MechWarfare::AsyncStart(mjlib::io::ErrorCallback handler) {
   impl_->AsyncStart(handler);
 }
 

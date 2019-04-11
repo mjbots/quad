@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -35,13 +35,15 @@ BOOST_AUTO_TEST_CASE(TelemetryLogBasicTest) {
   boost::asio::posix::stream_descriptor in(service, pipefd[0]);
   log.Open(pipefd[1]);
 
-  log.WriteBlock(TelemetryFormat::BlockType::kBlockData, "invalid block\n");
+  log.WriteBlock(
+      mjlib::telemetry::TelemetryFormat::BlockType::kBlockData,
+      "invalid block\n");
   log.Flush();
 
   boost::asio::streambuf streambuf;
   boost::asio::async_read_until(
       in, streambuf, '\n',
-      [&](boost::system::error_code ec, std::size_t size){
+      [&](boost::system::error_code ec, std::size_t){
         BOOST_REQUIRE(!ec);
         service.stop();
       });
@@ -54,16 +56,16 @@ BOOST_AUTO_TEST_CASE(TelemetryLogBasicTest) {
   std::ostringstream ostr;
   ostr << &streambuf;
   BOOST_CHECK_EQUAL(ostr.str().size(), 28);
-  std::istringstream istr(ostr.str());
+  mjlib::base::FastIStringStream istr(ostr.str());
   char header[9] = {};
-  istr.read(header, 8);
+  istr.read(mjlib::base::string_span(header, 8));
   BOOST_CHECK_EQUAL(std::string(header), "TLOG0002");
 
-  TelemetryReadStream<> stream(istr);
+  mjlib::telemetry::TelemetryReadStream stream(istr);
   BOOST_CHECK_EQUAL(stream.Read<uint16_t>(), 2);
   BOOST_CHECK_EQUAL(stream.Read<uint32_t>(), 14);
   char buf[15] = {};
-  istr.read(buf, 14);
+  istr.read(mjlib::base::string_span(buf, 14));
   BOOST_CHECK_EQUAL(std::string(buf), "invalid block\n");
 
   log.Close();

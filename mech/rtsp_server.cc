@@ -1,4 +1,5 @@
 // Copyright 2014-2015 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,9 +15,10 @@
 
 #include "rtsp_server.h"
 
+#include <atomic>
+#include <functional>
 #include <mutex>
 #include <thread>
-#include <atomic>
 
 #include <gst/gst.h>
 #include <gst/app/gstappsrc.h>
@@ -24,8 +26,9 @@
 
 #include <fmt/format.h>
 
+#include "mjlib/base/fail.h"
+
 #include "base/common.h"
-#include "base/fail.h"
 #include "base/logging.h"
 
 namespace mjmech {
@@ -43,14 +46,15 @@ const char* kLaunchCmd =
 class RtspServer::Impl : boost::noncopyable {
  public:
   Impl(RtspServer* parent, boost::asio::io_service& service)
-      : parameters_(parent->parameters_),
+      : service_(service),
+        parameters_(parent->parameters_),
         parent_id_(std::this_thread::get_id()) {}
 
   ~Impl() {
     log_.debug("object destroyed");
   }
 
-  void AsyncStart(base::ErrorHandler handler) {
+  void AsyncStart(mjlib::io::ErrorCallback handler) {
     BOOST_ASSERT(std::this_thread::get_id() == parent_id_);
 
     // if gst_started is true, it means that GstReady already happened
@@ -58,6 +62,7 @@ class RtspServer::Impl : boost::noncopyable {
     // on the main glib loop instead of just crashing here.
     BOOST_ASSERT(!gst_started_);
     started_ = true;
+    service_.post(std::bind(handler, mjlib::base::error_code()));
   }
 
   void HandleGstReady(GstMainLoopRef& ref) {
@@ -102,7 +107,7 @@ class RtspServer::Impl : boost::noncopyable {
     int id = gst_rtsp_server_attach(server_, NULL);
     int port = gst_rtsp_server_get_bound_port(server_);
     if (port < 0) {
-      base::Fail("failed to bind RTSP server port.");
+      mjlib::base::Fail("failed to bind RTSP server port.");
     }
     BOOST_ASSERT(id > 0);
     log_.noticeStream() <<
@@ -214,7 +219,7 @@ class RtspServer::Impl : boost::noncopyable {
         ->HandleMediaConfigure(sender, media);
   }
 
-  void HandleMediaConfigure(GstRTSPMediaFactory *sender, GstRTSPMedia *media) {
+  void HandleMediaConfigure(GstRTSPMediaFactory *, GstRTSPMedia *media) {
     log_.notice("rtsp server got client");
     g_signal_connect(media, "unprepared",
                      G_CALLBACK(media_unprepared_wrapper), this);
@@ -239,7 +244,7 @@ class RtspServer::Impl : boost::noncopyable {
           GST_APP_SRC(gst_bin_get_by_name_recurse_up(
                           GST_BIN(main_bin), "h264-input"));
       if (!appsrc_h264_) {
-        base::Fail("Could not find H264 appsource in RTSP pipeline");
+        mjlib::base::Fail("Could not find H264 appsource in RTSP pipeline");
       };
       if (appsrc_h264_caps_) {
         // Function takes a copy of caps, so original reference is still in this
@@ -269,9 +274,10 @@ class RtspServer::Impl : boost::noncopyable {
   static void client_connected_wrapper(
       GstRTSPServer* s, GstRTSPClient* c,  gpointer user_data) {
     static_cast<RtspServer::Impl*>(user_data)->HandleClientConnected(s, c);
-  };
+  }
+
   void HandleClientConnected(
-      GstRTSPServer* gstrtspserver, GstRTSPClient* client) {
+      GstRTSPServer*, GstRTSPClient* client) {
     GstRTSPConnection* conn = gst_rtsp_client_get_connection(client);
     log_.noticeStream()
         << "client " << reinterpret_cast<intptr_t>(client)
@@ -284,8 +290,9 @@ class RtspServer::Impl : boost::noncopyable {
       GstBus* bus, GstMessage* message, gpointer user_data) {
     static_cast<RtspServer::Impl*>(user_data)->
         HandleMediaBusMessage(bus, message);
-  };
-  void HandleMediaBusMessage(GstBus* bus, GstMessage* message) {
+  }
+
+  void HandleMediaBusMessage(GstBus*, GstMessage* message) {
     switch (GST_MESSAGE_TYPE (message)) {
       case GST_MESSAGE_ERROR: {
         std::string error_text;
@@ -303,7 +310,7 @@ class RtspServer::Impl : boost::noncopyable {
           error_text += dbg;
           g_free(dbg);
         }
-        base::Fail("RTSP Pipeline ERROR: " + error_text);
+        mjlib::base::Fail("RTSP Pipeline ERROR: " + error_text);
         break;
       }
         /*
@@ -333,7 +340,8 @@ class RtspServer::Impl : boost::noncopyable {
   static void media_unprepared_wrapper(GstRTSPMedia *m, gpointer user_data) {
     static_cast<RtspServer::Impl*>(user_data)->HandleMediaUnprepared(m);
   }
-  void HandleMediaUnprepared(GstRTSPMedia *gstrtspmedia) {
+
+  void HandleMediaUnprepared(GstRTSPMedia *) {
     log_.noticeStream()
         << "Tearing down video source, there were " << error_count_
         << " errors";
@@ -346,9 +354,8 @@ class RtspServer::Impl : boost::noncopyable {
     }
   }
 
-
   static void media_new_state_wrapper(
-      GstRTSPMedia *gstrtspmedia, gint state, gpointer user_data) {
+      GstRTSPMedia *, gint state, gpointer user_data) {
     // TODO theamk: if media did not go to PLAYING state after a while, raise
     // an error.
     static_cast<RtspServer::Impl*>(user_data)->
@@ -382,6 +389,7 @@ class RtspServer::Impl : boost::noncopyable {
     g_free(name);
   }
 
+  boost::asio::io_service& service_;
   const Parameters& parameters_;
   const std::thread::id parent_id_;
   std::thread::id gst_id_;
@@ -458,7 +466,7 @@ std::weak_ptr<CameraFrameConsumer> RtspServer::get_frame_consumer() {
   return frame_consumer_impl_;
 }
 
-void RtspServer::AsyncStart(base::ErrorHandler handler) {
+void RtspServer::AsyncStart(mjlib::io::ErrorCallback handler) {
   impl_->AsyncStart(handler);
 }
 

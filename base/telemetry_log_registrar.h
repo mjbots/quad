@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,7 +16,8 @@
 
 #include <boost/signals2/signal.hpp>
 
-#include "telemetry_archive.h"
+#include "mjlib/telemetry/telemetry_archive.h"
+
 #include "telemetry_log.h"
 
 namespace mjmech {
@@ -39,8 +40,9 @@ class TelemetryLogRegistrar {
   void Register(const std::string& name,
                 boost::signals2::signal<void (const T*)>* signal) {
     uint32_t identifier = telemetry_log_->AllocateIdentifier(name);
-    telemetry_log_->WriteSchema(identifier, 0, name,
-                                TelemetryWriteArchive<T>::schema());
+    telemetry_log_->WriteSchema(
+        identifier, 0, name,
+        mjlib::telemetry::TelemetryWriteArchive<T>::schema());
     signal->connect(std::bind(&TelemetryLogRegistrar::HandleData<T>,
                               this, identifier,
                               std::placeholders::_1));
@@ -53,7 +55,7 @@ class TelemetryLogRegistrar {
 
     std::unique_ptr<TelemetryLog::OStream> buffer =
         telemetry_log_->GetBuffer();
-    TelemetryWriteArchive<T>::Serialize(data, *buffer);
+    mjlib::telemetry::TelemetryWriteArchive<T>::Serialize(data, *buffer);
     telemetry_log_->WriteData(identifier, TelemetryLog::kNoWriteFlags,
                               std::move(buffer));
   }

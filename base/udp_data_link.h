@@ -1,4 +1,5 @@
 // Copyright 2015-2016 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,7 +17,8 @@
 
 #include <unordered_map>
 
-#include "deadline_timer.h"
+#include "mjlib/io/deadline_timer.h"
+
 #include "udp_socket.h"
 
 namespace mjmech {
@@ -121,7 +123,7 @@ class UdpDataLink : boost::noncopyable {
   const int kUdpV4HeaderSize = 28; // 20 byte IPv4 + 8 bytes UDP
 
   boost::asio::io_service& service_;
-  DeadlineTimer periodic_timer_;
+  mjlib::io::DeadlineTimer periodic_timer_;
   const Parameters params_;
   LogRef log_;
   std::unordered_map<UdpSocket::endpoint, PeerInfo> peers_;
@@ -130,7 +132,7 @@ class UdpDataLink : boost::noncopyable {
   PeerSignal peer_gone_signal_;
   int last_peer_id_ = 0;
 
-  boost::optional<UdpSocket::endpoint> tx_addr_;
+  std::optional<UdpSocket::endpoint> tx_addr_;
 
   std::shared_ptr<UdpSocket> rx_socket_;
   std::shared_ptr<UdpSocket> tx_socket_;

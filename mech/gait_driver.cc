@@ -1,4 +1,4 @@
-// Copyright 2014-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,10 +14,11 @@
 
 #include "gait_driver.h"
 
-#include "base/deadline_timer.h"
-#include "base/fail.h"
+#include "mjlib/base/fail.h"
+#include "mjlib/base/program_options_archive.h"
+#include "mjlib/io/deadline_timer.h"
+
 #include "base/now.h"
-#include "base/program_options_archive.h"
 #include "base/telemetry_registry.h"
 
 #include "ripple.h"
@@ -115,8 +116,8 @@ double Limit(double val, double max) {
 
 class FailHandler {
  public:
-  void operator()(base::ErrorCode ec) const {
-    FailIf(ec);
+  void operator()(mjlib::base::error_code ec) const {
+    mjlib::base::FailIf(ec);
   }
 };
 }
@@ -129,7 +130,7 @@ class GaitDriver::Impl : boost::noncopyable {
       : service_(service),
         servo_(servo),
         timer_(service) {
-    base::ProgramOptionsArchive(&options_).Accept(&parameters_);
+    mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
 
     telemetry_registry->Register("gait", &gait_data_signal_);
     telemetry_registry->Register("gait_command", &command_data_signal_);
@@ -179,7 +180,7 @@ class GaitDriver::Impl : boost::noncopyable {
     Emit();
   }
 
-  void ProcessBodyAhrs(boost::posix_time::ptime timestamp,
+  void ProcessBodyAhrs(boost::posix_time::ptime,
                        bool valid,
                        const base::Quaternion& world_attitude,
                        const base::Point3D& body_rate_dps) {
@@ -299,7 +300,7 @@ class GaitDriver::Impl : boost::noncopyable {
   boost::signals2::signal<void (const GaitData*)> gait_data_signal_;
   boost::signals2::signal<void (const CommandData*)> command_data_signal_;
 
-  base::DeadlineTimer timer_;
+  mjlib::io::DeadlineTimer timer_;
   bool timer_started_ = false;
   State state_ = kUnpowered;
   boost::posix_time::ptime last_command_timestamp_;

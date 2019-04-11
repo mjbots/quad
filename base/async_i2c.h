@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,9 @@
 
 #pragma once
 
-#include "comm.h"
+#include <boost/asio/io_service.hpp>
+
+#include "mjlib/io/async_types.h"
 
 namespace mjmech {
 namespace base {
@@ -26,15 +28,15 @@ class AsyncI2C : boost::noncopyable {
 
   virtual void AsyncRead(
       uint8_t device, uint8_t address,
-      MutableBufferSequence buffers, ReadHandler) = 0;
+      mjlib::io::MutableBufferSequence buffers, mjlib::io::ReadHandler) = 0;
 
   virtual void AsyncWrite(
       uint8_t device, uint8_t address,
-      ConstBufferSequence buffers, WriteHandler) = 0;
+      mjlib::io::ConstBufferSequence buffers, mjlib::io::WriteHandler) = 0;
 };
 
 typedef std::shared_ptr<AsyncI2C> SharedI2C;
-typedef std::function<void (ErrorCode, SharedI2C)> SharedI2CHandler;
+typedef std::function<void (mjlib::base::error_code, SharedI2C)> SharedI2CHandler;
 
 }
 }

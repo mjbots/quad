@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,19 +15,19 @@
 #pragma once
 
 #include <iostream>
+#include <optional>
 #include <vector>
 
 #include <boost/date_time/posix_time/posix_time.hpp>
-#include <boost/optional.hpp>
 
-#include "visit_archive.h"
-#include "visitor.h"
+#include "mjlib/base/visit_archive.h"
+#include "mjlib/base/visitor.h"
 
 namespace mjmech {
 namespace base {
-class JsonWriteArchive : public VisitArchive<JsonWriteArchive> {
+class JsonWriteArchive : public mjlib::base::VisitArchive<JsonWriteArchive> {
  public:
-  typedef VisitArchive<JsonWriteArchive> Base;
+  typedef mjlib::base::VisitArchive<JsonWriteArchive> Base;
 
   JsonWriteArchive(std::ostream& ostr, int indent=0)
       : ostr_(ostr), indent_(indent) {}
@@ -75,12 +75,12 @@ class JsonWriteArchive : public VisitArchive<JsonWriteArchive> {
   }
 
   template <typename NameValuePair, typename T>
-  void VisitValue(const NameValuePair& nvp, std::vector<T>* data, int) {
+  void VisitValue(const NameValuePair&, std::vector<T>* data, int) {
     DoArray(data);
   }
 
   template <typename NameValuePair, typename T, size_t N>
-  void VisitValue(const NameValuePair& nvp, std::array<T, N>* data, int) {
+  void VisitValue(const NameValuePair&, std::array<T, N>* data, int) {
     DoArray(data);
   }
 
@@ -91,39 +91,40 @@ class JsonWriteArchive : public VisitArchive<JsonWriteArchive> {
     for (size_t i = 0; i < a->size(); ++i) {
       if (i != 0) { ostr_ << ","; }
       ostr_ << "\n" << sub_archive.MakeChildIndent();
-      static_cast<Base*>(&sub_archive)->Visit(MakeNameValuePair(&(*a)[i], ""));
+      static_cast<Base*>(&sub_archive)->Visit(
+          mjlib::base::MakeNameValuePair(&(*a)[i], ""));
     }
     ostr_ << "\n" << MakeChildIndent() << "]";
   }
 
   template <typename NameValuePair, typename T>
-  void VisitValue(const NameValuePair& nvp, boost::optional<T>* data, int) {
+  void VisitValue(const NameValuePair& nvp, std::optional<T>* data, int) {
     if (!(*data)) {
       ostr_ << "null";
     } else {
       VisitArchive<JsonWriteArchive>::Visit(
-          MakeNameValuePair(&(**data), nvp.name()));
+          mjlib::base::MakeNameValuePair(&(**data), nvp.name()));
     }
   }
 
   template <typename NameValuePair>
-  void VisitValue(const NameValuePair& nvp, std::string* value, int) {
+  void VisitValue(const NameValuePair&, std::string* value, int) {
     ostr_ << "\"" << *value << "\"";
   }
 
   template <typename NameValuePair>
-  void VisitValue(const NameValuePair& nvp, bool* value, int) {
+  void VisitValue(const NameValuePair&, bool* value, int) {
     ostr_ << ((*value) ? "true" : "false");
   }
 
   template <typename NameValuePair>
-  void VisitValue(const NameValuePair& nvp,
+  void VisitValue(const NameValuePair&,
                   boost::posix_time::ptime* value, int) {
     ostr_ << "\"" << *value << "\"";
   }
 
   template <typename NameValuePair, typename T>
-  void VisitValue(const NameValuePair& nvp, T* value, long) {
+  void VisitValue(const NameValuePair&, T* value, long) {
     ostr_ << *value;
   }
 

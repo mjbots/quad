@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,8 +17,9 @@
 #include <boost/signals2/signal.hpp>
 #include <boost/signals2/connection.hpp>
 
+#include "mjlib/io/deadline_timer.h"
+
 #include "common.h"
-#include "deadline_timer.h"
 
 namespace mjmech {
 namespace base {
@@ -39,7 +40,7 @@ class SignalResult : boost::noncopyable {
                    double timeout_s,
                    Handler handler) {
     struct Context {
-      base::DeadlineTimer timer;
+      mjlib::io::DeadlineTimer timer;
       bool active = true;
       boost::signals2::connection connection;
 

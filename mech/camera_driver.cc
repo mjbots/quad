@@ -1,4 +1,5 @@
 // Copyright 2014-2016 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +16,7 @@
 #include "camera_driver.h"
 
 #include <mutex>
+#include <optional>
 #include <thread>
 
 #include <gst/gst.h>
@@ -23,9 +25,10 @@
 
 #include <fmt/format.h>
 
+#include "mjlib/base/fail.h"
+
 #include "base/common.h"
 #include "base/context_full.h"
-#include "base/fail.h"
 #include "base/json_archive.h"
 #include "base/logging.h"
 #include "base/now.h"
@@ -117,7 +120,7 @@ class Device {
       type_ = Type::kRaspberryPi;
       data_ = boost::erase_first_copy(name, "rpi:");
     } else {
-      base::Fail("Unknown device type: " + name);
+      mjlib::base::Fail("Unknown device type: " + name);
     }
   }
 
@@ -135,7 +138,7 @@ class Device {
         return true;
       }
     }
-    base::AssertNotReached();
+    mjlib::base::AssertNotReached();
   }
 
   /// This is required to return a gstreamer source which emits two
@@ -211,7 +214,7 @@ class Device {
                 size_.width, size_.height);
       }
     }
-    base::AssertNotReached();
+    mjlib::base::AssertNotReached();
   }
 
   std::string decoded_pad() const {
@@ -225,7 +228,7 @@ class Device {
       case Type::kC920:
         return "src.vfsrc";
     }
-    base::AssertNotReached();
+    mjlib::base::AssertNotReached();
   }
 
  private:
@@ -255,7 +258,7 @@ class H264Encoder {
       type_ = Type::kGstreamer;
       data_ = boost::erase_first_copy(name, "gstreamer:");
     } else {
-      base::Fail("Unknown encoder type: " + name);
+      mjlib::base::Fail("Unknown encoder type: " + name);
     }
   }
 
@@ -293,7 +296,7 @@ class H264Encoder {
         return data_;
       }
     }
-    base::AssertNotReached();
+    mjlib::base::AssertNotReached();
   }
 
  private:
@@ -317,7 +320,7 @@ class CameraDriver::Impl : boost::noncopyable {
     }
   }
 
-  void AsyncStart(base::ErrorHandler handler) {
+  void AsyncStart(mjlib::io::ErrorCallback handler) {
     BOOST_ASSERT(std::this_thread::get_id() == parent_id_);
     BOOST_ASSERT(!gst_loop_);
 
@@ -328,12 +331,12 @@ class CameraDriver::Impl : boost::noncopyable {
     const int kMaxPresets = sizeof(kPresets) / sizeof(kPresets[0]) - 1;
 
     int i_preset = parameters_.preset;
-    base::ErrorCode error;
+    mjlib::base::error_code error;
 
     if (i_preset < 0 || i_preset > kMaxPresets) {
       std::string msg = fmt::format("Preset {} is not in the range 0..{}",
                                     i_preset, kMaxPresets);
-      parent_service_.post(std::bind(handler, base::ErrorCode::einval(msg)));
+      parent_service_.post(std::bind(handler, mjlib::base::error_code::einval(msg)));
       return;
     }
     const Preset& preset = kPresets[i_preset];
@@ -348,7 +351,7 @@ class CameraDriver::Impl : boost::noncopyable {
       parameters_.h264_height = preset.h264_size.height;
     }
 
-    parent_service_.post(std::bind(handler, base::ErrorCode()));
+    parent_service_.post(std::bind(handler, mjlib::base::error_code()));
   }
 
   void AddFrameConsumer(std::weak_ptr<CameraFrameConsumer> c) {
@@ -492,7 +495,7 @@ class CameraDriver::Impl : boost::noncopyable {
   }
 
   // WARNING: This runs in internal gstreamer thread
-  void HandleDeepNotify(GstObject* gstobject, GstObject* prop_object,
+  void HandleDeepNotify(GstObject*, GstObject* prop_object,
                         GParamSpec* prop) {
     // Code from implementation of gst_object_default_deep_notify
     // This is what happens in gst-launch with -v option
@@ -517,7 +520,7 @@ class CameraDriver::Impl : boost::noncopyable {
     }
 
     if (bus_log_.isDebugEnabled()) {
-      GValue value = { 0, };
+      GValue value = {};
       g_value_init(&value, prop->value_type);
       g_object_get_property(G_OBJECT(prop_object), prop->name, &value);
       // Can also do g_value_dup_string(&value) when
@@ -681,7 +684,7 @@ class CameraDriver::Impl : boost::noncopyable {
 
   // From child (and maybe gst threads) only.
   int total_h264_frames_ = 0;
-  boost::optional<boost::posix_time::ptime> last_h264_time_;
+  std::optional<boost::posix_time::ptime> last_h264_time_;
   GstCaps* last_h264_caps_ = nullptr;
 };
 
@@ -698,7 +701,7 @@ void CameraDriver::AddFrameConsumer(std::weak_ptr<CameraFrameConsumer> c) {
   impl_->AddFrameConsumer(c);
 }
 
-void CameraDriver::AsyncStart(base::ErrorHandler handler) {
+void CameraDriver::AsyncStart(mjlib::io::ErrorCallback handler) {
   impl_->AsyncStart(handler);
 }
 

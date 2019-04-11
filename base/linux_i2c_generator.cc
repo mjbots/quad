@@ -1,4 +1,4 @@
-// Copyright 2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2016-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,7 +25,8 @@ extern "C" {
 
 #include <fmt/format.h>
 
-#include "program_options_archive.h"
+#include "mjlib/base/program_options_archive.h"
+#include "mjlib/base/system_error.h"
 
 namespace po = boost::program_options;
 
@@ -33,7 +34,7 @@ namespace mjmech {
 namespace base {
 
 LinuxI2CGenerator::Parameters::Parameters() {
-  ProgramOptionsArchive(&options_description_).Accept(this);
+  mjlib::base::ProgramOptionsArchive(&options_description_).Accept(this);
 }
 
 namespace {
@@ -46,7 +47,7 @@ class LinuxI2C : public AsyncI2C {
         parent_service_(service),
         fd_(::open(device.c_str(), O_RDWR)) {
     if (fd_ < 0) {
-      throw base::SystemError(
+      throw mjlib::base::system_error(
           errno, boost::system::generic_category(),
           "error opening '" + device + "'");
     }
@@ -67,8 +68,8 @@ class LinuxI2C : public AsyncI2C {
   }
 
   void AsyncRead(uint8_t device, uint8_t address,
-                 MutableBufferSequence buffers,
-                 ReadHandler handler) override {
+                 mjlib::io::MutableBufferSequence buffers,
+                 mjlib::io::ReadHandler handler) override {
     BOOST_ASSERT(std::this_thread::get_id() == parent_id_);
     child_service_.post(
         std::bind(&LinuxI2C::ChildRead, this,
@@ -76,8 +77,8 @@ class LinuxI2C : public AsyncI2C {
   }
 
   void ChildRead(uint8_t device, uint8_t address,
-                 MutableBufferSequence buffers,
-                 ReadHandler handler) {
+                 mjlib::io::MutableBufferSequence buffers,
+                 mjlib::io::ReadHandler handler) {
     BOOST_ASSERT(std::this_thread::get_id() == child_.get_id());
 
     if (!ErrWrap(::ioctl(fd_, I2C_SLAVE, static_cast<int>(device)),
@@ -95,7 +96,7 @@ class LinuxI2C : public AsyncI2C {
       parent_service_.post(
           std::bind(
               handler,
-              ErrorCode::einval(
+              mjlib::base::error_code::einval(
                   fmt::format("asked for length {} got {}",
                               static_cast<int>(size),
                               static_cast<int>(data.block[0]))),
@@ -106,12 +107,12 @@ class LinuxI2C : public AsyncI2C {
     boost::asio::buffer_copy(
         buffers, boost::asio::buffer(&data.block[1], size));
 
-    parent_service_.post(std::bind(handler, ErrorCode(), size));
+    parent_service_.post(std::bind(handler, mjlib::base::error_code(), size));
   }
 
   void AsyncWrite(uint8_t device, uint8_t address,
-                  ConstBufferSequence buffers,
-                  WriteHandler handler) override {
+                  mjlib::io::ConstBufferSequence buffers,
+                  mjlib::io::WriteHandler handler) override {
     BOOST_ASSERT(std::this_thread::get_id() == parent_id_);
     child_service_.post(
         std::bind(&LinuxI2C::ChildWrite, this,
@@ -119,8 +120,8 @@ class LinuxI2C : public AsyncI2C {
   }
 
   void ChildWrite(uint8_t device, uint8_t address,
-                  ConstBufferSequence buffers,
-                  WriteHandler handler) {
+                  mjlib::io::ConstBufferSequence buffers,
+                  mjlib::io::WriteHandler handler) {
     BOOST_ASSERT(std::this_thread::get_id() == child_.get_id());
 
     if (!ErrWrap(::ioctl(fd_, I2C_SLAVE, static_cast<int>(device)),
@@ -136,7 +137,7 @@ class LinuxI2C : public AsyncI2C {
                                     I2C_SMBUS_I2C_BLOCK_BROKEN, &i2c_data),
                  "during transfer", handler)) { return; }
 
-    parent_service_.post(std::bind(handler, ErrorCode(), size));
+    parent_service_.post(std::bind(handler, mjlib::base::error_code(), size));
   }
 
  private:
@@ -159,7 +160,7 @@ class LinuxI2C : public AsyncI2C {
     BOOST_ASSERT(std::this_thread::get_id() == child_.get_id());
 
     if (value == 0) { return true; }
-    parent_service_.post(std::bind(handler, ErrorCode::einval(message), 0));
+    parent_service_.post(std::bind(handler, mjlib::base::error_code::einval(message), 0));
     return false;
   }
 
@@ -186,7 +187,7 @@ void LinuxI2CGenerator::AsyncCreate(
   const Parameters& parameters =
       dynamic_cast<const Parameters&>(generator_parameters);
   SharedI2C shared(new LinuxI2C(service_, parameters.device));
-  service_.post(std::bind(handler, ErrorCode(), shared));
+  service_.post(std::bind(handler, mjlib::base::error_code(), shared));
 }
 
 }

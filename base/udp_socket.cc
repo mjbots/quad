@@ -1,4 +1,5 @@
 // Copyright 2015-2018 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +18,8 @@
 #include <boost/asio/ip/multicast.hpp>
 #include <boost/lexical_cast.hpp>
 
-#include "fail.h"
+#include "mjlib/base/fail.h"
+#include "mjlib/base/system_error.h"
 
 namespace mjmech {
 namespace base {
@@ -70,16 +72,16 @@ UdpSocket::UdpSocket(boost::asio::io_service& service,
           << ", choosing first one";
     }
     bind_to = endpoint(
-        listen_p.address.get_value_or(
-            bind_p.address.get_value_or(ip::address_v4::any())),
-        listen_p.port.get_value_or(
-            bind_p.port.get_value_or(
+        listen_p.address.value_or(
+            bind_p.address.value_or(ip::address_v4::any())),
+        listen_p.port.value_or(
+            bind_p.port.value_or(
                 server_mode ? parameters_.default_port : 0)));
   } else if (listen_p.address->is_v4()) {
     // We are v4 multicast / broadcast
     bind_to = endpoint(
-        bind_p.address.get_value_or(ip::address_v4::any()),
-        listen_p.port.get_value_or(bind_p.port.get_value_or(
+        bind_p.address.value_or(ip::address_v4::any()),
+        listen_p.port.value_or(bind_p.port.value_or(
                                        parameters_.default_port)));
 
     ip::address_v4 addr = listen_p.address->to_v4();
@@ -94,7 +96,7 @@ UdpSocket::UdpSocket(boost::asio::io_service& service,
     }
     rx_multicast_addr_ = endpoint(addr, bind_to.port());
   } else {
-    base::Fail("address family not supported");
+    mjlib::base::Fail("address family not supported");
   }
 
   log_.debugStream() << "Binding to " << bind_to;
@@ -126,7 +128,7 @@ void UdpSocket::PrepareSocket() {
     int result = ::setsockopt(fd, IPPROTO_IP, IP_MTU_DISCOVER,
                               &val, sizeof(val));
     if (result < 0) {
-      throw base::SystemError(errno, boost::system::generic_category());
+      throw mjlib::base::system_error(errno, boost::system::generic_category());
     }
   }
 
@@ -140,8 +142,8 @@ void UdpSocket::PrepareSocket() {
 UdpSocket::endpoint UdpSocket::ParseSendEndpoint(const std::string& addr) {
   ParseResult res = ParseAddress(addr);
   return endpoint(
-        res.address.get_value_or(ip::address_v4::any()),
-        res.port.get_value_or(parameters_.default_port));
+        res.address.value_or(ip::address_v4::any()),
+        res.port.value_or(parameters_.default_port));
 }
 
 void UdpSocket::PrepareToSendTo(const endpoint& endpoint) {
@@ -181,7 +183,7 @@ void UdpSocket::PrepareToSendTo(const endpoint& endpoint) {
     return;
   }
 
-  base::Fail("Unknown multicast / broadcast type");
+  mjlib::base::Fail("Unknown multicast / broadcast type");
 }
 
 void UdpSocket::SendTo(const std::string& data, const endpoint& endpoint) {
@@ -203,8 +205,8 @@ void UdpSocket::SendTo(const std::string& data, const endpoint& endpoint) {
 }
 
 void UdpSocket::HandleWrite(std::shared_ptr<std::string>,
-                            ErrorCode ec) {
-  FailIf(ec);
+                            mjlib::base::error_code ec) {
+  mjlib::base::FailIf(ec);
   tx_pending_--;
 }
 
@@ -240,8 +242,8 @@ UdpSocket::endpoint UdpSocket::local_endpoint() const {
   return socket_.local_endpoint();
 }
 
-void UdpSocket::HandleRead(ErrorCode ec, std::size_t size) {
-  FailIf(ec);
+void UdpSocket::HandleRead(mjlib::base::error_code ec, std::size_t size) {
+  mjlib::base::FailIf(ec);
 
   std::string data(receive_buffer_, size);
   udp::endpoint from = receive_endpoint_;
@@ -297,7 +299,7 @@ bool UdpSocket::IsMulticastBroadcast(const ip::address& addr) {
     ip::address_v6 addr6 = addr.to_v6();
     return addr6.is_multicast();
   } else {
-    base::Fail("invalid address type");
+    mjlib::base::Fail("invalid address type");
   }
 }
 

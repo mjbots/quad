@@ -1,4 +1,5 @@
 // Copyright 2015-2016 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,10 +15,11 @@
 
 #pragma once
 
+#include "mjlib/base/fail.h"
+#include "mjlib/base/program_options_archive.h"
+
 #include "base/component_archives.h"
-#include "base/fail.h"
 #include "base/logging.h"
-#include "base/program_options_archive.h"
 
 #include "mech_warfare_command.h"
 #include "video_controller_app.h"
@@ -34,13 +36,13 @@ class MWCommand : boost::noncopyable {
     m_.video_controller.reset(new VideoControllerApp(context));
     m_.commander.reset(new mw_command::Commander(service_));
 
-    base::ProgramOptionsArchive(&options_).Accept(&parameters_);
+    mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
   }
 
-  void AsyncStart(base::ErrorHandler handler) {
+  void AsyncStart(mjlib::io::ErrorCallback handler) {
     std::shared_ptr<base::ErrorHandlerJoiner> joiner =
         std::make_shared<base::ErrorHandlerJoiner>(
-            [=](base::ErrorCode ec) {
+            [=](mjlib::base::error_code ec) {
               if (!ec) {
                 service_.post([=]() {MaybeSendOnce(); });
               }
@@ -103,7 +105,7 @@ class MWCommand : boost::noncopyable {
 
     if (!parameters_.send_once) {
       if (turret_set) {
-        base::Fail("turret_* options have no effect when send_once=False");
+        mjlib::base::Fail("turret_* options have no effect when send_once=False");
       }
       return;
     }

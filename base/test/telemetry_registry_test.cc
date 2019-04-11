@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,8 +16,8 @@
 
 #include <boost/test/auto_unit_test.hpp>
 
-#include "base/telemetry_archive.h"
-#include "base/visitor.h"
+#include "mjlib/base/visitor.h"
+#include "mjlib/telemetry/telemetry_archive.h"
 
 using namespace mjmech::base;
 

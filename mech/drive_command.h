@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <optional>
+
 #include "base/euler.h"
 #include "base/point3d.h"
 #include "turret_command.h"
@@ -24,8 +26,8 @@ namespace mech {
 struct DriveCommand {
   /// Body coordinates relative to camera field of view.
   base::Point3D drive_mm_s;
-  boost::optional<base::Euler> turret_rate_dps;
-  boost::optional<base::Point3D> turret_target_relative;
+  std::optional<base::Euler> turret_rate_dps;
+  std::optional<base::Point3D> turret_target_relative;
 
   base::Point3D body_offset_mm;
   base::Euler body_attitude_deg;

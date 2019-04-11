@@ -74,7 +74,7 @@ class VideoLoopbackApp : boost::noncopyable {
     base::ProgramOptionsArchive(&options_).Accept(&parameters_);
   }
 
-  void AsyncStart(base::ErrorHandler handler) {
+  void AsyncStart(mjlib::io::ErrorCallback handler) {
     parameters_.children.Start(handler);
     StartTimer();
   }

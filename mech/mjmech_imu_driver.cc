@@ -1,4 +1,4 @@
-// Copyright 2014-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,8 +18,10 @@
 
 #include <fmt/format.h>
 
+#include "mjlib/base/fail.h"
+#include "mjlib/base/system_error.h"
+
 #include "base/common.h"
-#include "base/fail.h"
 #include "base/i2c_factory.h"
 #include "base/now.h"
 #include "base/quaternion.h"
@@ -83,7 +85,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
   ~Impl() {
   }
 
-  void AsyncStart(base::ErrorHandler handler) {
+  void AsyncStart(mjlib::io::ErrorCallback handler) {
     transform_ = base::Quaternion::FromEuler(
         base::Radians(parameters_.roll_deg),
         base::Radians(parameters_.pitch_deg),
@@ -97,8 +99,8 @@ class MjmechImuDriver::Impl : boost::noncopyable {
   boost::program_options::options_description* options() { return &options_; }
 
  private:
-  void HandleStart(base::ErrorHandler handler,
-                   base::ErrorCode ec,
+  void HandleStart(mjlib::io::ErrorCallback handler,
+                   mjlib::base::error_code ec,
                    base::SharedI2C i2c) {
     if (ec) {
       ec.Append("when starting imu i2c");
@@ -111,12 +113,12 @@ class MjmechImuDriver::Impl : boost::noncopyable {
     InitializeImu(handler);
   }
 
-  void InitializeImu(base::ErrorHandler handler) {
+  void InitializeImu(mjlib::io::ErrorCallback handler) {
     ReadGyro(0x20, 1, std::bind(&Impl::HandleWhoAmI, this, handler, _1, _2));
   }
 
-  void HandleWhoAmI(base::ErrorHandler handler,
-                    base::ErrorCode ec, std::size_t) {
+  void HandleWhoAmI(mjlib::io::ErrorCallback handler,
+                    mjlib::base::error_code ec, std::size_t) {
     if (ec) {
       ec.Append("when requesting gyro whoami");
       service_.post(std::bind(handler, ec));
@@ -125,7 +127,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
 
     const uint8_t whoami = buffer_[0];
     if (whoami != 0xb1) {
-      auto error = base::ErrorCode::einval(
+      auto error = mjlib::base::error_code::einval(
           fmt::format("Incorrect whoami got 0x{:02X} expected 0xb1",
                       static_cast<int>(whoami)));
       service_.post(std::bind(handler, error));
@@ -136,8 +138,8 @@ class MjmechImuDriver::Impl : boost::noncopyable {
               std::bind(&Impl::HandleInitAccelRead, this, handler, _1, _2));
   }
 
-  void HandleInitAccelRead(base::ErrorHandler handler,
-                           base::ErrorCode ec, std::size_t) {
+  void HandleInitAccelRead(mjlib::io::ErrorCallback handler,
+                           mjlib::base::error_code ec, std::size_t) {
     if (ec) {
       ec.Append("when discovering accelerometer");
       service_.post(std::bind(handler, ec));
@@ -152,7 +154,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
         else if (scale <= 500) { return 2; }
         else if (scale <= 1000) { return 1; }
         else if (scale <= 2000) { return 0; }
-        throw base::SystemError::einval("scale too large");
+        throw mjlib::base::system_error::einval("scale too large");
       }();
 
       imu_config_.rotation_dps = [fs]() {
@@ -162,7 +164,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
           case 2: { return 500.0; }
           case 3: { return 250.0; }
         }
-        throw base::SystemError::einval("invalid state");
+        throw mjlib::base::system_error::einval("invalid state");
       }();
 
       // FS=XX PWR=Normal XYZ=EN
@@ -208,7 +210,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
           case 14: { return 300.0; }
           case 15: { return 400.0; }
         }
-        throw base::SystemError::einval("invalid state");
+        throw mjlib::base::system_error::einval("invalid state");
       }();
 
       buffer_[1] = static_cast<uint8_t>(0x00 | (bw << 2)); // BW=X
@@ -222,7 +224,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
       const uint8_t odr = limit([&]() {
           const double rate = parameters_.rate_hz;
           if (rate < 4.95) {
-            throw base::SystemError::einval("IMU rate too small");
+            throw mjlib::base::system_error::einval("IMU rate too small");
           } else if (rate < 20) {
             return (154 * rate + 500) / rate;
           } else if (rate < 100) {
@@ -230,7 +232,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
           } else if (rate < 10000) {
             return (10000 - rate) / rate;
           } else {
-            throw base::SystemError::einval("IMU rate too large");
+            throw mjlib::base::system_error::einval("IMU rate too large");
           }
         }());
 
@@ -240,11 +242,11 @@ class MjmechImuDriver::Impl : boost::noncopyable {
         if (odr <= 99) { return 10000.0 / (odr + 1); }
         else if (odr <= 179) { return 10000.0 / (100 + 5 * (odr - 99)); }
         else if (odr <= 255) { return 10000.0 / (500 + 20 * (odr - 179)); }
-        throw base::SystemError::einval("invalid state");
+        throw mjlib::base::system_error::einval("invalid state");
       }();
-    } catch (base::SystemError& se) {
+    } catch (mjlib::base::system_error& se) {
       ec.Append("when configuring gyro");
-      service_.post(std::bind(handler, se.error_code()));
+      service_.post(std::bind(handler, se.code()));
       return;
     }
 
@@ -252,8 +254,8 @@ class MjmechImuDriver::Impl : boost::noncopyable {
               std::bind(&Impl::HandleGyroConfig, this, handler, _1, _2));
   }
 
-  void HandleGyroConfig(base::ErrorHandler handler,
-                        base::ErrorCode ec, std::size_t) {
+  void HandleGyroConfig(mjlib::io::ErrorCallback handler,
+                        mjlib::base::error_code ec, std::size_t) {
     if (ec) {
       ec.Append("when configuring gyro");
       service_.post(std::bind(handler, ec));
@@ -267,8 +269,8 @@ class MjmechImuDriver::Impl : boost::noncopyable {
                std::bind(&Impl::HandleAccelDisable, this, handler, _1, _2));
   }
 
-  void HandleAccelDisable(base::ErrorHandler handler,
-                          base::ErrorCode ec, std::size_t) {
+  void HandleAccelDisable(mjlib::io::ErrorCallback handler,
+                          mjlib::base::error_code ec, std::size_t) {
     if (ec) {
       ec.Append("when disabling accelerometer");
       service_.post(std::bind(handler, ec));
@@ -282,7 +284,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
         if (scale <= 2.0) { return 0; }
         else if (scale <= 4.0) { return 1; }
         else if (scale <= 8.0) { return 2; }
-        throw base::SystemError::einval("accel scale too large");
+        throw mjlib::base::system_error::einval("accel scale too large");
       }();
 
       imu_config_.accel_g = [fsg]() {
@@ -291,12 +293,12 @@ class MjmechImuDriver::Impl : boost::noncopyable {
           case 1: { return 4.0; }
           case 2: { return 8.0; }
         }
-        throw base::SystemError::einval("invalid state");
+        throw mjlib::base::system_error::einval("invalid state");
       }();
 
       buffer_[0] = fsg;
-    } catch (base::SystemError& se) {
-      service_.post(std::bind(handler, se.error_code()));
+    } catch (mjlib::base::system_error& se) {
+      service_.post(std::bind(handler, se.code()));
       return;
     }
 
@@ -304,8 +306,8 @@ class MjmechImuDriver::Impl : boost::noncopyable {
                std::bind(&Impl::HandleAccelFS, this, handler, _1, _2));
   }
 
-  void HandleAccelFS(base::ErrorHandler handler,
-                     base::ErrorCode ec, std::size_t) {
+  void HandleAccelFS(mjlib::io::ErrorCallback handler,
+                     mjlib::base::error_code ec, std::size_t) {
     if (ec) {
       ec.Append("when setting acclerometer scale");
       service_.post(std::bind(handler, ec));
@@ -323,7 +325,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
         else if (rate <= 200) { return 2; }
         else if (rate <= 400) { return 1; }
         else if (rate <= 800) { return 0; }
-        throw base::SystemError::einval("accel rate too large");
+        throw mjlib::base::system_error::einval("accel rate too large");
       }();
       const uint8_t lnoise = [&]() {
         if (parameters_.accel_g <= 4) { return 1; }
@@ -334,16 +336,16 @@ class MjmechImuDriver::Impl : boost::noncopyable {
       // 2B 0b00000010 ST=0 RST=0 SMODS=0 SLPE=0 MODS=2
       buffer_[0] = static_cast<uint8_t>(0x00 | (dr << 3) | (lnoise << 2));
       buffer_[1] = 0x02;
-    } catch (base::SystemError& se) {
-      service_.post(std::bind(handler, se.error_code()));
+    } catch (mjlib::base::system_error& se) {
+      service_.post(std::bind(handler, se.code()));
       return;
     }
     WriteAccel(0x2a, 1,
                std::bind(&Impl::HandleAccelConfig, this, handler, _1, _2));
   }
 
-  void HandleAccelConfig(base::ErrorHandler handler,
-                         base::ErrorCode ec, std::size_t) {
+  void HandleAccelConfig(mjlib::io::ErrorCallback handler,
+                         mjlib::base::error_code ec, std::size_t) {
     if (ec) {
       ec.Append("when configuring accelerometer");
       service_.post(std::bind(handler, ec));
@@ -356,8 +358,8 @@ class MjmechImuDriver::Impl : boost::noncopyable {
                std::bind(&Impl::HandleAccelEnable, this, handler, _1, _2));
   }
 
-  void HandleAccelEnable(base::ErrorHandler handler,
-                         base::ErrorCode ec, std::size_t) {
+  void HandleAccelEnable(mjlib::io::ErrorCallback handler,
+                         mjlib::base::error_code ec, std::size_t) {
     if (ec) {
       ec.Append("when enabling accelerometer");
       service_.post(std::bind(handler, ec));
@@ -375,14 +377,14 @@ class MjmechImuDriver::Impl : boost::noncopyable {
     // Emit our config.
     parent_->imu_config_signal_(&imu_config_);
 
-    service_.post(std::bind(handler, base::ErrorCode()));
+    service_.post(std::bind(handler, mjlib::base::error_code()));
 
     accel_sensitivity_ = [&]() {
       const double fs = imu_config_.accel_g;
       if (fs == 2.0) { return 1.0 / 4096 / 4; }
       else if (fs == 4.0) { return 1.0 / 2048 / 4; }
       else if (fs == 8.0) { return 1.0 / 1024 / 4; }
-      base::Fail("invalid configured accel range");
+      mjlib::base::Fail("invalid configured accel range");
     }();
 
     gyro_sensitivity_ = [&]() {
@@ -391,7 +393,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
       else if (fs == 500.0) { return 1.0 / 60.0; }
       else if (fs == 1000.0) { return 1.0 / 30.0; }
       else if (fs == 2000.0) { return 1.0 / 15.0; }
-      base::Fail("invalid configured gyro rate");
+      mjlib::base::Fail("invalid configured gyro rate");
     }();
 
     StartDataLoop();
@@ -401,8 +403,8 @@ class MjmechImuDriver::Impl : boost::noncopyable {
     ReadGyro(0x22, 1, std::bind(&Impl::HandleGyroPoll, this, _1, _2));
   }
 
-  void HandleGyroPoll(base::ErrorCode ec, std::size_t) {
-    base::FailIf(ec);
+  void HandleGyroPoll(mjlib::base::error_code ec, std::size_t) {
+    mjlib::base::FailIf(ec);
     if ((buffer_[0] & 0x01) == 0) {
       StartDataLoop();
     } else {
@@ -414,8 +416,8 @@ class MjmechImuDriver::Impl : boost::noncopyable {
     ReadGyro(0x22, 7, std::bind(&Impl::HandleGyroRead, this, _1, _2));
   }
 
-  void HandleGyroRead(base::ErrorCode ec, std::size_t) {
-    base::FailIf(ec);
+  void HandleGyroRead(mjlib::base::error_code ec, std::size_t) {
+    mjlib::base::FailIf(ec);
 
 
     const auto& gdata = buffer_;
@@ -438,8 +440,8 @@ class MjmechImuDriver::Impl : boost::noncopyable {
   }
 
   void HandleAccelRead(base::Point3D rate_dps,
-                       base::ErrorCode ec, std::size_t) {
-    base::FailIf(ec);
+                       mjlib::base::error_code ec, std::size_t) {
+    mjlib::base::FailIf(ec);
 
     ImuData imu_data;
     imu_data.timestamp = base::Now(service_);
@@ -467,34 +469,34 @@ class MjmechImuDriver::Impl : boost::noncopyable {
   }
 
   void WriteGyro(uint8_t reg, std::size_t length,
-                 base::WriteHandler handler) {
+                 mjlib::io::WriteHandler handler) {
     WriteData(parameters_.gyro_address, reg, length, handler);
   }
 
   void WriteAccel(uint8_t reg, std::size_t length,
-                  base::WriteHandler handler) {
+                  mjlib::io::WriteHandler handler) {
     WriteData(parameters_.accel_address, reg, length, handler);
   }
 
   void ReadGyro(uint8_t reg, std::size_t length,
-                base::ReadHandler handler) {
+                mjlib::io::ReadHandler handler) {
     ReadData(parameters_.gyro_address, reg, length, handler);
   }
 
   void ReadAccel(uint8_t reg, std::size_t length,
-                 base::ReadHandler handler) {
+                 mjlib::io::ReadHandler handler) {
     ReadData(parameters_.accel_address, reg, length, handler);
   }
 
   void WriteData(uint8_t address, uint8_t reg, std::size_t length,
-                 base::WriteHandler handler) {
+                 mjlib::io::WriteHandler handler) {
 
     i2c_->AsyncWrite(address, reg, boost::asio::buffer(buffer_, length),
                      handler);
   }
 
   void ReadData(uint8_t address, uint8_t reg, std::size_t length,
-                base::ReadHandler handler) {
+                mjlib::io::ReadHandler handler) {
 
     i2c_->AsyncRead(address, reg, boost::asio::buffer(buffer_, length),
                     handler);
@@ -524,7 +526,7 @@ MjmechImuDriver::MjmechImuDriver(boost::asio::io_service& service,
 
 MjmechImuDriver::~MjmechImuDriver() {}
 
-void MjmechImuDriver::AsyncStart(base::ErrorHandler handler) {
+void MjmechImuDriver::AsyncStart(mjlib::io::ErrorCallback handler) {
   impl_->AsyncStart(handler);
 }
 

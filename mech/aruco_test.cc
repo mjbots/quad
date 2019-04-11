@@ -1,4 +1,4 @@
-// Copyright 2018 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2018-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@
 extern "C" {
 
 int main(int argc, char** argv) {
-  BOOST_ASSERT(argc >= 2);
+  BOOST_VERIFY(argc >= 2);
   cv::Mat input = cv::imread(argv[1]);
   cv::Ptr<cv::aruco::Dictionary> dictionary =
       cv::aruco::getPredefinedDictionary(cv::aruco::DICT_4X4_50);

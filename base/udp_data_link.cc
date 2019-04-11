@@ -1,4 +1,5 @@
 // Copyright 2015-2016 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,9 +15,11 @@
 
 #include "udp_data_link.h"
 
+#include "mjlib/base/fail.h"
+
+#include "base/now.h"
+
 #include "common.h"
-#include "fail.h"
-#include "now.h"
 #include "stringify.h"
 
 /*
@@ -107,7 +110,7 @@ UdpDataLink::UdpDataLink(boost::asio::io_service& service,
 
   if (dest_p.address) {
     tx_addr_ = UdpSocket::endpoint(
-        *dest_p.address, dest_p.port.get_value_or(
+        *dest_p.address, dest_p.port.value_or(
             params_.socket_params.default_port));
     logmsg << ", sending to " << *tx_addr_;
   } else {
@@ -137,18 +140,17 @@ boost::asio::ip::address UdpDataLink::FlipBitInAddress(
   if (addr.is_v4()) {
     return boost::asio::ip::address_v4(
         addr.to_v4().to_ulong() ^ 1);
-  } else {
-    BOOST_ASSERT(false);
   }
 
+  mjlib::base::AssertNotReached();
 }
 
 int UdpDataLink::GetLastBitOfAddress(const boost::asio::ip::address& addr) {
   if (addr.is_v4()) {
     return addr.to_v4().to_ulong() & 1;
-  } else {
-    BOOST_ASSERT(false);
   }
+
+  mjlib::base::AssertNotReached();
 }
 
 void UdpDataLink::HandleUdpPacket(
@@ -199,7 +201,7 @@ void UdpDataLink::HandlePeriodicTimer() {
   // Allow timeout error of up to 20%.
   periodic_timer_.expires_from_now(timeout / 5.0);
   periodic_timer_.async_wait([=](const boost::system::error_code& ec) {
-      base::FailIf(ec);
+      mjlib::base::FailIf(ec);
       HandlePeriodicTimer();
     });
 }

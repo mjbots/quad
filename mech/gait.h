@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,9 +14,10 @@
 
 #pragma once
 
+#include "mjlib/base/visitor.h"
+
 #include "base/common.h"
 #include "base/tf.h"
-#include "base/visitor.h"
 
 #include "leg_ik.h"
 
@@ -40,7 +41,7 @@ struct Leg {
       a->Visit(MJ_NVP(idle_mm));
     }
 
-    bool operator==(const Config& rhs) const { return true; }
+    bool operator==(const Config&) const { return true; }
   };
 
   struct Result {

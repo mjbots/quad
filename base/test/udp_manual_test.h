@@ -1,4 +1,5 @@
 // Copyright 2015-2016 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -251,7 +252,7 @@ class SocketTester: public SocketTesterBase {
 
   const Parameters& parameters_;
   std::unique_ptr<UdpSocket> socket_;
-  boost::optional<UdpSocket::endpoint> tx_endpoint_;
+  std::optional<UdpSocket::endpoint> tx_endpoint_;
 };
 
 class LinkTester: public SocketTesterBase {
@@ -357,7 +358,7 @@ class UdpManualTest : boost::noncopyable {
     }
 
     log_.info("running");
-    service_.post(std::bind(handler, base::ErrorCode()));
+    service_.post(std::bind(handler, mjlib::base::error_code()));
   }
 
   struct Parameters {

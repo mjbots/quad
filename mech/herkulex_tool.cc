@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,10 +23,11 @@
 
 #include <fmt/format.h>
 
+#include "mjlib/io/deadline_timer.h"
+#include "mjlib/io/stream_factory.h"
+
 #include "base/common.h"
-#include "base/concrete_comm_factory.h"
 #include "base/program_options.h"
-#include "base/program_options_archive.h"
 
 #include "herkulex.h"
 #include "herkulex_servo_interface.h"
@@ -63,7 +64,7 @@ struct CommandContext {
   std::string args;
 };
 typedef std::function<
-  void (CommandContext&, ErrorHandler)> CommandFunction;
+  void (CommandContext&, mjlib::io::ErrorCallback)> CommandFunction;
 
 enum CommandArg {
   kNoArgs,
@@ -119,9 +120,9 @@ HC::Register ParseRegister(const std::string& args) {
         static_cast<uint8_t>(reg_size)};
 }
 
-void DoStdio(CommandContext&, ErrorHandler);
+void DoStdio(CommandContext&, mjlib::io::ErrorCallback);
 
-void MemReadCommand(CommandContext& ctx, ErrorHandler handler,
+void MemReadCommand(CommandContext& ctx, mjlib::io::ErrorCallback handler,
                     Servo::Command command) {
   HC::Register reg = ParseRegister(ctx.args);
 
@@ -158,7 +159,7 @@ void MemReadCommand(CommandContext& ctx, ErrorHandler handler,
       });
 }
 
-void MemWriteCommand(CommandContext& ctx, ErrorHandler handler,
+void MemWriteCommand(CommandContext& ctx, mjlib::io::ErrorCallback handler,
                      Servo::Command command) {
   std::vector<std::string> args;
   boost::split(args, ctx.args, boost::is_any_of(":"));
@@ -181,14 +182,14 @@ void MemWriteCommand(CommandContext& ctx, ErrorHandler handler,
 
 class EnumerateCommand : public std::enable_shared_from_this<EnumerateCommand> {
  public:
-  EnumerateCommand(CommandContext& context, ErrorHandler handler)
+  EnumerateCommand(CommandContext& context, mjlib::io::ErrorCallback handler)
       : context_(context),
         handler_(handler) {}
 
   void Start() {
     if (next_address_ == 254) {
       std::cout << "\n";
-      handler_(ErrorCode());
+      handler_(mjlib::base::error_code());
       return;
     }
 
@@ -202,8 +203,8 @@ class EnumerateCommand : public std::enable_shared_from_this<EnumerateCommand> {
   }
 
  private:
-  void HandleStatus(const ErrorCode& ec,
-                    Servo::StatusResponse response, int address) {
+  void HandleStatus(const mjlib::base::error_code& ec,
+                    Servo::StatusResponse, int address) {
     if (ec == boost::asio::error::operation_aborted) {
     } else {
       FailIf(ec);
@@ -216,28 +217,28 @@ class EnumerateCommand : public std::enable_shared_from_this<EnumerateCommand> {
   }
 
   CommandContext& context_;
-  ErrorHandler handler_;
+  mjlib::io::ErrorCallback handler_;
   int next_address_ = 0;
 };
 
 const std::map<std::string, Command> g_commands = {
   { "stdio", { kNoArgs, DoStdio } },
-  { "sleep", { kArg, [](CommandContext& ctx, ErrorHandler handler) {
-        auto timer = std::make_shared<DeadlineTimer>(ctx.service);
+  { "sleep", { kArg, [](CommandContext& ctx, mjlib::io::ErrorCallback handler) {
+        auto timer = std::make_shared<mjlib::io::DeadlineTimer>(ctx.service);
         double delay_s = std::stod(ctx.args);
         timer->expires_from_now(ConvertSecondsToDuration(delay_s));
-        timer->async_wait([timer, handler](const ErrorCode& ec) {
+        timer->async_wait([timer, handler](const mjlib::base::error_code& ec) {
             handler(ec);
           });
       } } },
-  { "reboot", { kNoArgs, [](CommandContext& ctx, ErrorHandler handler) {
+  { "reboot", { kNoArgs, [](CommandContext& ctx, mjlib::io::ErrorCallback handler) {
         ctx.servo.Reboot(ctx.options.address, handler);
       } } },
-  { "status", { kNoArgs, [](CommandContext& ctx, ErrorHandler handler) {
+  { "status", { kNoArgs, [](CommandContext& ctx, mjlib::io::ErrorCallback handler) {
         ctx.servo.Status(
             ctx.options.address,
             [handler, address=ctx.options.address](
-                const ErrorCode& ec, Servo::StatusResponse response) {
+                const mjlib::base::error_code& ec, Servo::StatusResponse response) {
               std::cout << fmt::format("Servo {}: (0x{:02x} 0x{:02x})\n",
                                        static_cast<int>(address),
                                        static_cast<int>(response.reg48),
@@ -245,11 +246,11 @@ const std::map<std::string, Command> g_commands = {
               handler(ec);
             });
       } } },
-  { "voltage", { kNoArgs, [](CommandContext& ctx, ErrorHandler handler) {
+  { "voltage", { kNoArgs, [](CommandContext& ctx, mjlib::io::ErrorCallback handler) {
         ctx.servo.RamRead(
             ctx.options.address, HC().voltage(),
             [handler, address=ctx.options.address](
-                const ErrorCode& ec, int value) {
+                const mjlib::base::error_code& ec, int value) {
               std::cout << fmt::format(
                   "Servo {}: {}\n",
                   static_cast<int>(address),
@@ -261,7 +262,7 @@ const std::map<std::string, Command> g_commands = {
   { "eep_read", { kArg, std::bind(MemReadCommand, pl::_1, pl::_2, Servo::EEP_READ) } },
   { "ram_write", { kArg, std::bind(MemWriteCommand, pl::_1, pl::_2, Servo::RAM_WRITE) } },
   { "eep_write", { kArg, std::bind(MemWriteCommand, pl::_1, pl::_2, Servo::EEP_WRITE) } },
-  { "value_write", { kArg, [](CommandContext& ctx, ErrorHandler handler) {
+  { "value_write", { kArg, [](CommandContext& ctx, mjlib::io::ErrorCallback handler) {
         std::vector<std::string> args;
         boost::split(args, ctx.args, boost::is_any_of(":"));
         if (args.size() < 2) {
@@ -280,16 +281,16 @@ const std::map<std::string, Command> g_commands = {
         ctx.servo.MemWrite(ctx.servo.RAM_WRITE, ctx.options.address,
                            reg.position, ostr.str(), handler);
       } } },
-  { "set_address", { kArg, [](CommandContext& ctx, ErrorHandler handler) {
+  { "set_address", { kArg, [](CommandContext& ctx, mjlib::io::ErrorCallback handler) {
         int new_address = std::stoi(ctx.args, 0, 0);
         ctx.servo.EepWrite(ctx.options.address, HC::id(),
                            new_address, handler);
       } } },
-  { "enumerate", { kNoArgs, [](CommandContext& ctx, ErrorHandler handler) {
+  { "enumerate", { kNoArgs, [](CommandContext& ctx, mjlib::io::ErrorCallback handler) {
         auto command = std::make_shared<EnumerateCommand>(ctx, handler);
         command->Start();
       } } },
-  { "set_pose", { kArg, [](CommandContext& ctx, ErrorHandler handler) {
+  { "set_pose", { kArg, [](CommandContext& ctx, mjlib::io::ErrorCallback handler) {
         std::vector<std::string> args;
         boost::split(args, ctx.args, boost::is_any_of(","));
 
@@ -304,7 +305,7 @@ const std::map<std::string, Command> g_commands = {
 
         ctx.servo_interface.SetPose(joints, handler);
       } } },
-  { "list_registers", { kNoArgs, [](CommandContext& ctx, ErrorHandler handler) {
+  { "list_registers", { kNoArgs, [](CommandContext&, mjlib::io::ErrorCallback handler) {
         HC constants;
         for (const auto& pair: constants.ram_registers) {
           std::cout << fmt::format("{:<30s} 0x{:02X} length={} stride={}",
@@ -314,7 +315,7 @@ const std::map<std::string, Command> g_commands = {
                                    static_cast<int>(pair.second.bit_align))
                     << "\n";
         }
-        handler(ErrorCode());
+        handler(mjlib::base::error_code());
       } } },
 };
 
@@ -333,9 +334,9 @@ class CommandValue : public boost::program_options::value_semantic {
   virtual bool is_required() const { return false; }
   virtual bool apply_default(boost::any&) const { return false; }
   virtual void notify(const boost::any&) const {}
-  virtual void parse(boost::any& value_store,
+  virtual void parse(boost::any&,
                      const std::vector<std::string>& new_tokens,
-                     bool utf8) const {
+                     bool /* utf8 */) const {
     output_->push_back(
         CommandText{name_, command_arg_ == kArg ?
               new_tokens.at(0) : ""});
@@ -361,7 +362,7 @@ class CommandRunner {
   void Run(const Commands& commands) {
     std::copy(commands.begin(), commands.end(), std::back_inserter(commands_));
 
-    servo_.AsyncStart([this](ErrorCode ec) {
+    servo_.AsyncStart([this](mjlib::base::error_code ec) {
         FailIf(ec);
         this->Start();
       });
@@ -395,7 +396,7 @@ class CommandRunner {
   }
 
   boost::asio::io_service service_;
-  ConcreteStreamFactory factory_{service_};
+  mjlib::io::StreamFactory factory_{service_};
   Servo servo_{service_, factory_};
   HerkuleXServoInterface<Servo> servo_interface_{&servo_};
   Options options_;
@@ -437,7 +438,7 @@ int work(int argc, char** argv) {
 
 class StdioHandler : public std::enable_shared_from_this<StdioHandler> {
  public:
-  StdioHandler(CommandContext& context, ErrorHandler handler)
+  StdioHandler(CommandContext& context, mjlib::io::ErrorCallback handler)
       : context_(context),
         final_handler_(handler) {}
 
@@ -449,7 +450,7 @@ class StdioHandler : public std::enable_shared_from_this<StdioHandler> {
   }
 
  private:
-  void HandleRead(const ErrorCode& ec) {
+  void HandleRead(const mjlib::base::error_code& ec) {
     FailIf(ec);
 
     std::ostringstream ostr;
@@ -486,7 +487,7 @@ class StdioHandler : public std::enable_shared_from_this<StdioHandler> {
     } else {
       it->second.function(
           *sub_context,
-          [self=shared_from_this(), sub_context](ErrorCode ec) {
+          [self=shared_from_this(), sub_context](mjlib::base::error_code ec) {
             FailIf(ec);
             self->Start();
           });
@@ -497,11 +498,11 @@ class StdioHandler : public std::enable_shared_from_this<StdioHandler> {
   boost::asio::posix::stream_descriptor descriptor_{
     context_.service, ::dup(0)};
   std::string last_line_;
-  ErrorHandler final_handler_;
+  mjlib::io::ErrorCallback final_handler_;
   boost::asio::streambuf stream_;
 };
 
-void DoStdio(CommandContext& ctx, ErrorHandler handler) {
+void DoStdio(CommandContext& ctx, mjlib::io::ErrorCallback handler) {
   auto stdio = std::make_shared<StdioHandler>(ctx, handler);
   stdio->Start();
 }

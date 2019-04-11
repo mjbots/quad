@@ -1,4 +1,5 @@
 // Copyright 2015 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,7 +20,7 @@
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/signals2/signal.hpp>
 
-#include "visitor.h"
+#include "mjlib/base/visitor.h"
 
 namespace boost {
 namespace program_options {

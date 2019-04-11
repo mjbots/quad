@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,11 +23,12 @@
 
 #include <fmt/format.h>
 
-#include "base/deadline_timer.h"
-#include "base/fail.h"
+#include "mjlib/base/fail.h"
+#include "mjlib/base/program_options_archive.h"
+#include "mjlib/io/deadline_timer.h"
+
 #include "base/json_archive.h"
 #include "base/logging.h"
-#include "base/program_options_archive.h"
 #include "base/property_tree_archive.h"
 
 namespace mjmech {
@@ -201,10 +202,10 @@ class Commander::Impl {
         options_(params.opt),
         service_(service),
         timer_(service) {
-    base::ProgramOptionsArchive(&po_options_).Accept(&params);
+    mjlib::base::ProgramOptionsArchive(&po_options_).Accept(&params);
   }
 
-  void AsyncStart(base::ErrorHandler handler) {
+  void AsyncStart(mjlib::io::ErrorCallback handler) {
     // Create joystick, if needed.
     if (!parameters_.joystick.empty()) {
       log_.infoStream() << "Opening joystick: " << parameters_.joystick;
@@ -242,7 +243,7 @@ class Commander::Impl {
       // Do not send command when we have no joystick.
       StartTimer();
     }
-    service_.post(std::bind(handler, base::ErrorCode()));
+    service_.post(std::bind(handler, mjlib::base::error_code()));
   }
 
   void SendMechMessage(const MechMessage& message) {
@@ -265,8 +266,8 @@ class Commander::Impl {
                                 std::placeholders::_1));
   }
 
-  void HandleRead(ErrorCode ec) {
-    FailIf(ec);
+  void HandleRead(mjlib::base::error_code ec) {
+    mjlib::base::FailIf(ec);
     StartRead();
 
     if (event_.ev_type == EV_KEY) {
@@ -363,8 +364,8 @@ class Commander::Impl {
     return key_pressed(mapping_.target_move);
   }
 
-  void HandleTimeout(ErrorCode ec) {
-    FailIf(ec);
+  void HandleTimeout(mjlib::base::error_code ec) {
+    mjlib::base::FailIf(ec);
     StartTimer();
 
     // The body mode acts independently of anything else and updates
@@ -590,7 +591,7 @@ class Commander::Impl {
   udp::endpoint target_;
   std::unique_ptr<LinuxInput> linux_input_;
   std::unique_ptr<udp::socket> socket_;
-  DeadlineTimer timer_;
+  mjlib::io::DeadlineTimer timer_;
   AxisMapping mapping_;
 
   bool laser_on_ = false;
@@ -612,7 +613,7 @@ Commander::Commander(boost::asio::io_service& service)
 
 Commander::~Commander() {};
 
-void Commander::AsyncStart(base::ErrorHandler handler) {
+void Commander::AsyncStart(mjlib::io::ErrorCallback handler) {
   impl_->AsyncStart(handler);
 }
 

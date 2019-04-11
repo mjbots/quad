@@ -1,4 +1,4 @@
-// Copyright 2014-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,10 +19,11 @@
 #include <boost/noncopyable.hpp>
 #include <boost/asio/io_service.hpp>
 
+#include "mjlib/io/stream_factory.h"
+
 namespace mjmech {
 namespace base {
 
-class ConcreteStreamFactory;
 class I2CFactory;
 class TelemetryLog;
 class TelemetryRemoteDebugServer;
@@ -36,7 +37,7 @@ struct Context : boost::noncopyable {
   std::unique_ptr<TelemetryLog> telemetry_log;
   std::unique_ptr<TelemetryRemoteDebugServer> remote_debug;
   std::unique_ptr<TelemetryRegistry> telemetry_registry;
-  std::unique_ptr<ConcreteStreamFactory> factory;
+  std::unique_ptr<mjlib::io::StreamFactory> factory;
   std::unique_ptr<I2CFactory> i2c_factory;
 };
 

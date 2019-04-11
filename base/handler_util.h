@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,8 +17,9 @@
 #include <list>
 #include <memory>
 
-#include "comm.h"
-#include "error_code.h"
+#include "mjlib/base/error_code.h"
+#include "mjlib/io/async_types.h"
+
 #include "logging.h"
 
 namespace mjmech {
@@ -29,12 +30,12 @@ namespace base {
 class ErrorHandlerJoiner
     : public std::enable_shared_from_this<ErrorHandlerJoiner> {
  public:
-  ErrorHandlerJoiner(ErrorHandler handler)
+  ErrorHandlerJoiner(mjlib::io::ErrorCallback handler)
       : handler_(handler),
         log_(GetUniqueLogInstance("joiner")) {
   }
 
-  ErrorHandler Wrap(const std::string& message) {
+  mjlib::io::ErrorCallback Wrap(const std::string& message) {
     BOOST_ASSERT(!done_);
     outstanding_.push_front(true);
     log_.debugStream()
@@ -42,7 +43,7 @@ class ErrorHandlerJoiner
         << outstanding_.size() << " pending";
     auto it = outstanding_.begin();
     auto me = shared_from_this();
-    return [me, it, message](ErrorCode ec) {
+    return [me, it, message](mjlib::base::error_code ec) {
       if (me->done_) {
         me->log_.warnStream()
             << "Complete [" << message << "]: result " << (!!ec)
@@ -66,7 +67,7 @@ class ErrorHandlerJoiner
   }
 
   bool done_ = false;
-  ErrorHandler handler_;
+  mjlib::io::ErrorCallback handler_;
   std::list<bool> outstanding_;
   LogRef log_;
 };

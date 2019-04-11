@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,8 +16,9 @@
 
 #include <tuple>
 
+#include "mjlib/base/visitor.h"
+
 #include "program_options.h"
-#include "visitor.h"
 
 namespace mjmech {
 namespace base {
@@ -41,7 +42,7 @@ class ParametersArchive {
   template <typename NameValuePair, typename Serializable>
   auto VisitHelper(const NameValuePair& pair,
                    Serializable* serializable,
-                   int32_t value) -> decltype((*serializable)->options()) {
+                   int32_t) -> decltype((*serializable)->options()) {
     MergeProgramOptions((*serializable)->options(),
                         std::string(pair.name()) + ".",
                         base_->options());
@@ -50,10 +51,11 @@ class ParametersArchive {
 
   template <typename NameValuePair, typename Serializable>
   void VisitHelper(const NameValuePair& pair,
-                   Serializable* serializable,
+                   Serializable*,
                    int64_t) {
     base_->Visit(
-        MakeNameValuePair((*pair.value())->parameters(), pair.name()));
+        mjlib::base::MakeNameValuePair(
+            (*pair.value())->parameters(), pair.name()));
   }
 
   BaseArchive* const base_;

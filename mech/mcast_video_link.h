@@ -1,4 +1,5 @@
 // Copyright 2014-2016 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,9 +21,10 @@
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/signals2/signal.hpp>
 
-#include "base/comm.h"
+#include "mjlib/base/visitor.h"
+#include "mjlib/io/async_types.h"
+
 #include "base/context.h"
-#include "base/visitor.h"
 
 #include "base/udp_data_link.h"
 
@@ -55,7 +57,7 @@ class McastVideoLinkTransmitter : boost::noncopyable {
   McastVideoLinkTransmitter(base::Context& context);
   ~McastVideoLinkTransmitter();
 
-  void AsyncStart(base::ErrorHandler handler);
+  void AsyncStart(mjlib::io::ErrorCallback handler);
 
   // Get a frameconsumer interface. pointer has same lifetime
   // as this object.
@@ -119,7 +121,7 @@ class McastVideoLinkReceiver : boost::noncopyable {
   McastVideoLinkReceiver(base::Context& context);
   ~McastVideoLinkReceiver();
 
-  void AsyncStart(base::ErrorHandler handler);
+  void AsyncStart(mjlib::io::ErrorCallback handler);
 
   struct Parameters {
     base::UdpDataLink::Parameters link;

@@ -1,4 +1,4 @@
-// Copyright 2014-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,16 +20,15 @@ namespace mjmech {
 namespace base {
 
 Context::Context()
-    : telemetry_log(new TelemetryLog),
-      remote_debug(new TelemetryRemoteDebugServer(service)),
-      telemetry_registry(new TelemetryRegistry(
+    : telemetry_log(std::make_unique<TelemetryLog>()),
+      remote_debug(std::make_unique<TelemetryRemoteDebugServer>(service)),
+      telemetry_registry(std::make_unique<TelemetryRegistry>(
                              telemetry_log.get(), remote_debug.get())),
-      factory(new ConcreteStreamFactory(service)),
-      i2c_factory(new I2CFactory(service))
+      factory(std::make_unique<mjlib::io::StreamFactory>(service)),
+      i2c_factory(std::make_unique<I2CFactory>(service))
 {
   i2c_factory->Register(
-      std::unique_ptr<I2CFactory::Generator>(
-          new LinuxI2CGenerator(service)));
+      std::make_unique<LinuxI2CGenerator>(service));
 }
 
 Context::~Context() {}

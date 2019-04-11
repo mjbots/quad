@@ -16,8 +16,10 @@ test:pi --define COM_GITHUB_MJBOTS_RASPBERRYPI=1
 build --strip=never
 test --strip=never
 
-build --compiler=clang-6.0
-test --compiler=clang-6.0
+build --compiler=clang
+test --compiler=clang
 
 build -c opt
 test -c opt
+
+test --test_output=errors

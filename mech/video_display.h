@@ -1,4 +1,5 @@
 // Copyright 2014-2015 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,8 +21,8 @@
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/signals2/signal.hpp>
 
-#include "base/comm.h"
-#include "base/visitor.h"
+#include "mjlib/base/visitor.h"
+#include "mjlib/io/async_types.h"
 
 #include "gst_main_loop.h"
 #include "target_tracker_data.h"
@@ -43,7 +44,7 @@ class VideoDisplay : boost::noncopyable {
   VideoDisplay(boost::asio::io_service&);
   ~VideoDisplay();
 
-  void AsyncStart(base::ErrorHandler handler);
+  void AsyncStart(mjlib::io::ErrorCallback handler);
 
   struct Parameters {
     double stats_interval_s = 1.0;

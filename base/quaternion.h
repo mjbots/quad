@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -128,9 +128,9 @@ class Quaternion {
     // delta is too large.
     const double kMaxIntegrationAngle = 0.5;
 
-    BOOST_ASSERT(rate_rps.x * dt_s < kMaxIntegrationAngle);
-    BOOST_ASSERT(rate_rps.y * dt_s < kMaxIntegrationAngle);
-    BOOST_ASSERT(rate_rps.z * dt_s < kMaxIntegrationAngle);
+    BOOST_VERIFY(rate_rps.x * dt_s < kMaxIntegrationAngle);
+    BOOST_VERIFY(rate_rps.y * dt_s < kMaxIntegrationAngle);
+    BOOST_VERIFY(rate_rps.z * dt_s < kMaxIntegrationAngle);
 
     return Quaternion(1.0,
                       0.5 * rate_rps.x * dt_s,
@@ -145,10 +145,10 @@ class Quaternion {
 
   template <typename Archive>
   void Serialize(Archive* a) {
-    a->Visit(MakeNameValuePair(&w_, "w"));
-    a->Visit(MakeNameValuePair(&x_, "x"));
-    a->Visit(MakeNameValuePair(&y_, "y"));
-    a->Visit(MakeNameValuePair(&z_, "z"));
+    a->Visit(mjlib::base::MakeNameValuePair(&w_, "w"));
+    a->Visit(mjlib::base::MakeNameValuePair(&x_, "x"));
+    a->Visit(mjlib::base::MakeNameValuePair(&y_, "y"));
+    a->Visit(mjlib::base::MakeNameValuePair(&z_, "z"));
   }
 
  private:

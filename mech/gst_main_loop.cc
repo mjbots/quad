@@ -1,4 +1,5 @@
 // Copyright 2014-2015 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,8 +22,9 @@
 
 #include <boost/asio/deadline_timer.hpp>
 
+#include "mjlib/base/fail.h"
+
 #include "base/common.h"
-#include "base/fail.h"
 #include "base/logging.h"
 
 extern "C" {
@@ -82,7 +84,7 @@ class GstMainLoop::Impl :
     WaitForQuit();
   }
 
-  void AsyncStart(base::ErrorHandler handler) {
+  void AsyncStart(mjlib::io::ErrorCallback handler) {
     BOOST_ASSERT(std::this_thread::get_id() == parent_id_);
 
     // Capture our parent's parameters before starting our thread.
@@ -90,7 +92,7 @@ class GstMainLoop::Impl :
 
     std::lock_guard<std::mutex> guard(thread_mutex_);
     child_ = std::thread(std::bind(&Impl::Run, shared_from_this(), handler));
-    service_.post(std::bind(handler, base::ErrorCode()));
+    service_.post(std::bind(handler, mjlib::base::error_code()));
   }
 
   void WaitForQuit() {
@@ -144,7 +146,7 @@ class GstMainLoop::Impl :
     while (!shutdown_complete_) {
       if (shutdown_var_.wait_for(lock, kShutdownTimeout)
           == std::cv_status::timeout) {
-        base::Fail("timed out while waiting for gst thread to quit");
+        mjlib::base::Fail("timed out while waiting for gst thread to quit");
       }
     }
 
@@ -169,7 +171,7 @@ class GstMainLoop::Impl :
   }
 
  private:
-  void Run(base::ErrorHandler handler) {
+  void Run(mjlib::io::ErrorCallback) {
     {
       std::lock_guard<std::mutex> guard(thread_mutex_);
       child_id_ = child_.get_id();
@@ -187,7 +189,7 @@ class GstMainLoop::Impl :
     if (quit_requested_) {
       log_.debug("child thread is exiting");
     } else {
-      base::Fail("glib loop exited unexpectedly");
+      mjlib::base::Fail("glib loop exited unexpectedly");
     }
 
     {
@@ -210,8 +212,8 @@ class GstMainLoop::Impl :
     int gs_argc = g_strv_length(gs_argv);
     gst_init(&gs_argc, reinterpret_cast<char***>(&gs_argv));
     if (gs_argc != 1) {
-      base::Fail(std::string("Unhandled gst option: ") +
-                 std::string(gs_argv[1]));
+      mjlib::base::Fail(std::string("Unhandled gst option: ") +
+                        std::string(gs_argv[1]));
     }
     g_strfreev(gs_argv);
 
@@ -270,7 +272,7 @@ class GstMainLoop::Impl :
     g_main_loop_quit(loop_);
   }
 
-  static void DoShutdown(std::shared_ptr<Impl> impl) {
+  static void DoShutdown(std::shared_ptr<Impl>) {
     // Let the impl fall off the end to be destroyed here.
   }
 
@@ -352,7 +354,7 @@ void GstMainLoop::SignalReady() {
   ready_signal_(ref);
 }
 
-void GstMainLoop::AsyncStart(base::ErrorHandler handler) {
+void GstMainLoop::AsyncStart(mjlib::io::ErrorCallback handler) {
   impl_->AsyncStart(handler);
 }
 

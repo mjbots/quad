@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,9 +19,10 @@
 #include <boost/program_options.hpp>
 #include <boost/signals2/signal.hpp>
 
+#include "mjlib/base/visitor.h"
+
 #include "base/context.h"
 #include "base/tf.h"
-#include "base/visitor.h"
 
 #include "gait.h"
 

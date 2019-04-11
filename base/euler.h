@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "visitor.h"
+#include "mjlib/base/visitor.h"
 
 namespace mjmech {
 namespace base {
