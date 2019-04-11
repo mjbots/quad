@@ -250,7 +250,7 @@ class VideoDisplay::Impl : boost::noncopyable {
         });
 
     pipeline_->ConnectIdentityHandoff(
-        "decoded-detector", [this](GstBuffer* buf) {
+        "decoded-detector", [this](GstBuffer*) {
           std::lock_guard<std::mutex> guard(stats_mutex_);
           if (parameters_.analyze) {
             log_.debug("detected decoded frame %d",
