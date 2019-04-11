@@ -23,8 +23,10 @@
 #include "gait_driver.h"
 #include "mech_defines.h"
 #include "mjmech_imu_driver.h"
+#include "moteus_servo.h"
 #include "ripple.h"
 #include "servo_monitor.h"
+#include "servo_selector.h"
 #include "turret.h"
 #include "video_sender_app.h"
 
@@ -45,6 +47,8 @@ class MechWarfare : boost::noncopyable {
   struct Members {
     std::unique_ptr<Mech::ServoBase> servo_base;
     std::unique_ptr<Mech::Servo> servo;
+    std::unique_ptr<MoteusServo> moteus_servo;
+    std::unique_ptr<ServoSelector> servo_selector;
     std::unique_ptr<MjmechImuDriver> imu;
     std::unique_ptr<Ahrs> ahrs;
     std::unique_ptr<GaitDriver> gait_driver;
@@ -57,6 +61,7 @@ class MechWarfare : boost::noncopyable {
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(servo_base));
       a->Visit(MJ_NVP(servo));
+      a->Visit(MJ_NVP(moteus_servo));
       a->Visit(MJ_NVP(imu));
       a->Visit(MJ_NVP(ahrs));
       a->Visit(MJ_NVP(gait_driver));

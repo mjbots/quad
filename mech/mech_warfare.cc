@@ -505,11 +505,16 @@ MechWarfare::MechWarfare(base::Context& context)
       impl_(new Impl(this, context)) {
   m_.servo_base.reset(new Mech::ServoBase(service_, *context.factory));
   m_.servo.reset(new Mech::Servo(m_.servo_base.get()));
+  m_.moteus_servo = std::make_unique<MoteusServo>(service_, *context.factory);
+  m_.servo_selector = std::make_unique<ServoSelector>();
+  m_.servo_selector->AddInterface("herkulex", m_.servo.get());
+  m_.servo_selector->AddInterface("moteus", m_.moteus_servo.get());
+
   m_.imu.reset(new MjmechImuDriver(context));
   m_.ahrs.reset(new Ahrs(context, m_.imu->imu_data_signal()));
   m_.gait_driver.reset(new GaitDriver(service_,
                                       context.telemetry_registry.get(),
-                                      m_.servo.get(),
+                                      m_.servo_selector.get(),
                                       m_.ahrs->ahrs_data_signal()));
   m_.servo_iface.reset(
       new ServoMonitor::HerkuleXServoConcrete<Mech::ServoBase>(

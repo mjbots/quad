@@ -16,6 +16,8 @@
 
 #include <boost/program_options.hpp>
 
+#include "mjlib/io/stream_factory.h"
+
 #include "mech/servo_interface.h"
 
 namespace mjmech {
@@ -23,7 +25,7 @@ namespace mech {
 
 class MoteusServo : public ServoInterface {
  public:
-  MoteusServo();
+  MoteusServo(boost::asio::io_service&, mjlib::io::StreamFactory&);
   ~MoteusServo() override;
 
   struct Parameters {
@@ -34,6 +36,8 @@ class MoteusServo : public ServoInterface {
 
   Parameters* parameters();
   boost::program_options::options_description* options();
+
+  void AsyncStart(mjlib::io::ErrorCallback);
 
   void SetPose(const std::vector<Joint>&, mjlib::io::ErrorCallback) override;
   void EnablePower(PowerState, const std::vector<int>&,
