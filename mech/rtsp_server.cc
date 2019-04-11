@@ -109,7 +109,7 @@ class RtspServer::Impl : boost::noncopyable {
     if (port < 0) {
       mjlib::base::Fail("failed to bind RTSP server port.");
     }
-    BOOST_ASSERT(id > 0);
+    BOOST_VERIFY(id > 0);
     log_.noticeStream() <<
         fmt::format("RTSP server ready at rtsp://127.0.0.1:{}/video", port);
   }

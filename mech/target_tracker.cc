@@ -60,7 +60,7 @@ class TargetTracker::Impl : public CameraFrameConsumer {
 
     // Apparently we should have a defined capabilities structure at
     // this point.
-    BOOST_ASSERT(GST_CAPS_IS_SIMPLE(caps));
+    BOOST_VERIFY(GST_CAPS_IS_SIMPLE(caps));
 
     if (log_.isDebugEnabled()) {
       char* caps_str = gst_caps_to_string(caps);
@@ -71,20 +71,20 @@ class TargetTracker::Impl : public CameraFrameConsumer {
     // TODO jpieper: Assert that the format is I420.
 
     GstBuffer* buf = gst_sample_get_buffer(sample);
-    BOOST_ASSERT(buf != nullptr);
+    BOOST_VERIFY(buf != nullptr);
 
     const size_t len = gst_buffer_get_size(buf);
     GstMemory* mem = gst_buffer_get_all_memory(buf);
     GstMapInfo info;
     std::memset(&info, 0, sizeof(info));
     const bool ok = gst_memory_map(mem, &info, GST_MAP_READ);
-    BOOST_ASSERT(ok);
-    BOOST_ASSERT(info.size == len);
+    BOOST_VERIFY(ok);
+    BOOST_VERIFY(info.size == len);
 
     gint width = 0;
     gint height = 0;
-    BOOST_ASSERT(gst_structure_get_int(str, "width", &width));
-    BOOST_ASSERT(gst_structure_get_int(str, "height", &height));
+    BOOST_VERIFY(gst_structure_get_int(str, "width", &width));
+    BOOST_VERIFY(gst_structure_get_int(str, "height", &height));
 
     cv::Mat mat(height, width, CV_8UC1, info.data);
 
@@ -123,7 +123,7 @@ class TargetTracker::Impl : public CameraFrameConsumer {
       data.target = std::nullopt;
     } else {
       // For now, just pick the first one we see.
-      BOOST_ASSERT(!marker_corners.empty());
+      BOOST_VERIFY(!marker_corners.empty());
       TargetTrackerData::Target target;
       base::Point3D total;
       for (const auto& corner : marker_corners.front()) {
