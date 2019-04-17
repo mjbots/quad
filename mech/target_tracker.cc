@@ -104,11 +104,12 @@ class TargetTracker::Impl : public CameraFrameConsumer {
     }();
 
     const auto& p = parent_->parameters_;
-    cv::Rect crop_area(
+    cv::Rect crop_area = cv::Rect(
         mat.cols / 2 - p.region_width / 2,
         mat.rows / 2 - p.region_height / 2,
         p.region_width,
-        p.region_height);
+        p.region_height) &
+        cv::Rect(0, 0, mat.cols, mat.rows);
     cv::Mat subset = mat(crop_area);
 
     std::vector<int> marker_ids;
