@@ -260,6 +260,12 @@ class MammalIK : public IKSolver {
     Joint tibia;
     bool invert = false;
 
+    /// Should the tibia be measured "relative" to the position of the
+    /// femur?  This will be the case for geometries where the tibia
+    /// servo is co-located at the joint, but for geometries like the
+    /// co-axial joint, the tibia angle is absolute.
+    bool tibia_relative = true;
+
     double servo_speed_dps = 360.0;
 
     template <typename Archive>
@@ -269,6 +275,7 @@ class MammalIK : public IKSolver {
       a->Visit(MJ_NVP(femur));
       a->Visit(MJ_NVP(tibia));
       a->Visit(MJ_NVP(invert));
+      a->Visit(MJ_NVP(tibia_relative));
       a->Visit(MJ_NVP(servo_speed_dps));
     }
   };
@@ -391,11 +398,12 @@ class MammalIK : public IKSolver {
     const double tibia_sign = config_.invert ? -1.0 : 1.0;
     const double logical_tibia_rad = tibia_sign * (M_PI - tibiainv_rad);
 
-    const double tibia_deg =
+    const double tibia_relative_deg =
         config_.tibia.sign * base::Degrees(logical_tibia_rad) +
         config_.tibia.idle_deg;
-    if (tibia_deg < config_.tibia.min_deg ||
-        tibia_deg > config_.tibia.max_deg) {
+
+    if (tibia_relative_deg < config_.tibia.min_deg ||
+        tibia_relative_deg > config_.tibia.max_deg) {
       return JointAngles::Invalid();
     }
 
@@ -422,7 +430,12 @@ class MammalIK : public IKSolver {
     JointAngles result;
     result.joints.emplace_back(config_.shoulder.ident, shoulder_deg);
     result.joints.emplace_back(config_.femur.ident, femur_deg);
-    result.joints.emplace_back(config_.tibia.ident, tibia_deg);
+
+    const double tibia_command_deg =
+        config_.tibia_relative ?
+        tibia_relative_deg : (tibia_relative_deg + femur_deg);
+
+    result.joints.emplace_back(config_.tibia.ident, tibia_command_deg);
 
     return result;
   }
