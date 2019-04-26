@@ -62,6 +62,7 @@ class MechWarfare : boost::noncopyable {
       a->Visit(MJ_NVP(servo_base));
       a->Visit(MJ_NVP(servo));
       a->Visit(MJ_NVP(moteus_servo));
+      a->Visit(MJ_NVP(servo_selector));
       a->Visit(MJ_NVP(imu));
       a->Visit(MJ_NVP(ahrs));
       a->Visit(MJ_NVP(gait_driver));
