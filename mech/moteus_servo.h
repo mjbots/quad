@@ -29,8 +29,11 @@ class MoteusServo : public ServoInterface {
   ~MoteusServo() override;
 
   struct Parameters {
+    double max_current = 30.0;
+
     template <typename Archive>
-    void Serialize(Archive*) {
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(max_current));
     }
   };
 

@@ -25,10 +25,10 @@ namespace mech {
 
 class ServoSelector : public ServoInterface {
  public:
-  ServoSelector() {}
-  ~ServoSelector() override {
+  ServoSelector() {
     mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
   }
+  ~ServoSelector() override {}
 
   struct Parameters {
     std::string servo;

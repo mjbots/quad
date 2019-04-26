@@ -16,8 +16,12 @@
 
 #include <functional>
 
+#include "mjlib/base/fail.h"
 #include "mjlib/base/program_options_archive.h"
 #include "mjlib/multiplex/asio_client.h"
+
+#include "base/logging.h"
+#include "mech/moteus.h"
 
 namespace pl = std::placeholders;
 
@@ -50,6 +54,85 @@ class MoteusServo::Impl {
     service_.post(std::bind(handler, ec));
   }
 
+  void SetPose(const std::vector<Joint>& joints,
+               mjlib::io::ErrorCallback handler) {
+    BOOST_ASSERT(!!mp_client_);
+    BOOST_ASSERT(!outstanding_);
+
+    if (joints.empty()) {
+      service_.post(std::bind(handler, mjlib::base::error_code()));
+      return;
+    }
+
+    request_ = {};
+    request_.WriteSingle(moteus::kMode,
+                         static_cast<int8_t>(moteus::Mode::kPosition));
+    request_.WriteMultiple(
+        moteus::kCommandPosition,
+        {
+          static_cast<float>(joints.back().angle_deg / 360.0),
+          0.0f, // velocity
+          static_cast<float>(parameters_.max_current),
+        });
+
+    auto remainder = joints;
+    remainder.pop_back();
+
+    outstanding_ = true;
+    mp_client_->AsyncRegister(
+        joints.back().address, request_,
+        std::bind(&Impl::HandleSetPose, this, pl::_1, pl::_2, remainder, handler));
+  }
+
+  void HandleSetPose(const mjlib::base::error_code& ec,
+                     const mjlib::multiplex::RegisterReply&,
+                     const std::vector<Joint>& remainder,
+                     mjlib::io::ErrorCallback handler) {
+    mjlib::base::FailIf(ec);
+    outstanding_ = false;
+
+    SetPose(remainder, handler);
+  }
+
+  void EnablePower(PowerState power_state,
+                   const std::vector<int>& ids,
+                   mjlib::io::ErrorCallback handler) {
+    if (ids.empty()) {
+      service_.post(std::bind(handler, mjlib::base::error_code()));
+      return;
+    }
+
+    request_ = {};
+    const auto value = [&]() {
+      switch (power_state) {
+        case PowerState::kPowerFree: return moteus::Mode::kStopped;
+        case PowerState::kPowerBrake: return moteus::Mode::kStopped;
+        case PowerState::kPowerEnable: return moteus::Mode::kPosition;
+      }
+    }();
+    request_.WriteSingle(moteus::kMode, static_cast<int8_t>(value));
+
+    auto remainder = ids;
+    remainder.pop_back();
+
+    mp_client_->AsyncRegister(
+        ids.back(), request_,
+        std::bind(&Impl::HandleEnablePower, this, pl::_1, pl::_2,
+                  power_state, remainder, handler));
+  }
+
+  void HandleEnablePower(const mjlib::base::error_code& ec,
+                         const mjlib::multiplex::RegisterReply&,
+                         PowerState power_state,
+                         const std::vector<int>& ids,
+                         mjlib::io::ErrorCallback handler) {
+    mjlib::base::FailIf(ec);
+
+    EnablePower(power_state, ids, handler);
+  }
+
+  base::LogRef log_ = base::GetLogInstance("MoteusServo");
+
   boost::asio::io_service& service_;
   mjlib::io::StreamFactory& factory_;
   mjlib::io::StreamFactory::Options stream_parameters_;
@@ -59,6 +142,9 @@ class MoteusServo::Impl {
 
   mjlib::io::SharedStream stream_;
   std::unique_ptr<mjlib::multiplex::AsioClient> mp_client_;
+
+  bool outstanding_ = false;
+  mjlib::multiplex::RegisterRequest request_;
 };
 
 MoteusServo::MoteusServo(boost::asio::io_service& service,
@@ -78,20 +164,29 @@ void MoteusServo::AsyncStart(mjlib::io::ErrorCallback handler) {
   impl_->AsyncStart(handler);
 }
 
-void MoteusServo::SetPose(const std::vector<Joint>&, mjlib::io::ErrorCallback) {
+void MoteusServo::SetPose(const std::vector<Joint>& joints,
+                          mjlib::io::ErrorCallback handler) {
+  impl_->SetPose(joints, handler);
 }
 
-void MoteusServo::EnablePower(PowerState, const std::vector<int>&,
-                              mjlib::io::ErrorCallback) {
+void MoteusServo::EnablePower(PowerState power_state,
+                              const std::vector<int>& ids,
+                              mjlib::io::ErrorCallback handler) {
+  auto ids_copy = ids;
+  if (ids_copy.empty()) { ids_copy.push_back(moteus::Ids::kBroadcastId); }
+  impl_->EnablePower(power_state, ids_copy, handler);
 }
 
 void MoteusServo::GetPose(const std::vector<int>&, PoseHandler) {
+  mjlib::base::AssertNotReached();
 }
 
 void MoteusServo::GetTemperature(const std::vector<int>&, TemperatureHandler) {
+  mjlib::base::AssertNotReached();
 }
 
 void MoteusServo::GetVoltage(const std::vector<int>&, VoltageHandler) {
+  mjlib::base::AssertNotReached();
 }
 
 }
