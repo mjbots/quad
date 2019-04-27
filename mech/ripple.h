@@ -252,9 +252,6 @@ class RippleGait : public Gait {
       leg_state.frame = &result.world_frame;
       leg_state.mode = Leg::Mode::kStance;
 
-      base::Frame shoulder_frame;
-      MakeShoulderFrame(leg_config, &result, &shoulder_frame);
-
       leg_state.leg_ik = leg_config.leg_ik;
     }
 
