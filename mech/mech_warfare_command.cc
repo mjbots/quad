@@ -79,6 +79,7 @@ struct AxisMapping {
   int crouch = -1;
   int manual = -1;
   int target_relative = -1;
+  int body = -1;
   int freeze = -1;
   int pause = -1;
   int target_move = -1;
@@ -127,8 +128,9 @@ AxisMapping GetAxisMapping(const LinuxInput* input) {
     }
 
     result.crouch = BTN_THUMB;
-    result.manual = BTN_PINKIE;
+    // result.manual = BTN_PINKIE;
     result.target_relative = BTN_BASE;
+    result.body = BTN_PINKIE;
     result.freeze = BTN_TOP2;
     result.pause = BTN_BASE4;
     result.target_move = BTN_THUMB2;
@@ -338,7 +340,7 @@ class Commander::Impl {
   }
 
   bool body_enabled() const {
-    return false;
+    return key_pressed(mapping_.body);
   }
 
   bool freeze_enabled() const {
