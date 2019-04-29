@@ -27,8 +27,11 @@ struct MechWarfareData {
   enum class Mode {
     kIdle,
     kTurretBias,
+    kPrepositioning,
+    kStanding,
     kManual,
     kDrive,
+    kSitting,
   };
 
   Mode mode = Mode::kIdle;
@@ -36,13 +39,19 @@ struct MechWarfareData {
   DriveCommand current_drive;
   boost::posix_time::ptime last_command_timestamp;
   boost::posix_time::ptime turret_bias_start_timestamp;
+  boost::posix_time::ptime sitting_start_timestamp;
+  boost::posix_time::ptime prepositioning_start_timestamp;
+  boost::posix_time::ptime standing_start_timestamp;
 
   static std::map<Mode, const char*> ModeMapper() {
     return std::map<Mode, const char*>{
       {Mode::kIdle, "kIdle"},
       {Mode::kTurretBias, "kTurretBias"},
+      {Mode::kPrepositioning, "kPrepositioning"},
+      {Mode::kStanding, "kStanding"},
       {Mode::kManual, "kManual"},
       {Mode::kDrive, "kDrive"},
+      {Mode::kSitting, "kSitting"},
     };
   }
 
@@ -53,6 +62,9 @@ struct MechWarfareData {
     a->Visit(MJ_NVP(current_drive));
     a->Visit(MJ_NVP(last_command_timestamp));
     a->Visit(MJ_NVP(turret_bias_start_timestamp));
+    a->Visit(MJ_NVP(sitting_start_timestamp));
+    a->Visit(MJ_NVP(prepositioning_start_timestamp));
+    a->Visit(MJ_NVP(standing_start_timestamp));
   }
 };
 

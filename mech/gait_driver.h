@@ -24,7 +24,7 @@
 #include "base/context.h"
 #include "base/tf.h"
 
-#include "gait.h"
+#include "mech/gait.h"
 
 namespace mjmech {
 namespace mech {
@@ -57,6 +57,16 @@ class GaitDriver : boost::noncopyable {
   /// Set all servos to be unpowered and stop executing the gait
   /// engine.
   void SetFree();
+
+  /// Prepare legs to stand up by gently positioning them above the
+  /// idle state.
+  void CommandPrepositioning();
+
+  /// Gently stand up.
+  void CommandStandup();
+
+  /// Gently sit down.
+  void CommandSitting();
 
   boost::program_options::options_description* options();
 

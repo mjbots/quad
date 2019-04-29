@@ -66,6 +66,8 @@ struct RippleConfig {
   double rate_p_mm_dps = 0.0;
   double rate_i_mm_dps2 = 0.0;
 
+  double preposition_z_offset_mm = -80;
+
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(mechanical));
@@ -86,6 +88,7 @@ struct RippleConfig {
     a->Visit(MJ_NVP(attitude_i_mm_dps));
     a->Visit(MJ_NVP(rate_p_mm_dps));
     a->Visit(MJ_NVP(rate_i_mm_dps2));
+    a->Visit(MJ_NVP(preposition_z_offset_mm));
   }
 };
 
@@ -226,36 +229,12 @@ class RippleGait : public Gait {
   const Options& options() const { return options_; }
   const Command& command() const { return command_; }
 
+  RippleState GetPrepositioningState() const {
+    return GetStartupState(config_.preposition_z_offset_mm);
+  }
+
   RippleState GetIdleState() const {
-    RippleState result;
-
-    result.body_frame.transform.translation.z = config_.body_z_offset_mm;
-
-    for (const auto& leg_config: config_.mechanical.leg_config) {
-      base::Point3D point;
-
-      const double x_sign = base::GetSign(leg_config.mount_mm.x);
-      point.x = leg_config.mount_mm.x + leg_config.idle_mm.x * x_sign;
-
-      const double y_sign = base::GetSign(leg_config.mount_mm.y);
-      point.y = leg_config.mount_mm.y + leg_config.idle_mm.y * y_sign;
-
-      point.z = leg_config.mount_mm.z +
-          leg_config.idle_mm.z -
-          config_.body_z_offset_mm;
-
-      result.legs.emplace_back();
-      RippleState::Leg& leg_state = result.legs.back();
-
-      leg_state.point = result.world_frame.MapFromFrame(
-          &result.body_frame, point);
-      leg_state.frame = &result.world_frame;
-      leg_state.mode = Leg::Mode::kStance;
-
-      leg_state.leg_ik = leg_config.leg_ik;
-    }
-
-    return result;
+    return GetStartupState(0.0);
   }
 
   JointCommand MakeJointCommand(const RippleState& state) const {
@@ -281,6 +260,39 @@ class RippleGait : public Gait {
   }
 
  private:
+  RippleState GetStartupState(double z_offset_mm) const {
+    RippleState result;
+
+    result.body_frame.transform.translation.z = config_.body_z_offset_mm;
+
+    for (const auto& leg_config: config_.mechanical.leg_config) {
+      base::Point3D point;
+
+      const double x_sign = base::GetSign(leg_config.mount_mm.x);
+      point.x = leg_config.mount_mm.x + leg_config.idle_mm.x * x_sign;
+
+      const double y_sign = base::GetSign(leg_config.mount_mm.y);
+      point.y = leg_config.mount_mm.y + leg_config.idle_mm.y * y_sign;
+
+      point.z = leg_config.mount_mm.z +
+          leg_config.idle_mm.z -
+          config_.body_z_offset_mm -
+          z_offset_mm;
+
+      result.legs.emplace_back();
+      RippleState::Leg& leg_state = result.legs.back();
+
+      leg_state.point = result.world_frame.MapFromFrame(
+          &result.body_frame, point);
+      leg_state.frame = &result.world_frame;
+      leg_state.mode = Leg::Mode::kStance;
+
+      leg_state.leg_ik = leg_config.leg_ik;
+    }
+
+    return result;
+  }
+
   void MakeShoulderFrame(const Leg::Config& leg_config,
                          const RippleState* state,
                          base::Frame* shoulder_frame) const {

@@ -71,8 +71,9 @@ class MoteusServo::Impl {
         moteus::kCommandPosition,
         {
           static_cast<float>(joints.back().angle_deg / 360.0),
-          0.0f, // velocity
+          static_cast<float>(joints.back().velocity_dps / 360.0f),
           static_cast<float>(parameters_.max_current),
+          static_cast<float>(joints.back().goal_deg / 360.0f),
         });
 
     auto remainder = joints;

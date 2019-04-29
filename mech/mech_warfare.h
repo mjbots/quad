@@ -90,6 +90,9 @@ class MechWarfare : boost::noncopyable {
     double drive_max_translate_mm_s = 200.0;
 
     double turret_bias_timeout_s = 1.5;
+    double prepositioning_timeout_s = 2.0;
+    double standing_timeout_s = 2.0;
+    double sitting_timeout_s = 2.0;
     std::string config_servos = "0-11";
 
     uint8_t servo_min_voltage_counts = 0x50;
@@ -111,6 +114,9 @@ class MechWarfare : boost::noncopyable {
       a->Visit(MJ_NVP(drive_min_error_deg));
       a->Visit(MJ_NVP(drive_max_translate_mm_s));
       a->Visit(MJ_NVP(turret_bias_timeout_s));
+      a->Visit(MJ_NVP(prepositioning_timeout_s));
+      a->Visit(MJ_NVP(standing_timeout_s));
+      a->Visit(MJ_NVP(sitting_timeout_s));
       a->Visit(MJ_NVP(config_servos));
       a->Visit(MJ_NVP(servo_min_voltage_counts));
       a->Visit(MJ_NVP(body_offset_mm));

@@ -170,6 +170,45 @@ class MechWarfare::Impl : boost::noncopyable {
                                 std::placeholders::_1));
   }
 
+  void WorkTowardsIdle() {
+    // Try to get into an idle state.  First, we need to sit down,
+    // then power off the servos.
+
+    switch (data_.mode) {
+      case Data::Mode::kIdle: {
+        mjlib::base::AssertNotReached();
+        break;
+      }
+      case Data::Mode::kTurretBias: {
+        // We haven't even turned on the servos yet.
+        data_.mode = Data::Mode::kIdle;
+        break;
+      }
+      case Data::Mode::kPrepositioning: // fall through
+      case Data::Mode::kStanding:
+      case Data::Mode::kManual:
+      case Data::Mode::kDrive: {
+        // Start sitting.
+        data_.sitting_start_timestamp = base::Now(service_);
+        parent_->m_.gait_driver->CommandSitting();
+        data_.mode = Data::Mode::kSitting;
+        break;
+      }
+      case Data::Mode::kSitting: {
+        // TODO: Wait for our timeout.
+        const auto now = base::Now(service_);
+        const auto elapsed_s = base::ConvertDurationToSeconds(
+            now - data_.sitting_start_timestamp);
+        if (elapsed_s > parent_->parameters_.sitting_timeout_s) {
+          data_.mode = Data::Mode::kIdle;
+          parent_->m_.gait_driver->SetFree();
+          parent_->m_.servo_monitor->ExpectTorqueOff();
+        }
+        break;
+      }
+    }
+  }
+
   void HandleTimer(mjlib::base::error_code ec) {
     if (ec == boost::asio::error::operation_aborted) { return; }
     mjlib::base::FailIf(ec);
@@ -180,16 +219,18 @@ class MechWarfare::Impl : boost::noncopyable {
       const double elapsed_s = base::ConvertDurationToSeconds(
           base::Now(service_) - data_.last_command_timestamp);
       if (elapsed_s > parent_->parameters_.idle_timeout_s) {
-        data_.mode = Data::Mode::kIdle;
-        parent_->m_.gait_driver->SetFree();
-        parent_->m_.servo_monitor->ExpectTorqueOff();
+        WorkTowardsIdle();
       }
     }
 
     switch (data_.mode) {
-      case Data::Mode::kIdle: { break; }
-      case Data::Mode::kTurretBias: { break; }
-      case Data::Mode::kManual: { break; }
+      case Data::Mode::kIdle:  // fall through
+      case Data::Mode::kTurretBias:  // fall through
+      case Data::Mode::kPrepositioning:  // fall through
+      case Data::Mode::kStanding:  // fall through
+      case Data::Mode::kSitting:  // fall through
+      case Data::Mode::kManual:
+        break;
       case Data::Mode::kDrive: {
         DoDrive();
         break;
@@ -393,6 +434,7 @@ class MechWarfare::Impl : boost::noncopyable {
   }
 
   void MaybeEnterActiveMode(Data::Mode mode) {
+    const auto now = base::Now(service_);
     switch (data_.mode) {
       case Data::Mode::kIdle: {
         // Start the turret bias process.
@@ -407,13 +449,36 @@ class MechWarfare::Impl : boost::noncopyable {
           break;
         }
 
-        const auto now = base::Now(service_);
         const double elapsed_s = base::ConvertDurationToSeconds(
             now - data_.turret_bias_start_timestamp);
         if (elapsed_s > parent_->parameters_.turret_bias_timeout_s) {
-          data_.mode = mode;
+          parent_->m_.gait_driver->CommandPrepositioning();
+          data_.prepositioning_start_timestamp = now;
+          data_.mode = Data::Mode::kPrepositioning;
           parent_->m_.servo_monitor->ExpectTorqueOn();
         }
+        break;
+      }
+      case Data::Mode::kPrepositioning: {
+        const double elapsed_s = base::ConvertDurationToSeconds(
+            now - data_.prepositioning_start_timestamp);
+        if (elapsed_s > parent_->parameters_.prepositioning_timeout_s) {
+          parent_->m_.gait_driver->CommandStandup();
+          data_.standing_start_timestamp = now;
+          data_.mode = Data::Mode::kStanding;
+        }
+        break;
+      }
+      case Data::Mode::kStanding: {
+        const double elapsed_s = base::ConvertDurationToSeconds(
+            now - data_.standing_start_timestamp);
+        if (elapsed_s > parent_->parameters_.standing_timeout_s) {
+          data_.mode = mode;
+        }
+        break;
+      }
+      case Data::Mode::kSitting: {
+        // We just have to wait for this to finish.
         break;
       }
       case Data::Mode::kManual: // fall-through

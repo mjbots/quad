@@ -27,8 +27,18 @@ class ServoInterface : boost::noncopyable {
   virtual ~ServoInterface() {}
 
   struct Joint {
-    int address;
-    double angle_deg;
+    int address = 0;
+
+    /// The position to aim to be at *right now*.  !finite means start
+    /// from wherever we happen to be.
+    double angle_deg = 0.0;
+
+    /// The speed to aim to be at *right now*.
+    double velocity_dps = 0.0;
+
+    /// The position to stop at if velocity is non-zero.  !finite
+    /// means don't stop moving.
+    double goal_deg = std::numeric_limits<double>::quiet_NaN();
   };
   virtual void SetPose(const std::vector<Joint>&, mjlib::io::ErrorCallback) = 0;
 

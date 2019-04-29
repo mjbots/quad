@@ -58,11 +58,17 @@ class HerkuleXServoInterface : public ServoInterface {
       uint16_t position;
       uint8_t leds;
     };
+    auto get_angle = [&](const auto& joint) {
+      if (std::isfinite(joint.goal_deg)) {
+        return joint.goal_deg;
+      }
+      return joint.angle_deg;
+    };
     std::vector<Target> targets;
     for (const auto& joint: joints) {
       targets.emplace_back(Target{
           MapAddress(joint.address),
-              HerkuleXBase::AngleToCount(joint.angle_deg), 0});
+              HerkuleXBase::AngleToCount(get_angle(joint)), 0});
     }
     servo_->SJog(targets, parameters_.pose_time_s, handler);
   }

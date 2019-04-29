@@ -18,6 +18,7 @@
 #include "mjlib/base/program_options_archive.h"
 #include "mjlib/io/deadline_timer.h"
 
+#include "base/logging.h"
 #include "base/now.h"
 #include "base/telemetry_registry.h"
 
@@ -39,24 +40,37 @@ struct Parameters {
   /// axis.  Deceleration is currently unlimited.
   base::Point3D max_acceleration_mm_s2 = base::Point3D(200., 200., 200.);
 
+  double preposition_speed_dps = 60.0;
+  double standup_speed_dps = 30.0;
+  double sitting_speed_dps = 30.0;
+
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(period_s));
     a->Visit(MJ_NVP(command_timeout_s));
     a->Visit(MJ_NVP(max_acceleration_mm_s2));
+    a->Visit(MJ_NVP(preposition_speed_dps));
+    a->Visit(MJ_NVP(standup_speed_dps));
+    a->Visit(MJ_NVP(sitting_speed_dps));
   }
 };
 
 enum State : int {
   kUnpowered,
-      kActive,
-      };
+  kActive,
+  kPrepositioning,
+  kStandup,
+  kSitting,
+};
 
 static std::map<State, const char*> StateMapper() {
   return std::map<State, const char*>{
     { kUnpowered, "kUnpowered" },
     { kActive, "kActive" },
-        };
+    { kPrepositioning, "kPrepositioning" },
+    { kStandup, "kStandup" },
+    { kSitting, "kSitting" },
+};
 }
 
 struct GaitData {
@@ -157,6 +171,8 @@ class GaitDriver::Impl : boost::noncopyable {
     last_command_timestamp_ = data.timestamp;
 
     if (state_ != kActive) {
+      // This may already be the case, but it doesn't hurt to do it
+      // again.
       servo_->EnablePower(ServoInterface::kPowerEnable, {}, FailHandler());
     }
     state_ = kActive;
@@ -176,6 +192,64 @@ class GaitDriver::Impl : boost::noncopyable {
     state_ = kUnpowered;
     timer_.cancel();
     timer_started_ = false;
+
+    Emit();
+  }
+
+  std::vector<ServoInterface::Joint> MakeServoCommands(
+      const JointCommand& gait_joints,
+      double joint_speed_dps) {
+    std::vector<ServoInterface::Joint> servo_commands;
+
+    // Switch all of these to be a goal position with a non-zero
+    // velocity so that we gently go there from wherever we might
+    // start at (assuming the servos support that).
+    for (auto& command : gait_joints.joints) {
+      ServoInterface::Joint joint_command;
+      joint_command.address = command.servo_number;
+      joint_command.goal_deg = command.angle_deg;
+      joint_command.angle_deg = std::numeric_limits<double>::quiet_NaN();
+      joint_command.velocity_dps = joint_speed_dps;
+
+      servo_commands.push_back(joint_command);
+
+      // TODO: Set a lower than maximum power?
+    }
+
+    return servo_commands;
+  }
+
+  void CommandPrepositioning() {
+    log_.debug("CommandPrepositioning");
+    state_ = kPrepositioning;
+
+    const auto commands = gait_->MakeJointCommand(gait_->GetPrepositioningState());
+    const auto servo_commands =
+        MakeServoCommands(commands, parameters_.preposition_speed_dps);
+    servo_->SetPose(servo_commands, FailHandler());
+
+    Emit();
+  }
+
+  void CommandStandup() {
+    log_.debug("CommandStandup");
+    state_ = kStandup;
+
+    auto commands = gait_->MakeJointCommand(gait_->GetIdleState());
+    servo_->SetPose(MakeServoCommands(commands, parameters_.standup_speed_dps),
+                    FailHandler());
+
+    Emit();
+  }
+
+  void CommandSitting() {
+    log_.debug("CommandSitting");
+    state_ = kPrepositioning;
+
+    servo_->EnablePower(ServoInterface::kPowerEnable, {}, FailHandler());
+    auto commands = gait_->MakeJointCommand(gait_->GetPrepositioningState());
+    servo_->SetPose(MakeServoCommands(commands, parameters_.sitting_speed_dps),
+                    FailHandler());
 
     Emit();
   }
@@ -210,18 +284,27 @@ class GaitDriver::Impl : boost::noncopyable {
   void HandleTimer(const boost::system::error_code& ec) {
     if (ec == boost::asio::error::operation_aborted) { return; }
 
+    if (state_ == kUnpowered) {
+      SetFree();
+      return;
+    }
+
+    StartTimer();
+
+    if (state_ == kPrepositioning || state_ == kStandup || state_ == kSitting) {
+      return;
+    }
+
     const auto now = base::Now(service_);
     const auto elapsed = now - last_command_timestamp_;
     const bool timeout =
         (parameters_.command_timeout_s > 0.0) &&
         (elapsed > base::ConvertSecondsToDuration(
             parameters_.command_timeout_s));
-    if (state_ == kUnpowered || timeout) {
+    if (timeout) {
       SetFree();
       return;
     }
-
-    StartTimer();
 
     auto update_axis_accel = [&](double input_mm_s,
                                  double* gait_mm_s,
@@ -289,6 +372,8 @@ class GaitDriver::Impl : boost::noncopyable {
     gait_data_signal_(&data);
   }
 
+  base::LogRef log_ = base::GetLogInstance("GaitDriver");
+
   boost::asio::io_service& service_;
   std::unique_ptr<RippleGait> gait_;
   ServoInterface* const servo_;
@@ -329,6 +414,18 @@ void GaitDriver::SetCommand(const Command& command) {
 
 void GaitDriver::SetFree() {
   impl_->SetFree();
+}
+
+void GaitDriver::CommandPrepositioning() {
+  impl_->CommandPrepositioning();
+}
+
+void GaitDriver::CommandStandup() {
+  impl_->CommandStandup();
+}
+
+void GaitDriver::CommandSitting() {
+  impl_->CommandSitting();
 }
 
 boost::program_options::options_description*
