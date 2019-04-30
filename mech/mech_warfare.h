@@ -19,16 +19,16 @@
 
 #include "base/component_archives.h"
 
-#include "ahrs.h"
-#include "gait_driver.h"
-#include "mech_defines.h"
-#include "mjmech_imu_driver.h"
-#include "moteus_servo.h"
-#include "ripple.h"
-#include "servo_monitor.h"
-#include "servo_selector.h"
-#include "turret.h"
-#include "video_sender_app.h"
+#include "mech/ahrs.h"
+#include "mech/gait_driver.h"
+#include "mech/mech_defines.h"
+#include "mech/mjmech_imu_driver.h"
+#include "mech/moteus_servo.h"
+#include "mech/ripple.h"
+#include "mech/servo_monitor.h"
+#include "mech/servo_selector.h"
+#include "mech/turret.h"
+#include "mech/video_sender_app.h"
 
 namespace mjmech {
 namespace base {
