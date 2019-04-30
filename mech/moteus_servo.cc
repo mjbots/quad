@@ -30,33 +30,18 @@ namespace mech {
 
 class MoteusServo::Impl {
  public:
-  Impl(boost::asio::io_service& service,
-       mjlib::io::StreamFactory& factory)
-      : service_(service),
-        factory_(factory) {
-    mjlib::base::ProgramOptionsArchive(&options_).Accept(&stream_parameters_);
+  Impl(boost::asio::io_service& service)
+      : service_(service) {
     mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
   }
 
   void AsyncStart(mjlib::io::ErrorCallback handler) {
-    factory_.AsyncCreate(
-        stream_parameters_,
-        std::bind(&Impl::HandleCreate, this, pl::_1, pl::_2, handler));
-  }
-
-  void HandleCreate(const mjlib::base::error_code& ec,
-                    mjlib::io::SharedStream stream,
-                    mjlib::io::ErrorCallback handler) {
-    if (!ec) {
-      stream_ = stream;
-      mp_client_ = std::make_unique<mjlib::multiplex::AsioClient>(stream_.get());
-    }
-    service_.post(std::bind(handler, ec));
+    service_.post(std::bind(handler, mjlib::base::error_code()));
   }
 
   void SetPose(const std::vector<Joint>& joints,
                mjlib::io::ErrorCallback handler) {
-    BOOST_ASSERT(!!mp_client_);
+    if (!mp_client_) { return; }
     BOOST_ASSERT(!outstanding_);
 
     if (joints.empty()) {
@@ -98,6 +83,8 @@ class MoteusServo::Impl {
   void EnablePower(PowerState power_state,
                    const std::vector<int>& ids,
                    mjlib::io::ErrorCallback handler) {
+    if (!mp_client_) { return; }
+
     if (ids.empty()) {
       service_.post(std::bind(handler, mjlib::base::error_code()));
       return;
@@ -135,22 +122,18 @@ class MoteusServo::Impl {
   base::LogRef log_ = base::GetLogInstance("MoteusServo");
 
   boost::asio::io_service& service_;
-  mjlib::io::StreamFactory& factory_;
-  mjlib::io::StreamFactory::Options stream_parameters_;
 
   Parameters parameters_;
   boost::program_options::options_description options_;
 
-  mjlib::io::SharedStream stream_;
-  std::unique_ptr<mjlib::multiplex::AsioClient> mp_client_;
-
   bool outstanding_ = false;
   mjlib::multiplex::RegisterRequest request_;
+
+  mjlib::multiplex::AsioClient* mp_client_ = nullptr;
 };
 
-MoteusServo::MoteusServo(boost::asio::io_service& service,
-                         mjlib::io::StreamFactory& factory)
-    : impl_(std::make_unique<Impl>(service, factory)) {}
+MoteusServo::MoteusServo(boost::asio::io_service& service)
+    : impl_(std::make_unique<Impl>(service)) {}
 MoteusServo::~MoteusServo() {}
 
 MoteusServo::Parameters* MoteusServo::parameters() {
@@ -163,6 +146,10 @@ boost::program_options::options_description* MoteusServo::options() {
 
 void MoteusServo::AsyncStart(mjlib::io::ErrorCallback handler) {
   impl_->AsyncStart(handler);
+}
+
+void MoteusServo::SetClient(mjlib::multiplex::AsioClient* client) {
+  impl_->mp_client_ = client;
 }
 
 void MoteusServo::SetPose(const std::vector<Joint>& joints,

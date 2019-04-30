@@ -33,6 +33,7 @@ cc_library(
         "mech_warfare_command.cc",
         "mjmech_imu_driver.cc",
         "moteus_servo.cc",
+        "multiplex_client.cc",
         "rtsp_server.cc",
         "servo_monitor.cc",
         "target_tracker.cc",

@@ -24,6 +24,7 @@
 #include "mech/mech_defines.h"
 #include "mech/mjmech_imu_driver.h"
 #include "mech/moteus_servo.h"
+#include "mech/multiplex_client.h"
 #include "mech/ripple.h"
 #include "mech/servo_monitor.h"
 #include "mech/servo_selector.h"
@@ -45,6 +46,7 @@ class MechWarfare : boost::noncopyable {
   void AsyncStart(mjlib::io::ErrorCallback handler);
 
   struct Members {
+    std::unique_ptr<MultiplexClient> multiplex_client;
     std::unique_ptr<Mech::ServoBase> servo_base;
     std::unique_ptr<Mech::Servo> servo;
     std::unique_ptr<MoteusServo> moteus_servo;
@@ -59,6 +61,7 @@ class MechWarfare : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(multiplex_client));
       a->Visit(MJ_NVP(servo_base));
       a->Visit(MJ_NVP(servo));
       a->Visit(MJ_NVP(moteus_servo));

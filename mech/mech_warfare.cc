@@ -568,9 +568,16 @@ class MechWarfare::Impl : boost::noncopyable {
 MechWarfare::MechWarfare(base::Context& context)
     : service_(context.service),
       impl_(new Impl(this, context)) {
+  m_.multiplex_client = std::make_unique<MultiplexClient>(service_, *context.factory);
   m_.servo_base.reset(new Mech::ServoBase(service_, *context.factory));
   m_.servo.reset(new Mech::Servo(m_.servo_base.get()));
-  m_.moteus_servo = std::make_unique<MoteusServo>(service_, *context.factory);
+  m_.moteus_servo = std::make_unique<MoteusServo>(service_);
+
+  m_.multiplex_client->RequestClient([this](const auto& ec, auto* client) {
+        mjlib::base::FailIf(ec);
+        m_.moteus_servo->SetClient(client);
+      });
+
   m_.servo_selector = std::make_unique<ServoSelector>();
   m_.servo_selector->AddInterface("herkulex", m_.servo.get());
   m_.servo_selector->AddInterface("moteus", m_.moteus_servo.get());

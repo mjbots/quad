@@ -19,37 +19,26 @@
 #include "mjlib/io/stream_factory.h"
 #include "mjlib/multiplex/asio_client.h"
 
-#include "mech/servo_interface.h"
-
 namespace mjmech {
 namespace mech {
 
-class MoteusServo : public ServoInterface {
+class MultiplexClient {
  public:
-  MoteusServo(boost::asio::io_service&);
-  ~MoteusServo() override;
+  MultiplexClient(boost::asio::io_service&, mjlib::io::StreamFactory&);
+  ~MultiplexClient();
 
   struct Parameters {
-    double max_current = 30.0;
-
     template <typename Archive>
-    void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(max_current));
-    }
+    void Serialize(Archive*) {}
   };
 
   Parameters* parameters();
   boost::program_options::options_description* options();
-
   void AsyncStart(mjlib::io::ErrorCallback);
-  void SetClient(mjlib::multiplex::AsioClient*);
 
-  void SetPose(const std::vector<Joint>&, mjlib::io::ErrorCallback) override;
-  void EnablePower(PowerState, const std::vector<int>&,
-                   mjlib::io::ErrorCallback) override;
-  void GetPose(const std::vector<int>&, PoseHandler) override;
-  void GetTemperature(const std::vector<int>&, TemperatureHandler) override;
-  void GetVoltage(const std::vector<int>&, VoltageHandler) override;
+  using Client = mjlib::multiplex::AsioClient;
+  using ClientCallback = std::function<void (const mjlib::base::error_code&, Client*)>;
+  void RequestClient(ClientCallback);
 
  private:
   class Impl;
