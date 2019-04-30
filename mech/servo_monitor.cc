@@ -63,7 +63,10 @@ class ServoMonitor::Impl : boost::noncopyable {
 
     // We shouldn't have any outstanding requests by the time we get
     // here.  If we do, then our timeout is probably too short.
-    BOOST_ASSERT(!outstanding_);
+    if (outstanding_) {
+      log_.debug("skipping poll because we are too slow");
+      return;
+    }
 
     switch (state_.mode) {
       case State::kIdle: { DoIdle(); break; }

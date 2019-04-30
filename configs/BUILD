@@ -23,5 +23,7 @@ filegroup(
         "mw.ini",
         "mw_lizard.ini",
         "lizard.cfg",
+        "moteus.ini",
+        "moteus_ik.cfg",
     ],
 )

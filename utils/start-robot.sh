@@ -16,7 +16,7 @@ mach=$(uname -m)
 cd $(dirname $(dirname $(readlink -f $0)))
 
 if [[ "$mach" == "armv7l" ]]; then
-    CONFIG="-c configs/mw.ini"
+    CONFIG="-c configs/moteus.ini"
     set -x
     cd ~/mech/
     export LD_LIBRARY_PATH=.

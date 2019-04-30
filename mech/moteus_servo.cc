@@ -42,7 +42,10 @@ class MoteusServo::Impl {
   void SetPose(const std::vector<Joint>& joints,
                mjlib::io::ErrorCallback handler) {
     if (!mp_client_) { return; }
-    BOOST_ASSERT(!outstanding_);
+    if (outstanding_) {
+      log_.debug("skipping SetPose because we are backed up");
+      return;
+    }
 
     if (joints.empty()) {
       service_.post(std::bind(handler, mjlib::base::error_code()));
