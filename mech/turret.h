@@ -17,6 +17,7 @@
 #include <optional>
 
 #include "mjlib/base/visitor.h"
+#include "mjlib/multiplex/asio_client.h"
 
 #include "base/point3d.h"
 
@@ -44,6 +45,8 @@ class Turret : boost::noncopyable {
 
   void AsyncStart(mjlib::io::ErrorCallback);
 
+  void SetMultiplexClient(mjlib::multiplex::AsioClient*);
+
   void SetCommand(const TurretCommand&);
   void SetFireControl(const TurretCommand::FireControl&);
 
@@ -52,6 +55,7 @@ class Turret : boost::noncopyable {
   void StartBias();
 
   struct Parameters {
+    bool use_moteus_turret = false;
     int gimbal_address = 98;
     double period_s = 0.1;
     int command_update_decimate = 10;
@@ -73,6 +77,7 @@ class Turret : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(use_moteus_turret));
       a->Visit(MJ_NVP(gimbal_address));
       a->Visit(MJ_NVP(period_s));
       a->Visit(MJ_NVP(command_update_decimate));

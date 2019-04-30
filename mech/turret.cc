@@ -23,10 +23,17 @@
 #include "base/logging.h"
 #include "base/now.h"
 
+namespace pl = std::placeholders;
+using Value = mjlib::multiplex::Format::Value;
+
 namespace mjmech {
 namespace mech {
 
 namespace {
+
+const auto u8 = [](int val) {
+  return static_cast<uint8_t>(std::max(0, std::min(255, val)));
+};
 
 const HerkuleXConstants::Register PitchCommand  = { 0x50, 4, 7, true };
 const HerkuleXConstants::Register YawCommand = { 0x54, 4, 7, true };
@@ -41,6 +48,31 @@ const HerkuleXConstants::Register FireTime = { 0x7c, 1};
 const HerkuleXConstants::Register FirePwm = { 0x7d, 1};
 const HerkuleXConstants::Register AgitatorPwm  = {0x7e, 1};
 const HerkuleXConstants::Register BiasCommand = { 0x7b, 1};
+
+enum MoteusRegister : uint32_t {
+  kMode = 0x000,
+
+  kImuPitch = 0x010,
+  kImuYaw = 0x011,
+  kAbsolutePitch = 0x12,
+  kAbsoluteYaw = 0x13,
+  kPitchRate = 0x14,
+  kYawRate = 0x15,
+
+  kPitchCommand = 0x020,
+  kYawCommand = 0x021,
+  kAbsolutePitchCommand = 0x022,
+  kAbsoluteYawCommand = 0x023,
+
+  kPitchRateCommand = 0x030,
+  kYawRateCommand = 0x031,
+
+  kFireTime = 0x040,
+  kFirePwm = 0x041,
+  kAgitatorPwm = 0x042,
+  kLaser = 0x043,
+  kBiasCommand = 0x044,
+};
 
 
 class Parser {
@@ -82,8 +114,7 @@ class Turret::Impl : boost::noncopyable {
   void StartTimer() {
     timer_.expires_from_now(
         base::ConvertSecondsToDuration(parameters_.period_s));
-    timer_.async_wait(std::bind(&Impl::HandleTimer, this,
-                                std::placeholders::_1));
+    timer_.async_wait(std::bind(&Impl::HandleTimer, this, pl::_1));
   }
 
   void HandleTimer(const mjlib::base::error_code& ec) {
@@ -99,14 +130,23 @@ class Turret::Impl : boost::noncopyable {
   void DoPoll() {
     poll_count_++;
 
-    // Then, ask for IMU and absolute coordinates every time.
-    servo_->MemRead(
-        servo_->RAM_READ, parameters_.gimbal_address,
-        ImuPitch.position,
-        ImuPitch.length + ImuYaw.length + AbsoluteYaw.length,
-        [this](mjlib::base::error_code ec, Mech::ServoBase::MemReadResponse response) {
-          HandleCurrent(ec, response);
-        });
+    if (parameters_.use_moteus_turret) {
+      read_request_ = {};
+      read_request_.ReadMultiple(MoteusRegister::kImuPitch, 4, 3);
+      mp_client_->AsyncRegister(
+          parameters_.gimbal_address,
+          read_request_,
+          std::bind(&Impl::HandleMoteusCurrent, this, pl::_1, pl::_2));
+    } else {
+      // Then, ask for IMU and absolute coordinates every time.
+      servo_->MemRead(
+          servo_->RAM_READ, parameters_.gimbal_address,
+          ImuPitch.position,
+          ImuPitch.length + ImuYaw.length + AbsoluteYaw.length,
+          [this](mjlib::base::error_code ec, Mech::ServoBase::MemReadResponse response) {
+            HandleCurrent(ec, response);
+          });
+    }
   }
 
   void HandleCommand(mjlib::base::error_code ec,
@@ -133,6 +173,33 @@ class Turret::Impl : boost::noncopyable {
     return false;
   }
 
+  void HandleMoteusCurrent(const mjlib::base::error_code& ec,
+                           mjlib::multiplex::RegisterReply reply) {
+    if (CheckTemporaryError(ec)) { return; }
+    mjlib::base::FailIf(ec);
+
+    auto read_float = [](auto read_result) -> double {
+      auto* maybe_value = std::get_if<Value>(&read_result);
+      if (!maybe_value) { return 0.0; }
+      auto* maybe_float = std::get_if<float>(&*maybe_value);
+      if (!maybe_float) { return 0.0; }
+      return *maybe_float;
+    };
+
+    data_.imu.y_deg = read_float(reply[MoteusRegister::kImuPitch]);
+    data_.imu.x_deg = read_float(reply[MoteusRegister::kImuYaw]);
+    data_.absolute.y_deg = data_.imu.y_deg;
+    data_.absolute.x_deg = read_float(reply[MoteusRegister::kAbsoluteYaw]);
+
+    // Now read from the fire control board.
+    read_request_ = {};
+    read_request_.ReadMultiple(MoteusRegister::kFirePwm, 2, 0);
+    mp_client_->AsyncRegister(
+        parameters_.gimbal_address,
+        read_request_,
+        std::bind(&Impl::HandleMoteusFireControl, this, pl::_1, pl::_2));
+  }
+
   void HandleCurrent(mjlib::base::error_code ec,
                      Mech::ServoBase::MemReadResponse response) {
     if (CheckTemporaryError(ec)) { return; }
@@ -153,6 +220,28 @@ class Turret::Impl : boost::noncopyable {
         [this](mjlib::base::error_code ec, Mech::ServoBase::MemReadResponse response) {
           HandleFireControl(ec, response);
         });
+  }
+
+  void HandleMoteusFireControl(const mjlib::base::error_code& ec,
+                               mjlib::multiplex::RegisterReply reply) {
+    if (CheckTemporaryError(ec)) { return; }
+    mjlib::base::FailIf(ec);
+
+    auto read_int8 = [](auto read_result) -> int8_t {
+      auto* maybe_value = std::get_if<Value>(&read_result);
+      if (!maybe_value) { return 0.0; }
+      auto* maybe_float = std::get_if<int8_t>(&*maybe_value);
+      if (!maybe_float) { return 0.0; }
+      return *maybe_float;
+    };
+
+    data_.fire_enabled = read_int8(reply[MoteusRegister::kFirePwm]) != 0;
+    data_.agitator_enabled = read_int8(reply[MoteusRegister::kAgitatorPwm]) != 0;
+    if (data_.fire_enabled) {
+      data_.total_fire_time_s += parameters_.period_s;
+    }
+
+    Emit();
   }
 
   void HandleFireControl(mjlib::base::error_code ec,
@@ -199,13 +288,21 @@ class Turret::Impl : boost::noncopyable {
   }
 
   void SendImuCommand(const TurretCommand::Imu& command) {
-    const std::string data = MakeCommand(command);
-    servo_->MemWrite(
-        servo_->RAM_WRITE, parameters_.gimbal_address,
-        PitchCommand.position,
-        data,
-        std::bind(&Impl::HandleWrite, this,
-                  std::placeholders::_1));
+    if (parameters_.use_moteus_turret) {
+      RegisterRequest request;
+      request.WriteMultiple(
+          MoteusRegister::kPitchCommand,
+          {Value(static_cast<float>(command.y_deg)),
+           Value(static_cast<float>(command.x_deg))});
+      SendRegister(request);
+    } else {
+      const std::string data = MakeCommand(command);
+      servo_->MemWrite(
+          servo_->RAM_WRITE, parameters_.gimbal_address,
+          PitchCommand.position,
+          data,
+          std::bind(&Impl::HandleWrite, this, pl::_1));
+    }
   }
 
   void TemporarilyDisableTurret(const mjlib::base::error_code& ec) {
@@ -246,14 +343,17 @@ class Turret::Impl : boost::noncopyable {
     const auto now = base::Now(service_);
 
     // Update the laser status.
-    uint8_t leds = (command.laser_on ? 1 : 0) << 2;
-    servo_->RamWrite(
-        parameters_.gimbal_address, LedControl, leds,
-        std::bind(&Impl::HandleWrite, this, std::placeholders::_1));
-
-    const auto u8 = [](int val) {
-      return static_cast<uint8_t>(std::max(0, std::min(255, val)));
-    };
+    if (parameters_.use_moteus_turret) {
+      RegisterRequest request;
+      request.WriteSingle(
+          MoteusRegister::kLaser, Value(u8(command.laser_on ? 1 : 0)));
+      SendRegister(request);
+    } else {
+      uint8_t leds = (command.laser_on ? 1 : 0) << 2;
+      servo_->RamWrite(
+          parameters_.gimbal_address, LedControl, leds,
+          std::bind(&Impl::HandleWrite, this, pl::_1));
+    }
 
     // Now do the fire control, only accept things where the sequence
     // number has advanced.
@@ -298,19 +398,28 @@ class Turret::Impl : boost::noncopyable {
 
       const double pwm =
           (fire_time_s == 0.0) ? 0.0 : parameters_.fire_motor_pwm;
-      const uint8_t fire_data[] = {
-        u8(fire_time_s / 0.01),
-        u8(pwm * 255),
-      };
-      std::string fire_data_str(reinterpret_cast<const char*>(fire_data),
-                                sizeof(fire_data));
-      servo_->MemWrite(
-          servo_->RAM_WRITE,
-          parameters_.gimbal_address,
-          FireTime.position,
-          fire_data_str,
-          std::bind(&Impl::HandleWrite, this,
-                    std::placeholders::_1));
+
+      if (parameters_.use_moteus_turret) {
+        RegisterRequest request;
+        request.WriteMultiple(
+            MoteusRegister::kFireTime,
+            {Value(u8(fire_time_s / 0.01)),
+                  Value(u8(pwm * 255))});
+        SendRegister(request);
+      } else {
+        const uint8_t fire_data[] = {
+          u8(fire_time_s / 0.01),
+          u8(pwm * 255),
+        };
+        std::string fire_data_str(reinterpret_cast<const char*>(fire_data),
+                                  sizeof(fire_data));
+        servo_->MemWrite(
+            servo_->RAM_WRITE,
+            parameters_.gimbal_address,
+            FireTime.position,
+            fire_data_str,
+            std::bind(&Impl::HandleWrite, this, pl::_1));
+      }
     }
 
     // Update the agitator status.
@@ -335,23 +444,37 @@ class Turret::Impl : boost::noncopyable {
         mjlib::base::AssertNotReached();
       }() * 255);
 
-    servo_->RamWrite(
-        parameters_.gimbal_address, AgitatorPwm, agitator_pwm,
-        std::bind(&Impl::HandleWrite, this, std::placeholders::_1));
+    if (parameters_.use_moteus_turret) {
+      RegisterRequest request;
+      request.WriteSingle(MoteusRegister::kAgitatorPwm, Value(u8(agitator_pwm)));
+      SendRegister(request);
+    } else {
+      servo_->RamWrite(
+          parameters_.gimbal_address, AgitatorPwm, agitator_pwm,
+          std::bind(&Impl::HandleWrite, this, pl::_1));
+    }
   }
 
   void WriteRate(double x_deg_s, double y_deg_s) {
-    const double pitch_dps = y_deg_s;
-    const int pitch_command = static_cast<int>(pitch_dps * 1000.0);
-    servo_->RamWrite(
-        parameters_.gimbal_address, PitchRateCommand, pitch_command,
-        std::bind(&Impl::HandleWrite, this, std::placeholders::_1));
+    const float pitch_dps = y_deg_s;
+    const float yaw_dps = x_deg_s;
 
-    const double yaw_dps = x_deg_s;
-    const int yaw_command = static_cast<int>(yaw_dps * 1000.0);
-    servo_->RamWrite(
-        parameters_.gimbal_address, YawRateCommand, yaw_command,
-        std::bind(&Impl::HandleWrite, this, std::placeholders::_1));
+    if (parameters_.use_moteus_turret) {
+      RegisterRequest request;
+      request.WriteMultiple(MoteusRegister::kPitchRateCommand,
+                            {Value(pitch_dps), Value(yaw_dps)});
+      SendRegister(request);
+    } else {
+      const int pitch_command = static_cast<int>(pitch_dps * 1000.0);
+      servo_->RamWrite(
+          parameters_.gimbal_address, PitchRateCommand, pitch_command,
+          std::bind(&Impl::HandleWrite, this, pl::_1));
+
+      const int yaw_command = static_cast<int>(yaw_dps * 1000.0);
+      servo_->RamWrite(
+          parameters_.gimbal_address, YawRateCommand, yaw_command,
+          std::bind(&Impl::HandleWrite, this, pl::_1));
+    }
   }
 
   void UpdateTrackedTarget(const std::optional<base::Point3D>& target) {
@@ -388,10 +511,22 @@ class Turret::Impl : boost::noncopyable {
     data_.target_relative_last_time = now;
   }
 
+  void SendRegister(const mjlib::multiplex::RegisterRequest& request) {
+    auto it = outstanding_requests_.insert(outstanding_requests_.end(), request);
+    mp_client_->AsyncRegister(
+        parameters_.gimbal_address,
+        *it,
+        [this, it](const mjlib::base::error_code& ec, const auto&) {
+          if (CheckTemporaryError(ec)) { return; }
+          this->outstanding_requests_.erase(it);
+        });
+  }
+
   base::LogRef log_ = base::GetLogInstance("turret");
   Turret* const parent_;
   boost::asio::io_service& service_;
   Mech::ServoBase* const servo_;
+  mjlib::multiplex::AsioClient* mp_client_ = nullptr;
   mjlib::io::DeadlineTimer timer_;
   Parameters parameters_;
   boost::posix_time::ptime disable_until_;
@@ -399,6 +534,10 @@ class Turret::Impl : boost::noncopyable {
   int error_count_ = 0;
 
   Data data_;
+
+  using RegisterRequest = mjlib::multiplex::RegisterRequest;
+  RegisterRequest read_request_;
+  std::list<RegisterRequest> outstanding_requests_;
 };
 
 Turret::Turret(boost::asio::io_service& service,
@@ -411,6 +550,10 @@ void Turret::AsyncStart(mjlib::io::ErrorCallback handler) {
   impl_->StartTimer();
 
   impl_->service_.post(std::bind(handler, mjlib::base::error_code()));
+}
+
+void Turret::SetMultiplexClient(mjlib::multiplex::AsioClient* client) {
+  impl_->mp_client_ = client;
 }
 
 void Turret::SetCommand(const TurretCommand& command) {
@@ -428,12 +571,19 @@ void Turret::SetCommand(const TurretCommand& command) {
     // Since we no longer want to be commanding a rate, ensure that
     // the gimbal is not advancing on its own.
     impl_->data_.last_rate = false;
-    impl_->servo_->RamWrite(
-        impl_->parameters_.gimbal_address, PitchRateCommand, 0,
-        std::bind(&Impl::HandleWrite, impl_.get(), std::placeholders::_1));
-    impl_->servo_->RamWrite(
-        impl_->parameters_.gimbal_address, YawRateCommand, 0,
-        std::bind(&Impl::HandleWrite, impl_.get(), std::placeholders::_1));
+    if (impl_->parameters_.use_moteus_turret) {
+      Impl::RegisterRequest request;
+      request.WriteMultiple(MoteusRegister::kPitchRateCommand,
+                            {Value(0.0f), Value(0.0f)});
+      impl_->SendRegister(request);
+    } else {
+      impl_->servo_->RamWrite(
+          impl_->parameters_.gimbal_address, PitchRateCommand, 0,
+          std::bind(&Impl::HandleWrite, impl_.get(), pl::_1));
+      impl_->servo_->RamWrite(
+          impl_->parameters_.gimbal_address, YawRateCommand, 0,
+          std::bind(&Impl::HandleWrite, impl_.get(), pl::_1));
+    }
   }
 
   if (!command.target_relative) {
@@ -449,36 +599,54 @@ void Turret::SetCommand(const TurretCommand& command) {
         std::max(impl_->parameters_.min_y_deg,
                  std::min(impl_->parameters_.max_y_deg,
                           command.absolute->y_deg));
-    const int pitch_command =
-        static_cast<int>(limited_pitch_deg * 1000.0);
-    impl_->servo_->RamWrite(
-        impl_->parameters_.gimbal_address, PitchCommand, pitch_command,
-        std::bind(&Impl::HandleWrite, impl_.get(), std::placeholders::_1));
-
-
     const double limited_yaw_deg =
         std::max(impl_->parameters_.min_x_deg,
                  std::min(impl_->parameters_.max_x_deg,
                           command.absolute->x_deg));
-    const int yaw_command =
-        static_cast<int>(limited_yaw_deg * 1000.0);
-    impl_->servo_->RamWrite(
-        impl_->parameters_.gimbal_address, AbsoluteYawCommand, yaw_command,
-        std::bind(&Impl::HandleWrite, impl_.get(), std::placeholders::_1));
+
+    if (impl_->parameters_.use_moteus_turret) {
+      Impl::RegisterRequest request;
+      request.WriteSingle(MoteusRegister::kPitchCommand,
+                          static_cast<float>(limited_pitch_deg));
+      request.WriteSingle(MoteusRegister::kAbsoluteYawCommand,
+                          static_cast<float>(limited_yaw_deg));
+      impl_->SendRegister(request);
+    } else {
+      const int pitch_command =
+          static_cast<int>(limited_pitch_deg * 1000.0);
+      impl_->servo_->RamWrite(
+          impl_->parameters_.gimbal_address, PitchCommand, pitch_command,
+          std::bind(&Impl::HandleWrite, impl_.get(), pl::_1));
+
+      const int yaw_command =
+          static_cast<int>(limited_yaw_deg * 1000.0);
+      impl_->servo_->RamWrite(
+          impl_->parameters_.gimbal_address, AbsoluteYawCommand, yaw_command,
+          std::bind(&Impl::HandleWrite, impl_.get(), pl::_1));
+    }
   } else if (command.imu) {
     // Then IMU relative.
 
     const double pitch_deg = command.imu->y_deg;
-    const int pitch_command = static_cast<int>(pitch_deg * 1000.0);
-    impl_->servo_->RamWrite(
-        impl_->parameters_.gimbal_address, PitchCommand, pitch_command,
-        std::bind(&Impl::HandleWrite, impl_.get(), std::placeholders::_1));
-
     const double yaw_deg = command.imu->x_deg;
-    const int yaw_command = static_cast<int>(yaw_deg * 1000.0);
-    impl_->servo_->RamWrite(
-        impl_->parameters_.gimbal_address, YawCommand, yaw_command,
-        std::bind(&Impl::HandleWrite, impl_.get(), std::placeholders::_1));
+
+    if (impl_->parameters_.use_moteus_turret) {
+      Impl::RegisterRequest request;
+      request.WriteMultiple(MoteusRegister::kPitchCommand,
+                            {Value(static_cast<float>(pitch_deg)),
+                                  Value(static_cast<float>(yaw_deg))});
+      impl_->SendRegister(request);
+    } else {
+      const int pitch_command = static_cast<int>(pitch_deg * 1000.0);
+      impl_->servo_->RamWrite(
+          impl_->parameters_.gimbal_address, PitchCommand, pitch_command,
+          std::bind(&Impl::HandleWrite, impl_.get(), pl::_1));
+
+      const int yaw_command = static_cast<int>(yaw_deg * 1000.0);
+      impl_->servo_->RamWrite(
+          impl_->parameters_.gimbal_address, YawCommand, yaw_command,
+          std::bind(&Impl::HandleWrite, impl_.get(), pl::_1));
+    }
   } else if (command.rate) {
     // Finally, rate if we have one.
 
@@ -499,9 +667,15 @@ void Turret::UpdateTrackedTarget(
 }
 
 void Turret::StartBias() {
-  impl_->servo_->RamWrite(
-      impl_->parameters_.gimbal_address, BiasCommand, 1,
-      std::bind(&Impl::HandleWrite, impl_.get(), std::placeholders::_1));
+  if (impl_->parameters_.use_moteus_turret) {
+    Impl::RegisterRequest request;
+    request.WriteSingle(MoteusRegister::kBiasCommand, u8(1));
+    impl_->SendRegister(request);
+  } else {
+    impl_->servo_->RamWrite(
+        impl_->parameters_.gimbal_address, BiasCommand, 1,
+        std::bind(&Impl::HandleWrite, impl_.get(), pl::_1));
+  }
 }
 
 const Turret::Data& Turret::data() const { return impl_->data_; }

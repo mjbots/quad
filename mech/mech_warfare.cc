@@ -573,11 +573,6 @@ MechWarfare::MechWarfare(base::Context& context)
   m_.servo.reset(new Mech::Servo(m_.servo_base.get()));
   m_.moteus_servo = std::make_unique<MoteusServo>(service_);
 
-  m_.multiplex_client->RequestClient([this](const auto& ec, auto* client) {
-        mjlib::base::FailIf(ec);
-        m_.moteus_servo->SetClient(client);
-      });
-
   m_.servo_selector = std::make_unique<ServoSelector>();
   m_.servo_selector->AddInterface("herkulex", m_.servo.get());
   m_.servo_selector->AddInterface("moteus", m_.moteus_servo.get());
@@ -594,6 +589,13 @@ MechWarfare::MechWarfare(base::Context& context)
   m_.servo_monitor.reset(new ServoMonitor(context, m_.servo_iface.get()));
   m_.servo_monitor->parameters()->servos = "0-11,98";
   m_.turret.reset(new Turret(context, m_.servo_base.get()));
+
+  m_.multiplex_client->RequestClient([this](const auto& ec, auto* client) {
+        mjlib::base::FailIf(ec);
+        m_.moteus_servo->SetClient(client);
+        m_.turret->SetMultiplexClient(client);
+      });
+
   m_.video.reset(new VideoSenderApp(context));
 
   impl_->telemetry_ = m_.video->telemetry_interface().lock();
