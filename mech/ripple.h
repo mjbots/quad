@@ -38,9 +38,13 @@
 #include <map>
 #include <optional>
 
+#include <fmt/format.h>
+
 #include "mjlib/base/visitor.h"
 
-#include "gait.h"
+#include "base/logging.h"
+
+#include "mech/gait.h"
 
 namespace mjmech {
 namespace mech {
@@ -229,8 +233,10 @@ class RippleGait : public Gait {
   const Options& options() const { return options_; }
   const Command& command() const { return command_; }
 
-  RippleState GetPrepositioningState() const {
-    return GetStartupState(config_.preposition_z_offset_mm);
+  RippleState GetPrepositioningState(double scale) const {
+    log_.warn(fmt::format("preposition_z_offset {} scale={}",
+                          config_.preposition_z_offset_mm, scale));
+    return GetStartupState(config_.preposition_z_offset_mm * scale);
   }
 
   RippleState GetIdleState() const {
@@ -263,6 +269,8 @@ class RippleGait : public Gait {
   RippleState GetStartupState(double z_offset_mm) const {
     RippleState result;
 
+    // Setting the body frame here doesn't really accomplish much of
+    // anything.  We'll just do it for completeness.
     result.body_frame.transform.translation.z = config_.body_z_offset_mm;
 
     for (const auto& leg_config: config_.mechanical.leg_config) {
@@ -608,6 +616,8 @@ class RippleGait : public Gait {
   };
 
   const std::vector<Action> actions_;
+
+  base::LogRef log_ = base::GetLogInstance("Ripple");
 
   // Mutable state.
 

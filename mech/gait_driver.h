@@ -48,6 +48,8 @@ class GaitDriver : boost::noncopyable {
 
   ~GaitDriver();
 
+  void AsyncStart(mjlib::io::ErrorCallback);
+
   void SetGait(std::unique_ptr<RippleGait>);
 
   /// Start the gait engine if it is not running and make it execute

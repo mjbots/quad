@@ -43,6 +43,7 @@ struct Parameters {
   double preposition_speed_dps = 60.0;
   double standup_speed_dps = 30.0;
   double sitting_speed_dps = 30.0;
+  double stand_sit_time_s = 1.5;
 
   template <typename Archive>
   void Serialize(Archive* a) {
@@ -52,6 +53,7 @@ struct Parameters {
     a->Visit(MJ_NVP(preposition_speed_dps));
     a->Visit(MJ_NVP(standup_speed_dps));
     a->Visit(MJ_NVP(sitting_speed_dps));
+    a->Visit(MJ_NVP(stand_sit_time_s));
   }
 };
 
@@ -150,6 +152,13 @@ class GaitDriver::Impl : boost::noncopyable {
     telemetry_registry->Register("gait_command", &command_data_signal_);
   }
 
+  void AsyncStart(mjlib::io::ErrorCallback callback) {
+    log_.warn("AsyncStart");
+    timer_.expires_from_now(base::ConvertSecondsToDuration(0.0));
+    StartTimer();
+    service_.post(std::bind(callback, mjlib::base::error_code()));
+  }
+
   void SetGait(std::unique_ptr<RippleGait> gait) {
     gait_ = std::move(gait);
   }
@@ -177,23 +186,30 @@ class GaitDriver::Impl : boost::noncopyable {
     }
     state_ = kActive;
 
-    // If our timer isn't started yet, then start it now.
-    if (!timer_started_) {
-      timer_started_ = true;
-      timer_.expires_from_now(base::ConvertSecondsToDuration(0.0));
-      StartTimer();
-    }
-
     gait_->SetCommand(gait_command_);
   }
 
   void SetFree() {
     servo_->EnablePower(ServoInterface::kPowerBrake, {}, FailHandler());
     state_ = kUnpowered;
-    timer_.cancel();
-    timer_started_ = false;
 
     Emit();
+  }
+
+  std::vector<ServoInterface::Joint> DerateTibiaCommands(
+      const std::vector<ServoInterface::Joint>& input,
+      double scale) {
+    std::vector<ServoInterface::Joint> result;
+    // TOTAL HACK!  I need to do prepositioning in IK space, this is
+    // just an expedient way to make it not barf.
+    for (auto item : input) {
+      if (item.address == 2 || item.address == 5 ||
+          item.address == 8 || item.address == 11) {
+        item.power = scale;
+      }
+      result.push_back(item);
+    }
+    return result;
   }
 
   std::vector<ServoInterface::Joint> MakeServoCommands(
@@ -221,37 +237,62 @@ class GaitDriver::Impl : boost::noncopyable {
 
   void CommandPrepositioning() {
     log_.debug("CommandPrepositioning");
+    stand_sit_start_time_ = base::Now(service_);
     state_ = kPrepositioning;
 
-    const auto commands = gait_->MakeJointCommand(gait_->GetPrepositioningState());
-    const auto servo_commands =
-        MakeServoCommands(commands, parameters_.preposition_speed_dps);
-    servo_->SetPose(servo_commands, FailHandler());
+    SendPrepositionCommand();
 
     Emit();
+  }
+
+  void SendPrepositionCommand() {
+    const auto commands = gait_->MakeJointCommand(
+        gait_->GetPrepositioningState(1.0));
+    const auto servo_commands =
+        MakeServoCommands(commands, parameters_.preposition_speed_dps);
+    servo_->SetPose(DerateTibiaCommands(servo_commands, GetSitStandRatio()),
+                    FailHandler());
   }
 
   void CommandStandup() {
     log_.debug("CommandStandup");
+    stand_sit_start_time_ = base::Now(service_);
     state_ = kStandup;
 
-    auto commands = gait_->MakeJointCommand(gait_->GetIdleState());
-    servo_->SetPose(MakeServoCommands(commands, parameters_.standup_speed_dps),
-                    FailHandler());
+    SendStandupCommand();
 
     Emit();
   }
 
+  void SendStandupCommand() {
+    auto commands = gait_->MakeJointCommand(
+        gait_->GetPrepositioningState(1.0 - GetSitStandRatio()));
+    servo_->SetPose(MakeServoCommands(commands, parameters_.standup_speed_dps),
+                    FailHandler());
+  }
+
   void CommandSitting() {
     log_.debug("CommandSitting");
-    state_ = kPrepositioning;
+    stand_sit_start_time_ = base::Now(service_);
+    state_ = kSitting;
 
-    servo_->EnablePower(ServoInterface::kPowerEnable, {}, FailHandler());
-    auto commands = gait_->MakeJointCommand(gait_->GetPrepositioningState());
-    servo_->SetPose(MakeServoCommands(commands, parameters_.sitting_speed_dps),
-                    FailHandler());
+    SendSittingCommand();
 
     Emit();
+  }
+
+  double GetSitStandRatio() {
+    const auto now = base::Now(service_);
+    const double delay_s = base::ConvertDurationToSeconds(now - stand_sit_start_time_);
+    const double ratio = std::max(0.0, std::min(1.0, delay_s / parameters_.stand_sit_time_s));
+    return ratio;
+  }
+
+  void SendSittingCommand() {
+    auto commands = gait_->MakeJointCommand(
+        gait_->GetPrepositioningState(GetSitStandRatio()));
+    servo_->SetPose(MakeServoCommands(commands, parameters_.sitting_speed_dps),
+                    FailHandler());
   }
 
   void ProcessBodyAhrs(boost::posix_time::ptime,
@@ -283,17 +324,30 @@ class GaitDriver::Impl : boost::noncopyable {
 
   void HandleTimer(const boost::system::error_code& ec) {
     if (ec == boost::asio::error::operation_aborted) { return; }
-
-    if (state_ == kUnpowered) {
-      SetFree();
-      return;
-    }
-
     StartTimer();
 
-    if (state_ == kPrepositioning || state_ == kStandup || state_ == kSitting) {
-      return;
+    switch (state_) {
+      case kUnpowered: {
+        SetFree();
+        return;
+      }
+      case kPrepositioning: {
+        SendPrepositionCommand();
+        return;
+      }
+      case kSitting: {
+        SendSittingCommand();
+        return;
+      }
+      case kStandup: {
+        SendStandupCommand();
+        return;
+      }
+      case kActive: {
+        break;
+      }
     }
+
 
     const auto now = base::Now(service_);
     const auto elapsed = now - last_command_timestamp_;
@@ -386,7 +440,6 @@ class GaitDriver::Impl : boost::noncopyable {
   boost::signals2::signal<void (const CommandData*)> command_data_signal_;
 
   mjlib::io::DeadlineTimer timer_;
-  bool timer_started_ = false;
   State state_ = kUnpowered;
   boost::posix_time::ptime last_command_timestamp_;
   base::Quaternion attitude_;
@@ -395,6 +448,8 @@ class GaitDriver::Impl : boost::noncopyable {
 
   Command input_command_;
   Command gait_command_;
+
+  boost::posix_time::ptime stand_sit_start_time_;
 };
 
 GaitDriver::GaitDriver(boost::asio::io_service& service,
@@ -403,6 +458,10 @@ GaitDriver::GaitDriver(boost::asio::io_service& service,
     : impl_(new Impl(service, registry, servo)) {}
 
 GaitDriver::~GaitDriver() {}
+
+void GaitDriver::AsyncStart(mjlib::io::ErrorCallback callback) {
+  impl_->AsyncStart(callback);
+}
 
 void GaitDriver::SetGait(std::unique_ptr<RippleGait> gait) {
   impl_->SetGait(std::move(gait));

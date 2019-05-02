@@ -39,6 +39,8 @@ class ServoInterface : boost::noncopyable {
     /// The position to stop at if velocity is non-zero.  !finite
     /// means don't stop moving.
     double goal_deg = std::numeric_limits<double>::quiet_NaN();
+
+    double power = 1.0;
   };
   virtual void SetPose(const std::vector<Joint>&, mjlib::io::ErrorCallback) = 0;
 

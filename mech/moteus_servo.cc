@@ -60,7 +60,7 @@ class MoteusServo::Impl {
         {
           static_cast<float>(joints.back().angle_deg / 360.0),
           static_cast<float>(joints.back().velocity_dps / 360.0f),
-          static_cast<float>(parameters_.max_current),
+          static_cast<float>(joints.back().power * parameters_.max_current),
           static_cast<float>(joints.back().goal_deg / 360.0f),
         });
 
