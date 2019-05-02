@@ -98,6 +98,10 @@ def main():
     if os.getuid() != 0:
         raise RuntimeError('must be run as root')
 
+    # Some useful utilities
+    run('apt install --yes socat setserial')
+
+    # Things necessary to be an AP
     run('apt install --yes hostapd dnsmasq')
 
     # P1 Camera - Yes
