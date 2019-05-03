@@ -52,6 +52,13 @@ class ServoInterface : boost::noncopyable {
   virtual void EnablePower(PowerState power_state, const std::vector<int>&,
                            mjlib::io::ErrorCallback) = 0;
 
+  struct StatusOptions {
+    bool pose = false;
+    bool temperature = false;
+    bool voltage = false;
+    bool error = false;
+  };
+
   typedef std::function<
     void (mjlib::base::error_code, std::vector<Joint>)> PoseHandler;
 
@@ -75,6 +82,27 @@ class ServoInterface : boost::noncopyable {
       mjlib::base::error_code, std::vector<Voltage>)> VoltageHandler;
 
   virtual void GetVoltage(const std::vector<int>&, VoltageHandler) = 0;
+
+  struct JointStatus {
+    int address = 0;
+    bool torque_on = false;
+    uint32_t error = 0;
+    std::optional<double> angle_deg;
+    std::optional<double> temperature_C;
+    std::optional<double> voltage;
+  };
+
+  typedef std::function<
+    void (const mjlib::base::error_code&,
+          const std::vector<JointStatus>&)> StatusHandler;
+
+  virtual void GetStatus(const std::vector<int>&, const StatusOptions&,
+                         StatusHandler) = 0;
+
+  // If there are errors which can be cleared in a way that does not
+  // affect behavior, do so here.
+  virtual void ClearErrors(const std::vector<int>& ids,
+                           mjlib::io::ErrorCallback) = 0;
 };
 
 }

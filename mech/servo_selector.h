@@ -84,6 +84,16 @@ class ServoSelector : public ServoInterface {
     selected_->GetVoltage(ids, handler);
   }
 
+  void GetStatus(const std::vector<int>& ids, const StatusOptions& status_options,
+                 StatusHandler handler) override {
+    selected_->GetStatus(ids, status_options, handler);
+  }
+
+  void ClearErrors(const std::vector<int>& ids,
+                   mjlib::io::ErrorCallback callback) override {
+    selected_->ClearErrors(ids, callback);
+  }
+
  private:
   Parameters parameters_;
   boost::program_options::options_description options_;

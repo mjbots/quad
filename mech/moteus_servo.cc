@@ -16,6 +16,8 @@
 
 #include <functional>
 
+#include <fmt/format.h>
+
 #include "mjlib/base/fail.h"
 #include "mjlib/base/program_options_archive.h"
 #include "mjlib/multiplex/asio_client.h"
@@ -27,6 +29,20 @@ namespace pl = std::placeholders;
 
 namespace mjmech {
 namespace mech {
+
+using Value = mjlib::multiplex::Format::Value;
+
+enum RegisterTypes {
+  kInt32 = 2,
+  kFloat = 3,
+};
+
+template <typename T>
+T ReadCast(const mjlib::multiplex::Format::ReadResult& value) {
+  return std::visit([](auto a) {
+      return static_cast<T>(a);
+    }, std::get<Value>(value));
+}
 
 class MoteusServo::Impl {
  public:
@@ -122,6 +138,107 @@ class MoteusServo::Impl {
     EnablePower(power_state, ids, handler);
   }
 
+  void GetStatus(const std::vector<int>& ids,
+                 const StatusOptions& status_options,
+                 StatusHandler handler) {
+    StartNextStatusRequest(ids, status_options, handler, {});
+  }
+
+  void StartNextStatusRequest(const std::vector<int>& ids,
+                              const StatusOptions& status_options,
+                              StatusHandler handler,
+                              const std::vector<JointStatus>& current_result) {
+    if (ids.empty()) {
+      service_.post(std::bind(handler, mjlib::base::error_code(), current_result));
+      return;
+    }
+
+    read_request_ = {};
+    read_request_.ReadSingle(moteus::kMode, 0);
+    if (status_options.pose) {
+      read_request_.ReadSingle(moteus::kPosition, kFloat);
+    }
+    if (status_options.temperature) {
+      read_request_.ReadSingle(moteus::kTemperature, kFloat);
+    }
+    if (status_options.voltage) {
+      read_request_.ReadSingle(moteus::kVoltage, kFloat);
+    }
+    read_request_.ReadSingle(moteus::kFault, kInt32);
+
+    auto remainder = ids;
+    remainder.pop_back();
+
+    auto this_id = ids.back();
+
+    mp_client_->AsyncRegister(
+        this_id, read_request_,
+        std::bind(&Impl::HandleStatus, this, pl::_1, pl::_2,
+                  this_id, remainder, status_options, handler, current_result));
+  }
+
+  void HandleStatus(const mjlib::base::error_code& ec,
+                    const mjlib::multiplex::RegisterReply& reply,
+                    int this_id,
+                    const std::vector<int>& remainder,
+                    const StatusOptions& status_options,
+                    StatusHandler handler,
+                    std::vector<JointStatus> current_result) {
+    if (ec) {
+      log_.debug(fmt::format("reply with error: {}", ec.message()));
+      service_.post(std::bind(handler, ec, current_result));
+      return;
+    }
+
+    JointStatus this_status;
+    this_status.address = this_id;
+
+    log_.debug(fmt::format("got {} regs of data", reply.size()));
+
+    for (const auto& pair : reply) {
+      auto* maybe_value = std::get_if<Value>(&pair.second);
+      if (!maybe_value) {
+        log_.debug(fmt::format("error in reg {} : {}",
+                               pair.first, std::get<uint32_t>((pair.second))));
+        // There must have been an error of some sort.
+        //
+        // TODO(jpieper): Figure out how we want to report this.
+        continue;
+      }
+      log_.debug(fmt::format("reg {:03x} has value", pair.first));
+      switch (static_cast<moteus::Register>(pair.first)) {
+        case moteus::kMode: {
+          const auto mode = ReadCast<int32_t>(pair.second);
+          this_status.torque_on = mode >= 5;
+          break;
+        }
+        case moteus::kPosition: {
+          this_status.angle_deg = ReadCast<float>(pair.second) * 360.0;
+          break;
+        }
+        case moteus::kTemperature: {
+          this_status.temperature_C = ReadCast<float>(pair.second);
+          break;
+        }
+        case moteus::kVoltage: {
+          this_status.voltage = ReadCast<float>(pair.second);
+          break;
+        }
+        case moteus::kFault: {
+          this_status.error = ReadCast<int32_t>(pair.second);
+          break;
+        }
+        default: {
+          break;
+        }
+      }
+    }
+
+    current_result.push_back(this_status);
+
+    StartNextStatusRequest(remainder, status_options, handler, current_result);
+  }
+
   base::LogRef log_ = base::GetLogInstance("MoteusServo");
 
   boost::asio::io_service& service_;
@@ -131,6 +248,7 @@ class MoteusServo::Impl {
 
   bool outstanding_ = false;
   mjlib::multiplex::RegisterRequest request_;
+  mjlib::multiplex::RegisterRequest read_request_;
 
   mjlib::multiplex::AsioClient* mp_client_ = nullptr;
 };
@@ -178,6 +296,17 @@ void MoteusServo::GetTemperature(const std::vector<int>&, TemperatureHandler) {
 
 void MoteusServo::GetVoltage(const std::vector<int>&, VoltageHandler) {
   mjlib::base::AssertNotReached();
+}
+
+void MoteusServo::GetStatus(const std::vector<int>& ids,
+                            const StatusOptions& status_options,
+                            StatusHandler handler) {
+  impl_->GetStatus(ids, status_options, handler);
+}
+
+void MoteusServo::ClearErrors(const std::vector<int>&,
+                              mjlib::io::ErrorCallback callback) {
+  impl_->service_.post(std::bind(callback, mjlib::base::error_code()));
 }
 
 }

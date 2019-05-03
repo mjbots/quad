@@ -50,6 +50,8 @@ class MoteusServo : public ServoInterface {
   void GetPose(const std::vector<int>&, PoseHandler) override;
   void GetTemperature(const std::vector<int>&, TemperatureHandler) override;
   void GetVoltage(const std::vector<int>&, VoltageHandler) override;
+  void GetStatus(const std::vector<int>&, const StatusOptions&, StatusHandler) override;
+  void ClearErrors(const std::vector<int>&, mjlib::io::ErrorCallback) override;
 
  private:
   class Impl;

@@ -238,6 +238,17 @@ class HerkuleXServoInterface : public ServoInterface {
                               new_ids, result, handler));
   }
 
+  void GetStatus(const std::vector<int>&,
+                 const StatusOptions&,
+                 StatusHandler) override {
+    mjlib::base::AssertNotReached();
+  }
+
+  void ClearErrors(const std::vector<int>&,
+                   mjlib::io::ErrorCallback) override {
+    mjlib::base::AssertNotReached();
+  }
+
  private:
   static uint8_t MapAddress(int address) {
     if (address < 0 || address > 0xfe) {

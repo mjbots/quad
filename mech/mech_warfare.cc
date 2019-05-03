@@ -583,11 +583,8 @@ MechWarfare::MechWarfare(base::Context& context)
                                       context.telemetry_registry.get(),
                                       m_.servo_selector.get(),
                                       m_.ahrs->ahrs_data_signal()));
-  m_.servo_iface.reset(
-      new ServoMonitor::HerkuleXServoConcrete<Mech::ServoBase>(
-          m_.servo_base.get()));
-  m_.servo_monitor.reset(new ServoMonitor(context, m_.servo_iface.get()));
-  m_.servo_monitor->parameters()->servos = "0-11,98";
+  m_.servo_monitor.reset(new ServoMonitor(context, m_.servo_selector.get()));
+  m_.servo_monitor->parameters()->servos = "1-12,32";
   m_.turret.reset(new Turret(context, m_.servo_base.get()));
 
   m_.multiplex_client->RequestClient([this](const auto& ec, auto* client) {

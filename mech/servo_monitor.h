@@ -21,55 +21,21 @@
 #include "mjlib/base/visitor.h"
 #include "mjlib/io/async_types.h"
 
-#include "herkulex.h"
+#include "mech/servo_interface.h"
 
 namespace mjmech {
 namespace mech {
 class ServoMonitor : boost::noncopyable {
  public:
-  class HerkuleXServo {
-   public:
-    virtual ~HerkuleXServo() {}
-
-    typedef boost::function<
-      void (mjlib::base::error_code, HerkuleXBase::MemReadResponse)> MemReadHandler;
-
-    virtual void RamRead(
-        uint8_t servo, uint8_t reg, uint8_t length, MemReadHandler) = 0;
-
-    virtual void ClearStatus(uint8_t servo, mjlib::io::ErrorCallback) = 0;
-  };
-
-  template <typename T>
-  class HerkuleXServoConcrete : public HerkuleXServo {
-   public:
-    HerkuleXServoConcrete(T* base) : base_(base) {}
-    virtual ~HerkuleXServoConcrete() {}
-
-    virtual void RamRead(
-        uint8_t servo, uint8_t reg, uint8_t length, MemReadHandler handler) {
-      base_->MemRead(HerkuleXBase::RAM_READ,
-                     servo, reg, length, handler);
-    }
-
-    virtual void ClearStatus(uint8_t servo, mjlib::io::ErrorCallback handler) {
-      base_->MemWrite(HerkuleXBase::RAM_WRITE,
-                      servo, HerkuleXConstants::status_error().position,
-                      std::string(2, '\x00'), handler);
-    }
-
-    T* const base_;
-  };
-
   template <typename Context>
   ServoMonitor(Context& context,
-               HerkuleXServo* servo) :
+               ServoInterface* servo) :
       ServoMonitor(context.service, context.telemetry_registry.get(), servo) {}
 
   template <typename TelemetryRegistry>
   ServoMonitor(boost::asio::io_service& service,
                TelemetryRegistry* telemetry_registry,
-               HerkuleXServo* servo)
+               ServoInterface* servo)
       : ServoMonitor(service, servo) {
     telemetry_registry->Register("servo", &servo_data_signal_);
   }
@@ -88,9 +54,8 @@ class ServoMonitor : boost::noncopyable {
     double parole_min_time_s = 60.0;
     double parole_max_time_s = 600.0;
 
-    /// ServoMonitor will watch any servo that another process
-    /// communicates with, but you can seed it with additional ones
-    /// using this comma separated optionally ranged list (0,3-5,9).
+    /// A list of servos to monitor.  Comma separated with optional -
+    /// ranges, like: "1,2-5,9-12"
     std::string servos;
 
     template <typename Archive>
@@ -146,7 +111,7 @@ class ServoMonitor : boost::noncopyable {
 
  private:
   ServoMonitor(boost::asio::io_service& service,
-               HerkuleXServo* servo);
+               ServoInterface* servo);
 
 
   ServoDataSignal servo_data_signal_;

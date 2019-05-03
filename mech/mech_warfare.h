@@ -54,7 +54,6 @@ class MechWarfare : boost::noncopyable {
     std::unique_ptr<MjmechImuDriver> imu;
     std::unique_ptr<Ahrs> ahrs;
     std::unique_ptr<GaitDriver> gait_driver;
-    std::unique_ptr<ServoMonitor::HerkuleXServo> servo_iface;
     std::unique_ptr<ServoMonitor> servo_monitor;
     std::unique_ptr<Turret> turret;
     std::unique_ptr<VideoSenderApp> video;

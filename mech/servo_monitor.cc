@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "servo_monitor.h"
+#include "mech/servo_monitor.h"
 
 #include <optional>
 
@@ -29,7 +29,7 @@
 #include "base/logging.h"
 #include "base/now.h"
 
-#include "servo_interface.h"
+namespace pl = std::placeholders;
 
 namespace mjmech {
 namespace mech {
@@ -38,7 +38,7 @@ class ServoMonitor::Impl : boost::noncopyable {
  public:
   Impl(ServoMonitor* parent,
        boost::asio::io_service& service,
-       HerkuleXServo* servo)
+       ServoInterface* servo)
       : parent_(parent),
         service_(service),
         servo_(servo),
@@ -53,13 +53,14 @@ class ServoMonitor::Impl : boost::noncopyable {
   void Start() {
     timer_.expires_from_now(
         base::ConvertSecondsToDuration(parameters_.period_s));
-    timer_.async_wait(std::bind(&Impl::HandleTimeout, this,
-                                std::placeholders::_1));
+    timer_.async_wait(std::bind(&Impl::HandleTimeout, this, pl::_1));
   }
 
   void HandleTimeout(mjlib::base::error_code ec) {
     mjlib::base::FailIf(ec);
     Start();
+
+    log_.debug("HandleTimeout");
 
     // We shouldn't have any outstanding requests by the time we get
     // here.  If we do, then our timeout is probably too short.
@@ -67,14 +68,6 @@ class ServoMonitor::Impl : boost::noncopyable {
       log_.debug("skipping poll because we are too slow");
       return;
     }
-
-    switch (state_.mode) {
-      case State::kIdle: { DoIdle(); break; }
-      case State::kTemperature: { DoTemperature(); break; }
-    }
-  }
-
-  void DoIdle() {
     // Pick out the next servo to use.  Find one that exists and isn't
     // on parole.
     std::optional<int> next_servo = FindNext();
@@ -82,95 +75,65 @@ class ServoMonitor::Impl : boost::noncopyable {
     if (!next_servo) {
       // Nothing is ready, let's just stick around in this state until
       // the next polling period.
+      log_.debug("nothing is ready");
       return;
     }
 
+    log_.debug(fmt::format("going to query {}", *next_servo));
+
     state_.last_servo = *next_servo;
 
-    // Send out a request for voltage.
+    // Request status.
     outstanding_ = true;
-    servo_->RamRead(state_.last_servo,
-                    HerkuleXConstants::voltage().position,
-                    HerkuleXConstants::voltage().length,
-                    std::bind(&Impl::HandleVoltage, this,
-                                 state_.last_servo,
-                                 std::placeholders::_1,
-                                 std::placeholders::_2));
+    servo_->GetStatus(
+        {state_.last_servo},
+        []() {
+          ServoInterface::StatusOptions s;
+          s.temperature = true;
+          s.voltage = true;
+          s.error = true;
+          return s;
+        }(),
+        std::bind(&Impl::HandleStatus, this,
+                  state_.last_servo, pl::_1, pl::_2));
   }
 
-  void DoTemperature() {
-    outstanding_ = true;
-    servo_->RamRead(state_.last_servo,
-                    HerkuleXConstants::temperature_c().position,
-                    HerkuleXConstants::temperature_c().length,
-                    std::bind(&Impl::HandleTemperature, this,
-                              state_.last_servo,
-                              std::placeholders::_1,
-                              std::placeholders::_2));
-  }
-
-  void HandleVoltage(int requested_servo,
-                     mjlib::base::error_code ec,
-                     const HerkuleXBase::MemReadResponse& response) {
+  void HandleStatus(int requested_servo,
+                    mjlib::base::error_code ec,
+                    const std::vector<ServoInterface::JointStatus>& responses) {
     BOOST_ASSERT(outstanding_);
     outstanding_ = false;
 
+    log_.debug("HandleStatus");
+
     const auto now = base::Now(service_);
-    if (ec == boost::asio::error::operation_aborted ||
-        ec == herkulex_error::synchronization_error) {
+    if (ec == boost::asio::error::operation_aborted) {
+      log_.debug(fmt::format("{} servo timed out", requested_servo));
       UpdateServoTimeout(requested_servo, now);
       return;
     }
     mjlib::base::FailIf(ec);
+
+    log_.debug(fmt::format("{} got a result!", requested_servo));
 
     auto& servo = servo_data_[requested_servo];
 
     // Yay, we got a result!
     UpdateServoFound(requested_servo, now);
+    BOOST_ASSERT(responses.size() == 1);
+    const auto& response = responses.front();
 
-    BOOST_ASSERT(response.servo == requested_servo);
-    BOOST_ASSERT(response.register_data.size() >= 1);
-    servo.voltage_V =
-        HerkuleXBase::CountsToVoltage(response.register_data[0]);
-    servo.torque_on = response.motor_on;
-
-    CheckFaults(response);
-
-    // Next time, ask for the same servo's temperature.
-    state_.mode = State::kTemperature;
-  }
-
-  void HandleTemperature(
-      int requested_servo,
-      mjlib::base::error_code ec,
-      const HerkuleXBase::MemReadResponse& response) {
-    BOOST_ASSERT(outstanding_);
-    outstanding_ = false;
-
-    const auto now = base::Now(service_);
-    if (ec == boost::asio::error::operation_aborted ||
-        ec == herkulex_error::synchronization_error) {
-      UpdateServoTimeout(requested_servo, now);
-      return;
+    servo.torque_on = response.torque_on;
+    if (response.voltage) {
+      servo.voltage_V = *response.voltage;
     }
-    mjlib::base::FailIf(ec);
-
-    auto& servo = servo_data_[requested_servo];
-
-    UpdateServoFound(requested_servo, now);
-
-    BOOST_ASSERT(response.servo == requested_servo);
-    BOOST_ASSERT(response.register_data.size() >= 1);
-    servo.temperature_C =
-        HerkuleXBase::CountsToTemperatureC(response.register_data[0]);
-    servo.torque_on = response.motor_on;
+    if (response.temperature_C) {
+      servo.temperature_C = *response.temperature_C;
+    }
 
     CheckFaults(response);
 
     EmitData();
-
-    // Switch back to idle so we move on to the next servo.
-    state_.mode = State::kIdle;
   }
 
   void UpdateServoTimeout(int requested_servo,
@@ -188,9 +151,6 @@ class ServoMonitor::Impl : boost::noncopyable {
     }
 
     servo.next_update += base::ConvertSecondsToDuration(servo.parole_time_s);
-
-    // Skip on to the next servo.
-    state_.mode = State::kIdle;
   }
 
   void UpdateServoFound(int requested_servo,
@@ -246,19 +206,17 @@ class ServoMonitor::Impl : boost::noncopyable {
     parent_->servo_data_signal_(&data);
   }
 
-  void CheckFaults(const HerkuleXBase::MemReadResponse& response) {
-    if (response.reg48) {
-      log_.warn(fmt::format("ServoMonitor: {:02X} err={}",
-                            response.servo,
-                            FaultToString(response)));
-      servo_->ClearStatus(response.servo,
-                          std::bind(&Impl::HandleClear, this,
-                                    std::placeholders::_1));
+  void CheckFaults(const ServoInterface::JointStatus& response) {
+    if (response.error) {
+      log_.warn(fmt::format("ServoMonitor: {}, {:02X}",
+                            response.address, response.error));
+      servo_->ClearErrors({response.address},
+                          std::bind(&Impl::HandleClear, this, pl::_1));
     }
 
-    if (!response.motor_on && expect_torque_on_) {
+    if (!response.torque_on && expect_torque_on_) {
       log_.warn(fmt::format("{:02X} has motor unexpectedly off!",
-                            response.servo));
+                            response.address));
     }
   }
 
@@ -266,37 +224,9 @@ class ServoMonitor::Impl : boost::noncopyable {
     mjlib::base::FailIf(ec);
   }
 
-  std::string FaultToString(const HerkuleXBase::MemReadResponse& response) {
-    std::vector<std::string> errors;
-
-#define CHECK(x) if (response.x) { errors.push_back(#x); }
-    CHECK(exceeded_input_voltage_limit);
-    CHECK(exceeded_allowed_pot_limit);
-    CHECK(exceeded_temperature_limit);
-    CHECK(invalid_packet);
-    CHECK(overload_detected);
-    CHECK(driver_fault_detected);
-    CHECK(eep_reg_distorted);
-    CHECK(checksum_error);
-    CHECK(unknown_command);
-    CHECK(exceeded_reg_range);
-    CHECK(garbage_detected);
-#undef CHECK
-
-    std::ostringstream ostr;
-    bool first = true;
-    for (const auto item: errors) {
-      if (!first) { ostr << "|"; }
-      ostr << item;
-      first = false;
-    }
-
-    return ostr.str();
-  }
-
   ServoMonitor* const parent_;
   boost::asio::io_service& service_;
-  HerkuleXServo* const servo_;
+  ServoInterface* const servo_;
 
   base::LogRef log_ = base::GetLogInstance("ServoMonitor");
 
@@ -316,12 +246,6 @@ class ServoMonitor::Impl : boost::noncopyable {
 
   struct State {
     int last_servo = -1;
-
-    enum Mode {
-      kIdle,
-      kTemperature,
-    } mode = kIdle;
-
   } state_;
 
   bool outstanding_ = false;
@@ -332,7 +256,7 @@ class ServoMonitor::Impl : boost::noncopyable {
 };
 
 ServoMonitor::ServoMonitor(boost::asio::io_service& service,
-                           HerkuleXServo* servo)
+                           ServoInterface* servo)
     : impl_(new Impl(this, service, servo)) {}
 
 ServoMonitor::~ServoMonitor() {}
