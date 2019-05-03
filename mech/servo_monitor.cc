@@ -130,6 +130,7 @@ class ServoMonitor::Impl : boost::noncopyable {
     if (response.temperature_C) {
       servo.temperature_C = *response.temperature_C;
     }
+    servo.error = response.error;
 
     CheckFaults(response);
 
@@ -200,6 +201,7 @@ class ServoMonitor::Impl : boost::noncopyable {
       servo.voltage_V = pair.second.voltage_V;
       servo.temperature_C = pair.second.temperature_C;
       servo.torque_on = pair.second.torque_on;
+      servo.error = pair.second.error;
       data.servos.push_back(servo);
     }
 
@@ -237,6 +239,7 @@ class ServoMonitor::Impl : boost::noncopyable {
     double voltage_V = 0;
     double temperature_C = 0;
     bool torque_on = false;
+    int32_t error = 0;
 
     boost::posix_time::ptime next_update;
     double parole_time_s = 0;

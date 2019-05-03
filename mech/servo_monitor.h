@@ -84,6 +84,7 @@ class ServoMonitor : boost::noncopyable {
       int address = -1;
       double voltage_V = 0.0;
       double temperature_C = 0.0;
+      int32_t error = 0;
       bool torque_on = false;
 
       template <typename Archive>
@@ -92,6 +93,7 @@ class ServoMonitor : boost::noncopyable {
         a->Visit(MJ_NVP(address));
         a->Visit(MJ_NVP(voltage_V));
         a->Visit(MJ_NVP(temperature_C));
+        a->Visit(MJ_NVP(error));
         a->Visit(MJ_NVP(torque_on));
       }
     };

@@ -529,8 +529,23 @@ class MechWarfare::Impl : boost::noncopyable {
 
   void HandleServoData(const ServoMonitor::ServoData* data) {
     bool first = true;
+    bool error = false;
+
+    servo_min_voltage_V_ = 0.0;
+    servo_max_voltage_V_ = 0.0;
+
     for (const auto& servo: data->servos) {
       if (servo.last_update.is_not_a_date_time()) { continue; }
+      if (servo.error && !error) {
+        error = true;
+        // We need to immediately cut power to everything.
+        log_.warn(fmt::format("servo {} reported error {}, idling",
+                              servo.address, servo.error));
+
+        parent_->m_.gait_driver->SetFree();
+        parent_->m_.servo_monitor->ExpectTorqueOff();
+        data_.mode = Data::Mode::kIdle;
+      }
       if (servo.voltage_V == 0.0) { continue; }
       if (first || servo.voltage_V < servo_min_voltage_V_) {
         servo_min_voltage_V_ = servo.voltage_V;
@@ -584,7 +599,7 @@ MechWarfare::MechWarfare(base::Context& context)
                                       m_.servo_selector.get(),
                                       m_.ahrs->ahrs_data_signal()));
   m_.servo_monitor.reset(new ServoMonitor(context, m_.servo_selector.get()));
-  m_.servo_monitor->parameters()->servos = "1-12,32";
+  m_.servo_monitor->parameters()->servos = "1-12";
   m_.turret.reset(new Turret(context, m_.servo_base.get()));
 
   m_.multiplex_client->RequestClient([this](const auto& ec, auto* client) {
