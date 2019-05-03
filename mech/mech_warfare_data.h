@@ -42,6 +42,7 @@ struct MechWarfareData {
   boost::posix_time::ptime sitting_start_timestamp;
   boost::posix_time::ptime prepositioning_start_timestamp;
   boost::posix_time::ptime standing_start_timestamp;
+  bool active = false;
 
   static std::map<Mode, const char*> ModeMapper() {
     return std::map<Mode, const char*>{
@@ -65,6 +66,7 @@ struct MechWarfareData {
     a->Visit(MJ_NVP(sitting_start_timestamp));
     a->Visit(MJ_NVP(prepositioning_start_timestamp));
     a->Visit(MJ_NVP(standing_start_timestamp));
+    a->Visit(MJ_NVP(active));
   }
 };
 

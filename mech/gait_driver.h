@@ -72,6 +72,8 @@ class GaitDriver : boost::noncopyable {
 
   boost::program_options::options_description* options();
 
+  const Gait* gait() const;
+
  private:
   GaitDriver(boost::asio::io_service& service,
              base::TelemetryRegistry*,

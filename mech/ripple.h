@@ -114,6 +114,7 @@ struct RippleState : public CommonState {
   };
 
   std::vector<Leg> legs;
+  int zero_phase_count = 0;
 
   RippleState() {}
   RippleState(const RippleState& rhs) : CommonState(rhs) {
@@ -126,6 +127,7 @@ struct RippleState : public CommonState {
     phase = rhs.phase;
     action = rhs.action;
     legs = rhs.legs;
+    zero_phase_count = rhs.zero_phase_count;
 
     auto map_frame = [this, &rhs](const base::Frame* frame) {
       if (frame == &rhs.world_frame) {
@@ -167,6 +169,17 @@ class RippleGait : public Gait {
 
   void SetState(const RippleState& state) {
     state_ = state;
+  }
+
+  bool are_all_legs_stance() const override {
+    for (const auto& leg: state_.legs) {
+      if (leg.mode != Leg::Mode::kStance) { return false; }
+    }
+    return true;
+  }
+
+  int zero_phase_count() const override {
+    return state_.zero_phase_count;
   }
 
   virtual Result SetCommand(const Command& command) override {
@@ -211,6 +224,13 @@ class RippleGait : public Gait {
         state_.action = 0;
         next_phase -= 1.0;
         cur_phase -= 1.0;
+
+        // We just wrapped.  Increment or zero our idle phase count.
+        if (command_.IsZero()) {
+          state_.zero_phase_count++;
+        } else {
+          state_.zero_phase_count = 0;
+        }
 
         // Install our new command.
       }
@@ -445,6 +465,10 @@ class RippleGait : public Gait {
   void ReallySetCommand(const Command& command, const Options& options) {
     command_ = command;
     options_ = options;
+
+    if (command.reset_phase) {
+      state_ = idle_state_;
+    }
 
     ApplyBodyCommand(&state_, command);
   }

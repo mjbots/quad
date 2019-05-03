@@ -80,6 +80,13 @@ struct Command {
   double body_yaw_deg = 0;
   double lift_height_percent = 100;
   double time_rate_percent = 100;
+  bool reset_phase = false;
+
+  bool IsZero() const {
+    return translate_x_mm_s == 0.0 &&
+        translate_y_mm_s == 0.0 &&
+        rotate_deg_s == 0.0;
+  }
 
   template <typename Archive>
   void Serialize(Archive* a) {
@@ -94,6 +101,7 @@ struct Command {
     a->Visit(MJ_NVP(body_yaw_deg));
     a->Visit(MJ_NVP(lift_height_percent));
     a->Visit(MJ_NVP(time_rate_percent));
+    a->Visit(MJ_NVP(reset_phase));
   }
 };
 
@@ -174,6 +182,8 @@ class Gait : boost::noncopyable {
     kNotSupported,
   };
   virtual Result SetCommand(const Command&) = 0;
+  virtual bool are_all_legs_stance() const = 0;
+  virtual int zero_phase_count() const = 0;
 };
 }
 }

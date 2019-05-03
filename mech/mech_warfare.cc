@@ -304,10 +304,26 @@ class MechWarfare::Impl : boost::noncopyable {
         base::Radians(parent_->m_.turret->data().absolute.x_deg)).Rotate(
             data_.current_drive.drive_mm_s);
 
-    const bool active = (data_.current_drive.drive_mm_s != base::Point3D());
-    gait.lift_height_percent = active ? 100.0 : 0.0;
+    const bool want_active = (data_.current_drive.drive_mm_s != base::Point3D());
+    if (want_active && !data_.active) {
+      // We can instantly go active.  Reset gait phase.
+      gait.reset_phase = true;
+      data_.active = true;
+    } else if (data_.active && !want_active) {
+      // We need to wait until a whole gait cycle has completed, and
+      // all legs are on the ground before stopping.
 
-    if (active) {
+      if (parent_->m_.gait_driver->gait()->zero_phase_count() >= 2 &&
+          parent_->m_.gait_driver->gait()->are_all_legs_stance()) {
+        data_.active = false;
+      }
+    }
+    gait.lift_height_percent = data_.active ? 100.0 : 0.0;
+
+    // NOTE: We explicitly use "want_active" here, because we don't
+    // want to be messing around with rotations if we are trying to
+    // stop.
+    if (want_active) {
       const double heading_deg = body_mm_s.heading_deg();
       const double forward_error_deg = base::WrapNeg180To180(heading_deg);
       const double drive_heading_deg =

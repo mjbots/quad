@@ -36,8 +36,8 @@ struct Parameters {
   /// engine and setting all servos to unpowered.
   double command_timeout_s = 0.0;
 
-  /// The maximum amount that the gait engine can accelerate in each
-  /// axis.  Deceleration is currently unlimited.
+  /// The maximum amount that the gait engine can accelerate or
+  /// decelerate in each axis.
   base::Point3D max_acceleration_mm_s2 = base::Point3D(200., 200., 200.);
 
   double preposition_speed_dps = 60.0;
@@ -123,12 +123,6 @@ struct CommandData {
     a->Visit(MJ_NVP(command));
   }
 };
-
-double Limit(double val, double max) {
-  if (val > max) { return max; }
-  else if (val < -max) { return -max; }
-  return val;
-}
 
 class FailHandler {
  public:
@@ -313,6 +307,10 @@ class GaitDriver::Impl : boost::noncopyable {
     return &options_;
   }
 
+  const Gait* gait() const {
+    return gait_.get();
+  }
+
  private:
   void StartTimer() {
     timer_.expires_at(
@@ -320,6 +318,20 @@ class GaitDriver::Impl : boost::noncopyable {
         base::ConvertSecondsToDuration(parameters_.period_s));
     timer_.async_wait(std::bind(&Impl::HandleTimer, this,
                                 std::placeholders::_1));
+  }
+
+  void UpdateAxisAccel(double input_mm_s,
+                       double* gait_mm_s,
+                       double accel_mm_s2) {
+    double delta_mm_s = input_mm_s - *gait_mm_s;
+    const double max_step_mm_s = parameters_.period_s * accel_mm_s2;
+    const double step_mm_s = [&]() {
+      if (delta_mm_s > max_step_mm_s) { return max_step_mm_s; }
+      if (delta_mm_s < -max_step_mm_s) { return -max_step_mm_s; }
+      return delta_mm_s;
+    }();
+
+    *gait_mm_s += step_mm_s;
   }
 
   void HandleTimer(const boost::system::error_code& ec) {
@@ -360,33 +372,12 @@ class GaitDriver::Impl : boost::noncopyable {
       return;
     }
 
-    auto update_axis_accel = [&](double input_mm_s,
-                                 double* gait_mm_s,
-                                 double accel_mm_s2) {
-      // Update the translational velocities.
-      if ((input_mm_s * (*gait_mm_s)) >= 0.0) {
-        // Same sign or one is zero.
-        if (std::abs(input_mm_s) > std::abs(*gait_mm_s)) {
-          double delta_mm_s = input_mm_s - *gait_mm_s;
-          const double max_step_mm_s =
-            parameters_.period_s * accel_mm_s2;
-          const double step_mm_s = Limit(delta_mm_s, max_step_mm_s);
-          *gait_mm_s += step_mm_s;
-        } else {
-          *gait_mm_s = input_mm_s;
-        }
-      } else {
-        // Opposite signs.
-        *gait_mm_s = 0;
-      }
-    };
-
-    update_axis_accel(input_command_.translate_x_mm_s,
-                      &gait_command_.translate_x_mm_s,
-                      parameters_.max_acceleration_mm_s2.x);
-    update_axis_accel(input_command_.translate_y_mm_s,
-                      &gait_command_.translate_y_mm_s,
-                      parameters_.max_acceleration_mm_s2.y);
+    UpdateAxisAccel(input_command_.translate_x_mm_s,
+                    &gait_command_.translate_x_mm_s,
+                    parameters_.max_acceleration_mm_s2.x);
+    UpdateAxisAccel(input_command_.translate_y_mm_s,
+                    &gait_command_.translate_y_mm_s,
+                    parameters_.max_acceleration_mm_s2.y);
 
     // Advance our gait, then send the requisite servo commands out.
     gait_commands_ = gait_->AdvanceTime(parameters_.period_s);
@@ -489,6 +480,10 @@ void GaitDriver::CommandSitting() {
 
 boost::program_options::options_description*
 GaitDriver::options() { return impl_->options(); }
+
+const Gait* GaitDriver::gait() const {
+  return impl_->gait();
+}
 
 void GaitDriver::ProcessBodyAhrs(boost::posix_time::ptime timestamp,
                                  bool valid,
