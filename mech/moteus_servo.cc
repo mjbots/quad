@@ -71,13 +71,22 @@ class MoteusServo::Impl {
     request_ = {};
     request_.WriteSingle(moteus::kMode,
                          static_cast<int8_t>(moteus::Mode::kPosition));
+    const auto& joint = joints.back();
+
+    // TODO(jpieper): MAJOR HACK.  This is not the right abstraction
+    // layer for this.
+    const bool is_shoulder = ((joint.address - 1) % 3) == 2;
+
     request_.WriteMultiple(
         moteus::kCommandPosition,
         {
-          static_cast<float>(joints.back().angle_deg / 360.0),
-          static_cast<float>(joints.back().velocity_dps / 360.0f),
-          static_cast<float>(joints.back().power * parameters_.max_current),
-          static_cast<float>(joints.back().goal_deg / 360.0f),
+          static_cast<float>(joint.angle_deg / 360.0),
+          static_cast<float>(joint.velocity_dps / 360.0f),
+          static_cast<float>(
+              joint.power * (is_shoulder ?
+                             parameters_.max_torque_shoulder_Nm :
+                             parameters_.max_torque_legs_Nm)),
+          static_cast<float>(joint.goal_deg / 360.0f),
         });
 
     auto remainder = joints;
