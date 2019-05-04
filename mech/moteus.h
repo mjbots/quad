@@ -28,7 +28,8 @@ enum Register : uint32_t {
   kQCurrent = 0x004,
   kDCurrent = 0x005,
   kVoltage = 0x006,
-  kFault = 0x007,
+  kTorque = 0x007,
+  kFault = 0x00f,
 
   kPwmPhaseA = 0x010,
   kPwmPhaseB = 0x011,
