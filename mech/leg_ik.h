@@ -26,11 +26,18 @@ struct JointAngles {
   struct Joint {
     int ident = 0;
     double angle_deg = 0;
+    double torque_Nm = 0;
 
     Joint() {}
-    Joint(int ident, double angle_deg) : ident(ident), angle_deg(angle_deg) {}
-    bool operator==(const Joint& rhs) {
-      return ident == rhs.ident && angle_deg == rhs.angle_deg;
+    Joint(int ident_in, double angle_deg_in, double torque_Nm_in = 0.0)
+        : ident(ident_in),
+          angle_deg(angle_deg_in),
+          torque_Nm(torque_Nm_in) {}
+
+    bool operator==(const Joint& rhs) const {
+      return ident == rhs.ident &&
+          angle_deg == rhs.angle_deg &&
+          torque_Nm == rhs.torque_Nm;
     }
   };
 
@@ -63,7 +70,8 @@ class IKSolver : boost::noncopyable {
   ///  +z is up
   ///
   /// If no solution is possible, return an object with NaN values.
-  virtual JointAngles Solve(const base::Point3D&) const = 0;
+  virtual JointAngles Solve(const base::Point3D& point_mm,
+                            const base::Point3D& force_N) const = 0;
 };
 
 /// Inverse kinematics solver for lizard style 3-dof legs.
@@ -113,7 +121,8 @@ class LizardIK : public IKSolver {
     }
   }
 
-  virtual JointAngles Solve(const base::Point3D& point_mm) const {
+  virtual JointAngles Solve(const base::Point3D& point_mm,
+                            const base::Point3D&) const {
     // Solve for the coxa first, as it has only a single solution.
     const double coxa_deg = (
         config_.coxa.sign *
@@ -289,7 +298,8 @@ class MammalIK : public IKSolver {
     }
   }
 
-  virtual JointAngles Solve(const base::Point3D& point_mm) const {
+  virtual JointAngles Solve(const base::Point3D& point_mm,
+                            const base::Point3D& force_N) const {
     // Find the angle of the shoulder joint.  This will be tangent
     // angle between the point and the circle with radius
     // femur_attachment_mm.y.
@@ -308,6 +318,7 @@ class MammalIK : public IKSolver {
     }
 
     const double denom = (std::pow(x0, 2) + std::pow(y0, 2));
+    const double length = std::sqrt(denom);
     const double subexp = y0 * std::sqrt(squared) / denom;
 
     auto lim = [](double value) {
@@ -340,6 +351,20 @@ class MammalIK : public IKSolver {
         shoulder_deg > config_.shoulder.max_deg) {
       return JointAngles::Invalid();
     }
+
+    // Rotate the y/z force into the shoulder/leg frame.
+    //
+    // TODO(jpieper): This is incorrect if the femur has a lateral
+    // offset!
+    const double shoulder_force_Nm =
+        std::cos(logical_shoulder_rad) * force_N.y +
+        std::sin(logical_shoulder_rad) * force_N.z;
+    const double leg_frame_force_y_N =
+        std::cos(logical_shoulder_rad) * force_N.z -
+        std::sin(logical_shoulder_rad) * force_N.y;
+    const double logical_shoulder_torque_Nm =
+        shoulder_force_Nm * 0.001 * length;
+
 
     // Given this shoulder angle, find the center of the leg plane in
     // the joint reference system.
@@ -427,15 +452,30 @@ class MammalIK : public IKSolver {
       return JointAngles::Invalid();
     }
 
+    // Finally solve for the femur / tibia torque.
+    const double leg_frame_force_x_N = force_N.x;
+
+    const double logical_femur_torque_Nm =
+        leg_frame_force_x_N * 0.001 * config_.femur.length_mm * std::cos(femur_rad) -
+        leg_frame_force_x_N * 0.001 * config_.tibia.length_mm * std::cos(logical_tibia_rad + femur_rad) +
+        leg_frame_force_y_N * 0.001 * config_.femur.length_mm * std::sin(femur_rad) +
+        leg_frame_force_y_N * 0.001 * config_.tibia.length_mm * std::sin(logical_tibia_rad + femur_rad);
+    const double logical_tibia_torque_Nm =
+        0.001 * config_.tibia.length_mm * leg_frame_force_x_N * std::cos(logical_tibia_rad + femur_rad) -
+        0.001 * config_.tibia.length_mm * leg_frame_force_y_N * std::sin(logical_tibia_rad + femur_rad);
+
     JointAngles result;
-    result.joints.emplace_back(config_.shoulder.ident, shoulder_deg);
-    result.joints.emplace_back(config_.femur.ident, femur_deg);
+    result.joints.emplace_back(config_.shoulder.ident, shoulder_deg,
+                               logical_shoulder_torque_Nm * config_.shoulder.sign);
+    result.joints.emplace_back(config_.femur.ident, femur_deg,
+                               logical_femur_torque_Nm * config_.femur.sign);
 
     const double tibia_command_deg =
         config_.tibia_relative ?
         tibia_relative_deg : (tibia_relative_deg + femur_deg);
 
-    result.joints.emplace_back(config_.tibia.ident, tibia_command_deg);
+    result.joints.emplace_back(config_.tibia.ident, tibia_command_deg,
+                               logical_tibia_torque_Nm * config_.tibia.sign);
 
     return result;
   }

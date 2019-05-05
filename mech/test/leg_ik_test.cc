@@ -34,6 +34,24 @@ struct Test {
   double expected_tibia_deg;
 };
 
+struct TorqueTest {
+  double x_mm;
+  double y_mm;
+  double z_mm;
+
+  double x_N;
+  double y_N;
+  double z_N;
+
+  double expected_coxa_deg;
+  double expected_femur_deg;
+  double expected_tibia_deg;
+
+  double expected_coxa_Nm;
+  double expected_femur_Nm;
+  double expected_tibia_Nm;
+};
+
 LizardIK::Config MakeLizardConfig() {
   LizardIK::Config r;
 
@@ -67,10 +85,26 @@ double GetAngle(T joints, int ident) {
 }
 
 template <typename T>
+double GetTorque(T joints, int ident) {
+  for (const auto& joint: joints.joints) {
+    if (joint.ident == ident) { return joint.torque_Nm; }
+  }
+  BOOST_CHECK(false);
+  return 0.0;
+}
+
+template <typename T>
 void CheckJoints(T joints, double coxa_deg, double femur_deg, double tibia_deg) {
   BOOST_CHECK_SMALL(std::abs(GetAngle(joints, kCoxaIdent) - coxa_deg), 1e-2);
   BOOST_CHECK_SMALL(std::abs(GetAngle(joints, kFemurIdent) - femur_deg), 1e-2);
   BOOST_CHECK_SMALL(std::abs(GetAngle(joints, kTibiaIdent) - tibia_deg), 1e-2);
+}
+
+template <typename T>
+void CheckTorque(T joints, double coxa_Nm, double femur_Nm, double tibia_Nm) {
+  BOOST_CHECK_SMALL(std::abs(GetTorque(joints, kCoxaIdent) - coxa_Nm), 1e-2);
+  BOOST_CHECK_SMALL(std::abs(GetTorque(joints, kFemurIdent) - femur_Nm), 1e-2);
+  BOOST_CHECK_SMALL(std::abs(GetTorque(joints, kTibiaIdent) - tibia_Nm), 1e-2);
 }
 }
 
@@ -90,7 +124,7 @@ BOOST_AUTO_TEST_CASE(TestLizard3Dof) {
 
   for (const Test& test: tests) {
     Point3D point(test.x_mm, test.y_mm, test.z_mm);
-    auto result = ik.Solve(point);
+    auto result = ik.Solve(point, {});
     CheckJoints(result, test.expected_coxa_deg, test.expected_femur_deg,
                 test.expected_tibia_deg);
   }
@@ -98,31 +132,31 @@ BOOST_AUTO_TEST_CASE(TestLizard3Dof) {
   // Try adding some idle to coxa.
   Point3D point(20, 87.75, -25);
   config.coxa.idle_deg = 3.0;
-  auto result = LizardIK(config).Solve(point);
+  auto result = LizardIK(config).Solve(point, {});
   CheckJoints(result, 15.84, 7.18, -6.58);
 
   // And some idle to femur.
   config.femur.idle_deg = 4.0;
-  result = LizardIK(config).Solve(point);
+  result = LizardIK(config).Solve(point, {});
   CheckJoints(result, 15.84, 11.18, -6.58);
 
   // And some idle to tibia.
   config.tibia.idle_deg = 5.0;
-  result = LizardIK(config).Solve(point);
+  result = LizardIK(config).Solve(point, {});
   CheckJoints(result, 15.84, 11.18, -1.58);
 
   // Try setting the max coxa low enough that we should get invalid.
   config.coxa.max_deg = 15.0;
-  result = LizardIK(config).Solve(point);
+  result = LizardIK(config).Solve(point, {});
   BOOST_CHECK(!result.Valid());
 
   config.coxa.max_deg = 90.0;
-  result = LizardIK(config).Solve(point);
+  result = LizardIK(config).Solve(point, {});
   BOOST_CHECK(result.Valid());
 
   // And set the tibia max deg low enough to get invalid.
   config.femur.max_deg = 10.0;
-  result = LizardIK(config).Solve(point);
+  result = LizardIK(config).Solve(point, {});
   BOOST_CHECK(!result.Valid());
 }
 
@@ -174,38 +208,65 @@ void TestMammalForward(const JointAngles& joints,
 BOOST_AUTO_TEST_CASE(TestMammal3DoF) {
   auto config = MakeMammalConfig();
 
-  Test tests[] = {
-    {   0, 30, -250,    0.00,   0,   0 },
-    {   0, 30, -240,    0.00,  -18.65, 35.55 },
-    {   0, 30, -230,    0.00,  -26.52, 50.48 },
-    {   0, 30, -210,    0.00,  -37.97, 72.00 },
-    {   0, 30, -190,    0.00,  -47.16, 88.96 },
-    {   0, 30, -150,    0.00,  -62.96, 117.04 },
-    {   0, 30, -90,     0.00,  -87.71, 152.98 },
-    {  20, 30, -190,    0.00,  -54.18, 87.92 },
-    { -20, 30, -190,    0.00,  -39.00, 87.92 },
-    {   0, 40, -190,    3.00,  -46.37, 87.52 },
-    {   0, 20, -190,   -3.02,  -47.72, 89.98 },
+  TorqueTest tests[] = {
+    {   0, 30, -250,  0, 0, 0,    0.00,   0,   0,       0,     0, 0 },
+
+    // Torque behaves as expected in the "straight-down" position.
+    {   0, 30, -250,  0, 1, 0,    0.00,   0,   0,       0.25,  0, 0 },
+    {   0, 30, -250,  0, -1, 0,   0.00,   0,   0,       -0.25, 0, 0 },
+    {   0, 30, -250,  0, 0, 1,    0.00,   0,   0,       0.00,  0, 0 },
+    {   0, 30, -250,  0, 0, -1,   0.00,   0,   0,       0.00,  0, 0 },
+    {   0, 30, -250,  1, 0, 0,    0.00,   0,   0,       0.00,  0, 0.11 },
+
+    {   0, 30, -240,  0, 0, 0,    0.00,  -18.65, 35.55, 0, 0, 0 },
+
+    // Torque also does something useful in the "bent" position
+    {   0, 30, -240,  0, 0, 10,   0.00,  -18.64, 35.55, 0.00, 0, -0.32 },
+    {   0, 30, -240,  0, 0, -10,  0.00,  -18.64, 35.55, 0.00, 0, 0.32 },
+
+    {   0, 30, -230,  0, 0, 0,    0.00,  -26.52, 50.48, 0, 0, 0 },
+    {   0, 30, -210,  0, 0, 0,    0.00,  -37.97, 72.00, 0, 0, 0 },
+    {   0, 30, -190,  0, 0, 0,    0.00,  -47.16, 88.96, 0, 0, 0 },
+    {   0, 30, -150,  0, 0, 0,    0.00,  -62.96, 117.04, 0, 0, 0 },
+    {   0, 30, -90,   0, 0, 0,    0.00,  -87.71, 152.98, 0, 0, 0 },
+    {  20, 30, -190,  0, 0, 0,    0.00,  -54.18, 87.92,  0, 0, 0 },
+
+    // TODO(jpieper): Does the sign of this femur torque make sense?
+    {  20, 30, -190,  0, 0, 10,   0.00,  -54.18, 87.92,  0, -0.20, -0.61 },
+
+    { -20, 30, -190,  0, 0, 0,    0.00,  -39.00, 87.92,  0, 0, 0 },
+
+    { -20, 30, -190,  0, 0, 10,   0.00,  -39.00, 87.92,  0, 0.20, -0.82 },
+
+
+    {   0, 40, -190,  0, 0, 0,    3.00,  -46.37, 87.52,  0, 0, 0 },
+    {   0, 20, -190,  0, 0, 0,    -3.02,  -47.72, 89.98, 0, 0, 0 },
   };
 
-  for (const Test& test: tests) {
+  for (const auto& test: tests) {
     auto run_test = [](const MammalIK::Config& config,
-                       const Test& test) {
+                       const auto& test) {
       MammalIK ik(config);
-      Point3D point(test.x_mm, test.y_mm, test.z_mm);
-      auto result = ik.Solve(point);
+      Point3D point_mm(test.x_mm, test.y_mm, test.z_mm);
+      Point3D point_N(test.x_N, test.y_N, test.z_N);
+      auto result = ik.Solve(point_mm, point_N);
       CheckJoints(result, test.expected_coxa_deg, test.expected_femur_deg,
                   test.expected_tibia_deg);
-      TestMammalForward(result, config, point);
+      TestMammalForward(result, config, point_mm);
+      CheckTorque(result,
+                  test.expected_coxa_Nm,
+                  test.expected_femur_Nm,
+                  test.expected_tibia_Nm);
     };
 
     run_test(config, test);
 
     {
-      Test sign_test = test;
+      auto sign_test = test;
       MammalIK::Config sign_config = config;
       sign_config.shoulder.sign *= -1;
       sign_test.expected_coxa_deg *= -1;
+      sign_test.expected_coxa_Nm *= -1;
 
       run_test(sign_config, sign_test);
     }

@@ -273,7 +273,7 @@ class RippleGait : public Gait {
 
       base::Point3D shoulder_point =
           shoulder_frame.MapFromFrame(leg.frame, leg.point);
-      auto joints = leg.leg_ik->Solve(shoulder_point);
+      auto joints = leg.leg_ik->Solve(shoulder_point, {});
       for (const auto& joint: joints.joints) {
         result.joints.emplace_back(
             JointCommand::Joint(joint.ident, joint.angle_deg));
@@ -378,7 +378,7 @@ class RippleGait : public Gait {
 
           const auto& leg_config = config_.mechanical.leg_config.at(leg_num);
 
-          auto result = leg_config.leg_ik->Solve(leg_shoulder_point);
+          auto result = leg_config.leg_ik->Solve(leg_shoulder_point, {});
           if (!result.Valid()) {
             // Break, so that we can take action knowing
             // how far we can go.
