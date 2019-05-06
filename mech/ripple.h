@@ -303,7 +303,7 @@ class RippleGait : public Gait {
       auto joints = leg.leg_ik->Solve(shoulder_point, shoulder_force_N);
       const auto phase_in_stance = state.phase - leg.stance_phase_start;
       const double feedforward_factor =
-          !in_stance ? 1.0 :
+          !in_stance ? 0.0 :
           std::max(
               0.0,
               std::min(
