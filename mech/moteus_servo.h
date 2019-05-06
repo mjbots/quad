@@ -30,7 +30,7 @@ class MoteusServo : public ServoInterface {
   ~MoteusServo() override;
 
   struct Parameters {
-    double max_torque_shoulder_Nm = 20.0;
+    double max_torque_shoulder_Nm = 40.0;
     double max_torque_legs_Nm = 4.0;
 
     template <typename Archive>
