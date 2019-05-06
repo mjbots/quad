@@ -73,6 +73,8 @@ struct RippleConfig {
   double preposition_z_offset_mm = -80;
 
   double mass_kg = 0.0;
+  double feedforward_stance_ramp_percent = 5;
+  double min_kp = 0.2;
 
   template <typename Archive>
   void Serialize(Archive* a) {
@@ -96,6 +98,8 @@ struct RippleConfig {
     a->Visit(MJ_NVP(rate_i_mm_dps2));
     a->Visit(MJ_NVP(preposition_z_offset_mm));
     a->Visit(MJ_NVP(mass_kg));
+    a->Visit(MJ_NVP(feedforward_stance_ramp_percent));
+    a->Visit(MJ_NVP(min_kp));
   }
 };
 
@@ -112,6 +116,9 @@ struct RippleState : public CommonState {
   struct Leg : public mjmech::mech::Leg::State {
     std::optional<base::Point3D> swing_start_pos;
     std::optional<base::Point3D> swing_end_pos;
+    // We set this negative, so that we'll count as being well into
+    // stance until it is actually updated.
+    double stance_phase_start = -1.0;
 
     bool operator==(const Leg&) const { return true; }
   };
@@ -228,6 +235,10 @@ class RippleGait : public Gait {
         next_phase -= 1.0;
         cur_phase -= 1.0;
 
+        for (auto& leg: state_.legs) {
+          leg.stance_phase_start -= 1.0;
+        }
+
         // We just wrapped.  Increment or zero our idle phase count.
         if (command_.IsZero()) {
           state_.zero_phase_count++;
@@ -265,11 +276,12 @@ class RippleGait : public Gait {
   }
 
   JointCommand MakeJointCommand(const RippleState& state) const {
+    // NOTE: You should not reference 'command_' here, since it may
+    // not correlate with the passed in 'state'.
     const int num_legs_in_stance =
         std::count_if(state.legs.begin(), state.legs.end(),
-                      [this](const auto& leg) {
-                        return (leg.mode == Leg::Mode::kStance ||
-                                command_.lift_height_percent == 0);
+                      [](const auto& leg) {
+                        return (leg.mode == Leg::Mode::kStance);
                       });
 
     JointCommand result;
@@ -281,19 +293,28 @@ class RippleGait : public Gait {
 
       base::Point3D shoulder_point =
           shoulder_frame.MapFromFrame(leg.frame, leg.point);
-      // TODO(jpieper): Perhaps ramp this during or before lift and
-      // during or after touch down?
+      const bool in_stance = leg.mode == Leg::Mode::kStance;
       base::Point3D shoulder_force_N =
           base::Point3D(0,
                         0,
-                        (leg.mode == Leg::Mode::kStance ||
-                         command_.lift_height_percent == 0) ?
+                        in_stance ?
                         (-config_.mass_kg * 9.81 / num_legs_in_stance) :
                         0.0);
       auto joints = leg.leg_ik->Solve(shoulder_point, shoulder_force_N);
+      const auto phase_in_stance = state.phase - leg.stance_phase_start;
+      const double feedforward_factor =
+          !in_stance ? 1.0 :
+          std::max(
+              0.0,
+              std::min(
+                  1.0, (phase_in_stance /
+                        (config_.feedforward_stance_ramp_percent / 100.0))));
       for (const auto& joint: joints.joints) {
         result.joints.emplace_back(
-            JointCommand::Joint(joint.ident, joint.angle_deg, joint.torque_Nm));
+            JointCommand::Joint(
+                joint.ident, joint.angle_deg,
+                feedforward_factor * joint.torque_Nm,
+                feedforward_factor * (1.0 - config_.min_kp) + config_.min_kp));
       }
 
       index += 1;
@@ -331,6 +352,7 @@ class RippleGait : public Gait {
           &result.body_frame, point);
       leg_state.frame = &result.world_frame;
       leg_state.mode = Leg::Mode::kStance;
+      leg_state.stance_phase_start = -1.0;
 
       leg_state.leg_ik = leg_config.leg_ik;
     }
@@ -553,12 +575,17 @@ class RippleGait : public Gait {
       auto& leg = state_.legs.at(leg_num);
 
       if (action.action == RippleState::kActionStartStance) {
+        const auto old_mode = leg.mode;
         leg.mode = Leg::Mode::kStance;
         leg.point = state_.world_frame.MapFromFrame(
             leg.frame, leg.point);
         leg.point.z = 0;
         leg.frame = &state_.world_frame;
-      } else if (action.action == RippleState::kActionStartSwing) {
+        if (old_mode == Leg::Mode::kSwing) {
+          leg.stance_phase_start = action.phase;
+        }
+      } else if (action.action == RippleState::kActionStartSwing &&
+                 command_.lift_height_percent != 0) {
         leg.mode = Leg::Mode::kSwing;
         leg.point = state_.robot_frame.MapFromFrame(
             leg.frame, leg.point);

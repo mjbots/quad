@@ -246,6 +246,7 @@ class GaitDriver::Impl : boost::noncopyable {
       joint_command.torque_Nm = command.torque_Nm;
       joint_command.angle_deg = std::numeric_limits<double>::quiet_NaN();
       joint_command.velocity_dps = joint_speed_dps;
+      joint_command.kp = command.kp;
 
       servo_commands.push_back(joint_command);
 
@@ -425,6 +426,7 @@ class GaitDriver::Impl : boost::noncopyable {
       si_joint.address = joint.servo_number;
       si_joint.angle_deg = joint.angle_deg;
       si_joint.torque_Nm = joint.torque_Nm;
+      si_joint.kp = joint.kp;
       servo_commands.push_back(si_joint);
     }
 

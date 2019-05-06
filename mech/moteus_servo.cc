@@ -100,6 +100,12 @@ class MoteusServo::Impl {
           static_cast<float>(joint.torque_Nm));
     }
 
+    if (joint.kp != 1.0) {
+      request_.WriteSingle(
+          moteus::kCommandKpScale,
+          static_cast<float>(joint.kp));
+    }
+
     auto remainder = joints;
     remainder.pop_back();
 

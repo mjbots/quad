@@ -43,6 +43,8 @@ class ServoInterface : boost::noncopyable {
     double power = 1.0;
 
     double torque_Nm = 0.0;
+
+    double kp = 1.0;
   };
   virtual void SetPose(const std::vector<Joint>&, mjlib::io::ErrorCallback) = 0;
 
