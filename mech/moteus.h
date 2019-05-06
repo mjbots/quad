@@ -49,7 +49,7 @@ enum Register : uint32_t {
   kCommandVelocity = 0x021,
   kCommandPositionMaxCurrent = 0x022,
   kCommandStopPosition = 0x023,
-  kCommandFeedforwardCurrent = 0x024,
+  kCommandFeedforwardTorque = 0x024,
   kCommandKpScale = 0x025,
   kCommandKdScale = 0x026,
 };

@@ -218,6 +218,7 @@ class GaitDriver::Impl : boost::noncopyable {
       ServoInterface::Joint joint_command;
       joint_command.address = command.servo_number;
       joint_command.goal_deg = command.angle_deg;
+      joint_command.torque_Nm = command.torque_Nm;
       joint_command.angle_deg = std::numeric_limits<double>::quiet_NaN();
       joint_command.velocity_dps = joint_speed_dps;
 
@@ -384,8 +385,11 @@ class GaitDriver::Impl : boost::noncopyable {
 
     std::vector<ServoInterface::Joint> servo_commands;
     for (const auto& joint: gait_commands_.joints) {
-      servo_commands.emplace_back(
-          ServoInterface::Joint{joint.servo_number, joint.angle_deg});
+      ServoInterface::Joint si_joint;
+      si_joint.address = joint.servo_number;
+      si_joint.angle_deg = joint.angle_deg;
+      si_joint.torque_Nm = joint.torque_Nm;
+      servo_commands.push_back(si_joint);
     }
 
     servo_->SetPose(servo_commands, FailHandler());

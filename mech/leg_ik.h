@@ -359,9 +359,11 @@ class MammalIK : public IKSolver {
     const double shoulder_force_Nm =
         std::cos(logical_shoulder_rad) * force_N.y +
         std::sin(logical_shoulder_rad) * force_N.z;
-    const double leg_frame_force_y_N =
+    // TODO(jpieper): I have no idea why this -1.0 is necessary right
+    // now.
+    const double leg_frame_force_y_N = -1.0 * (
         std::cos(logical_shoulder_rad) * force_N.z -
-        std::sin(logical_shoulder_rad) * force_N.y;
+        std::sin(logical_shoulder_rad) * force_N.y);
     const double logical_shoulder_torque_Nm =
         shoulder_force_Nm * 0.001 * length;
 

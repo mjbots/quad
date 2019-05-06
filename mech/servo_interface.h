@@ -41,6 +41,8 @@ class ServoInterface : boost::noncopyable {
     double goal_deg = std::numeric_limits<double>::quiet_NaN();
 
     double power = 1.0;
+
+    double torque_Nm = 0.0;
   };
   virtual void SetPose(const std::vector<Joint>&, mjlib::io::ErrorCallback) = 0;
 

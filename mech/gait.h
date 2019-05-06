@@ -147,20 +147,23 @@ struct JointCommand {
   struct Joint {
     int servo_number = 0;
     double angle_deg = 0.0;
+    double torque_Nm = 0.0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(servo_number));
       a->Visit(MJ_NVP(angle_deg));
+      a->Visit(MJ_NVP(torque_Nm));
     }
 
     Joint() {}
-    Joint(int servo_number, double angle_deg)
-        : servo_number(servo_number), angle_deg(angle_deg) {}
+    Joint(int servo_number, double angle_deg, double torque_Nm)
+        : servo_number(servo_number), angle_deg(angle_deg), torque_Nm(torque_Nm) {}
 
     bool operator==(const Joint& rhs) const {
       return servo_number == rhs.servo_number &&
-          angle_deg == rhs.angle_deg;
+          angle_deg == rhs.angle_deg &&
+          torque_Nm == rhs.torque_Nm;
     }
   };
 

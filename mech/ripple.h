@@ -72,6 +72,8 @@ struct RippleConfig {
 
   double preposition_z_offset_mm = -80;
 
+  double mass_kg = 0.0;
+
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(mechanical));
@@ -93,6 +95,7 @@ struct RippleConfig {
     a->Visit(MJ_NVP(rate_p_mm_dps));
     a->Visit(MJ_NVP(rate_i_mm_dps2));
     a->Visit(MJ_NVP(preposition_z_offset_mm));
+    a->Visit(MJ_NVP(mass_kg));
   }
 };
 
@@ -264,6 +267,13 @@ class RippleGait : public Gait {
   }
 
   JointCommand MakeJointCommand(const RippleState& state) const {
+    const int num_legs_in_stance =
+        std::count_if(state.legs.begin(), state.legs.end(),
+                      [this](const auto& leg) {
+                        return (leg.mode == Leg::Mode::kStance ||
+                                command_.lift_height_percent == 0);
+                      });
+
     JointCommand result;
     int index = 0;
     for (const auto& leg: state.legs) {
@@ -273,10 +283,19 @@ class RippleGait : public Gait {
 
       base::Point3D shoulder_point =
           shoulder_frame.MapFromFrame(leg.frame, leg.point);
-      auto joints = leg.leg_ik->Solve(shoulder_point, {});
+      // TODO(jpieper): Perhaps ramp this during or before lift and
+      // during or after touch down?
+      base::Point3D shoulder_force_N =
+          base::Point3D(0,
+                        0,
+                        (leg.mode == Leg::Mode::kStance ||
+                         command_.lift_height_percent == 0) ?
+                        (-config_.mass_kg * 9.81 / num_legs_in_stance) :
+                        0.0);
+      auto joints = leg.leg_ik->Solve(shoulder_point, shoulder_force_N);
       for (const auto& joint: joints.joints) {
         result.joints.emplace_back(
-            JointCommand::Joint(joint.ident, joint.angle_deg));
+            JointCommand::Joint(joint.ident, joint.angle_deg, joint.torque_Nm));
       }
 
       index += 1;
