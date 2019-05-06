@@ -201,7 +201,32 @@ class GaitDriver::Impl : boost::noncopyable {
           item.address == 8 || item.address == 11) {
         item.power = scale;
       }
+      // We want no feedforward in this phase, since we aren't
+      // touching the ground.
+      item.torque_Nm = 0.0;
       result.push_back(item);
+    }
+    return result;
+  }
+
+  std::vector<ServoInterface::Joint> DerateStandupCommands(
+      const std::vector<ServoInterface::Joint>& input,
+      double scale) {
+    // For the very beginning of the standup, (and the end of the
+    // sitting down), we want to have 0 torque, with a quick ramp up
+    // to full torque shortly after that.
+    const double torque_scale =
+        (scale < 0.05) ?
+        0.0 :
+        (scale < 0.2) ?
+        ((scale - 0.05) / 0.15) :
+        1.0;
+
+    std::vector<ServoInterface::Joint> result;
+    for (const auto& item : input) {
+      auto copy = item;
+      copy.torque_Nm = torque_scale * item.torque_Nm;
+      result.push_back(copy);
     }
     return result;
   }
@@ -264,8 +289,11 @@ class GaitDriver::Impl : boost::noncopyable {
   void SendStandupCommand() {
     gait_commands_ = gait_->MakeJointCommand(
         gait_->GetPrepositioningState(1.0 - GetSitStandRatio()));
-    servo_->SetPose(MakeServoCommands(gait_commands_, parameters_.standup_speed_dps),
-                    FailHandler());
+    servo_->SetPose(
+        DerateStandupCommands(
+            MakeServoCommands(gait_commands_, parameters_.standup_speed_dps),
+            GetSitStandRatio()),
+        FailHandler());
 
     Emit();
   }
@@ -290,8 +318,11 @@ class GaitDriver::Impl : boost::noncopyable {
   void SendSittingCommand() {
     gait_commands_ = gait_->MakeJointCommand(
         gait_->GetPrepositioningState(GetSitStandRatio()));
-    servo_->SetPose(MakeServoCommands(gait_commands_, parameters_.sitting_speed_dps),
-                    FailHandler());
+    servo_->SetPose(
+        DerateStandupCommands(
+            MakeServoCommands(gait_commands_, parameters_.sitting_speed_dps),
+            1.0 - GetSitStandRatio()),
+        FailHandler());
     Emit();
   }
 
