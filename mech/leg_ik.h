@@ -275,6 +275,11 @@ class MammalIK : public IKSolver {
     /// co-axial joint, the tibia angle is absolute.
     bool tibia_relative = true;
 
+    /// For the co-axial joint, we need to know the gear ratio of the
+    /// tibia since if it is non-unity, then the femur angle is mixed
+    /// into it.
+    double coaxial_tibia_gear_ratio = 0.5454;
+
     double servo_speed_dps = 360.0;
 
     template <typename Archive>
@@ -472,9 +477,20 @@ class MammalIK : public IKSolver {
     result.joints.emplace_back(config_.femur.ident, femur_deg,
                                logical_femur_torque_Nm * config_.femur.sign);
 
+    const auto make_absolute_tibia = [&]() {
+      // The current femur angle mixes into this in an annoying way in
+      // this configuration.
+      const double logical_tibia_absolute_rad= (
+          logical_tibia_rad + femur_rad
+          - femur_rad * (1.0 - config_.coaxial_tibia_gear_ratio));
+      return (config_.tibia.sign * base::Degrees(logical_tibia_absolute_rad) +
+              config_.tibia.idle_deg);
+    };
+
     const double tibia_command_deg =
         config_.tibia_relative ?
-        tibia_relative_deg : (tibia_relative_deg + femur_deg);
+        tibia_relative_deg :
+        make_absolute_tibia();
 
     result.joints.emplace_back(config_.tibia.ident, tibia_command_deg,
                                logical_tibia_torque_Nm * config_.tibia.sign);
