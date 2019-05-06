@@ -46,13 +46,13 @@ class ServoMonitor : boost::noncopyable {
 
   struct Parameters {
     /// Query individual servos at this rate.
-    double period_s = 0.5;
+    double period_s = 0.1;
 
     /// If a servo times out a response, then exclude it from queries.
     /// The time to exclude starts at parole_min_time_s, then doubles
     /// with each timeout until it reaches parole_max_time_s.
-    double parole_min_time_s = 60.0;
-    double parole_max_time_s = 600.0;
+    double parole_min_time_s = 2.0;
+    double parole_max_time_s = 20.0;
 
     /// A list of servos to monitor.  Comma separated with optional -
     /// ranges, like: "1,2-5,9-12"
@@ -84,6 +84,9 @@ class ServoMonitor : boost::noncopyable {
       int address = -1;
       double voltage_V = 0.0;
       double temperature_C = 0.0;
+      double angle_deg = 0.0;
+      double velocity_dps = 0.0;
+      double torque_Nm = 0.0;
       int32_t error = 0;
       bool torque_on = false;
 
@@ -93,6 +96,9 @@ class ServoMonitor : boost::noncopyable {
         a->Visit(MJ_NVP(address));
         a->Visit(MJ_NVP(voltage_V));
         a->Visit(MJ_NVP(temperature_C));
+        a->Visit(MJ_NVP(angle_deg));
+        a->Visit(MJ_NVP(velocity_dps));
+        a->Visit(MJ_NVP(torque_Nm));
         a->Visit(MJ_NVP(error));
         a->Visit(MJ_NVP(torque_on));
       }

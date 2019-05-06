@@ -56,7 +56,9 @@ class ServoInterface : boost::noncopyable {
 
   struct StatusOptions {
     bool pose = false;
+    bool velocity = false;
     bool temperature = false;
+    bool torque = false;
     bool voltage = false;
     bool error = false;
   };
@@ -92,6 +94,8 @@ class ServoInterface : boost::noncopyable {
     std::optional<double> angle_deg;
     std::optional<double> temperature_C;
     std::optional<double> voltage;
+    std::optional<double> velocity_dps;
+    std::optional<double> torque_Nm;
   };
 
   typedef std::function<

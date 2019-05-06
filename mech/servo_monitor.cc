@@ -89,6 +89,9 @@ class ServoMonitor::Impl : boost::noncopyable {
         {state_.last_servo},
         []() {
           ServoInterface::StatusOptions s;
+          s.pose = true;
+          s.torque = true;
+          s.velocity = true;
           s.temperature = true;
           s.voltage = true;
           s.error = true;
@@ -129,6 +132,15 @@ class ServoMonitor::Impl : boost::noncopyable {
     }
     if (response.temperature_C) {
       servo.temperature_C = *response.temperature_C;
+    }
+    if (response.angle_deg) {
+      servo.angle_deg = *response.angle_deg;
+    }
+    if (response.torque_Nm) {
+      servo.torque_Nm = *response.torque_Nm;
+    }
+    if (response.velocity_dps) {
+      servo.velocity_dps = *response.velocity_dps;
     }
     servo.error = response.error;
 
@@ -200,6 +212,9 @@ class ServoMonitor::Impl : boost::noncopyable {
       servo.last_update = pair.second.last_update;
       servo.voltage_V = pair.second.voltage_V;
       servo.temperature_C = pair.second.temperature_C;
+      servo.angle_deg = pair.second.angle_deg;
+      servo.torque_Nm = pair.second.torque_Nm;
+      servo.velocity_dps = pair.second.velocity_dps;
       servo.torque_on = pair.second.torque_on;
       servo.error = pair.second.error;
       data.servos.push_back(servo);
@@ -238,6 +253,9 @@ class ServoMonitor::Impl : boost::noncopyable {
     boost::posix_time::ptime last_update;
     double voltage_V = 0;
     double temperature_C = 0;
+    double torque_Nm = 0;
+    double velocity_dps = 0;
+    double angle_deg = 0;
     bool torque_on = false;
     int32_t error = 0;
 

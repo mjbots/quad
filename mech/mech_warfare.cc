@@ -246,6 +246,8 @@ class MechWarfare::Impl : boost::noncopyable {
     telemetry.total_fire_time_s = parent_->m_.turret->data().total_fire_time_s;
     telemetry.servo_min_voltage_V = servo_min_voltage_V_;
     telemetry.servo_max_voltage_V = servo_max_voltage_V_;
+    telemetry.servo_min_temp_C = servo_min_temp_C_;
+    telemetry.servo_max_temp_C = servo_max_temp_C_;
     telemetry.mech_mode = static_cast<int>(data_.mode);
     telemetry.target_data = parent_->m_.video->target_tracker()->data();
 
@@ -544,14 +546,9 @@ class MechWarfare::Impl : boost::noncopyable {
   }
 
   void HandleServoData(const ServoMonitor::ServoData* data) {
-    bool first = true;
     bool error = false;
 
-    servo_min_voltage_V_ = 0.0;
-    servo_max_voltage_V_ = 0.0;
-
     for (const auto& servo: data->servos) {
-      if (servo.last_update.is_not_a_date_time()) { continue; }
       if (servo.error && !error) {
         error = true;
         // We need to immediately cut power to everything.
@@ -562,15 +559,30 @@ class MechWarfare::Impl : boost::noncopyable {
         parent_->m_.servo_monitor->ExpectTorqueOff();
         data_.mode = Data::Mode::kIdle;
       }
-      if (servo.voltage_V == 0.0) { continue; }
-      if (first || servo.voltage_V < servo_min_voltage_V_) {
-        servo_min_voltage_V_ = servo.voltage_V;
-      }
-      if (first || servo.voltage_V > servo_max_voltage_V_) {
-        servo_max_voltage_V_ = servo.voltage_V;
-      }
-      first = false;
     }
+
+    auto min_max = [&](auto getter) -> std::pair<double, double> {
+      bool first = true;
+      std::pair<double, double> result = {};
+      for (const auto& servo : data->servos) {
+        if (servo.last_update.is_not_a_date_time()) { continue; }
+        const auto value = getter(servo);
+        if (value == 0.0) { continue; }
+        if (first || value < result.first) {
+          result.first = value;
+        }
+        if (first || value > result.second) {
+          result.second = value;
+        }
+        first = false;
+      }
+      return result;
+    };
+
+    std::tie(servo_min_voltage_V_, servo_max_voltage_V_) =
+        min_max([](const auto& servo) { return servo.voltage_V; });
+    std::tie(servo_min_temp_C_, servo_max_temp_C_) =
+        min_max([](const auto& servo) { return servo.temperature_C; });
   }
 
   MechWarfare* const parent_;
@@ -591,6 +603,8 @@ class MechWarfare::Impl : boost::noncopyable {
   std::vector<int> servos_to_configure_;
   double servo_min_voltage_V_ = 0.0;
   double servo_max_voltage_V_ = 0.0;
+  double servo_min_temp_C_ = 0.0;
+  double servo_max_temp_C_ = 0.0;
 
   Data data_;
   boost::signals2::signal<void (const Data*)> data_signal_;

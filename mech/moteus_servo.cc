@@ -184,6 +184,12 @@ class MoteusServo::Impl {
     if (status_options.voltage) {
       read_request_.ReadSingle(moteus::kVoltage, kFloat);
     }
+    if (status_options.velocity) {
+      read_request_.ReadSingle(moteus::kVelocity, kFloat);
+    }
+    if (status_options.torque) {
+      read_request_.ReadSingle(moteus::kTorque, kFloat);
+    }
     read_request_.ReadSingle(moteus::kFault, kInt32);
 
     auto remainder = ids;
@@ -242,6 +248,14 @@ class MoteusServo::Impl {
         }
         case moteus::kVoltage: {
           this_status.voltage = ReadCast<float>(pair.second);
+          break;
+        }
+        case moteus::kVelocity: {
+          this_status.velocity_dps = ReadCast<float>(pair.second) * 360.0;
+          break;
+        }
+        case moteus::kTorque: {
+          this_status.torque_Nm = ReadCast<float>(pair.second);
           break;
         }
         case moteus::kFault: {

@@ -27,6 +27,8 @@ struct MechTelemetry {
 
   float servo_min_voltage_V = 0.0;
   float servo_max_voltage_V = 0.0;
+  float servo_min_temp_C = 0.0;
+  float servo_max_temp_C = 0.0;
 
   float turret_absolute_deg = 0.0;
 
@@ -42,6 +44,8 @@ struct MechTelemetry {
     a->Visit(MJ_NVP(timestamp));
     a->Visit(MJ_NVP(servo_min_voltage_V));
     a->Visit(MJ_NVP(servo_max_voltage_V));
+    a->Visit(MJ_NVP(servo_min_temp_C));
+    a->Visit(MJ_NVP(servo_max_temp_C));
     a->Visit(MJ_NVP(turret_absolute_deg));
     a->Visit(MJ_NVP(total_fire_time_s));
     a->Visit(MJ_NVP(mech_mode));

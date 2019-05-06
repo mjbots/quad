@@ -156,12 +156,14 @@ class VideoControllerApp : boost::noncopyable {
           it->second;
 
       m_.display->SetOsdText(
-          fmt::format("Servo: {:.1f}/{:.1f}\n"
+          fmt::format("Servo: {:.1f}/{:.1f}V {:.1f}/{:.1f}C\n"
                       "Fire: {:.0f}(s)\n"
                       "Turret: {:.0f}(deg)\n"
                       "Mode: {}",
                       telemetry.servo_min_voltage_V,
                       telemetry.servo_max_voltage_V,
+                      telemetry.servo_min_temp_C,
+                      telemetry.servo_max_temp_C,
                       telemetry.total_fire_time_s,
                       telemetry.turret_absolute_deg,
                       mode_str));
