@@ -241,12 +241,14 @@ class GaitDriver::Impl : boost::noncopyable {
   }
 
   void SendPrepositionCommand() {
-    const auto commands = gait_->MakeJointCommand(
+    gait_commands_ = gait_->MakeJointCommand(
         gait_->GetPrepositioningState(1.0));
     const auto servo_commands =
-        MakeServoCommands(commands, parameters_.preposition_speed_dps);
+        MakeServoCommands(gait_commands_, parameters_.preposition_speed_dps);
     servo_->SetPose(DerateTibiaCommands(servo_commands, GetSitStandRatio()),
                     FailHandler());
+
+    Emit();
   }
 
   void CommandStandup() {
@@ -260,10 +262,12 @@ class GaitDriver::Impl : boost::noncopyable {
   }
 
   void SendStandupCommand() {
-    auto commands = gait_->MakeJointCommand(
+    gait_commands_ = gait_->MakeJointCommand(
         gait_->GetPrepositioningState(1.0 - GetSitStandRatio()));
-    servo_->SetPose(MakeServoCommands(commands, parameters_.standup_speed_dps),
+    servo_->SetPose(MakeServoCommands(gait_commands_, parameters_.standup_speed_dps),
                     FailHandler());
+
+    Emit();
   }
 
   void CommandSitting() {
@@ -284,10 +288,11 @@ class GaitDriver::Impl : boost::noncopyable {
   }
 
   void SendSittingCommand() {
-    auto commands = gait_->MakeJointCommand(
+    gait_commands_ = gait_->MakeJointCommand(
         gait_->GetPrepositioningState(GetSitStandRatio()));
-    servo_->SetPose(MakeServoCommands(commands, parameters_.sitting_speed_dps),
+    servo_->SetPose(MakeServoCommands(gait_commands_, parameters_.sitting_speed_dps),
                     FailHandler());
+    Emit();
   }
 
   void ProcessBodyAhrs(boost::posix_time::ptime,
