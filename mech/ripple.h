@@ -54,6 +54,7 @@ struct RippleConfig {
   double max_cycle_time_s = 4.0;
   double lift_height_mm = 80.0;
   double lift_percent = 25.0;
+  double lower_percent = 25.0;
   double swing_percent = 80.0;
   double position_margin_percent = 80.0;
   std::vector<std::vector<int>> leg_order;
@@ -82,6 +83,7 @@ struct RippleConfig {
     a->Visit(MJ_NVP(max_cycle_time_s));
     a->Visit(MJ_NVP(lift_height_mm));
     a->Visit(MJ_NVP(lift_percent));
+    a->Visit(MJ_NVP(lower_percent));
     a->Visit(MJ_NVP(swing_percent));
     a->Visit(MJ_NVP(position_margin_percent));
     a->Visit(MJ_NVP(leg_order));
@@ -550,15 +552,16 @@ class RippleGait : public Gait {
         leg.point = current;
 
         const double lift_fraction = 0.01 * config_.lift_percent;
+        const double lower_fraction = 0.01 * config_.lower_percent;
         const double height_mm =
             config_.lift_height_mm *
             command_.lift_height_percent / 100.0;
         if (leg_phase < lift_fraction) {
           leg.point.z = (leg_phase / lift_fraction) * height_mm;
-        } else if (leg_phase < (1.0 - lift_fraction)) {
+        } else if (leg_phase < (1.0 - lower_fraction)) {
           leg.point.z = height_mm;
         } else {
-          leg.point.z = ((1.0 - leg_phase) / lift_fraction) * height_mm;
+          leg.point.z = ((1.0 - leg_phase) / lower_fraction) * height_mm;
         }
       }
     }
