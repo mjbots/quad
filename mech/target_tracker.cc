@@ -25,6 +25,7 @@
 #include <opencv2/imgcodecs.hpp>
 
 #include "base/logging.h"
+#include "base/now.h"
 #include "base/telemetry_registry.h"
 
 namespace mjmech {
@@ -100,8 +101,11 @@ class TargetTracker::Impl : public CameraFrameConsumer {
 
     auto data = [&]() {
       std::lock_guard<std::mutex> guard(mutex_);
-      return data_;
+      auto copy = data_;
+      copy.timestamp = base::Now(this->service_);
+      return copy;
     }();
+
 
     const auto& p = parent_->parameters_;
     cv::Rect crop_area = cv::Rect(
