@@ -257,8 +257,6 @@ class RippleGait : public Gait {
   const Command& command() const { return command_; }
 
   RippleState GetPrepositioningState(double scale) const {
-    log_.warn(fmt::format("preposition_z_offset {} scale={}",
-                          config_.preposition_z_offset_mm, scale));
     return GetStartupState(config_.preposition_z_offset_mm * scale);
   }
 
