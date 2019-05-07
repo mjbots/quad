@@ -135,6 +135,15 @@ module_main(
     deps = [":mech"],
 )
 
+cc_binary(
+    name = "multiplex_tool",
+    srcs = ["multiplex_tool_main.cc"],
+    deps = [
+        "@moteus//mjlib/multiplex:libmultiplex_tool",
+        "@org_llvm_libcxx//:libcxx",
+    ],
+)
+
 pkg_tar(
     name = "deploy",
     extension = "tar",
@@ -144,6 +153,7 @@ pkg_tar(
         ":video_sender_app",
         ":mech_warfare",
         ":herkulex_tool",
+        ":multiplex_tool",
     ],
     files = {
         "//configs:real.cfg": "configs/real.cfg",
