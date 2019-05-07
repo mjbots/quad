@@ -153,7 +153,7 @@ void RunCycle(Gait& gait, const Command& command,
       // No leg moves faster than X in the world frame.
       double world_speed_mm_s =
           (current_world_point - old_world_point).length() / time_step_s;
-      BOOST_CHECK_LT(world_speed_mm_s, 1000);
+      BOOST_CHECK_LT(world_speed_mm_s, 1100);
 
       // No leg moves faster than Y in the body frame.
       Point3D current_body_point = this_state.body_frame.MapFromFrame(
@@ -163,7 +163,7 @@ void RunCycle(Gait& gait, const Command& command,
 
       double body_speed_mm_s =
           (current_body_point - old_body_point).length() / time_step_s;
-      BOOST_CHECK_LT(body_speed_mm_s, 600);
+      BOOST_CHECK_LT(body_speed_mm_s, 1100);
 
       old_state = this_state;
     }

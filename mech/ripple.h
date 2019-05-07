@@ -546,11 +546,6 @@ class RippleGait : public Gait {
           leg_phase = 1.0;
         }
 
-        BOOST_ASSERT(leg.frame == &state_.robot_frame);
-        const auto delta = *leg.swing_end_pos - *leg.swing_start_pos;
-        const auto current = *leg.swing_start_pos + delta.scaled(leg_phase);
-        leg.point = current;
-
         const double lift_fraction = 0.01 * config_.lift_percent;
         const double lower_fraction = 0.01 * config_.lower_percent;
         const double height_mm =
@@ -559,8 +554,27 @@ class RippleGait : public Gait {
         if (leg_phase < lift_fraction) {
           leg.point.z = (leg_phase / lift_fraction) * height_mm;
         } else if (leg_phase < (1.0 - lower_fraction)) {
+          if (leg.frame != &state_.robot_frame) {
+            leg.point = state_.robot_frame.MapFromFrame(
+                leg.frame, leg.point);
+            leg.frame = &state_.robot_frame;
+            leg.swing_start_pos = leg.point;
+          }
+
+          const double swing_phase =
+              (leg_phase - lift_fraction) / (1.0 - lower_fraction - lift_fraction);
+
+          const auto delta = *leg.swing_end_pos - *leg.swing_start_pos;
+          const auto current = *leg.swing_start_pos + delta.scaled(swing_phase);
+          leg.point = current;
+
           leg.point.z = height_mm;
         } else {
+          if (leg.frame != &state_.world_frame) {
+            leg.point = state_.world_frame.MapFromFrame(
+                leg.frame, leg.point);
+            leg.frame = &state_.world_frame;
+          }
           leg.point.z = ((1.0 - leg_phase) / lower_fraction) * height_mm;
         }
       }
@@ -590,10 +604,6 @@ class RippleGait : public Gait {
       } else if (action.action == RippleState::kActionStartSwing &&
                  command_.lift_height_percent != 0) {
         leg.mode = Leg::Mode::kSwing;
-        leg.point = state_.robot_frame.MapFromFrame(
-            leg.frame, leg.point);
-        leg.frame = &state_.robot_frame;
-        leg.swing_start_pos = leg.point;
         leg.swing_end_pos = GetSwingEndPos(leg_num);
       }
     }
