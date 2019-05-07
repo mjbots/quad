@@ -40,4 +40,8 @@ genrule(
     cmd = "pyside-uic $< > $@",
 )
 
-exports_files(["start-robot.sh"])
+exports_files([
+    "rezero.sh",
+    "start-robot.sh",
+    "update_pid.sh",
+])
