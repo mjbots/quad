@@ -443,6 +443,10 @@ class GaitDriver::Impl : boost::noncopyable {
 
     data.state = state_;
     data.command = gait_commands_;
+    std::sort(data.command.joints.begin(), data.command.joints.end(),
+              [](const auto& lhs_joint, const auto& rhs_joint) {
+                return lhs_joint.servo_number < rhs_joint.servo_number;
+              });
     data.body_robot = state.body_frame.TransformToFrame(&state.robot_frame);
     data.cog_robot = state.cog_frame.TransformToFrame(&state.robot_frame);
     data.body_world = state.body_frame.TransformToFrame(&state.world_frame);
