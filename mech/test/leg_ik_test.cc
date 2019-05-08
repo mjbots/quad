@@ -216,13 +216,14 @@ BOOST_AUTO_TEST_CASE(TestMammal3DoF) {
     {   0, 30, -250,  0, -1, 0,   0.00,   0,   0,       -0.25, 0, 0 },
     {   0, 30, -250,  0, 0, 1,    0.00,   0,   0,       0.00,  0, 0 },
     {   0, 30, -250,  0, 0, -1,   0.00,   0,   0,       0.00,  0, 0 },
-    {   0, 30, -250,  1, 0, 0,    0.00,   0,   0,       0.00,  0, 0.11 },
+    {   0, 30, -250,  1, 0, 0,    0.00,   0,   0,       0.00,  0, -0.11 },
+    {   0, 30, -250,  -1, 0, 0,   0.00,   0,   0,       0.00,  0, 0.11 },
 
     {   0, 30, -240,  0, 0, 0,    0.00,  -18.65, 35.55, 0, 0, 0 },
 
     // Torque also does something useful in the "bent" position
-    {   0, 30, -240,  0, 0, 10,   0.00,  -18.64, 35.55, 0.00, 0, 0.32 },
-    {   0, 30, -240,  0, 0, -10,  0.00,  -18.64, 35.55, 0.00, 0, -0.32 },
+    {   0, 30, -240,  0, 0, 10,   0.00,  -18.64, 35.55,  0.00, 0, 0.32 },
+    {   0, 30, -240,  0, 0, -10,  0.00,  -18.64, 35.55,  0.00, 0, -0.32 },
 
     {   0, 30, -230,  0, 0, 0,    0.00,  -26.52, 50.48, 0, 0, 0 },
     {   0, 30, -210,  0, 0, 0,    0.00,  -37.97, 72.00, 0, 0, 0 },
@@ -231,14 +232,13 @@ BOOST_AUTO_TEST_CASE(TestMammal3DoF) {
     {   0, 30, -90,   0, 0, 0,    0.00,  -87.71, 152.98, 0, 0, 0 },
     {  20, 30, -190,  0, 0, 0,    0.00,  -54.18, 87.92,  0, 0, 0 },
 
-    // TODO(jpieper): Does the sign of this femur torque make sense?
-    {  20, 30, -190,  0, 0, 10,   0.00,  -54.18, 87.92,  0, 0.20, 0.61 },
-    {  20, 30, -190,  0, 0, -10,   0.00,  -54.18, 87.92,  0, -0.20, -0.61 },
+    {  20, 30, -190,  0, 0, 10,   0.00,  -54.18, 87.92,  0, -0.20, 0.61 },
+    {  20, 30, -190,  0, 0, -10,  0.00,  -54.18, 87.92,  0, 0.20, -0.61 },
 
     { -20, 30, -190,  0, 0, 0,    0.00,  -39.00, 87.92,  0, 0, 0 },
 
-    { -20, 30, -190,  0, 0, 10,   0.00,  -39.00, 87.92,  0, -0.20, 0.82 },
-    { -20, 30, -190,  0, 0, -10,   0.00,  -39.00, 87.92,  0, 0.20, -0.82 },
+    { -20, 30, -190,  0, 0, 10,   0.00,  -39.00, 87.92,  0, 0.20, 0.82 },
+    { -20, 30, -190,  0, 0, -10,   0.00,  -39.00, 87.92, 0,-0.20, -0.82 },
 
 
     {   0, 40, -190,  0, 0, 0,    3.00,  -46.37, 87.52,  0, 0, 0 },
@@ -272,5 +272,57 @@ BOOST_AUTO_TEST_CASE(TestMammal3DoF) {
 
       run_test(sign_config, sign_test);
     }
+  }
+}
+
+namespace {
+MammalIK::Config MakeCenteredMammalConfig() {
+  auto result = MakeMammalConfig();
+  result.femur_attachment_mm.z = -22;
+  result.femur.length_mm = 135;
+  result.tibia.length_mm = 122;
+  result.femur_attachment_mm.y = 0;
+  result.tibia_relative = false;
+  return result;
+}
+}
+
+BOOST_AUTO_TEST_CASE(TestSimpleMammalDof) {
+  auto config = MakeCenteredMammalConfig();
+
+  TorqueTest tests[] = {
+    // Fully extended.
+    { 0, 0, -279,   0, 0, 0,   0, 0, 0,   0, 0, 0},
+
+    // Our nominal "idle" stance.
+    { 0, 30, -270,  0, 0, 0,      6.34, -13.03, 20.38,   0, 0, 0},
+
+    // A stance torque of 6kgf/4 = 14.7N
+    //
+    // The tibia torque should be negative, so as to reduce the tibia
+    // angle bringing it closer to center.  This will push in the -z
+    // direction.
+    { 0, 30, -270,  0, 0, -14.7,  6.34, -13.03, 20.38,   -.44, 0, -0.44},
+
+    // Far enough forward that we can be sure we know what sign the
+    // femur torque should be.  Since the femur is negative, force to
+    // push in the -z direction should be positive, so as to bring it
+    // closer to zero.
+    { 60, 30, -270,  0, 0, -14.7,  6.34, -15.82, -3.77,   -.44, 0.88, 0.34 },
+  };
+
+  for (const auto& test: tests) {
+    MammalIK ik(config);
+    Point3D point_mm(test.x_mm, test.y_mm, test.z_mm);
+    Point3D point_N(test.x_N, test.y_N, test.z_N);
+    auto result = ik.Solve(point_mm, point_N);
+    CheckJoints(result,
+                test.expected_coxa_deg,
+                test.expected_femur_deg,
+                test.expected_tibia_deg);
+    CheckTorque(result,
+                test.expected_coxa_Nm,
+                test.expected_femur_Nm,
+                test.expected_tibia_Nm);
   }
 }

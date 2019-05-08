@@ -364,9 +364,7 @@ class MammalIK : public IKSolver {
     const double shoulder_force_Nm =
         std::cos(logical_shoulder_rad) * force_N.y +
         std::sin(logical_shoulder_rad) * force_N.z;
-    // TODO(jpieper): I have no idea why this -1.0 is necessary right
-    // now.
-    const double leg_frame_force_y_N = -1.0 * (
+    const double leg_frame_force_y_N = (
         std::cos(logical_shoulder_rad) * force_N.z -
         std::sin(logical_shoulder_rad) * force_N.y);
     const double logical_shoulder_torque_Nm =
@@ -472,10 +470,12 @@ class MammalIK : public IKSolver {
         0.001 * config_.tibia.length_mm * leg_frame_force_y_N * std::sin(logical_tibia_rad + femur_rad);
 
     JointAngles result;
-    result.joints.emplace_back(config_.shoulder.ident, shoulder_deg,
-                               logical_shoulder_torque_Nm * config_.shoulder.sign);
-    result.joints.emplace_back(config_.femur.ident, femur_deg,
-                               logical_femur_torque_Nm * config_.femur.sign);
+    result.joints.emplace_back(
+        config_.shoulder.ident, shoulder_deg,
+        logical_shoulder_torque_Nm * config_.shoulder.sign);
+    result.joints.emplace_back(
+        config_.femur.ident, femur_deg,
+        logical_femur_torque_Nm * config_.femur.sign);
 
     const auto make_absolute_tibia = [&]() {
       // The current femur angle mixes into this in an annoying way in
@@ -492,8 +492,10 @@ class MammalIK : public IKSolver {
         tibia_relative_deg :
         make_absolute_tibia();
 
-    result.joints.emplace_back(config_.tibia.ident, tibia_command_deg,
-                               logical_tibia_torque_Nm * config_.tibia.sign);
+    result.joints.emplace_back(
+        config_.tibia.ident, tibia_command_deg,
+        // TODO(jpieper): I'm not entirely sure why this -1 is here.
+        -1 * logical_tibia_torque_Nm * config_.tibia.sign);
 
     return result;
   }

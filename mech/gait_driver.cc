@@ -38,7 +38,7 @@ struct Parameters {
 
   /// The maximum amount that the gait engine can accelerate or
   /// decelerate in each axis.
-  base::Point3D max_acceleration_mm_s2 = base::Point3D(200., 200., 200.);
+  base::Point3D max_acceleration_mm_s2 = base::Point3D(50., 50., 50.);
 
   double preposition_speed_dps = 60.0;
   double standup_speed_dps = 30.0;
