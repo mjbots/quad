@@ -150,12 +150,15 @@ struct JointCommand {
     double torque_Nm = 0.0;
     double kp = 1.0;
 
+    JointAngles::Joint ik_joint;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(servo_number));
       a->Visit(MJ_NVP(angle_deg));
       a->Visit(MJ_NVP(torque_Nm));
       a->Visit(MJ_NVP(kp));
+      a->Visit(MJ_NVP(ik_joint));
     }
 
     Joint() {}

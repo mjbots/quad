@@ -28,6 +28,11 @@ struct JointAngles {
     double angle_deg = 0;
     double torque_Nm = 0;
 
+    // These are intermediate values.
+    double logical_relative_deg = 0;
+    double logical_absolute_deg = 0;
+    double logical_post_coaxial_correction_deg = 0;
+
     Joint() {}
     Joint(int ident_in, double angle_deg_in, double torque_Nm_in = 0.0)
         : ident(ident_in),
@@ -38,6 +43,16 @@ struct JointAngles {
       return ident == rhs.ident &&
           angle_deg == rhs.angle_deg &&
           torque_Nm == rhs.torque_Nm;
+    }
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(ident));
+      a->Visit(MJ_NVP(angle_deg));
+      a->Visit(MJ_NVP(torque_Nm));
+      a->Visit(MJ_NVP(logical_relative_deg));
+      a->Visit(MJ_NVP(logical_absolute_deg));
+      a->Visit(MJ_NVP(logical_post_coaxial_correction_deg));
     }
   };
 
@@ -290,6 +305,7 @@ class MammalIK : public IKSolver {
       a->Visit(MJ_NVP(tibia));
       a->Visit(MJ_NVP(invert));
       a->Visit(MJ_NVP(tibia_relative));
+      a->Visit(MJ_NVP(coaxial_tibia_gear_ratio));
       a->Visit(MJ_NVP(servo_speed_dps));
     }
   };
@@ -470,32 +486,49 @@ class MammalIK : public IKSolver {
         0.001 * config_.tibia.length_mm * leg_frame_force_y_N * std::sin(logical_tibia_rad + femur_rad);
 
     JointAngles result;
-    result.joints.emplace_back(
-        config_.shoulder.ident, shoulder_deg,
-        logical_shoulder_torque_Nm * config_.shoulder.sign);
-    result.joints.emplace_back(
-        config_.femur.ident, femur_deg,
-        logical_femur_torque_Nm * config_.femur.sign);
+    {
+      JointAngles::Joint shoulder;
+      shoulder.ident = config_.shoulder.ident;
+      shoulder.angle_deg = shoulder_deg;
+      shoulder.torque_Nm = logical_shoulder_torque_Nm * config_.shoulder.sign;
+      result.joints.push_back(shoulder);
+    }
 
-    const auto make_absolute_tibia = [&]() {
-      // The current femur angle mixes into this in an annoying way in
-      // this configuration.
-      const double logical_tibia_absolute_rad= (
-          logical_tibia_rad + femur_rad
-          - femur_rad * (1.0 - config_.coaxial_tibia_gear_ratio));
-      return (config_.tibia.sign * base::Degrees(logical_tibia_absolute_rad) +
-              config_.tibia.idle_deg);
-    };
+    {
+      JointAngles::Joint femur;
+      femur.ident = config_.femur.ident;
+      femur.angle_deg = femur_deg;
+      femur.torque_Nm = logical_femur_torque_Nm * config_.femur.sign;
 
-    const double tibia_command_deg =
-        config_.tibia_relative ?
-        tibia_relative_deg :
-        make_absolute_tibia();
+      femur.logical_relative_deg = base::Degrees(femur_rad);
+      femur.logical_absolute_deg = femur.logical_relative_deg;
+      femur.logical_post_coaxial_correction_deg = femur.logical_relative_deg;
+      result.joints.push_back(femur);
+    }
 
-    result.joints.emplace_back(
-        config_.tibia.ident, tibia_command_deg,
-        // TODO(jpieper): I'm not entirely sure why this -1 is here.
-        -1 * logical_tibia_torque_Nm * config_.tibia.sign);
+    {
+      JointAngles::Joint tibia;
+
+      tibia.ident = config_.tibia.ident;
+
+      tibia.logical_relative_deg = base::Degrees(logical_tibia_rad);
+      tibia.logical_absolute_deg = base::Degrees(logical_tibia_rad + femur_rad);
+      tibia.logical_post_coaxial_correction_deg =
+          tibia.logical_absolute_deg -
+          base::Degrees(femur_rad * (1.0 - config_.coaxial_tibia_gear_ratio));
+
+      // TODO(jpieper): I'm not entirely sure why this -1 is here.
+      tibia.torque_Nm = -1 * logical_tibia_torque_Nm * config_.tibia.sign;
+
+      tibia.angle_deg =
+          config_.tibia.sign * (
+              config_.tibia_relative ?
+              tibia.logical_relative_deg :
+              tibia.logical_post_coaxial_correction_deg) +
+          config_.tibia.idle_deg;
+
+      result.joints.push_back(tibia);
+    }
 
     return result;
   }

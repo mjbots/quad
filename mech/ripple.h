@@ -312,11 +312,12 @@ class RippleGait : public Gait {
                   1.0, (phase_in_stance /
                         (config_.feedforward_stance_ramp_percent / 100.0))));
       for (const auto& joint: joints.joints) {
-        result.joints.emplace_back(
-            JointCommand::Joint(
-                joint.ident, joint.angle_deg,
-                feedforward_factor * joint.torque_Nm,
-                feedforward_factor * (1.0 - config_.min_kp) + config_.min_kp));
+        JointCommand::Joint to_add(
+            joint.ident, joint.angle_deg,
+            feedforward_factor * joint.torque_Nm,
+            feedforward_factor * (1.0 - config_.min_kp) + config_.min_kp);
+        to_add.ik_joint = joint;
+        result.joints.emplace_back(to_add);
       }
 
       index += 1;
