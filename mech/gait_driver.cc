@@ -292,7 +292,7 @@ class GaitDriver::Impl : boost::noncopyable {
         gait_->GetPrepositioningState(1.0 - GetSitStandRatio()));
     servo_->SetPose(
         DerateStandupCommands(
-            MakeServoCommands(gait_commands_, parameters_.standup_speed_dps),
+            MakeRegularServoCommands(gait_commands_.joints),
             GetSitStandRatio()),
         FailHandler());
 
@@ -321,7 +321,7 @@ class GaitDriver::Impl : boost::noncopyable {
         gait_->GetPrepositioningState(GetSitStandRatio()));
     servo_->SetPose(
         DerateStandupCommands(
-            MakeServoCommands(gait_commands_, parameters_.sitting_speed_dps),
+            MakeRegularServoCommands(gait_commands_.joints),
             1.0 - GetSitStandRatio()),
         FailHandler());
     Emit();
@@ -372,6 +372,24 @@ class GaitDriver::Impl : boost::noncopyable {
     *gait_mm_s += step_mm_s;
   }
 
+  ServoInterface::Joint MakeRegularServoCommand(const JointCommand::Joint& joint) {
+    ServoInterface::Joint result;
+    result.address = joint.servo_number;
+    result.angle_deg = joint.angle_deg;
+    result.torque_Nm = joint.torque_Nm;
+    result.kp = joint.kp;
+    return result;
+  }
+
+  std::vector<ServoInterface::Joint> MakeRegularServoCommands(
+      const std::vector<JointCommand::Joint>& joints) {
+    std::vector<ServoInterface::Joint> result;
+    for (const auto& joint : joints) {
+      result.push_back(MakeRegularServoCommand(joint));
+    }
+    return result;
+  }
+
   void HandleTimer(const boost::system::error_code& ec) {
     if (ec == boost::asio::error::operation_aborted) { return; }
     StartTimer();
@@ -420,17 +438,7 @@ class GaitDriver::Impl : boost::noncopyable {
     // Advance our gait, then send the requisite servo commands out.
     gait_commands_ = gait_->AdvanceTime(parameters_.period_s);
 
-    std::vector<ServoInterface::Joint> servo_commands;
-    for (const auto& joint: gait_commands_.joints) {
-      ServoInterface::Joint si_joint;
-      si_joint.address = joint.servo_number;
-      si_joint.angle_deg = joint.angle_deg;
-      si_joint.torque_Nm = joint.torque_Nm;
-      si_joint.kp = joint.kp;
-      servo_commands.push_back(si_joint);
-    }
-
-    servo_->SetPose(servo_commands, FailHandler());
+    servo_->SetPose(MakeRegularServoCommands(gait_commands_.joints), FailHandler());
 
     Emit();
   }
