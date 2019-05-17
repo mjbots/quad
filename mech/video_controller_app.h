@@ -159,7 +159,7 @@ class VideoControllerApp : boost::noncopyable {
           fmt::format("Servo: {:.1f}/{:.1f}V {:.1f}/{:.1f}C\n"
                       "Fire: {:.0f}(s)\n"
                       "Turret: {:4.0f}(deg)\n"
-                      "x/y/r {:4.0f}/{:4.0f}/{:3.0}\n"
+                      "x/y/r {:4.0f}/{:4.0f}/{:3.0f}\n"
                       "Mode: {}",
                       telemetry.servo_min_voltage_V,
                       telemetry.servo_max_voltage_V,
