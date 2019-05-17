@@ -251,6 +251,11 @@ class MechWarfare::Impl : boost::noncopyable {
     telemetry.mech_mode = static_cast<int>(data_.mode);
     telemetry.target_data = parent_->m_.video->target_tracker()->data();
 
+    const auto& input_command = parent_->m_.gait_driver->input_command();
+    telemetry.gait_x_mm_s = input_command.translate_x_mm_s;
+    telemetry.gait_y_mm_s = input_command.translate_y_mm_s;
+    telemetry.gait_rot_deg_s = input_command.rotate_deg_s;
+
     telemetry_->SetTelemetry(
         "mech",
         mjlib::telemetry::TelemetryWriteArchive<MechTelemetry>::Serialize(&telemetry),

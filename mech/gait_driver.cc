@@ -349,6 +349,14 @@ class GaitDriver::Impl : boost::noncopyable {
     return gait_.get();
   }
 
+  const Command& input_command() const {
+    return input_command_;
+  }
+
+  const Command& gait_command() const {
+    return gait_command_;
+  }
+
  private:
   void StartTimer() {
     timer_.expires_at(
@@ -537,6 +545,14 @@ GaitDriver::options() { return impl_->options(); }
 
 const Gait* GaitDriver::gait() const {
   return impl_->gait();
+}
+
+const Command& GaitDriver::input_command() const {
+  return impl_->input_command();
+}
+
+const Command& GaitDriver::gait_command() const {
+  return impl_->gait_command();
 }
 
 void GaitDriver::ProcessBodyAhrs(boost::posix_time::ptime timestamp,

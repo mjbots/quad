@@ -158,7 +158,8 @@ class VideoControllerApp : boost::noncopyable {
       m_.display->SetOsdText(
           fmt::format("Servo: {:.1f}/{:.1f}V {:.1f}/{:.1f}C\n"
                       "Fire: {:.0f}(s)\n"
-                      "Turret: {:.0f}(deg)\n"
+                      "Turret: {:4.0f}(deg)\n"
+                      "x/y/r {:4.0f}/{:4.0f}/{:3.0}\n"
                       "Mode: {}",
                       telemetry.servo_min_voltage_V,
                       telemetry.servo_max_voltage_V,
@@ -166,6 +167,9 @@ class VideoControllerApp : boost::noncopyable {
                       telemetry.servo_max_temp_C,
                       telemetry.total_fire_time_s,
                       telemetry.turret_absolute_deg,
+                      telemetry.gait_x_mm_s,
+                      telemetry.gait_y_mm_s,
+                      telemetry.gait_rot_deg_s,
                       mode_str));
       m_.display->SetTrackerTarget(telemetry.target_data);
     }

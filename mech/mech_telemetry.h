@@ -39,6 +39,10 @@ struct MechTelemetry {
 
   TargetTrackerData target_data;
 
+  float gait_x_mm_s = 0.0;
+  float gait_y_mm_s = 0.0;
+  float gait_rot_deg_s = 0.0;
+
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(timestamp));
@@ -50,6 +54,9 @@ struct MechTelemetry {
     a->Visit(MJ_NVP(total_fire_time_s));
     a->Visit(MJ_NVP(mech_mode));
     a->Visit(MJ_NVP(target_data));
+    a->Visit(MJ_NVP(gait_x_mm_s));
+    a->Visit(MJ_NVP(gait_y_mm_s));
+    a->Visit(MJ_NVP(gait_rot_deg_s));
   }
 };
 

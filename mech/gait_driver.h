@@ -72,6 +72,8 @@ class GaitDriver : boost::noncopyable {
 
   boost::program_options::options_description* options();
 
+  const Command& input_command() const;
+  const Command& gait_command() const;
   const Gait* gait() const;
 
  private:
