@@ -365,7 +365,9 @@ class MechWarfare::Impl : boost::noncopyable {
       }
     }
 
-    gait.translate_x_mm_s = body_mm_s.x;
+    // HACK: Don't allow side stepping unless we are frozen.  It just
+    // causes the current robot to fall over.
+    gait.translate_x_mm_s = data_.current_drive.freeze_rotation ? body_mm_s.x : 0;
     gait.translate_y_mm_s = body_mm_s.y;
 
     // Give the commands to our members.
