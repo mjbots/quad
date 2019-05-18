@@ -74,7 +74,7 @@ const Preset kPresets[] = {{
  h264_size         : { 1920, 1080 },
  extra_uvch264     : "",
   }, {
- bitrate_kbps      : 1500,
+ bitrate_kbps      : 700,
  h264_size         : { 1280, 720 },
  extra_uvch264     : "",
   }, {
