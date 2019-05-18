@@ -45,6 +45,17 @@ class ServoInterface : boost::noncopyable {
     double torque_Nm = 0.0;
 
     double kp = 1.0;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(address));
+      a->Visit(MJ_NVP(angle_deg));
+      a->Visit(MJ_NVP(velocity_dps));
+      a->Visit(MJ_NVP(goal_deg));
+      a->Visit(MJ_NVP(power));
+      a->Visit(MJ_NVP(torque_Nm));
+      a->Visit(MJ_NVP(kp));
+    }
   };
   virtual void SetPose(const std::vector<Joint>&, mjlib::io::ErrorCallback) = 0;
 

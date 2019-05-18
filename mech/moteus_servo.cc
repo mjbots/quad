@@ -16,6 +16,8 @@
 
 #include <functional>
 
+#include <boost/signals2/signal.hpp>
+
 #include <fmt/format.h>
 
 #include "mjlib/base/fail.h"
@@ -23,6 +25,7 @@
 #include "mjlib/multiplex/asio_client.h"
 
 #include "base/logging.h"
+#include "base/now.h"
 #include "mech/moteus.h"
 
 namespace pl = std::placeholders;
@@ -44,11 +47,26 @@ T ReadCast(const mjlib::multiplex::Format::ReadResult& value) {
     }, std::get<Value>(value));
 }
 
+namespace {
+struct Command {
+  boost::posix_time::ptime timestamp;
+  std::vector<ServoInterface::Joint> joints;
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(MJ_NVP(timestamp));
+    a->Visit(MJ_NVP(joints));
+  }
+};
+}
+
 class MoteusServo::Impl {
  public:
-  Impl(boost::asio::io_service& service)
+  Impl(boost::asio::io_service& service,
+       base::TelemetryRegistry* telemetry_registry)
       : service_(service) {
     mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
+    telemetry_registry->Register("moteus_command", &command_signal_);
   }
 
   void AsyncStart(mjlib::io::ErrorCallback handler) {
@@ -57,6 +75,23 @@ class MoteusServo::Impl {
 
   void SetPose(const std::vector<Joint>& joints,
                mjlib::io::ErrorCallback handler) {
+
+    {
+      Command command;
+      command.timestamp = base::Now(service_);
+      command.joints = joints;
+      std::sort(command.joints.begin(), command.joints.end(),
+                [](const auto& lhs, const auto& rhs) {
+                  return lhs.address < rhs.address;
+                });
+      command_signal_(&command);
+    }
+
+    ReallySetPose(joints, handler);
+  }
+
+  void ReallySetPose(const std::vector<Joint>& joints,
+                     mjlib::io::ErrorCallback handler) {
     if (!mp_client_) { return; }
     if (outstanding_) {
       log_.debug("skipping SetPose because we are backed up");
@@ -122,7 +157,7 @@ class MoteusServo::Impl {
     mjlib::base::FailIf(ec);
     outstanding_ = false;
 
-    SetPose(remainder, handler);
+    ReallySetPose(remainder, handler);
   }
 
   void EnablePower(PowerState power_state,
@@ -281,6 +316,8 @@ class MoteusServo::Impl {
 
   base::LogRef log_ = base::GetLogInstance("MoteusServo");
 
+  boost::signals2::signal<void (const Command*)> command_signal_;
+
   boost::asio::io_service& service_;
 
   Parameters parameters_;
@@ -293,8 +330,9 @@ class MoteusServo::Impl {
   mjlib::multiplex::AsioClient* mp_client_ = nullptr;
 };
 
-MoteusServo::MoteusServo(boost::asio::io_service& service)
-    : impl_(std::make_unique<Impl>(service)) {}
+MoteusServo::MoteusServo(boost::asio::io_service& service,
+                         base::TelemetryRegistry* telemetry_registry)
+    : impl_(std::make_unique<Impl>(service, telemetry_registry)) {}
 MoteusServo::~MoteusServo() {}
 
 MoteusServo::Parameters* MoteusServo::parameters() {

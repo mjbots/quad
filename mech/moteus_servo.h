@@ -19,6 +19,7 @@
 #include "mjlib/io/stream_factory.h"
 #include "mjlib/multiplex/asio_client.h"
 
+#include "base/telemetry_registry.h"
 #include "mech/servo_interface.h"
 
 namespace mjmech {
@@ -26,7 +27,8 @@ namespace mech {
 
 class MoteusServo : public ServoInterface {
  public:
-  MoteusServo(boost::asio::io_service&);
+  MoteusServo(boost::asio::io_service&,
+              base::TelemetryRegistry* telemetry_registry);
   ~MoteusServo() override;
 
   struct Parameters {
