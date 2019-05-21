@@ -49,6 +49,7 @@ cc_library(
         "@moteus//mjlib/base:error_code",
         "@moteus//mjlib/base:fail",
         "@moteus//mjlib/base:fast_stream",
+        "@moteus//mjlib/base:limit",
         "@moteus//mjlib/base:program_options_archive",
         "@moteus//mjlib/base:recording_stream",
         "@moteus//mjlib/base:system_error",

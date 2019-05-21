@@ -121,25 +121,12 @@ class MoteusServo::Impl {
               joint.power * (is_shoulder ?
                              parameters_.max_torque_shoulder_Nm :
                              parameters_.max_torque_legs_Nm)),
-              });
-
-    if (std::isfinite(joint.goal_deg)) {
-      request_.WriteSingle(
-          moteus::kCommandStopPosition,
-          static_cast<float>(joint.goal_deg / 360.0f));
-    }
-
-    if (joint.torque_Nm != 0.0) {
-      request_.WriteSingle(
-          moteus::kCommandFeedforwardTorque,
-          static_cast<float>(joint.torque_Nm));
-    }
-
-    if (joint.kp != 1.0) {
-      request_.WriteSingle(
-          moteus::kCommandKpScale,
-          static_cast<float>(joint.kp));
-    }
+          (std::isfinite(joint.goal_deg) ?
+           static_cast<float>(joint.goal_deg / 360.0f) :
+           std::numeric_limits<float>::quiet_NaN()),
+          static_cast<float>(joint.torque_Nm),
+          static_cast<float>(joint.kp),
+        });
 
     auto remainder = joints;
     remainder.pop_back();

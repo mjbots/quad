@@ -108,6 +108,7 @@ class TargetTracker::Impl : public CameraFrameConsumer {
 
 
     const auto& p = parent_->parameters_;
+    const auto center = cv::Point2f(mat.cols / 2, mat.rows / 2);
     cv::Rect crop_area = cv::Rect(
         mat.cols / 2 - p.region_width / 2,
         mat.rows / 2 - p.region_height / 2,
@@ -127,17 +128,24 @@ class TargetTracker::Impl : public CameraFrameConsumer {
     if (marker_ids.empty()) {
       data.target = std::nullopt;
     } else {
-      // For now, just pick the first one we see.
-      BOOST_VERIFY(!marker_corners.empty());
+      // For now, just pick the one with a first corner closest to the center.
+      auto it = std::min_element(
+          marker_corners.begin(), marker_corners.end(),
+          [&](const auto& lhs_corners, const auto& rhs_corners) {
+            return (cv::norm(lhs_corners.front() - center) <
+                    cv::norm(rhs_corners.front() - center));
+          });
+      BOOST_VERIFY(it != marker_corners.end());
+
       TargetTrackerData::Target target;
       base::Point3D total;
-      for (const auto& corner : marker_corners.front()) {
+      for (const auto& corner : *it) {
         target.corners.emplace_back(corner.x + crop_area.x,
                                     corner.y + crop_area.y, 0);
         total += target.corners.back();
       }
-      target.center = total.scaled(1.0 / marker_corners.front().size());
 
+      target.center = total.scaled(1.0 / it->size());
       data.target = target;
     }
 

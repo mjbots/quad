@@ -149,6 +149,7 @@ struct JointCommand {
     double angle_deg = 0.0;
     double torque_Nm = 0.0;
     double kp = 1.0;
+    double velocity_deg_s = 0.0;
 
     JointAngles::Joint ik_joint;
 
@@ -158,6 +159,7 @@ struct JointCommand {
       a->Visit(MJ_NVP(angle_deg));
       a->Visit(MJ_NVP(torque_Nm));
       a->Visit(MJ_NVP(kp));
+      a->Visit(MJ_NVP(velocity_deg_s));
       a->Visit(MJ_NVP(ik_joint));
     }
 

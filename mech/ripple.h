@@ -208,6 +208,32 @@ class RippleGait : public Gait {
   }
 
   virtual JointCommand AdvancePhase(double delta_phase) override {
+    auto first_command = ReallyAdvancePhase(delta_phase);
+    auto my_next_state = state_;
+    auto second_command = ReallyAdvancePhase(delta_phase);
+
+    // Go back to one advance.
+    state_ = my_next_state;
+
+    // Now use the joint differences to report a velocity.
+    for (auto& joint : first_command.joints) {
+      auto* joint_t1 = [&]() -> JointCommand::Joint* {
+        for (auto& rhs : second_command.joints) {
+          if (rhs.servo_number == joint.servo_number) { return &rhs; }
+        }
+        return nullptr;
+      }();
+
+      if (joint_t1) {
+        joint.velocity_deg_s = (joint_t1->angle_deg - joint.angle_deg) /
+            (delta_phase * current_phase_time_s());
+      }
+    }
+
+    return first_command;
+  }
+
+  JointCommand ReallyAdvancePhase(double delta_phase) {
     if (config_.leg_order.empty()) {
       state_.phase = std::fmod(state_.phase + delta_phase, 1.0);
       return MakeJointCommand(state_);
@@ -257,6 +283,10 @@ class RippleGait : public Gait {
     state_.phase = next_phase;
 
     return MakeJointCommand(state_);
+  }
+
+  double current_phase_time_s() const {
+    return (command_.time_rate_percent / 100.0) * phase_time_s();
   }
 
   virtual JointCommand AdvanceTime(double delta_s) override {

@@ -15,6 +15,7 @@
 #include "gait_driver.h"
 
 #include "mjlib/base/fail.h"
+#include "mjlib/base/limit.h"
 #include "mjlib/base/program_options_archive.h"
 #include "mjlib/io/deadline_timer.h"
 
@@ -45,6 +46,9 @@ struct Parameters {
   double sitting_speed_dps = 30.0;
   double stand_sit_time_s = 1.5;
 
+  double joint_speed_scale = 0.1;
+  double joint_max_speed_dps = 1000.0;
+
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(period_s));
@@ -54,6 +58,8 @@ struct Parameters {
     a->Visit(MJ_NVP(standup_speed_dps));
     a->Visit(MJ_NVP(sitting_speed_dps));
     a->Visit(MJ_NVP(stand_sit_time_s));
+    a->Visit(MJ_NVP(joint_speed_scale));
+    a->Visit(MJ_NVP(joint_max_speed_dps));
   }
 };
 
@@ -385,6 +391,10 @@ class GaitDriver::Impl : boost::noncopyable {
     result.address = joint.servo_number;
     result.angle_deg = joint.angle_deg;
     result.torque_Nm = joint.torque_Nm;
+    result.velocity_dps = mjlib::base::Limit(
+        parameters_.joint_speed_scale * joint.velocity_deg_s,
+        -parameters_.joint_max_speed_dps,
+        parameters_.joint_max_speed_dps);
     result.kp = joint.kp;
     return result;
   }
@@ -446,7 +456,8 @@ class GaitDriver::Impl : boost::noncopyable {
     // Advance our gait, then send the requisite servo commands out.
     gait_commands_ = gait_->AdvanceTime(parameters_.period_s);
 
-    servo_->SetPose(MakeRegularServoCommands(gait_commands_.joints), FailHandler());
+    auto commands = MakeRegularServoCommands(gait_commands_.joints);
+    servo_->SetPose(commands, FailHandler());
 
     Emit();
   }
