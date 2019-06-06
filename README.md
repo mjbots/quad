@@ -20,3 +20,13 @@ Directory structure
 * **video-ui/** - Client application for FPV and real-time control.
 * **configs/** - Configuration files for different robots and applications.
 * **hw/** - Hardware design files along with firmware.
+
+
+First Time Setup
+----------------
+
+The following should work on Ubuntu 18.04
+
+```
+./install-packages
+```
