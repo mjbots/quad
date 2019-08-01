@@ -7,6 +7,8 @@ jobs:
       script: ./travis-ci1.sh
     - stage: build2
       script: ./travis-ci2.sh
+    - stage: build3
+      script: ./travis-ci3.sh
 dist: bionic
 language: cpp
 cache:
