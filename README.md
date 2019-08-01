@@ -6,7 +6,7 @@ interfaces, and utilities for developing and operating them.
 
 * GitHub https://github.com/mjbots/mjmech
 * Most files are free hardware and software: Apache 2.0 License
-* SemaphoreCI [![Build Status](https://semaphoreci.com/api/v1/projects/0a934ef2-b8f1-47d6-b1f2-1a68a4cf3982/540242/badge.svg)](https://semaphoreci.com/jpieper/mjmech)
+* travis-ci [![Build Status](https://travis-ci.org/mjbots/mjmech.svg?branch=master)](https://travis-ci.org/mjbots/mjmech)
 
 Directory structure
 -------------------
