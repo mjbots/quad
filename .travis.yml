@@ -3,4 +3,4 @@ dist: bionic
 language: cpp
 cache:
    directories:
-    - /home/travis/.cache/bazel/
+    - $HOME/.cache/bazel/
