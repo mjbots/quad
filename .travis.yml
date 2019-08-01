@@ -1,6 +1,8 @@
 stages:
+  - build0
   - build1
   - build2
+  - build3
 jobs:
   include:
     - stage: build0
