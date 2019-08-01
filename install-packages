@@ -97,7 +97,6 @@ def main():
     g_verbosity += options.verbose - options.quiet
 
     PKGLIST = split('''
-    clang-6.0 lld-6.0 openjdk-8-jdk-headless openjdk-8-jre-headless
     bison flex libi2c-dev gcc g++
 
     python3-matplotlib python3-pyside pyside-tools
