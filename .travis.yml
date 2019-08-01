@@ -1,4 +1,9 @@
-script: ./travis-ci.sh
+jobs:
+  include:
+    - stage: build
+      script: ./travis-ci1.sh
+    - # ignored
+      script: ./travis-ci2.sh
 dist: bionic
 language: cpp
 cache:
