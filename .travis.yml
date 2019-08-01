@@ -1,8 +1,11 @@
+stages:
+  - build1
+  - build2
 jobs:
   include:
-    - stage: build
+    - stage: build1
       script: ./travis-ci1.sh
-    - # ignored
+    - stage: build2
       script: ./travis-ci2.sh
 dist: bionic
 language: cpp
