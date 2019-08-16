@@ -355,7 +355,7 @@ class Commander::Impl {
   }
 
   bool manual_enabled() const {
-    return key_pressed(mapping_.manual);
+    return options_.manual_drive || key_pressed(mapping_.manual);
   }
 
   bool drive_enabled() const {
@@ -427,7 +427,6 @@ class Commander::Impl {
         command.translate_x_mm_s != 0.0 ||
         command.translate_y_mm_s != 0.0 ||
         command.rotate_deg_s != 0;
-    command.lift_height_percent = active ? 100.0 : 0.0;
 
     if (!body_enabled()) {
       if (active) {

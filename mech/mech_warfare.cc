@@ -228,9 +228,13 @@ class MechWarfare::Impl : boost::noncopyable {
       case Data::Mode::kTurretBias:  // fall through
       case Data::Mode::kPrepositioning:  // fall through
       case Data::Mode::kStanding:  // fall through
-      case Data::Mode::kSitting:  // fall through
-      case Data::Mode::kManual:
+      case Data::Mode::kSitting: {
         break;
+      }
+      case Data::Mode::kManual: {
+        DoManual();
+        break;
+      }
       case Data::Mode::kDrive: {
         DoDrive();
         break;
@@ -261,6 +265,32 @@ class MechWarfare::Impl : boost::noncopyable {
         mjlib::telemetry::TelemetryWriteArchive<MechTelemetry>::Serialize(&telemetry),
         base::Now(service_) +
         mjlib::base::ConvertSecondsToDuration(kTelemetryTimeoutS));
+  }
+
+  void UpdateActive(Command* gait, bool want_active) {
+    if (want_active && !data_.active) {
+      // We can instantly go active.  Reset gait phase.
+      gait->reset_phase = true;
+      data_.active = true;
+    } else if (data_.active && !want_active) {
+      // We need to wait until a whole gait cycle has completed, and
+      // all legs are on the ground before stopping.
+
+      if (parent_->m_.gait_driver->gait()->zero_phase_count() >= 2 &&
+          parent_->m_.gait_driver->gait()->are_all_legs_stance()) {
+        data_.active = false;
+      }
+    }
+    gait->lift_height_percent = data_.active ? 100.0 : 0.0;
+  }
+
+  void DoManual() {
+    const bool want_active =
+        manual_gait_.translate_x_mm_s != 0 ||
+        manual_gait_.translate_y_mm_s != 0 ||
+        manual_gait_.rotate_deg_s != 0;
+    UpdateActive(&manual_gait_, want_active);
+    parent_->m_.gait_driver->SetCommand(manual_gait_);
   }
 
   void DoDrive() {
@@ -312,20 +342,7 @@ class MechWarfare::Impl : boost::noncopyable {
             data_.current_drive.drive_mm_s);
 
     const bool want_active = (data_.current_drive.drive_mm_s != base::Point3D());
-    if (want_active && !data_.active) {
-      // We can instantly go active.  Reset gait phase.
-      gait.reset_phase = true;
-      data_.active = true;
-    } else if (data_.active && !want_active) {
-      // We need to wait until a whole gait cycle has completed, and
-      // all legs are on the ground before stopping.
-
-      if (parent_->m_.gait_driver->gait()->zero_phase_count() >= 2 &&
-          parent_->m_.gait_driver->gait()->are_all_legs_stance()) {
-        data_.active = false;
-      }
-    }
-    gait.lift_height_percent = data_.active ? 100.0 : 0.0;
+    UpdateActive(&gait, want_active);
 
     // NOTE: We explicitly use "want_active" here, because we don't
     // want to be messing around with rotations if we are trying to
@@ -520,9 +537,10 @@ class MechWarfare::Impl : boost::noncopyable {
         tree, base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&command);
 
     MaybeEnterActiveMode(Data::Mode::kManual);
+    manual_gait_ = command;
 
     if (data_.mode == Data::Mode::kManual) {
-      parent_->m_.gait_driver->SetCommand(command);
+      parent_->m_.gait_driver->SetCommand(manual_gait_);
     }
   }
 
@@ -614,6 +632,7 @@ class MechWarfare::Impl : boost::noncopyable {
   double servo_max_temp_C_ = 0.0;
 
   Data data_;
+  Command manual_gait_;
   boost::signals2::signal<void (const Data*)> data_signal_;
 };
 

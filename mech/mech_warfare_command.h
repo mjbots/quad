@@ -52,8 +52,8 @@ struct OptOptions {
   double max_body_z_mm = 30.0;
   double min_body_z_mm = -60.0;
   double idle_body_y_mm = 5.0;
-  double forward_body_y_mm = 15.0;
-  double reverse_body_y_mm = -10.0;
+  double forward_body_y_mm = 0.0;
+  double reverse_body_y_mm = 0.0;
   double max_body_x_mm = 30;
   double max_body_y_mm = 30;
   double max_body_pitch_deg = 20;
@@ -64,6 +64,7 @@ struct OptOptions {
   double target_max_rate = 100.0;
   bool manual_agitator = false;
   bool verbose = false;
+  bool manual_drive = false;
 
   template <typename Archive>
   void Serialize(Archive* a) {
@@ -87,6 +88,7 @@ struct OptOptions {
     a->Visit(MJ_NVP(target_max_rate));
     a->Visit(MJ_NVP(manual_agitator));
     a->Visit(MJ_NVP(verbose));
+    a->Visit(MJ_NVP(manual_drive));
   }
 };
 
