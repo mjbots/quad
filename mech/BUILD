@@ -28,6 +28,7 @@ cc_library(
         "gst_helpers.cc",
         "gst_main_loop.cc",
         "herkulex.cc",
+        "jump_test.cc",
         "mcast_video_link.cc",
         "mech_warfare.cc",
         "mech_warfare_command.cc",
@@ -135,6 +136,13 @@ module_main(
     deps = [":mech"],
 )
 
+module_main(
+    name = "jump_test",
+    cname = "mjmech::mech::JumpTest",
+    prefix = "mech",
+    deps = [":mech"],
+)
+
 cc_binary(
     name = "multiplex_tool",
     srcs = ["multiplex_tool_main.cc"],
@@ -152,6 +160,7 @@ pkg_tar(
     srcs = [
         ":video_sender_app",
         ":mech_warfare",
+        ":jump_test",
         ":herkulex_tool",
         ":multiplex_tool",
     ],
