@@ -449,13 +449,16 @@ class Commander::Impl {
 
     if (options_.verbose) {
       std::cout << fmt::format(
-          "x={:4.0f} y={:4.0f} r={:4.0f} z={:4.0f} bx={:4.0f} by={:4.0f}",
+          "x={:4.0f} y={:4.0f} r={:4.0f} z={:4.0f} bx={:4.0f} by={:4.0f} p={:3.0f} r={:3.0f} {}",
           command.translate_x_mm_s,
           command.translate_y_mm_s,
           command.rotate_deg_s,
           command.body_z_mm,
           command.body_x_mm,
-          command.body_y_mm);
+          command.body_y_mm,
+          command.body_pitch_deg,
+          command.body_roll_deg,
+          (body_enabled() ? "BODY" : "    "));
       if (message.turret.rate) {
         std::cout << fmt::format(
             " r={:4.0f},{:4.0f}",
@@ -565,12 +568,13 @@ class Commander::Impl {
       };
 
       std::cout << fmt::format(
-          "x={:4.0f} y={:4.0f} t={} bx={:4.0f} by={:4.0f} {} {}",
+          "x={:4.0f} y={:4.0f} t={} bx={:4.0f} by={:4.0f} {} {} {}",
           command.drive_mm_s.x,
           command.drive_mm_s.y,
           format_turret(command),
           command.body_offset_mm.x,
           command.body_offset_mm.y,
+          (body_enabled() ? "BODY" : "    "),
           (do_fire ? "FIRE" : "    "),
           (command.freeze_rotation ? "FREEZE" : "      "));
       std::cout << "\r";
