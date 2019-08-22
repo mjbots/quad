@@ -69,8 +69,9 @@ cc_library(
 )
 
 cc_test(
-    name = "base_test",
+    name = "test",
     srcs = ["test/" + x for x in [
+        "async_sequence_test.cc",
         "attitude_estimator_test.cc",
         "json_archive_test.cc",
         "program_options_test.cc",
