@@ -171,6 +171,7 @@ pkg_tar(
         "//configs:lizard.cfg": "configs/lizard.cfg",
         "//configs:moteus.ini": "configs/moteus.ini",
         "//configs:moteus_ik.cfg": "configs/moteus_ik.cfg",
+        "//configs:jump_test.ini": "configs/jump_test.ini",
         "//utils:start-robot.sh": "start-robot.sh",
         "//utils:rezero.sh": "rezero.sh",
         "//utils:update_pid.sh": "update_pid.sh",

@@ -24,6 +24,9 @@
 #include "base/component_archives.h"
 #include "base/context.h"
 
+#include "mech/multiplex_client.h"
+#include "mech/moteus_servo.h"
+
 namespace mjmech {
 namespace mech {
 
@@ -35,18 +38,88 @@ class JumpTest : boost::noncopyable {
   void AsyncStart(mjlib::io::ErrorCallback);
 
   struct Members {
+    std::unique_ptr<MultiplexClient> multiplex_client;
+    std::unique_ptr<MoteusServo> moteus_servo;
 
     template <typename Archive>
     void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(multiplex_client));
+      a->Visit(MJ_NVP(moteus_servo));
+    }
+  };
+
+  struct JointSetup {
+    double shoulder = 0.0;
+    double femur = 0.0;
+    double tibia = 0.0;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(shoulder));
+      a->Visit(MJ_NVP(femur));
+      a->Visit(MJ_NVP(tibia));
     }
   };
 
   struct Parameters {
+    bool skip_powered = false;
+    double period_s = 0.05;
+
+    JointSetup preposition_deg = { 0, 60, 120 };
+    double preposition_power = 0.2;
+    double preposition_speed_dps = 30.0;
+    double preposition_time_s = 4.0;
+
+    JointSetup standing_deg = { 0, 5, 10 };
+    double standing_speed_dps = 20.0;
+    double standing_time_s = 4.0;
+
+    JointSetup squat_deg = { 0, 40, 80 };
+    double squat_dps = 20.0;
+    double squat_time_s = 4.0;
+
+    JointSetup jump_deg = { 0, 0, 0 };
+    double jump_power = 1.0;
+    double jump_dps = 600.0;
+
+    JointSetup landing_prepare_deg = { 0, 20, 40 };
+    double landing_prepare_dps = 800.0;
+    double landing_prepare_time_s = 2.0;
+
+    double landing_kp = 0.6;
+    double landing_threshold_dps = 20.0;
+    double landing_torque_Nm = 1.0;
 
     base::ComponentParameters<Members> children;
 
     template <typename Archive>
     void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(skip_powered));
+      a->Visit(MJ_NVP(period_s));
+      a->Visit(MJ_NVP(preposition_deg));
+      a->Visit(MJ_NVP(preposition_power));
+      a->Visit(MJ_NVP(preposition_speed_dps));
+      a->Visit(MJ_NVP(preposition_time_s));
+      a->Visit(MJ_NVP(standing_deg));
+      a->Visit(MJ_NVP(standing_speed_dps));
+      a->Visit(MJ_NVP(standing_time_s));
+      a->Visit(MJ_NVP(squat_deg));
+      a->Visit(MJ_NVP(squat_dps));
+      a->Visit(MJ_NVP(squat_time_s));
+
+      a->Visit(MJ_NVP(jump_deg));
+      a->Visit(MJ_NVP(jump_power));
+      a->Visit(MJ_NVP(jump_dps));
+
+      a->Visit(MJ_NVP(landing_prepare_deg));
+      a->Visit(MJ_NVP(landing_prepare_dps));
+      a->Visit(MJ_NVP(landing_prepare_time_s));
+
+      a->Visit(MJ_NVP(landing_kp));
+      a->Visit(MJ_NVP(landing_threshold_dps));
+      a->Visit(MJ_NVP(landing_torque_Nm));
+
+      children.Serialize(a);
     }
 
     Parameters(Members* m) : children(m) {}

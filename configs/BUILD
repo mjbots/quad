@@ -19,11 +19,12 @@ package(default_visibility = ["//visibility:public"])
 filegroup(
     name = "configs",
     srcs = [
-        "real.cfg",
-        "mw.ini",
-        "mw_lizard.ini",
+        "jump_test.ini",
         "lizard.cfg",
         "moteus.ini",
         "moteus_ik.cfg",
+        "mw.ini",
+        "mw_lizard.ini",
+        "real.cfg",
     ],
 )
