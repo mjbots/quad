@@ -88,6 +88,12 @@ cc_binary(
 )
 
 cc_binary(
+    name = "servo_latency_test",
+    srcs = ["servo_latency_test.cc"],
+    deps = [":mech"],
+)
+
+cc_binary(
     name = "aruco_test",
     srcs = ["aruco_test.cc"],
     deps = ["//base", "@boost", "@boost//:timer", "@boost//:system", "@fmt",
@@ -163,6 +169,7 @@ pkg_tar(
         ":jump_test",
         ":herkulex_tool",
         ":multiplex_tool",
+        ":servo_latency_test",
     ],
     files = {
         "//configs:real.cfg": "configs/real.cfg",

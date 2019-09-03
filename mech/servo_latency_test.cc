@@ -1,0 +1,254 @@
+// Copyright 2019 Josh Pieper, jjp@pobox.com.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include <boost/asio/io_service.hpp>
+#include <boost/program_options.hpp>
+
+#include <fmt/format.h>
+
+#include "mjlib/base/fail.h"
+#include "mjlib/base/program_options_archive.h"
+#include "mjlib/base/time_conversions.h"
+#include "mjlib/io/deadline_timer.h"
+#include "mjlib/io/stream_factory.h"
+#include "mjlib/multiplex/asio_client.h"
+
+namespace base = mjlib::base;
+namespace io = mjlib::io;
+namespace mp = mjlib::multiplex;
+namespace po = boost::program_options;
+namespace pl = std::placeholders;
+
+namespace {
+
+struct Options {
+  std::vector<int> targets;
+
+  int setup_register = 0;
+  int8_t setup_value = 0;
+  int nonce_register = 1;
+
+  double rate_s = 0.1;
+};
+
+class CommandRunner {
+ public:
+  CommandRunner(boost::asio::io_service& service,
+                io::StreamFactory* stream_factory,
+                const io::StreamFactory::Options& stream_options,
+                const Options& options)
+      : service_(service),
+        stream_factory_(stream_factory),
+        options_(options) {
+    stream_factory->AsyncCreate(
+        stream_options,
+        std::bind(&CommandRunner::HandleStream, this, pl::_1, pl::_2));
+  }
+
+  void HandleStream(const base::error_code& ec, io::SharedStream stream) {
+    base::FailIf(ec);
+
+    stream_ = stream;
+    client_.emplace(stream_.get());
+
+    MaybeStart();
+  }
+
+  void MaybeStart() {
+    if (!stream_) { return; }
+
+    StartTimer();
+  }
+
+  void StartTimer() {
+    timer_.expires_from_now(
+        base::ConvertSecondsToDuration(options_.rate_s));
+    timer_.async_wait(
+        std::bind(&CommandRunner::HandleTimer, this, pl::_1));
+  }
+
+  void HandleTimer(const base::error_code& ec) {
+    if (ec == boost::asio::error::operation_aborted) { return; }
+
+    DoTimer();
+    StartTimer();
+  }
+
+  void DoTimer() {
+    EmitStatus();
+
+    if (busy_) {
+      stats_.skipped++;
+      return;
+    }
+
+    busy_ = true;
+    StartSend();
+  }
+
+  void EmitStatus() {
+    std::cout << fmt::format(
+        "{:5d}  sk={:3d} st={:3d} qt={:3d} mr={:3d} er={:3d} wrt={:3d} wn={:3d}\n",
+        stats_.valid_reply,
+        stats_.skipped,
+        stats_.send_timeout,
+        stats_.query_timeout,
+        stats_.missing_reply,
+        stats_.error_reply,
+        stats_.wrong_reply_type,
+        stats_.wrong_nonce);
+  }
+
+  void StartSend() {
+    // We first, set a specific value as a command, then read it back.
+    // For now, we just handle a single servo.
+
+    BOOST_ASSERT(!options_.targets.empty());
+
+    request_ = {};
+    request_.WriteSingle(options_.setup_register, options_.setup_value);
+    nonce_count_ = (nonce_count_ + 1) % 100;
+    request_.WriteSingle(options_.nonce_register, nonce_count_);
+
+    client_->AsyncRegister(options_.targets.front(),
+                           request_,
+                           std::bind(&CommandRunner::HandleSend, this,
+                                     pl::_1, pl::_2));
+  }
+
+  void HandleSend(const base::error_code& ec, const mp::RegisterReply&) {
+    if (ec == boost::asio::error::operation_aborted) {
+      stats_.send_timeout++;
+      busy_ = false;
+      return;
+    }
+
+    base::FailIf(ec);
+
+    StartQuery();
+  }
+
+  void StartQuery() {
+    request_ = {};
+    request_.ReadSingle(options_.nonce_register, 0);  // int8_t
+
+    client_->AsyncRegister(options_.targets.front(),
+                           request_,
+                           std::bind(&CommandRunner::HandleQuery, this,
+                                     pl::_1, pl::_2));
+  }
+
+  void HandleQuery(const base::error_code& ec,
+                   const mp::RegisterReply& reply) {
+    busy_ = false;
+    if (ec == boost::asio::error::operation_aborted) {
+      stats_.query_timeout++;
+      return;
+    }
+
+    base::FailIf(ec);
+
+    // Check to see if the nonce value was correctly reported.
+    if (reply.count(options_.nonce_register) == 0) {
+      stats_.missing_reply++;
+      return;
+    }
+
+    const auto& read_result = reply.at(options_.nonce_register);
+    if (std::holds_alternative<uint32_t>(read_result)) {
+      stats_.error_reply++;
+      return;
+    }
+
+    auto value = std::get<mp::Format::Value>(read_result);
+    if (!std::holds_alternative<int8_t>(value)) {
+      stats_.wrong_reply_type++;
+      return;
+    }
+
+    auto int8_value = std::get<int8_t>(value);
+    if (int8_value != nonce_count_) {
+      std::cout << fmt::format("got nonce {} expected {}\n",
+                               int8_value, nonce_count_);
+      stats_.wrong_nonce++;
+      return;
+    }
+
+    stats_.valid_reply++;
+  }
+
+
+  boost::asio::io_service& service_;
+  io::StreamFactory* const stream_factory_;
+  const Options options_;
+  io::SharedStream stream_;
+  std::optional<mp::AsioClient> client_;
+
+  io::DeadlineTimer timer_{service_};
+  mp::RegisterRequest request_;
+
+  bool busy_ = false;
+
+  struct Stats {
+    int skipped = 0;
+    int send_timeout = 0;
+    int query_timeout = 0;
+    int missing_reply = 0;
+    int error_reply = 0;
+    int wrong_reply_type = 0;
+    int wrong_nonce = 0;
+    int valid_reply = 0;
+  };
+
+  Stats stats_;
+  int8_t nonce_count_ = 0;
+};
+
+}
+
+int main(int argc, char** argv) {
+  boost::asio::io_service service;
+  io::StreamFactory factory{service};
+
+  io::StreamFactory::Options stream_options;
+  po::options_description desc("Allowable options");
+
+  Options options;
+
+  desc.add_options()
+      ("help,h", "display usage message")
+      ("target,t", po::value(&options.targets), "")
+      ("rate,r", po::value(&options.rate_s), "")
+      ("setup-register", po::value(&options.setup_register), "")
+      ("setup-value", po::value(&options.setup_value), "")
+      ("nonce-register", po::value(&options.nonce_register), "")
+      ;
+
+  base::ProgramOptionsArchive(&desc).Accept(&stream_options);
+
+  po::variables_map vm;
+  po::store(po::parse_command_line(argc, argv, desc), vm);
+  po::notify(vm);
+
+  if (vm.count("help")) {
+    std::cout << desc;
+    return 0;
+  }
+
+  CommandRunner command_runner{service, &factory, stream_options, options};
+
+  service.run();
+
+  return 0;
+}
