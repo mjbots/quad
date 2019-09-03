@@ -24,6 +24,8 @@
 #include "mjlib/io/stream_factory.h"
 #include "mjlib/multiplex/asio_client.h"
 
+#include "base/now.h"
+
 namespace base = mjlib::base;
 namespace io = mjlib::io;
 namespace mp = mjlib::multiplex;
@@ -32,13 +34,11 @@ namespace pl = std::placeholders;
 
 namespace {
 
+constexpr int kSetupRegister = 0;  // mode
+constexpr int kSetupValue = 0;  // kStopped
+constexpr int kNonceRegister = 0x10;  // kPwmPhaseA
+
 struct Options {
-  std::vector<int> targets;
-
-  int setup_register = 0;
-  int8_t setup_value = 0;
-  int nonce_register = 1;
-
   double rate_s = 0.1;
 };
 
@@ -99,7 +99,7 @@ class CommandRunner {
 
   void EmitStatus() {
     std::cout << fmt::format(
-        "{:5d}  sk={:3d} st={:3d} qt={:3d} mr={:3d} er={:3d} wrt={:3d} wn={:3d}\n",
+        "{:5d}  sk={:3d} st={:3d} qt={:3d} mr={:3d} er={:3d} wrt={:3d} wn={:3d}  lat={:.6f}\n",
         stats_.valid_reply,
         stats_.skipped,
         stats_.send_timeout,
@@ -107,27 +107,38 @@ class CommandRunner {
         stats_.missing_reply,
         stats_.error_reply,
         stats_.wrong_reply_type,
-        stats_.wrong_nonce);
+        stats_.wrong_nonce,
+        base::ConvertDurationToSeconds(stats_.total_valid_time) /
+        stats_.valid_reply);
   }
 
   void StartSend() {
-    // We first, set a specific value as a command, then read it back.
-    // For now, we just handle a single servo.
+    start_time_ = mjmech::base::Now(service_);
 
-    BOOST_ASSERT(!options_.targets.empty());
-
-    request_ = {};
-    request_.WriteSingle(options_.setup_register, options_.setup_value);
     nonce_count_ = (nonce_count_ + 1) % 100;
-    request_.WriteSingle(options_.nonce_register, nonce_count_);
 
-    client_->AsyncRegister(options_.targets.front(),
-                           request_,
-                           std::bind(&CommandRunner::HandleSend, this,
-                                     pl::_1, pl::_2));
+    StartServoSend(0);
   }
 
-  void HandleSend(const base::error_code& ec, const mp::RegisterReply&) {
+  void StartServoSend(int index) {
+    const int servo_num = kTargets[index];
+    // For each servo, write something to the setup register and the
+    // nonce register, then a representative amount of data elsewhere.
+
+    request_ = {};
+    request_.WriteSingle(kSetupRegister, kSetupValue);
+    request_.WriteSingle(kNonceRegister, nonce_count_);
+    // The position command needs to set 6 values.  For now, we'll
+    // send 6 int32's, since that is about the maximum you could want.
+    request_.WriteMultiple(0x20, {0, 0, 0, 0, 0, 0});
+
+    client_->AsyncRegister(servo_num,
+                           request_,
+                           std::bind(&CommandRunner::HandleSend, this,
+                                     pl::_1, pl::_2, index));
+  }
+
+  void HandleSend(const base::error_code& ec, const mp::RegisterReply&, int index) {
     if (ec == boost::asio::error::operation_aborted) {
       stats_.send_timeout++;
       busy_ = false;
@@ -136,22 +147,44 @@ class CommandRunner {
 
     base::FailIf(ec);
 
-    StartQuery();
+    const int next_index = index + 1;
+    if (next_index >= kTargets.size()) {
+      StartQuery();
+    } else {
+      StartServoSend(next_index);
+    }
   }
 
   void StartQuery() {
-    request_ = {};
-    request_.ReadSingle(options_.nonce_register, 0);  // int8_t
+    StartServoQuery(0);
+  }
 
-    client_->AsyncRegister(options_.targets.front(),
+  void StartServoQuery(int index) {
+    const int servo_num = kTargets[index];
+    request_ = {};
+    request_.ReadSingle(kNonceRegister, 0);  // int8_t
+
+    // Read position, velocity, temp
+    request_.ReadMultiple(1, 3, 1);
+
+    // Torque
+    request_.ReadSingle(7, 1);
+
+    // And fault state
+    request_.ReadSingle(15, 1);
+
+    client_->AsyncRegister(servo_num,
                            request_,
                            std::bind(&CommandRunner::HandleQuery, this,
-                                     pl::_1, pl::_2));
+                                     pl::_1, pl::_2, index));
   }
 
   void HandleQuery(const base::error_code& ec,
-                   const mp::RegisterReply& reply) {
+                   const mp::RegisterReply& reply,
+                   int index) {
     busy_ = false;
+    const auto end_time = mjmech::base::Now(service_);
+
     if (ec == boost::asio::error::operation_aborted) {
       stats_.query_timeout++;
       return;
@@ -160,12 +193,12 @@ class CommandRunner {
     base::FailIf(ec);
 
     // Check to see if the nonce value was correctly reported.
-    if (reply.count(options_.nonce_register) == 0) {
+    if (reply.count(kNonceRegister) == 0) {
       stats_.missing_reply++;
       return;
     }
 
-    const auto& read_result = reply.at(options_.nonce_register);
+    const auto& read_result = reply.at(kNonceRegister);
     if (std::holds_alternative<uint32_t>(read_result)) {
       stats_.error_reply++;
       return;
@@ -185,6 +218,16 @@ class CommandRunner {
       return;
     }
 
+    const int next_index = index + 1;
+    if (next_index >= kTargets.size()) {
+      FinishQuery(end_time);
+    } else {
+      StartServoQuery(next_index);
+    }
+  }
+
+  void FinishQuery(boost::posix_time::ptime end_time) {
+    stats_.total_valid_time += (end_time - start_time_);
     stats_.valid_reply++;
   }
 
@@ -199,6 +242,7 @@ class CommandRunner {
   mp::RegisterRequest request_;
 
   bool busy_ = false;
+  boost::posix_time::ptime start_time_;
 
   struct Stats {
     int skipped = 0;
@@ -208,11 +252,20 @@ class CommandRunner {
     int error_reply = 0;
     int wrong_reply_type = 0;
     int wrong_nonce = 0;
+
     int valid_reply = 0;
+    boost::posix_time::time_duration total_valid_time;
   };
 
   Stats stats_;
   int8_t nonce_count_ = 0;
+
+  const std::vector<int> kTargets = {
+    1, 2, 3,
+    4, 5, 6,
+    7, 8, 9,
+    10, 11, 12
+  };
 };
 
 }
@@ -228,11 +281,7 @@ int main(int argc, char** argv) {
 
   desc.add_options()
       ("help,h", "display usage message")
-      ("target,t", po::value(&options.targets), "")
       ("rate,r", po::value(&options.rate_s), "")
-      ("setup-register", po::value(&options.setup_register), "")
-      ("setup-value", po::value(&options.setup_value), "")
-      ("nonce-register", po::value(&options.nonce_register), "")
       ;
 
   base::ProgramOptionsArchive(&desc).Accept(&stream_options);
