@@ -19,6 +19,7 @@ if [[ "$mach" == "armv7l" ]]; then
     CONFIG="-c configs/moteus.ini"
     set -x
     cd ~/mech/
+    ./performance_governor.sh
     export LD_LIBRARY_PATH=.
     ./mech_warfare -t camera_driver.stats $CONFIG "$@"
 elif [[ "$mach" == "x86_64" ]]; then

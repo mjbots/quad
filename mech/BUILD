@@ -180,6 +180,7 @@ pkg_tar(
         "//configs:moteus_ik.cfg": "configs/moteus_ik.cfg",
         "//configs:jump_test.ini": "configs/jump_test.ini",
         "//utils:start-robot.sh": "start-robot.sh",
+        "//utils:performance_governor.sh": "performance_governor.sh",
         "//utils:rezero.sh": "rezero.sh",
         "//utils:update_pid.sh": "update_pid.sh",
     },

@@ -43,5 +43,6 @@ genrule(
 exports_files([
     "rezero.sh",
     "start-robot.sh",
+    "performance_governor.sh",
     "update_pid.sh",
 ])
