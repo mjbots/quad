@@ -57,6 +57,7 @@ cc_library(
         "@moteus//mjlib/base:visit_archive",
         "@moteus//mjlib/io:async_types",
         "@moteus//mjlib/io:debug_time",
+        "@moteus//mjlib/io:repeating_timer",
         "@moteus//mjlib/io:stream_factory",
         "@moteus//mjlib/telemetry:telemetry_archive",
         "@moteus//mjlib/telemetry:telemetry_util",

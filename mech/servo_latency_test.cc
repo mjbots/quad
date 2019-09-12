@@ -20,7 +20,7 @@
 #include "mjlib/base/fail.h"
 #include "mjlib/base/program_options_archive.h"
 #include "mjlib/base/time_conversions.h"
-#include "mjlib/io/deadline_timer.h"
+#include "mjlib/io/repeating_timer.h"
 #include "mjlib/io/stream_factory.h"
 #include "mjlib/multiplex/asio_client.h"
 
@@ -72,9 +72,8 @@ class CommandRunner {
   }
 
   void StartTimer() {
-    timer_.expires_from_now(
-        base::ConvertSecondsToDuration(options_.rate_s));
-    timer_.async_wait(
+    timer_.start(
+        base::ConvertSecondsToDuration(options_.rate_s),
         std::bind(&CommandRunner::HandleTimer, this, pl::_1));
   }
 
@@ -82,11 +81,13 @@ class CommandRunner {
     if (ec == boost::asio::error::operation_aborted) { return; }
 
     DoTimer();
-    StartTimer();
   }
 
   void DoTimer() {
-    EmitStatus();
+    stats_.count++;
+    if ((stats_.count % 100) == 0) {
+      EmitStatus();
+    }
 
     if (busy_) {
       stats_.skipped++;
@@ -94,7 +95,7 @@ class CommandRunner {
     }
 
     busy_ = true;
-    StartSend();
+    StartCycle();
   }
 
   void EmitStatus() {
@@ -112,33 +113,41 @@ class CommandRunner {
         stats_.valid_reply);
   }
 
-  void StartSend() {
+  void StartCycle() {
     start_time_ = mjmech::base::Now(service_);
 
     nonce_count_ = (nonce_count_ + 1) % 100;
 
-    StartServoSend(0);
+    StartServo(0);
   }
 
-  void StartServoSend(int index) {
+  void StartServo(int index) {
     const int servo_num = kTargets[index];
     // For each servo, write something to the setup register and the
     // nonce register, then a representative amount of data elsewhere.
 
     request_ = {};
     request_.WriteSingle(kSetupRegister, kSetupValue);
-    request_.WriteSingle(kNonceRegister, nonce_count_);
-    // The position command needs to set 6 values.  For now, we'll
-    // send 6 int32's, since that is about the maximum you could want.
-    request_.WriteMultiple(0x20, {0, 0, 0, 0, 0, 0});
+
+    // The position command needs to set 3 values.  For now, we'll
+    // send 3 int16's.
+    auto i16 = [](auto v) { return static_cast<int16_t>(v); };
+    request_.WriteMultiple(kNonceRegister, {i16(nonce_count_), i16(0), i16(0)});
+
+    request_.ReadMultiple(kNonceRegister, 3, 1);
+    // And read two i8 regs, like voltage and fault
+    request_.ReadMultiple(0x006, 2, 0);
 
     client_->AsyncRegister(servo_num,
                            request_,
-                           std::bind(&CommandRunner::HandleSend, this,
+                           std::bind(&CommandRunner::HandleServo, this,
                                      pl::_1, pl::_2, index));
   }
 
-  void HandleSend(const base::error_code& ec, const mp::RegisterReply&, int index) {
+  void HandleServo(const base::error_code& ec,
+                   const mp::RegisterReply& reply,
+                   int index) {
+    const auto end_time = mjmech::base::Now(service_);
     if (ec == boost::asio::error::operation_aborted) {
       stats_.send_timeout++;
       busy_ = false;
@@ -147,84 +156,45 @@ class CommandRunner {
 
     base::FailIf(ec);
 
-    const int next_index = index + 1;
-    if (next_index >= kTargets.size()) {
-      StartQuery();
-    } else {
-      StartServoSend(next_index);
-    }
-  }
-
-  void StartQuery() {
-    StartServoQuery(0);
-  }
-
-  void StartServoQuery(int index) {
-    const int servo_num = kTargets[index];
-    request_ = {};
-    request_.ReadSingle(kNonceRegister, 0);  // int8_t
-
-    // Read position, velocity, temp
-    request_.ReadMultiple(1, 3, 1);
-
-    // Torque
-    request_.ReadSingle(7, 1);
-
-    // And fault state
-    request_.ReadSingle(15, 1);
-
-    client_->AsyncRegister(servo_num,
-                           request_,
-                           std::bind(&CommandRunner::HandleQuery, this,
-                                     pl::_1, pl::_2, index));
-  }
-
-  void HandleQuery(const base::error_code& ec,
-                   const mp::RegisterReply& reply,
-                   int index) {
-    busy_ = false;
-    const auto end_time = mjmech::base::Now(service_);
-
-    if (ec == boost::asio::error::operation_aborted) {
-      stats_.query_timeout++;
-      return;
-    }
-
-    base::FailIf(ec);
-
     // Check to see if the nonce value was correctly reported.
     if (reply.count(kNonceRegister) == 0) {
       stats_.missing_reply++;
+      busy_ = false;
       return;
     }
 
     const auto& read_result = reply.at(kNonceRegister);
     if (std::holds_alternative<uint32_t>(read_result)) {
       stats_.error_reply++;
+      busy_ = false;
       return;
     }
 
     auto value = std::get<mp::Format::Value>(read_result);
-    if (!std::holds_alternative<int8_t>(value)) {
+    if (!std::holds_alternative<int16_t>(value)) {
       stats_.wrong_reply_type++;
+      busy_ = false;
       return;
     }
 
-    auto int8_value = std::get<int8_t>(value);
-    if (int8_value != nonce_count_) {
+    auto int16_value = std::get<int16_t>(value);
+    if (int16_value != nonce_count_) {
       std::cout << fmt::format("got nonce {} expected {}\n",
-                               int8_value, nonce_count_);
+                               int16_value, nonce_count_);
       stats_.wrong_nonce++;
+      busy_ = false;
       return;
     }
 
     const int next_index = index + 1;
     if (next_index >= kTargets.size()) {
+      busy_ = false;
       FinishQuery(end_time);
     } else {
-      StartServoQuery(next_index);
+      StartServo(next_index);
     }
   }
+
 
   void FinishQuery(boost::posix_time::ptime end_time) {
     stats_.total_valid_time += (end_time - start_time_);
@@ -238,13 +208,14 @@ class CommandRunner {
   io::SharedStream stream_;
   std::optional<mp::AsioClient> client_;
 
-  io::DeadlineTimer timer_{service_};
+  io::RepeatingTimer timer_{service_};
   mp::RegisterRequest request_;
 
   bool busy_ = false;
   boost::posix_time::ptime start_time_;
 
   struct Stats {
+    int count = 0;
     int skipped = 0;
     int send_timeout = 0;
     int query_timeout = 0;
