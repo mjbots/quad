@@ -50,7 +50,7 @@ def ensure_present(filename, line):
     print('ensure_present({}): Adding: {}'.format(filename, line))
 
     # Nope, we need to add it.
-    with open(filename, 'w+', encoding='utf-8') as f:
+    with open(filename, 'a', encoding='utf-8') as f:
         f.write(line + '\n')
 
 
@@ -193,7 +193,6 @@ rsn_pairwise=CCMP
 
     ensure_present('/etc/default/hostapd',
                    'DAEMON_CONF="/etc/hostapd/hostapd.conf"')
-
 
     ensure_contents('/etc/dnsmasq.conf',
                     '''
