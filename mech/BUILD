@@ -158,18 +158,28 @@ cc_binary(
     ],
 )
 
+cc_binary(
+    name = "moteus_tool",
+    srcs = ["moteus_tool_main.cc"],
+    deps = [
+        "@moteus//moteus/tool:moteus_tool_lib",
+        "@org_llvm_libcxx//:libcxx",
+    ],
+)
+
 pkg_tar(
     name = "deploy",
     extension = "tar",
     include_runfiles = True,
     package_dir = "mech",
     srcs = [
-        ":video_sender_app",
-        ":mech_warfare",
-        ":jump_test",
         ":herkulex_tool",
+        ":jump_test",
+        ":mech_warfare",
+        ":moteus_tool",
         ":multiplex_tool",
         ":servo_latency_test",
+        ":video_sender_app",
     ],
     files = {
         "//configs:real.cfg": "configs/real.cfg",
