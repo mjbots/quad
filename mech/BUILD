@@ -94,6 +94,12 @@ cc_binary(
 )
 
 cc_binary(
+    name = "direct_servo_latency_test",
+    srcs = ["direct_servo_latency_test.cc"],
+    deps = [":mech"],
+)
+
+cc_binary(
     name = "aruco_test",
     srcs = ["aruco_test.cc"],
     deps = ["//base", "@boost", "@boost//:timer", "@boost//:system", "@fmt",
