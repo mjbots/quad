@@ -21,8 +21,7 @@
 #include "mjlib/base/program_options_archive.h"
 #include "mjlib/base/time_conversions.h"
 #include "mjlib/io/repeating_timer.h"
-#include "mjlib/io/stream_factory.h"
-#include "mjlib/multiplex/asio_client.h"
+#include "mjlib/multiplex/threaded_client.h"
 
 #include "base/now.h"
 
@@ -40,34 +39,52 @@ constexpr int kNonceRegister = 0x10;  // kPwmPhaseA
 
 struct Options {
   double rate_s = 0.1;
+  std::string port;
 };
 
 class CommandRunner {
  public:
   CommandRunner(boost::asio::io_service& service,
-                io::StreamFactory* stream_factory,
-                const io::StreamFactory::Options& stream_options,
                 const Options& options)
       : service_(service),
-        stream_factory_(stream_factory),
         options_(options) {
-    stream_factory->AsyncCreate(
-        stream_options,
-        std::bind(&CommandRunner::HandleStream, this, pl::_1, pl::_2));
+    client_.emplace(
+        service_,
+        [&]() {
+          mp::ThreadedClient::Options options;
+          options.port = options_.port;
+          return options;
+        }());
   }
 
-  void HandleStream(const base::error_code& ec, io::SharedStream stream) {
-    base::FailIf(ec);
+  void MakeRequest() {
+    nonce_count_ = (nonce_count_ + 1) % 100;
 
-    stream_ = stream;
-    client_.emplace(stream_.get());
+    reply_.replies.clear();
 
-    MaybeStart();
+    request_.requests.resize(kTargets.size());
+    for (size_t i = 0; i < kTargets.size(); i++) {
+      const int id = kTargets[i];
+
+      mp::ThreadedClient::SingleRequest request;
+      request.id = id;
+      request.request.WriteSingle(kSetupRegister, kSetupValue);
+
+      // The position command needs to set 3 values.  For now, we'll
+      // send 3 int16's.
+      auto i16 = [](auto v) { return static_cast<int16_t>(v); };
+      request.request.WriteMultiple(
+          kNonceRegister, {i16(nonce_count_), i16(0), i16(0)});
+
+      request.request.ReadMultiple(kNonceRegister, 3, 1);
+      // And read two i8 regs, like voltage and fault
+      request.request.ReadMultiple(0x006, 2, 0);
+
+      request_.requests[i] = request;
+    }
   }
 
-  void MaybeStart() {
-    if (!stream_) { return; }
-
+  void Start() {
     StartTimer();
   }
 
@@ -100,7 +117,8 @@ class CommandRunner {
 
   void EmitStatus() {
     std::cout << fmt::format(
-        "{:5d}  sk={:3d} st={:3d} qt={:3d} mr={:3d} er={:3d} wrt={:3d} wn={:3d}  lat={:.6f}\n",
+        "{:5d}  sk={:3d} st={:3d} qt={:3d} mr={:3d} "
+        "er={:3d} wrt={:3d} wn={:3d}  lat={:.6f}\n",
         stats_.valid_reply,
         stats_.skipped,
         stats_.send_timeout,
@@ -116,83 +134,65 @@ class CommandRunner {
   void StartCycle() {
     start_time_ = mjmech::base::Now(service_);
 
-    nonce_count_ = (nonce_count_ + 1) % 100;
+    MakeRequest();
 
-    StartServo(0);
+    client_->AsyncRegister(
+        &request_,
+        &reply_,
+        std::bind(&CommandRunner::HandleCycle, this, pl::_1));
   }
 
-  void StartServo(int index) {
-    const int servo_num = kTargets[index];
-    // For each servo, write something to the setup register and the
-    // nonce register, then a representative amount of data elsewhere.
-
-    request_ = {};
-    request_.WriteSingle(kSetupRegister, kSetupValue);
-
-    // The position command needs to set 3 values.  For now, we'll
-    // send 3 int16's.
-    auto i16 = [](auto v) { return static_cast<int16_t>(v); };
-    request_.WriteMultiple(kNonceRegister, {i16(nonce_count_), i16(0), i16(0)});
-
-    request_.ReadMultiple(kNonceRegister, 3, 1);
-    // And read two i8 regs, like voltage and fault
-    request_.ReadMultiple(0x006, 2, 0);
-
-    client_->AsyncRegister(servo_num,
-                           request_,
-                           std::bind(&CommandRunner::HandleServo, this,
-                                     pl::_1, pl::_2, index));
-  }
-
-  void HandleServo(const base::error_code& ec,
-                   const mp::RegisterReply& reply,
-                   int index) {
+  void HandleCycle(const base::error_code& ec) {
+    busy_ = false;
     const auto end_time = mjmech::base::Now(service_);
+
     if (ec == boost::asio::error::operation_aborted) {
       stats_.send_timeout++;
-      busy_ = false;
       return;
     }
 
     base::FailIf(ec);
 
-    // Check to see if the nonce value was correctly reported.
-    if (reply.count(kNonceRegister) == 0) {
-      stats_.missing_reply++;
-      busy_ = false;
-      return;
+    for (size_t i = 0; i < kTargets.size(); i++) {
+      // Check to see if the nonce value was correctly reported.
+      if (reply_.replies.size() <= i) {
+        stats_.missing_reply++;
+        return;
+      }
+
+      const auto& reply = reply_.replies[i];
+      if (reply.id != kTargets[i]) {
+        stats_.missing_reply++;
+        return;
+      }
+
+      if (reply.reply.count(kNonceRegister) == 0) {
+        stats_.missing_reply++;
+        return;
+      }
+
+      const auto& read_result = reply.reply.at(kNonceRegister);
+      if (std::holds_alternative<uint32_t>(read_result)) {
+        stats_.error_reply++;
+        return;
+      }
+
+      auto value = std::get<mp::Format::Value>(read_result);
+      if (!std::holds_alternative<int16_t>(value)) {
+        stats_.wrong_reply_type++;
+        return;
+      }
+
+      auto int16_value = std::get<int16_t>(value);
+      if (int16_value != nonce_count_) {
+        std::cout << fmt::format("got nonce {} expected {}\n",
+                                 int16_value, nonce_count_);
+        stats_.wrong_nonce++;
+        return;
+      }
     }
 
-    const auto& read_result = reply.at(kNonceRegister);
-    if (std::holds_alternative<uint32_t>(read_result)) {
-      stats_.error_reply++;
-      busy_ = false;
-      return;
-    }
-
-    auto value = std::get<mp::Format::Value>(read_result);
-    if (!std::holds_alternative<int16_t>(value)) {
-      stats_.wrong_reply_type++;
-      busy_ = false;
-      return;
-    }
-
-    auto int16_value = std::get<int16_t>(value);
-    if (int16_value != nonce_count_) {
-      std::cout << fmt::format("got nonce {} expected {}\n",
-                               int16_value, nonce_count_);
-      stats_.wrong_nonce++;
-      busy_ = false;
-      return;
-    }
-
-    const int next_index = index + 1;
-    if (next_index >= kTargets.size()) {
-      busy_ = false;
-      FinishQuery(end_time);
-    } else {
-      StartServo(next_index);
-    }
+    FinishQuery(end_time);
   }
 
 
@@ -201,15 +201,13 @@ class CommandRunner {
     stats_.valid_reply++;
   }
 
-
   boost::asio::io_service& service_;
-  io::StreamFactory* const stream_factory_;
   const Options options_;
-  io::SharedStream stream_;
-  std::optional<mp::AsioClient> client_;
+  std::optional<mp::ThreadedClient> client_;
 
   io::RepeatingTimer timer_{service_};
-  mp::RegisterRequest request_;
+  mp::ThreadedClient::Request request_;
+  mp::ThreadedClient::Reply reply_;
 
   bool busy_ = false;
   boost::posix_time::ptime start_time_;
@@ -243,9 +241,7 @@ class CommandRunner {
 
 int main(int argc, char** argv) {
   boost::asio::io_service service;
-  io::StreamFactory factory{service};
 
-  io::StreamFactory::Options stream_options;
   po::options_description desc("Allowable options");
 
   Options options;
@@ -253,9 +249,8 @@ int main(int argc, char** argv) {
   desc.add_options()
       ("help,h", "display usage message")
       ("rate,r", po::value(&options.rate_s), "")
+      ("port,p", po::value(&options.port), "")
       ;
-
-  base::ProgramOptionsArchive(&desc).Accept(&stream_options);
 
   po::variables_map vm;
   po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -266,7 +261,8 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  CommandRunner command_runner{service, &factory, stream_options, options};
+  CommandRunner command_runner{service, options};
+  command_runner.Start();
 
   service.run();
 

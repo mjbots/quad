@@ -52,6 +52,7 @@ cc_library(
         "@gst-libav//:plugins",
         "@gst-rtsp-server//:rtsp-server",
         "@moteus//mjlib/multiplex:asio_client",
+        "@moteus//mjlib/multiplex:threaded_client",
         "@opencv//:core",
         "@opencv//:aruco",
         "@opencv//:imgcodecs",
