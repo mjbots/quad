@@ -286,7 +286,7 @@ class JumpTest::Impl {
       ServoInterface::Joint joint;
       joint.address = id;
       joint.angle_deg = std::numeric_limits<double>::quiet_NaN();
-      joint.power = 1.0;
+      joint.max_torque_Nm = 50.0;
 
       joint_setter(&joint);
 
@@ -337,7 +337,7 @@ class JumpTest::Impl {
                 GetJointServo(param_->preposition_deg, joint->address);
             joint->velocity_dps =
                 GetJointSpeed(param_->preposition_speed_dps, joint->address);
-            joint->power = param_->preposition_power;
+            joint->max_torque_Nm = param_->preposition_max_torque_Nm;
           });
 
         if (state_time_s > param_->preposition_time_s) {
@@ -380,7 +380,7 @@ class JumpTest::Impl {
             joint->goal_deg = GetJointServo(param_->jump_deg, joint->address);
             joint->velocity_dps =
                 GetJointSpeed(param_->jump_dps, joint->address);
-            joint->power = param_->jump_power;
+            joint->max_torque_Nm = param_->jump_max_torque_Nm;
           });
 
         if (InPosition(param_->jump_deg)) {

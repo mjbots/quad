@@ -205,7 +205,7 @@ class GaitDriver::Impl : boost::noncopyable {
     for (auto item : input) {
       if (item.address == 2 || item.address == 5 ||
           item.address == 8 || item.address == 11) {
-        item.power = scale;
+        item.max_torque_scale = scale;
       }
       // We want no feedforward in this phase, since we aren't
       // touching the ground.

@@ -66,7 +66,7 @@ class JumpTest : boost::noncopyable {
     double period_s = 0.05;
 
     JointSetup preposition_deg = { 0, 60, 120 };
-    double preposition_power = 0.2;
+    double preposition_max_torque_Nm = 2;
     double preposition_speed_dps = 30.0;
     double preposition_time_s = 4.0;
 
@@ -79,7 +79,7 @@ class JumpTest : boost::noncopyable {
     double squat_time_s = 4.0;
 
     JointSetup jump_deg = { 0, 0, 0 };
-    double jump_power = 1.0;
+    double jump_max_torque_Nm = 50;
     double jump_dps = 600.0;
 
     JointSetup landing_prepare_deg = { 0, 20, 40 };
@@ -97,7 +97,7 @@ class JumpTest : boost::noncopyable {
       a->Visit(MJ_NVP(skip_powered));
       a->Visit(MJ_NVP(period_s));
       a->Visit(MJ_NVP(preposition_deg));
-      a->Visit(MJ_NVP(preposition_power));
+      a->Visit(MJ_NVP(preposition_max_torque_Nm));
       a->Visit(MJ_NVP(preposition_speed_dps));
       a->Visit(MJ_NVP(preposition_time_s));
       a->Visit(MJ_NVP(standing_deg));
@@ -108,7 +108,7 @@ class JumpTest : boost::noncopyable {
       a->Visit(MJ_NVP(squat_time_s));
 
       a->Visit(MJ_NVP(jump_deg));
-      a->Visit(MJ_NVP(jump_power));
+      a->Visit(MJ_NVP(jump_max_torque_Nm));
       a->Visit(MJ_NVP(jump_dps));
 
       a->Visit(MJ_NVP(landing_prepare_deg));

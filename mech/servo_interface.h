@@ -40,8 +40,12 @@ class ServoInterface : boost::noncopyable {
     /// means don't stop moving.
     double goal_deg = std::numeric_limits<double>::quiet_NaN();
 
-    double power = 1.0;
+    /// The maximum joint for the motor to apply.
+    static constexpr double kDefaultMaxTorque = 40.0;
+    double max_torque_Nm = kDefaultMaxTorque;
+    double max_torque_scale = 1.0;
 
+    /// A "feedforward" torque to apply even with no control error.
     double torque_Nm = 0.0;
 
     double kp = 1.0;
@@ -52,7 +56,8 @@ class ServoInterface : boost::noncopyable {
       a->Visit(MJ_NVP(angle_deg));
       a->Visit(MJ_NVP(velocity_dps));
       a->Visit(MJ_NVP(goal_deg));
-      a->Visit(MJ_NVP(power));
+      a->Visit(MJ_NVP(max_torque_Nm));
+      a->Visit(MJ_NVP(max_torque_scale));
       a->Visit(MJ_NVP(torque_Nm));
       a->Visit(MJ_NVP(kp));
     }
@@ -122,6 +127,20 @@ class ServoInterface : boost::noncopyable {
   // affect behavior, do so here.
   virtual void ClearErrors(const std::vector<int>& ids,
                            mjlib::io::ErrorCallback) = 0;
+
+
+  /// Command all servos and query their state in one operation.  This
+  /// is intended to be the fastest way to update the state of the
+  /// entire system.
+  ///
+  /// @p command and @p result are aliased and must remain valid until
+  /// @p callback is invoked.
+  virtual void Update(
+      PowerState,
+      const StatusOptions&,
+      const std::vector<Joint>* command,
+      std::vector<JointStatus>* result,
+      mjlib::io::ErrorCallback callback) = 0;
 };
 
 }

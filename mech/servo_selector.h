@@ -80,11 +80,13 @@ class ServoSelector : public ServoInterface {
     selected_->GetTemperature(ids, handler);
   }
 
-  void GetVoltage(const std::vector<int>& ids, VoltageHandler handler) override {
+  void GetVoltage(const std::vector<int>& ids,
+                  VoltageHandler handler) override {
     selected_->GetVoltage(ids, handler);
   }
 
-  void GetStatus(const std::vector<int>& ids, const StatusOptions& status_options,
+  void GetStatus(const std::vector<int>& ids,
+                 const StatusOptions& status_options,
                  StatusHandler handler) override {
     selected_->GetStatus(ids, status_options, handler);
   }
@@ -92,6 +94,16 @@ class ServoSelector : public ServoInterface {
   void ClearErrors(const std::vector<int>& ids,
                    mjlib::io::ErrorCallback callback) override {
     selected_->ClearErrors(ids, callback);
+  }
+
+  void Update(
+      PowerState power_state,
+      const StatusOptions& status_options,
+      const std::vector<Joint>* command,
+      std::vector<JointStatus>* result,
+      mjlib::io::ErrorCallback callback) override {
+    selected_->Update(power_state, status_options, command,
+                      result, callback);
   }
 
  private:

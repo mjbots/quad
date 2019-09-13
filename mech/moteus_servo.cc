@@ -21,6 +21,7 @@
 #include <fmt/format.h>
 
 #include "mjlib/base/fail.h"
+#include "mjlib/base/limit.h"
 #include "mjlib/base/program_options_archive.h"
 #include "mjlib/multiplex/threaded_client.h"
 
@@ -34,21 +35,126 @@ namespace mp = mjlib::multiplex;
 namespace mjmech {
 namespace mech {
 
+namespace {
+
+using mjlib::base::Limit;
 using Value = mp::Format::Value;
 
+template <typename T>
+uint32_t u32(T value) {
+  return static_cast<uint32_t>(value);
+}
+
+template <typename T>
+Value ScaleSaturate(double value, double scale) {
+  if (!std::isfinite(value)) {
+    return std::numeric_limits<T>::min();
+  }
+
+  const double scaled = value / scale;
+  const auto max = std::numeric_limits<T>::max();
+  // We purposefully limit to +- max, rather than to min.  The minimum
+  // value for our two's complement types is reserved for NaN.
+  return Limit<T>(static_cast<T>(scaled), -max, max);
+}
+
 enum RegisterTypes {
+  kInt8 = 0,
+  kInt16 = 1,
   kInt32 = 2,
   kFloat = 3,
 };
 
-template <typename T>
-T ReadCast(const mp::Format::ReadResult& value) {
-  return std::visit([](auto a) {
-      return static_cast<T>(a);
-    }, std::get<Value>(value));
+Value ScaleMapping(double value,
+                   double int8_scale, double int16_scale, double int32_scale,
+                   RegisterTypes type) {
+  switch (type) {
+    case kInt8: return ScaleSaturate<int8_t>(value, int8_scale);
+    case kInt16: return ScaleSaturate<int16_t>(value, int16_scale);
+    case kInt32: return ScaleSaturate<int32_t>(value, int32_scale);
+    case kFloat: return static_cast<float>(value);
+  }
+  MJ_ASSERT(false);
+  return Value(static_cast<int8_t>(0));
 }
 
-namespace {
+Value write_position(double value, RegisterTypes reg) {
+  return ScaleMapping(value / 360.0, 0.01, 0.001, 0.00001, reg);
+}
+
+Value write_velocity(double value, RegisterTypes reg) {
+  return ScaleMapping(value / 360.0, 0.1, 0.001, 0.00001, reg);
+}
+
+Value write_torque(double value, RegisterTypes reg) {
+  return ScaleMapping(value, 0.5, 0.01, 0.001, reg);
+}
+
+Value write_pwm(double value, RegisterTypes reg) {
+  return ScaleMapping(value, 1.0 / 127.0,
+                      1.0 / 32767.0,
+                      1.0 / 2147483647.0,
+                      reg);
+}
+
+struct ValueScaler {
+  double int8_scale;
+  double int16_scale;
+  double int32_scale;
+
+  double operator()(int8_t value) const {
+    if (value == std::numeric_limits<int8_t>::min()) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    return value * int8_scale;
+  }
+
+  double operator()(int16_t value) const {
+    if (value == std::numeric_limits<int16_t>::min()) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    return value * int16_scale;
+  }
+
+  double operator()(int32_t value) const {
+    if (value == std::numeric_limits<int32_t>::min()) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    return value * int32_scale;
+  }
+
+  double operator()(float value) const {
+    return value;
+  }
+};
+
+double ReadScale(Value value,
+                 double int8_scale,
+                 double int16_scale,
+                 double int32_scale) {
+  return std::visit(ValueScaler{int8_scale, int16_scale, int32_scale}, value);
+}
+
+double read_position(Value value) {
+  return ReadScale(value, 0.01, 0.001, 0.00001) * 360.0;
+}
+
+double read_torque(Value value) {
+  return ReadScale(value, 0.5, 0.01, 0.001);
+}
+
+double read_voltage(Value value) {
+  return ReadScale(value, 1, 0.1, 0.001);
+}
+
+double read_temperature(Value value) {
+  return ReadScale(value, 1.0, 0.1, 0.001);
+}
+
+int read_int(Value value) {
+  return std::visit([](auto v) { return static_cast<int>(v); }, value);
+}
+
 struct Command {
   boost::posix_time::ptime timestamp;
   std::vector<ServoInterface::Joint> joints;
@@ -96,6 +202,7 @@ class MoteusServo::Impl {
     if (!mp_client_) { return; }
     if (outstanding_) {
       log_.debug("skipping SetPose because we are backed up");
+      service_.post(std::bind(handler, boost::asio::error::operation_aborted));
       return;
     }
 
@@ -111,10 +218,6 @@ class MoteusServo::Impl {
       request.WriteSingle(moteus::kMode,
                           static_cast<int8_t>(moteus::Mode::kPosition));
 
-      // TODO(jpieper): MAJOR HACK.  This is not the right abstraction
-      // layer for this.
-      const bool is_shoulder = ((joint.address - 1) % 3) == 2;
-
       request.WriteMultiple(
           moteus::kCommandPosition,
           {
@@ -123,10 +226,7 @@ class MoteusServo::Impl {
             static_cast<float>(joint.torque_Nm),
             static_cast<float>(joint.kp),
             1.0f,
-            static_cast<float>(
-                joint.power * (is_shoulder ?
-                               parameters_.max_torque_shoulder_Nm :
-                               parameters_.max_torque_legs_Nm)),
+            static_cast<float>(joint.max_torque_Nm * joint.max_torque_scale),
             (std::isfinite(joint.goal_deg) ?
               static_cast<float>(joint.goal_deg / 360.0f) :
               std::numeric_limits<float>::quiet_NaN()),
@@ -189,7 +289,7 @@ class MoteusServo::Impl {
       auto& request = request_pair.request;
       request = {};
 
-      request.ReadSingle(moteus::kMode, 0);
+      request.ReadSingle(moteus::kMode, kInt8);
       if (status_options.pose) {
         request.ReadSingle(moteus::kPosition, kFloat);
       }
@@ -230,56 +330,196 @@ class MoteusServo::Impl {
 
       log_.debug(fmt::format("got {} regs of data", reply.size()));
 
-      for (const auto& pair : reply) {
-        auto* maybe_value = std::get_if<Value>(&pair.second);
-        if (!maybe_value) {
-          log_.debug(fmt::format("error in reg {} : {}",
-                                 pair.first, std::get<uint32_t>((pair.second))));
-          // There must have been an error of some sort.
-          //
-          // TODO(jpieper): Figure out how we want to report this.
-          continue;
-        }
-        log_.debug(fmt::format("reg {:03x} has value", pair.first));
-        switch (static_cast<moteus::Register>(pair.first)) {
-          case moteus::kMode: {
-            const auto mode = ReadCast<int32_t>(pair.second);
-            this_status.torque_on = mode >= 5;
-            break;
-          }
-          case moteus::kPosition: {
-            this_status.angle_deg = ReadCast<float>(pair.second) * 360.0;
-            break;
-          }
-          case moteus::kTemperature: {
-            this_status.temperature_C = ReadCast<float>(pair.second);
-            break;
-          }
-          case moteus::kVoltage: {
-            this_status.voltage = ReadCast<float>(pair.second);
-            break;
-          }
-          case moteus::kVelocity: {
-            this_status.velocity_dps = ReadCast<float>(pair.second) * 360.0;
-            break;
-          }
-          case moteus::kTorque: {
-            this_status.torque_Nm = ReadCast<float>(pair.second);
-            break;
-          }
-          case moteus::kFault: {
-            this_status.error = ReadCast<int32_t>(pair.second);
-            break;
-          }
-          default: {
-            break;
-          }
-        }
-      }
+      ReadJoint(reply, &this_status);
       result.push_back(this_status);
     }
 
     service_.post(std::bind(handler, ec, result));
+  }
+
+  void Update(PowerState power_state,
+              const StatusOptions& status_options,
+              const std::vector<Joint>* command,
+              std::vector<JointStatus>* output,
+              mjlib::io::ErrorCallback callback) {
+    MJ_ASSERT(!outstanding_);
+
+    auto map_power_state = [](auto power_state) {
+      switch (power_state) {
+        case kPowerFree:
+        case kPowerBrake: {
+          return static_cast<int8_t>(moteus::Mode::kStopped);
+        }
+        case kPowerEnable: {
+          return static_cast<int8_t>(moteus::Mode::kPosition);
+        }
+      }
+    };
+
+    request_.requests.resize(command->size());
+    for (size_t i = 0; i < command->size(); i++) {
+      const auto& joint = (*command)[i];
+      auto& request_pair = request_.requests[i];
+      request_pair.id = joint.address;
+      auto& request = request_pair.request;
+      request = {};
+
+      // First, set our power state.
+      request.WriteSingle(moteus::kMode,
+                          map_power_state(power_state));
+
+      PopulateCommand(joint, &request);
+      PopulateQuery(status_options, &request);
+    }
+
+    reply_.replies.clear();
+
+    mp_client_->AsyncRegister(
+        &request_,
+        &reply_,
+        std::bind(&Impl::HandleUpdate, this, pl::_1, output, callback));
+  }
+
+  void ReadJoint(const mp::RegisterReply& reply,
+                 JointStatus* joint) {
+    for (auto& pair : reply) {
+      auto* maybe_value = std::get_if<Value>(&pair.second);
+      if (!maybe_value) { continue; }
+      auto value = *maybe_value;
+      switch (static_cast<moteus::Register>(pair.first)) {
+        case moteus::kMode: {
+          const auto mode = read_int(value);
+          joint->torque_on = mode >= 5;
+          break;
+        }
+        case moteus::kPosition: {
+          joint->angle_deg = read_position(value);
+          break;
+        }
+        case moteus::kVelocity: {
+          joint->velocity_dps = read_position(value);
+          break;
+        }
+        case moteus::kTorque: {
+          joint->torque_Nm = read_torque(value);
+          break;
+        }
+        case moteus::kVoltage: {
+          joint->voltage = read_voltage(value);
+          break;
+        }
+        case moteus::kTemperature: {
+          joint->temperature_C = read_temperature(value);
+          break;
+        }
+        default: {
+          break;
+        }
+      }
+    }
+  }
+
+  void HandleUpdate(const mjlib::base::error_code& ec,
+                    std::vector<JointStatus>* output,
+                    mjlib::io::ErrorCallback callback) {
+    if (ec) {
+      service_.post(std::bind(callback, ec));
+      return;
+    }
+
+    output->clear();
+    for (auto& reply_pair : reply_.replies) {
+      output->push_back({});
+      auto& joint = output->back();
+      joint.address = reply_pair.id;
+      ReadJoint(reply_pair.reply, &joint);
+    }
+
+    service_.post(std::bind(callback, ec));
+  }
+
+  void PopulateQuery(const StatusOptions& status_options,
+                     mp::RegisterRequest* request) {
+    // We always ask for at least the mode as an int16.  We optionally
+    // ask for other things as well.
+    {
+      moteus::Register max_reg = moteus::kMode;
+      if (status_options.pose) { max_reg = moteus::kPosition; }
+      if (status_options.velocity) { max_reg = moteus::kVelocity; }
+      if (status_options.torque) { max_reg = moteus::kTorque; }
+
+      const auto len = u32(max_reg) - u32(moteus::kMode) + 1;
+
+      request->ReadMultiple(moteus::kMode, len, 1);
+    }
+
+    // Now do the second grouping, these we get as int8s.  Here, we
+    // might not do anything at all if none of the respective things
+    // have been asked for.
+    {
+      std::optional<moteus::Register> max_reg;
+      if (status_options.voltage) { max_reg = moteus::kVoltage; }
+      if (status_options.temperature) { max_reg = moteus::kTemperature; }
+      if (status_options.error) { max_reg = moteus::kFault; }
+
+      if (!!max_reg) {
+        const auto len = u32(*max_reg) - u32(moteus::kVoltage) + 1;
+        request->ReadMultiple(moteus::kVoltage, len, 0);
+      }
+    }
+  }
+
+  void PopulateCommand(const Joint& joint, mp::RegisterRequest* request) {
+    auto& values = values_cache_;
+
+    // Now, figure out how to encode our command.  We write out all
+    // our command as a single WriteMultiple of int16s.  We use a
+    // shorter list of values if that is possible.
+    if (joint.angle_deg != 0.0) { values.resize(1); }
+    if (joint.velocity_dps != 0.0) { values.resize(2);}
+    if (joint.torque_Nm != 0.0) { values.resize(3); }
+    if (joint.kp != 1.0) { values.resize(4); }
+    if (joint.max_torque_scale != 1.0 ||
+        joint.max_torque_Nm != joint.kDefaultMaxTorque) {
+      values.resize(6);
+    }
+    if (std::isfinite(joint.goal_deg )) { values.resize(7); }
+
+    for (size_t i = 0; i < values.size(); i++) {
+      switch (i) {
+        case 0: {
+          values[i] = write_position(joint.angle_deg, kInt16);
+          break;
+        }
+        case 1: {
+          values[i] = write_velocity(joint.velocity_dps, kInt16);
+          break;
+        }
+        case 2: {
+          values[i] = write_torque(joint.torque_Nm, kInt16);
+          break;
+        }
+        case 3: {
+          values[i] = write_pwm(joint.kp, kInt16);
+          break;
+        }
+        case 4: {
+          values[i] = write_pwm(1.0, kInt16);  // kd
+          break;
+        }
+        case 5: {
+          values[i] = write_torque(
+              joint.max_torque_Nm * joint.max_torque_scale, kInt16);
+          break;
+        }
+        case 6: {
+          values[i] = write_position(joint.goal_deg, kInt16);
+          break;
+        }
+      }
+    }
+
+    request->WriteMultiple(moteus::kCommandPosition, values);
   }
 
   base::LogRef log_ = base::GetLogInstance("MoteusServo");
@@ -293,10 +533,13 @@ class MoteusServo::Impl {
 
   bool outstanding_ = false;
   mp::ThreadedClient::Request request_;
+  mp::ThreadedClient::Reply reply_;
+
   mp::ThreadedClient::Request read_request_;
   mp::ThreadedClient::Reply read_reply_;
 
   mjlib::multiplex::ThreadedClient* mp_client_ = nullptr;
+  std::vector<Value> values_cache_;
 };
 
 MoteusServo::MoteusServo(boost::asio::io_service& service,
@@ -354,6 +597,14 @@ void MoteusServo::GetStatus(const std::vector<int>& ids,
 void MoteusServo::ClearErrors(const std::vector<int>&,
                               mjlib::io::ErrorCallback callback) {
   impl_->service_.post(std::bind(callback, mjlib::base::error_code()));
+}
+
+void MoteusServo::Update(PowerState power_state,
+                         const StatusOptions& status_options,
+                         const std::vector<Joint>* command,
+                         std::vector<JointStatus>* output,
+                         mjlib::io::ErrorCallback callback) {
+  impl_->Update(power_state, status_options, command, output, callback);
 }
 
 }
