@@ -25,32 +25,22 @@ namespace mech {
 
 class MultiplexClient::Impl {
  public:
-  Impl(boost::asio::io_service& service,
-       mjlib::io::StreamFactory& factory)
-      : service_(service),
-        factory_(factory) {
-    mjlib::base::ProgramOptionsArchive(&options_).Accept(&stream_parameters_);
+  Impl(boost::asio::io_service& service)
+      : service_(service) {
+    mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
   }
 
   void AsyncStart(mjlib::io::ErrorCallback handler) {
-    factory_.AsyncCreate(
-        stream_parameters_,
-        std::bind(&Impl::HandleCreate, this, pl::_1, pl::_2, handler));
-  }
+    Client::Options options;
+    options.port = parameters_.serial_port;
+    options.baud_rate = parameters_.serial_baud;
+    client_ = std::make_unique<Client>(service_, options);
+    ProcessRequests();
 
-  void HandleCreate(const mjlib::base::error_code& ec,
-                    mjlib::io::SharedStream stream,
-                    mjlib::io::ErrorCallback handler) {
-    if (!ec) {
-      stream_ = stream;
-      client_ = std::make_unique<Client>(stream_.get());
-      ProcessRequests();
-    }
-    service_.post(std::bind(handler, ec));
+    service_.post(std::bind(handler, mjlib::base::error_code()));
   }
 
   void ProcessRequests() {
-    BOOST_ASSERT(stream_);
     BOOST_ASSERT(client_);
 
     for (auto callback : callbacks_) {
@@ -65,20 +55,15 @@ class MultiplexClient::Impl {
   Parameters parameters_;
 
   boost::asio::io_service& service_;
-  mjlib::io::StreamFactory& factory_;
-
-  mjlib::io::StreamFactory::Options stream_parameters_;
 
   boost::program_options::options_description options_;
 
-  mjlib::io::SharedStream stream_;
   std::unique_ptr<Client> client_;
   std::list<ClientCallback> callbacks_;
 };
 
-MultiplexClient::MultiplexClient(boost::asio::io_service& service,
-                                 mjlib::io::StreamFactory& factory)
-    : impl_(std::make_unique<Impl>(service, factory)) {}
+MultiplexClient::MultiplexClient(boost::asio::io_service& service)
+    : impl_(std::make_unique<Impl>(service)) {}
 
 MultiplexClient::~MultiplexClient() {}
 

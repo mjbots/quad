@@ -462,7 +462,7 @@ class JumpTest::Impl {
 JumpTest::JumpTest(base::Context& context)
     : impl_(std::make_unique<Impl>(this, context)) {
   m_.multiplex_client = std::make_unique<MultiplexClient>(
-      impl_->service_, *context.factory);
+      impl_->service_);
   m_.moteus_servo = std::make_unique<MoteusServo>(
       impl_->service_, context.telemetry_registry.get());
 

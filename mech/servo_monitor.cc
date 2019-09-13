@@ -110,7 +110,7 @@ class ServoMonitor::Impl : boost::noncopyable {
     log_.debug("HandleStatus");
 
     const auto now = base::Now(service_);
-    if (ec == boost::asio::error::operation_aborted) {
+    if (ec == boost::asio::error::operation_aborted || responses.size() == 0) {
       log_.debug(fmt::format("{} servo timed out", requested_servo));
       UpdateServoTimeout(requested_servo, now);
       return;

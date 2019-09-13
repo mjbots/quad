@@ -24,7 +24,8 @@
 #include "base/now.h"
 
 namespace pl = std::placeholders;
-using Value = mjlib::multiplex::Format::Value;
+namespace mp = mjlib::multiplex;
+using Value = mp::Format::Value;
 
 namespace mjmech {
 namespace mech {
@@ -131,12 +132,20 @@ class Turret::Impl : boost::noncopyable {
     poll_count_++;
 
     if (parameters_.use_moteus_turret) {
-      read_request_ = {};
-      read_request_.ReadMultiple(MoteusRegister::kImuPitch, 4, 3);
+      read_request_.requests.resize(1);
+      auto& request_pair = read_request_.requests.front();
+      request_pair.id = parameters_.gimbal_address;
+      auto& request = request_pair.request;
+      request = {};
+      request.ReadMultiple(MoteusRegister::kImuPitch, 4, 3);
+      request.ReadMultiple(MoteusRegister::kFirePwm, 2, 0);
+
+      read_reply_.replies.clear();
+
       mp_client_->AsyncRegister(
-          parameters_.gimbal_address,
-          read_request_,
-          std::bind(&Impl::HandleMoteusCurrent, this, pl::_1, pl::_2));
+          &read_request_,
+          &read_reply_,
+          std::bind(&Impl::HandleMoteusCurrent, this, pl::_1));
     } else {
       // Then, ask for IMU and absolute coordinates every time.
       servo_->MemRead(
@@ -162,8 +171,10 @@ class Turret::Impl : boost::noncopyable {
     Emit();
   }
 
-  bool CheckTemporaryError(const mjlib::base::error_code& ec) {
-    if (ec == boost::asio::error::operation_aborted ||
+  bool CheckTemporaryError(const mjlib::base::error_code& ec,
+                           bool value = false) {
+    if (value ||
+        ec == boost::asio::error::operation_aborted ||
         ec == herkulex_error::synchronization_error) {
       TemporarilyDisableTurret(ec);
       return true;
@@ -173,10 +184,11 @@ class Turret::Impl : boost::noncopyable {
     return false;
   }
 
-  void HandleMoteusCurrent(const mjlib::base::error_code& ec,
-                           mjlib::multiplex::RegisterReply reply) {
-    if (CheckTemporaryError(ec)) { return; }
+  void HandleMoteusCurrent(const mjlib::base::error_code& ec) {
+    if (CheckTemporaryError(ec, read_reply_.replies.empty())) { return; }
     mjlib::base::FailIf(ec);
+
+    auto& reply = read_reply_.replies.front().reply;
 
     auto read_float = [](auto read_result) -> double {
       auto* maybe_value = std::get_if<Value>(&read_result);
@@ -191,13 +203,21 @@ class Turret::Impl : boost::noncopyable {
     data_.absolute.y_deg = data_.imu.y_deg;
     data_.absolute.x_deg = read_float(reply[MoteusRegister::kAbsoluteYaw]);
 
-    // Now read from the fire control board.
-    read_request_ = {};
-    read_request_.ReadMultiple(MoteusRegister::kFirePwm, 2, 0);
-    mp_client_->AsyncRegister(
-        parameters_.gimbal_address,
-        read_request_,
-        std::bind(&Impl::HandleMoteusFireControl, this, pl::_1, pl::_2));
+    auto read_int8 = [](auto read_result) -> int8_t {
+      auto* maybe_value = std::get_if<Value>(&read_result);
+      if (!maybe_value) { return 0.0; }
+      auto* maybe_float = std::get_if<int8_t>(&*maybe_value);
+      if (!maybe_float) { return 0.0; }
+      return *maybe_float;
+    };
+
+    data_.fire_enabled = read_int8(reply[MoteusRegister::kFirePwm]) != 0;
+    data_.agitator_enabled = read_int8(reply[MoteusRegister::kAgitatorPwm]) != 0;
+    if (data_.fire_enabled) {
+      data_.total_fire_time_s += parameters_.period_s;
+    }
+
+    Emit();
   }
 
   void HandleCurrent(mjlib::base::error_code ec,
@@ -220,28 +240,6 @@ class Turret::Impl : boost::noncopyable {
         [this](mjlib::base::error_code ec, Mech::ServoBase::MemReadResponse response) {
           HandleFireControl(ec, response);
         });
-  }
-
-  void HandleMoteusFireControl(const mjlib::base::error_code& ec,
-                               mjlib::multiplex::RegisterReply reply) {
-    if (CheckTemporaryError(ec)) { return; }
-    mjlib::base::FailIf(ec);
-
-    auto read_int8 = [](auto read_result) -> int8_t {
-      auto* maybe_value = std::get_if<Value>(&read_result);
-      if (!maybe_value) { return 0.0; }
-      auto* maybe_float = std::get_if<int8_t>(&*maybe_value);
-      if (!maybe_float) { return 0.0; }
-      return *maybe_float;
-    };
-
-    data_.fire_enabled = read_int8(reply[MoteusRegister::kFirePwm]) != 0;
-    data_.agitator_enabled = read_int8(reply[MoteusRegister::kAgitatorPwm]) != 0;
-    if (data_.fire_enabled) {
-      data_.total_fire_time_s += parameters_.period_s;
-    }
-
-    Emit();
   }
 
   void HandleFireControl(mjlib::base::error_code ec,
@@ -289,7 +287,7 @@ class Turret::Impl : boost::noncopyable {
 
   void SendImuCommand(const TurretCommand::Imu& command) {
     if (parameters_.use_moteus_turret) {
-      RegisterRequest request;
+      mp::RegisterRequest request;
       request.WriteMultiple(
           MoteusRegister::kPitchCommand,
           {Value(static_cast<float>(command.y_deg)),
@@ -344,7 +342,7 @@ class Turret::Impl : boost::noncopyable {
 
     // Update the laser status.
     if (parameters_.use_moteus_turret) {
-      RegisterRequest request;
+      mp::RegisterRequest request;
       request.WriteSingle(
           MoteusRegister::kLaser, Value(u8(command.laser_on ? 1 : 0)));
       SendRegister(request);
@@ -400,7 +398,7 @@ class Turret::Impl : boost::noncopyable {
           (fire_time_s == 0.0) ? 0.0 : parameters_.fire_motor_pwm;
 
       if (parameters_.use_moteus_turret) {
-        RegisterRequest request;
+        mp::RegisterRequest request;
         request.WriteMultiple(
             MoteusRegister::kFireTime,
             {Value(u8(fire_time_s / 0.01)),
@@ -445,7 +443,7 @@ class Turret::Impl : boost::noncopyable {
       }() * 255);
 
     if (parameters_.use_moteus_turret) {
-      RegisterRequest request;
+      mp::RegisterRequest request;
       request.WriteSingle(MoteusRegister::kAgitatorPwm, Value(u8(agitator_pwm)));
       SendRegister(request);
     } else {
@@ -460,7 +458,7 @@ class Turret::Impl : boost::noncopyable {
     const float yaw_dps = x_deg_s;
 
     if (parameters_.use_moteus_turret) {
-      RegisterRequest request;
+      mp::RegisterRequest request;
       request.WriteMultiple(MoteusRegister::kPitchRateCommand,
                             {Value(pitch_dps), Value(yaw_dps)});
       SendRegister(request);
@@ -511,12 +509,19 @@ class Turret::Impl : boost::noncopyable {
     data_.target_relative_last_time = now;
   }
 
-  void SendRegister(const mjlib::multiplex::RegisterRequest& request) {
-    auto it = outstanding_requests_.insert(outstanding_requests_.end(), request);
+  void SendRegister(const mp::RegisterRequest& request_in) {
+    outstanding_requests_.push_back({});
+    auto& request = outstanding_requests_.back();
+    request.requests.resize(1);
+    request.requests[0].id = parameters_.gimbal_address;
+    request.requests[0].request = request_in;
+
+    auto it = --outstanding_requests_.end();
+
     mp_client_->AsyncRegister(
-        parameters_.gimbal_address,
-        *it,
-        [this, it](const mjlib::base::error_code& ec, const auto&) {
+        &*it,
+        nullptr,
+        [this, it](const mjlib::base::error_code& ec) {
           if (CheckTemporaryError(ec)) { return; }
           this->outstanding_requests_.erase(it);
         });
@@ -526,7 +531,7 @@ class Turret::Impl : boost::noncopyable {
   Turret* const parent_;
   boost::asio::io_service& service_;
   Mech::ServoBase* const servo_;
-  mjlib::multiplex::AsioClient* mp_client_ = nullptr;
+  mp::ThreadedClient* mp_client_ = nullptr;
   mjlib::io::DeadlineTimer timer_;
   Parameters parameters_;
   boost::posix_time::ptime disable_until_;
@@ -535,9 +540,10 @@ class Turret::Impl : boost::noncopyable {
 
   Data data_;
 
-  using RegisterRequest = mjlib::multiplex::RegisterRequest;
-  RegisterRequest read_request_;
-  std::list<RegisterRequest> outstanding_requests_;
+  using TC = mp::ThreadedClient;
+  TC::Request read_request_;
+  TC::Reply read_reply_;
+  std::list<TC::Request> outstanding_requests_;
 };
 
 Turret::Turret(boost::asio::io_service& service,
@@ -552,7 +558,7 @@ void Turret::AsyncStart(mjlib::io::ErrorCallback handler) {
   impl_->service_.post(std::bind(handler, mjlib::base::error_code()));
 }
 
-void Turret::SetMultiplexClient(mjlib::multiplex::AsioClient* client) {
+void Turret::SetMultiplexClient(mp::ThreadedClient* client) {
   impl_->mp_client_ = client;
 }
 
@@ -572,7 +578,7 @@ void Turret::SetCommand(const TurretCommand& command) {
     // the gimbal is not advancing on its own.
     impl_->data_.last_rate = false;
     if (impl_->parameters_.use_moteus_turret) {
-      Impl::RegisterRequest request;
+      mp::RegisterRequest request;
       request.WriteMultiple(MoteusRegister::kPitchRateCommand,
                             {Value(0.0f), Value(0.0f)});
       impl_->SendRegister(request);
@@ -605,7 +611,7 @@ void Turret::SetCommand(const TurretCommand& command) {
                           command.absolute->x_deg));
 
     if (impl_->parameters_.use_moteus_turret) {
-      Impl::RegisterRequest request;
+      mp::RegisterRequest request;
       request.WriteSingle(MoteusRegister::kPitchCommand,
                           static_cast<float>(limited_pitch_deg));
       request.WriteSingle(MoteusRegister::kAbsoluteYawCommand,
@@ -631,7 +637,7 @@ void Turret::SetCommand(const TurretCommand& command) {
     const double yaw_deg = command.imu->x_deg;
 
     if (impl_->parameters_.use_moteus_turret) {
-      Impl::RegisterRequest request;
+      mp::RegisterRequest request;
       request.WriteMultiple(MoteusRegister::kPitchCommand,
                             {Value(static_cast<float>(pitch_deg)),
                                   Value(static_cast<float>(yaw_deg))});
@@ -668,7 +674,7 @@ void Turret::UpdateTrackedTarget(
 
 void Turret::StartBias() {
   if (impl_->parameters_.use_moteus_turret) {
-    Impl::RegisterRequest request;
+    mp::RegisterRequest request;
     request.WriteSingle(MoteusRegister::kBiasCommand, u8(1));
     impl_->SendRegister(request);
   } else {

@@ -24,11 +24,11 @@ enum Register : uint32_t {
   kMode = 0x000,
   kPosition = 0x001,
   kVelocity = 0x002,
-  kTemperature = 0x003,
+  kTorque = 0x003,
   kQCurrent = 0x004,
   kDCurrent = 0x005,
-  kVoltage = 0x006,
-  kTorque = 0x007,
+  kVoltage = 0x00d,
+  kTemperature = 0x00e,
   kFault = 0x00f,
 
   kPwmPhaseA = 0x010,
@@ -47,11 +47,11 @@ enum Register : uint32_t {
 
   kCommandPosition = 0x020,
   kCommandVelocity = 0x021,
-  kCommandPositionMaxCurrent = 0x022,
-  kCommandStopPosition = 0x023,
-  kCommandFeedforwardTorque = 0x024,
-  kCommandKpScale = 0x025,
-  kCommandKdScale = 0x026,
+  kCommandFeedforwardTorque = 0x022,
+  kCommandKpScale = 0x023,
+  kCommandKdScale = 0x024,
+  kCommandPositionMaxCurrent = 0x025,
+  kCommandStopPosition = 0x026,
 };
 
 enum class Mode {

@@ -16,27 +16,33 @@
 
 #include <boost/program_options.hpp>
 
-#include "mjlib/io/stream_factory.h"
-#include "mjlib/multiplex/asio_client.h"
+#include "mjlib/base/visitor.h"
+#include "mjlib/multiplex/threaded_client.h"
 
 namespace mjmech {
 namespace mech {
 
 class MultiplexClient {
  public:
-  MultiplexClient(boost::asio::io_service&, mjlib::io::StreamFactory&);
+  MultiplexClient(boost::asio::io_service&);
   ~MultiplexClient();
 
   struct Parameters {
+    std::string serial_port;
+    int serial_baud = 3000000;
+
     template <typename Archive>
-    void Serialize(Archive*) {}
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(serial_port));
+      a->Visit(MJ_NVP(serial_baud));
+    }
   };
 
   Parameters* parameters();
   boost::program_options::options_description* options();
   void AsyncStart(mjlib::io::ErrorCallback);
 
-  using Client = mjlib::multiplex::AsioClient;
+  using Client = mjlib::multiplex::ThreadedClient;
   using ClientCallback = std::function<void (const mjlib::base::error_code&, Client*)>;
   void RequestClient(ClientCallback);
 

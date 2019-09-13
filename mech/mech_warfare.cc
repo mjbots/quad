@@ -639,7 +639,7 @@ class MechWarfare::Impl : boost::noncopyable {
 MechWarfare::MechWarfare(base::Context& context)
     : service_(context.service),
       impl_(new Impl(this, context)) {
-  m_.multiplex_client = std::make_unique<MultiplexClient>(service_, *context.factory);
+  m_.multiplex_client = std::make_unique<MultiplexClient>(service_);
   m_.servo_base.reset(new Mech::ServoBase(service_, *context.factory));
   m_.servo.reset(new Mech::Servo(m_.servo_base.get()));
   m_.moteus_servo = std::make_unique<MoteusServo>(service_, context.telemetry_registry.get());
