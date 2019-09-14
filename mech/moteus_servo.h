@@ -51,9 +51,6 @@ class MoteusServo : public ServoInterface {
   void SetPose(const std::vector<Joint>&, mjlib::io::ErrorCallback) override;
   void EnablePower(PowerState, const std::vector<int>&,
                    mjlib::io::ErrorCallback) override;
-  void GetPose(const std::vector<int>&, PoseHandler) override;
-  void GetTemperature(const std::vector<int>&, TemperatureHandler) override;
-  void GetVoltage(const std::vector<int>&, VoltageHandler) override;
   void GetStatus(const std::vector<int>&, const StatusOptions&, StatusHandler) override;
   void ClearErrors(const std::vector<int>&, mjlib::io::ErrorCallback) override;
   void Update(PowerState, const StatusOptions&, const std::vector<Joint>*,

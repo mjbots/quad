@@ -71,20 +71,6 @@ class ServoSelector : public ServoInterface {
     selected_->EnablePower(power_state, ids, handler);
   }
 
-  void GetPose(const std::vector<int>& ids, PoseHandler handler) override {
-    selected_->GetPose(ids, handler);
-  }
-
-  void GetTemperature(const std::vector<int>& ids,
-                      TemperatureHandler handler) override {
-    selected_->GetTemperature(ids, handler);
-  }
-
-  void GetVoltage(const std::vector<int>& ids,
-                  VoltageHandler handler) override {
-    selected_->GetVoltage(ids, handler);
-  }
-
   void GetStatus(const std::vector<int>& ids,
                  const StatusOptions& status_options,
                  StatusHandler handler) override {

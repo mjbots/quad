@@ -81,30 +81,6 @@ class ServoInterface : boost::noncopyable {
     bool error = false;
   };
 
-  typedef std::function<
-    void (mjlib::base::error_code, std::vector<Joint>)> PoseHandler;
-
-  virtual void GetPose(const std::vector<int>&, PoseHandler) = 0;
-
-  struct Temperature {
-    int address;
-    double temperature_C;
-  };
-
-  typedef std::function<
-    void (mjlib::base::error_code, std::vector<Temperature>)> TemperatureHandler;
-  virtual void GetTemperature(const std::vector<int>&, TemperatureHandler) = 0;
-
-  struct Voltage {
-    int address;
-    double voltage;
-  };
-
-  typedef std::function<void (
-      mjlib::base::error_code, std::vector<Voltage>)> VoltageHandler;
-
-  virtual void GetVoltage(const std::vector<int>&, VoltageHandler) = 0;
-
   struct JointStatus {
     int address = 0;
     bool torque_on = false;

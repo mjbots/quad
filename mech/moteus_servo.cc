@@ -576,18 +576,6 @@ void MoteusServo::EnablePower(PowerState power_state,
   impl_->EnablePower(power_state, ids_copy, handler);
 }
 
-void MoteusServo::GetPose(const std::vector<int>&, PoseHandler) {
-  mjlib::base::AssertNotReached();
-}
-
-void MoteusServo::GetTemperature(const std::vector<int>&, TemperatureHandler) {
-  mjlib::base::AssertNotReached();
-}
-
-void MoteusServo::GetVoltage(const std::vector<int>&, VoltageHandler) {
-  mjlib::base::AssertNotReached();
-}
-
 void MoteusServo::GetStatus(const std::vector<int>& ids,
                             const StatusOptions& status_options,
                             StatusHandler handler) {
