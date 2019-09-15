@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "mjlib/base/fail.h"
 #include "mjlib/base/system_error.h"
 #include "mjlib/base/visitor.h"
 
@@ -141,7 +142,7 @@ class LizardIK : public IKSolver {
     // Solve for the coxa first, as it has only a single solution.
     const double coxa_deg = (
         config_.coxa.sign *
-        base::Degrees(std::atan2(point_mm.x, point_mm.y)) +
+        base::Degrees(std::atan2(point_mm.x(), point_mm.y())) +
         config_.coxa.idle_deg);
 
     if (coxa_deg < config_.coxa.min_deg ||
@@ -150,10 +151,10 @@ class LizardIK : public IKSolver {
     }
 
     // x-coordinate of femur/tibia pair after rotating to 0 coxa
-    const double true_x = (std::sqrt(std::pow(point_mm.x, 2) +
-                                     std::pow(point_mm.y, 2)) -
+    const double true_x = (std::sqrt(std::pow(point_mm.x(), 2) +
+                                     std::pow(point_mm.y(), 2)) -
                            config_.coxa.length_mm);
-    const double im = std::sqrt(std::pow(point_mm.z, 2) +
+    const double im = std::sqrt(std::pow(point_mm.z(), 2) +
                                 std::pow(true_x, 2));
 
 
@@ -204,7 +205,7 @@ class LizardIK : public IKSolver {
 
     // To solve for the femur angle, we first get the angle opposite
     // true_x, then the angle opposite the tibia.
-    const double true_x_deg = base::Degrees(std::atan2(true_x, -point_mm.z));
+    const double true_x_deg = base::Degrees(std::atan2(true_x, -point_mm.z()));
 
     // Then the angle opposite the tibia is also found the via the law
     // of cosines.
@@ -326,9 +327,9 @@ class MammalIK : public IKSolver {
     // femur_attachment_mm.y.
 
     // From: http://mathworld.wolfram.com/CircleTangentLine.html
-    const double x0 = -point_mm.y;
-    const double y0 = -point_mm.z;
-    const double r = config_.femur_attachment_mm.y;
+    const double x0 = -point_mm.y();
+    const double y0 = -point_mm.z();
+    const double r = config_.femur_attachment_mm.y();
 
     const double squared =
         std::pow(x0, 2) + std::pow(y0, 2) - std::pow(r, 2);
@@ -358,8 +359,8 @@ class MammalIK : public IKSolver {
     //          positive   |    negative
     //          ------------------------
     //          negative   |    positive
-    const double rx = point_mm.y - r;
-    const double ry = point_mm.z;
+    const double rx = point_mm.y() - r;
+    const double ry = point_mm.z();
     // TODO jpieper: I don't think this sign calculation is correct
     // when abs(y) < radius.
     const double sign = base::GetSign(-rx * ry);
@@ -378,11 +379,11 @@ class MammalIK : public IKSolver {
     // TODO(jpieper): This is incorrect if the femur has a lateral
     // offset!
     const double shoulder_force_Nm =
-        std::cos(logical_shoulder_rad) * force_N.y +
-        std::sin(logical_shoulder_rad) * force_N.z;
+        std::cos(logical_shoulder_rad) * force_N.y() +
+        std::sin(logical_shoulder_rad) * force_N.z();
     const double leg_frame_force_y_N = (
-        std::cos(logical_shoulder_rad) * force_N.z -
-        std::sin(logical_shoulder_rad) * force_N.y);
+        std::cos(logical_shoulder_rad) * force_N.z() -
+        std::sin(logical_shoulder_rad) * force_N.y());
     const double logical_shoulder_torque_Nm =
         shoulder_force_Nm * 0.001 * length;
 
@@ -397,16 +398,16 @@ class MammalIK : public IKSolver {
     // plane.
     //
     // TODO jpieper: What sign?
-    const double femur_x = config_.femur_attachment_mm.x;
-    const double femur_y = config_.femur_attachment_mm.z;
+    const double femur_x = config_.femur_attachment_mm.x();
+    const double femur_y = config_.femur_attachment_mm.z();
 
-    const double point_x = point_mm.x; // TODO jpieper: What sign?
+    const double point_x = point_mm.x(); // TODO jpieper: What sign?
     // TODO jpieper: This sign correction is probably not correct for
     // all quadrants of operation.
     const double point_y =
-        std::sqrt(std::pow(point_mm.y - leg_frame_y, 2) +
-                  std::pow(point_mm.z - leg_frame_z, 2)) *
-        base::GetSign(point_mm.z - leg_frame_z);
+        std::sqrt(std::pow(point_mm.y() - leg_frame_y, 2) +
+                  std::pow(point_mm.z() - leg_frame_z, 2)) *
+        base::GetSign(point_mm.z() - leg_frame_z);
 
     const double prx = -(point_x - femur_x);
     const double pry = point_y - femur_y;
@@ -474,7 +475,7 @@ class MammalIK : public IKSolver {
     }
 
     // Finally solve for the femur / tibia torque.
-    const double leg_frame_force_x_N = force_N.x;
+    const double leg_frame_force_x_N = force_N.x();
 
     const double logical_femur_torque_Nm =
         leg_frame_force_x_N * 0.001 * config_.femur.length_mm * std::cos(femur_rad) -
@@ -570,8 +571,8 @@ class MammalIK : public IKSolver {
     ForwardResult result;
 
     result.femur_joint.transform.translation = config_.femur_attachment_mm;
-    result.tibia_joint.transform.translation.z = -config_.femur.length_mm;
-    result.end_frame.transform.translation.z = -config_.tibia.length_mm;
+    result.tibia_joint.transform.translation.z() = -config_.femur.length_mm;
+    result.end_frame.transform.translation.z() = -config_.tibia.length_mm;
 
     auto GetAngle = [](const JointAngles& joints, int ident) {
       for (const auto& joint: joints.joints) {

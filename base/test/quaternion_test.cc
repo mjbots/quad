@@ -26,9 +26,9 @@ typedef base::Point3D Point3D;
 
 void CheckVectorClose(const Point3D& lhs,
                       double x, double y, double z) {
-  BOOST_CHECK_SMALL(lhs.x - x, 1e-2);
-  BOOST_CHECK_SMALL(lhs.y - y, 1e-2);
-  BOOST_CHECK_SMALL(lhs.z - z, 1e-2);
+  BOOST_CHECK_SMALL(lhs.x() - x, 1e-2);
+  BOOST_CHECK_SMALL(lhs.y() - y, 1e-2);
+  BOOST_CHECK_SMALL(lhs.z() - z, 1e-2);
 }
 }
 

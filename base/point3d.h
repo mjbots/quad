@@ -14,80 +14,22 @@
 
 #pragma once
 
-#include "mjlib/base/fail.h"
-#include "mjlib/base/visitor.h"
+#include <cmath>
 
-#include "common.h"
+#include <Eigen/Dense>
+
+#include "mjlib/base/eigen.h"
+
+#include "base/common.h"
 
 namespace mjmech {
 namespace base {
-struct Point3D {
-  double x;
-  double y;
-  double z;
 
-  Point3D() : x(), y(), z() {}
-  Point3D(double x, double y, double z) : x(x), y(y), z(z) {}
+using Point3D = Eigen::Vector3d;
 
-  double operator[](size_t index) const {
-    switch (index) {
-      case 0: return x;
-      case 1: return y;
-      case 2: return z;
-    }
-    mjlib::base::AssertNotReached();
-  }
+inline double Point3DHeadingDeg(const Point3D& p) {
+  return Degrees(WrapNegPiToPi(0.5 * M_PI - std::atan2(p.y(), p.x())));
+}
 
-  std::string str() const;
-
-  Point3D operator+(const Point3D& other) const {
-    return Point3D{x + other.x, y + other.y, z + other.z};
-  }
-
-  Point3D operator-(const Point3D& other) const {
-    return Point3D{x - other.x, y - other.y, z - other.z};
-  }
-
-  Point3D& operator+=(const Point3D& other) {
-    *this = *this + other;
-    return *this;
-  }
-
-  Point3D& operator-=(const Point3D& other) {
-    *this = *this - other;
-    return *this;
-  }
-
-  bool operator==(const Point3D& other) const {
-    return x == other.x && y == other.y && z == other.z;
-  }
-
-  bool operator!=(const Point3D& other) const {
-    return !(*this == other);
-  }
-
-  double length() const {
-    return std::sqrt(length_squared());
-  }
-
-  double length_squared() const {
-    return x * x + y * y + z * z;
-  }
-
-  Point3D scaled(double value) const {
-    return Point3D{x * value, y * value, z * value};
-  }
-
-  double heading_deg() const {
-    return Degrees(WrapNegPiToPi(0.5 * M_PI - std::atan2(y, x)));
-  }
-
-  template <typename Archive>
-  void Serialize(Archive* a) {
-    a->Visit(MJ_NVP(x));
-    a->Visit(MJ_NVP(y));
-    a->Visit(MJ_NVP(z));
-  }
-};
 }
 }

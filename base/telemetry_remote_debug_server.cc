@@ -14,8 +14,8 @@
 
 #include "telemetry_remote_debug_server.h"
 
-#include <boost/property_tree/json_parser.hpp>
-
+#include "mjlib/base/json5_read_archive.h"
+#include "mjlib/base/json5_write_archive.h"
 #include "mjlib/base/fail.h"
 
 namespace mjmech {
@@ -46,29 +46,27 @@ class TelemetryRemoteDebugServer::Impl : boost::noncopyable {
     HandleData(data, from);
   }
 
-  void HandleData(const std::string& data, const udp::endpoint& from) {
-    // Our messages should come in as JSON requests.
-    boost::property_tree::ptree tree;
-    try {
-      std::istringstream inf(data);
-      boost::property_tree::read_json(inf, tree);
-    } catch (std::exception& e) {
-      std::cerr << "error reading remote debug command: " << e.what() << "\n";
-      return;
+  struct Message {
+    std::string command;
+    std::vector<std::string> names;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(command));
+      a->Visit(MJ_NVP(names));
     }
+  };
 
-    HandleMessage(tree, from);
-  }
+  void HandleData(const std::string& data, const udp::endpoint& from) {
+    const auto message = mjlib::base::Json5ReadArchive::Read<Message>(data);
 
-  void HandleMessage(const boost::property_tree::ptree& tree,
-                     const udp::endpoint& from) {
-    std::string command = tree.get<std::string>("command", "");
-    if (command == "enumerate") {
+    if (message.command == "enumerate") {
       DoEnumerate(from);
-    } else if (command == "get") {
-      DoGet(tree, from);
+    } else if (message.command == "get") {
+      DoGet(message, from);
     } else {
-      std::cerr << "unknown remote debug command: '" << command << "'\n";
+      std::cerr << "unknown remote debug command: '"
+                << message.command << "'\n";
     }
   }
 
@@ -87,7 +85,7 @@ class TelemetryRemoteDebugServer::Impl : boost::noncopyable {
     EnumerateResponse response;
     for (const auto& pair: handlers_) { response.names.push_back(pair.first); }
 
-    SendData(JsonWriteArchive::Write(&response), from);
+    SendData(mjlib::base::Json5WriteArchive::Write(response), from);
   }
 
   void SendData(const std::string& data,
@@ -99,11 +97,9 @@ class TelemetryRemoteDebugServer::Impl : boost::noncopyable {
                                     std::placeholders::_1));
   }
 
-  void DoGet(const boost::property_tree::ptree& tree,
+  void DoGet(const Message& message,
              const udp::endpoint& from) {
-    for (const boost::property_tree::ptree::value_type& v:
-             tree.get_child("names")) {
-      std::string name = v.second.data();
+    for (const auto& name : message.names) {
       auto it = handlers_.find(name);
       if (it == handlers_.end()) {
         std::cerr << "request for unknown name: '" + name + "'\n";

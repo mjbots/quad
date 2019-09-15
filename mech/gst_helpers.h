@@ -23,8 +23,9 @@
 
 #include <gst/gst.h>
 
+#include "mjlib/base/json5_write_archive.h"
+
 #include "base/logging.h"
-#include "base/property_tree_archive.h"
 
 #include "gst_main_loop.h"
 
@@ -43,19 +44,7 @@ std::string MuxerForVideoName(const std::string& name);
 
 template<typename Stats>
 std::string FormatStatsForLogging(Stats* stats_ptr) {
-  std::ostringstream out;
-  base::PropertyTreeWriteArchive arch;
-  arch.Accept(stats_ptr);
-  for (const auto& elem: arch.tree()) {
-    if (elem.first == "timestamp") { continue; }
-    if (elem.second.data() == "0") { continue; }
-    if (out.tellp()) { out << " "; }
-    out << elem.first << "=" << elem.second.data();
-  }
-  if (out.tellp() == 0) {
-    out << "(no data)";
-  }
-  return out.str();
+  return mjlib::base::Json5WriteArchive::Write(*stats_ptr);
 };
 
 struct VideoAnalyzeMessage {

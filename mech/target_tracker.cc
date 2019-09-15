@@ -145,7 +145,7 @@ class TargetTracker::Impl : public CameraFrameConsumer {
         total += target.corners.back();
       }
 
-      target.center = total.scaled(1.0 / it->size());
+      target.center = total * (1.0 / it->size());
       data.target = target;
     }
 

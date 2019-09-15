@@ -448,10 +448,10 @@ class GaitDriver::Impl : boost::noncopyable {
 
     UpdateAxisAccel(input_command_.translate_x_mm_s,
                     &gait_command_.translate_x_mm_s,
-                    parameters_.max_acceleration_mm_s2.x);
+                    parameters_.max_acceleration_mm_s2.x());
     UpdateAxisAccel(input_command_.translate_y_mm_s,
                     &gait_command_.translate_y_mm_s,
-                    parameters_.max_acceleration_mm_s2.y);
+                    parameters_.max_acceleration_mm_s2.y());
 
     // Advance our gait, then send the requisite servo commands out.
     gait_commands_ = gait_->AdvanceTime(parameters_.period_s);

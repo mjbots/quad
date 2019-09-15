@@ -60,7 +60,7 @@ struct Transform {
   Transform Inversed() const {
     auto conjugated = rotation.conjugated();
     return Transform{
-        conjugated.Rotate(translation.scaled(-1.0)),
+        conjugated.Rotate(translation * -1.0),
         conjugated};
   }
 

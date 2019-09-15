@@ -133,7 +133,7 @@ struct CommonState {
                     base::Frame* frame) const {
     // For now, we are assuming that shoulders face away from the y
     // axis.
-    const double rotation_rad = (leg_config.mount_mm.x > 0.0) ?
+    const double rotation_rad = (leg_config.mount_mm.x() > 0.0) ?
         (0.5 * M_PI) : (-0.5 * M_PI);
     frame->transform = base::Transform(
         leg_config.mount_mm,

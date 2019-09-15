@@ -19,17 +19,14 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/program_options.hpp>
 
-#include <boost/property_tree/json_parser.hpp>
-
 #include <fmt/format.h>
 
+#include "mjlib/base/json5_write_archive.h"
 #include "mjlib/base/fail.h"
 #include "mjlib/base/program_options_archive.h"
 #include "mjlib/io/deadline_timer.h"
 
-#include "base/json_archive.h"
 #include "base/logging.h"
-#include "base/property_tree_archive.h"
 
 namespace mjmech {
 namespace mech {
@@ -38,7 +35,6 @@ namespace mw_command {
 namespace {
 
 using namespace mjmech::base;
-namespace pt = boost::property_tree;
 typedef boost::asio::ip::udp udp;
 
 bool IsAxis(int item) {
@@ -189,9 +185,8 @@ struct MechDriveMessage {
 };
 
 template <typename T>
-std::string SerializeCommand(const T& message_in) {
-  T message = message_in;
-  return mjmech::base::JsonWriteArchive::Write(&message);
+std::string SerializeCommand(const T& message) {
+  return mjlib::base::Json5WriteArchive::Write(message);
 }
 
 }
@@ -478,8 +473,8 @@ class Commander::Impl {
     MechDriveMessage message;
     auto& command = message.drive;
 
-    command.body_offset_mm.x = command_.body_x_mm;
-    command.body_offset_mm.y = command_.body_y_mm;
+    command.body_offset_mm.x() = command_.body_x_mm;
+    command.body_offset_mm.y() = command_.body_y_mm;
     command.body_attitude_deg.pitch = command_.body_pitch_deg;
     command.body_attitude_deg.roll = command_.body_roll_deg;
 
@@ -497,19 +492,19 @@ class Commander::Impl {
       target_offset_signal_(static_cast<int>(target_x_),
                             static_cast<int>(target_y_));
     } else if (!body_enabled()) {
-      MaybeMap(&command.drive_mm_s.x, mapping_.translate_x,
+      MaybeMap(&command.drive_mm_s.x(), mapping_.translate_x,
                mapping_.sign_translate_x,
                command_.translate_x_mm_s,
                -options_.max_translate_x_mm_s, options_.max_translate_x_mm_s);
-      MaybeMap(&command.drive_mm_s.y, mapping_.translate_y,
+      MaybeMap(&command.drive_mm_s.y(), mapping_.translate_y,
                mapping_.sign_translate_y,
                command_.translate_y_mm_s,
                -options_.max_translate_y_mm_s, options_.max_translate_y_mm_s);
 
       if (target_relative_enabled()) {
         base::Point3D target_relative;
-        target_relative.x = target_x_ + 1280 / 2;
-        target_relative.y = target_y_ + 720 / 2;
+        target_relative.x() = target_x_ + 1280 / 2;
+        target_relative.y() = target_y_ + 720 / 2;
         command.turret_target_relative = target_relative;
       } else {
         base::Euler rate_dps;
@@ -534,7 +529,7 @@ class Commander::Impl {
     }
 
     if (key_map_[mapping_.crouch]) {
-      command.body_offset_mm.z = options_.min_body_z_mm;
+      command.body_offset_mm.z() = options_.min_body_z_mm;
     }
 
     const bool do_fire = fire_enabled();
@@ -561,19 +556,19 @@ class Commander::Impl {
                                 command.turret_rate_dps->pitch);
         } else if (command.turret_target_relative) {
           result += fmt::format("tgt={:.0f}/{:.0f}",
-                                command.turret_target_relative->x,
-                                command.turret_target_relative->y);
+                                command.turret_target_relative->x(),
+                                command.turret_target_relative->y());
         }
         return result;
       };
 
       std::cout << fmt::format(
           "x={:4.0f} y={:4.0f} t={} bx={:4.0f} by={:4.0f} {} {} {}",
-          command.drive_mm_s.x,
-          command.drive_mm_s.y,
+          command.drive_mm_s.x(),
+          command.drive_mm_s.y(),
           format_turret(command),
-          command.body_offset_mm.x,
-          command.body_offset_mm.y,
+          command.body_offset_mm.x(),
+          command.body_offset_mm.y(),
           (body_enabled() ? "BODY" : "    "),
           (do_fire ? "FIRE" : "    "),
           (command.freeze_rotation ? "FREEZE" : "      "));

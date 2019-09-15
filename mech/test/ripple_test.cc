@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,9 +23,9 @@ using namespace mjmech::base;
 using namespace mjmech::mech;
 
 void CheckPoints(const Point3D& lhs, const Point3D& rhs) {
-  BOOST_CHECK_SMALL(lhs.x - rhs.x, 1e-2);
-  BOOST_CHECK_SMALL(lhs.y - rhs.y, 1e-2);
-  BOOST_CHECK_SMALL(lhs.z - rhs.z, 1e-2);
+  BOOST_CHECK_SMALL(lhs.x() - rhs.x(), 1e-2);
+  BOOST_CHECK_SMALL(lhs.y() - rhs.y(), 1e-2);
+  BOOST_CHECK_SMALL(lhs.z() - rhs.z(), 1e-2);
 }
 
 template <typename T>
@@ -93,22 +93,22 @@ RippleConfig MakeConfig() {
 
   for (int i = 0; i < 4; i++) {
     Leg::Config leg_config;
-    leg_config.mount_mm.x = mounts[i][0];
-    leg_config.mount_mm.y = mounts[i][1];
-    leg_config.mount_mm.z = 0;
+    leg_config.mount_mm.x() = mounts[i][0];
+    leg_config.mount_mm.y() = mounts[i][1];
+    leg_config.mount_mm.z() = 0;
 
-    leg_config.idle_mm.x = 100.0;
-    leg_config.idle_mm.y = 0;
-    leg_config.idle_mm.z = 0;
+    leg_config.idle_mm.x() = 100.0;
+    leg_config.idle_mm.y() = 0;
+    leg_config.idle_mm.z() = 0;
 
     leg_config.leg_ik = MakeIKSolver(i * 3);
 
     result.mechanical.leg_config.push_back(leg_config);
   }
 
-  result.mechanical.body_cog_mm.x = 0;
-  result.mechanical.body_cog_mm.y = 0;
-  result.mechanical.body_cog_mm.z = 0;
+  result.mechanical.body_cog_mm.x() = 0;
+  result.mechanical.body_cog_mm.y() = 0;
+  result.mechanical.body_cog_mm.z() = 0;
 
   result.max_cycle_time_s = 4.0;
   result.lift_height_mm = 20.0;
@@ -152,7 +152,7 @@ void RunCycle(Gait& gait, const Command& command,
 
       // No leg moves faster than X in the world frame.
       double world_speed_mm_s =
-          (current_world_point - old_world_point).length() / time_step_s;
+          (current_world_point - old_world_point).norm() / time_step_s;
       BOOST_CHECK_LT(world_speed_mm_s, 1100);
 
       // No leg moves faster than Y in the body frame.
@@ -162,7 +162,7 @@ void RunCycle(Gait& gait, const Command& command,
           old_leg.frame, old_leg.point);
 
       double body_speed_mm_s =
-          (current_body_point - old_body_point).length() / time_step_s;
+          (current_body_point - old_body_point).norm() / time_step_s;
       BOOST_CHECK_LT(body_speed_mm_s, 1100);
 
       old_state = this_state;

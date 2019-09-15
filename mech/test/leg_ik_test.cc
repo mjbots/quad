@@ -168,9 +168,9 @@ MammalIK::Config MakeMammalConfig() {
   r.femur.ident = kFemurIdent;
   r.tibia.ident = kTibiaIdent;
 
-  r.femur_attachment_mm.x = 0;
-  r.femur_attachment_mm.y = 30;
-  r.femur_attachment_mm.z = -40;
+  r.femur_attachment_mm.x() = 0;
+  r.femur_attachment_mm.y() = 30;
+  r.femur_attachment_mm.z() = -40;
 
   r.shoulder.min_deg = -90.0;
   r.shoulder.idle_deg = 0.0;
@@ -191,9 +191,9 @@ MammalIK::Config MakeMammalConfig() {
 
 void CheckVectorsClose(const Point3D& p1,
                        const Point3D& p2) {
-  BOOST_CHECK_SMALL(p1.x - p2.x, 1e-3);
-  BOOST_CHECK_SMALL(p1.y - p2.y, 1e-3);
-  BOOST_CHECK_SMALL(p1.z - p2.z, 1e-3);
+  BOOST_CHECK_SMALL(p1.x() - p2.x(), 1e-3);
+  BOOST_CHECK_SMALL(p1.y() - p2.y(), 1e-3);
+  BOOST_CHECK_SMALL(p1.z() - p2.z(), 1e-3);
 }
 
 void TestMammalForward(const JointAngles& joints,
@@ -278,10 +278,10 @@ BOOST_AUTO_TEST_CASE(TestMammal3DoF) {
 namespace {
 MammalIK::Config MakeCenteredMammalConfig() {
   auto result = MakeMammalConfig();
-  result.femur_attachment_mm.z = -22;
+  result.femur_attachment_mm.z() = -22;
   result.femur.length_mm = 135;
   result.tibia.length_mm = 122;
-  result.femur_attachment_mm.y = 0;
+  result.femur_attachment_mm.y() = 0;
   result.tibia_relative = false;
   return result;
 }

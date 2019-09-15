@@ -18,7 +18,7 @@ cd $(dirname $(dirname $(readlink -f $0)))
 if [[ "$mach" == "armv7l" ]]; then
     CONFIG="-c configs/moteus.ini"
     set -x
-    cd ~/mech/
+    cd /home/pi/mech/
     ./performance_governor.sh
     export LD_LIBRARY_PATH=.
     ./mech_warfare -t camera_driver.stats $CONFIG "$@"

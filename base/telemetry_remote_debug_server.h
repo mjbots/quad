@@ -18,9 +18,8 @@
 #include <boost/asio/ip/udp.hpp>
 #include <boost/signals2/signal.hpp>
 
+#include "mjlib/base/json5_write_archive.h"
 #include "mjlib/io/async_types.h"
-
-#include "json_archive.h"
 
 namespace mjmech {
 namespace base {
@@ -120,7 +119,8 @@ class TelemetryRemoteDebugServer : boost::noncopyable {
 
     virtual void Respond(const udp::endpoint& endpoint) {
       Response<T> response(&data_, name_);
-      parent_->SendResponse(JsonWriteArchive::Write(&response), endpoint);
+      parent_->SendResponse(mjlib::base::Json5WriteArchive::Write(response),
+                            endpoint);
     }
 
     void HandleData(const T* data) { data_ = *data; }

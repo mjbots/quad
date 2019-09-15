@@ -105,11 +105,11 @@ class VideoDisplay::Impl : boost::noncopyable {
                    "text", "X", NULL);
       g_object_set(overlaytracked_,
                    "deltax",
-                   static_cast<int>(target_data.target->center.x),
+                   static_cast<int>(target_data.target->center.x()),
                    NULL);
       g_object_set(overlaytracked_,
                    "deltay",
-                   static_cast<int>(target_data.target->center.y),
+                   static_cast<int>(target_data.target->center.y()),
                    NULL);
     } else {
       g_object_set(overlaytracked_,

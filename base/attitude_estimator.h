@@ -69,13 +69,13 @@ class AttitudeEstimator {
   }
 
   void SetInitialGyroBias(const Point3D& body_rate_rps) {
-    filter_.state()(4) = body_rate_rps.x;
-    filter_.state()(5) = body_rate_rps.y;
-    filter_.state()(6) = body_rate_rps.z;
+    filter_.state()(4) = body_rate_rps.x();
+    filter_.state()(5) = body_rate_rps.y();
+    filter_.state()(6) = body_rate_rps.z();
   }
 
   void SetInitialAccel(const Point3D& accel_g) {
-    Point3D normalized = accel_g.scaled(accel_g.length());
+    Point3D normalized = accel_g * accel_g.norm();
 
     Quaternion a = AccelToOrientation(normalized);
     filter_.state()(0) = a.w();
@@ -113,15 +113,15 @@ class AttitudeEstimator {
   double roll_rad() const { return attitude().euler_rad().roll; }
 
   double pitch_rps() const {
-    return current_gyro_rps_.x + filter_.state()(4);
+    return current_gyro_rps_.x() + filter_.state()(4);
   }
 
   double roll_rps() const {
-    return current_gyro_rps_.y + filter_.state()(5);
+    return current_gyro_rps_.y() + filter_.state()(5);
   }
 
   double yaw_rps() const {
-    return -(current_gyro_rps_.z + filter_.state()(6));
+    return -(current_gyro_rps_.z() + filter_.state()(6));
   }
 
   Point3D gyro_bias_rps() const {
@@ -161,9 +161,7 @@ class AttitudeEstimator {
   static Eigen::Matrix<double, 3, 1> OrientationToAccel(
       const Quaternion& attitude) {
     Point3D gravity(0., 0., 1.);
-    Point3D expected =
-        attitude.conjugated().Rotate(gravity);
-    return Eigen::Matrix<double, 3, 1>(expected.x, expected.y, expected.z);;
+    return attitude.conjugated().Rotate(gravity);
   }
 
   static Eigen::Matrix<double, 3, 1> MeasureAccel(
@@ -176,13 +174,14 @@ class AttitudeEstimator {
       const Filter::State& s) const {
     Point3D bias_rps(s(4), s(5), s(6));
     Point3D rotation = current_gyro_rps_ + bias_rps;
-    return (Eigen::Matrix<double, 1, 1>() << rotation.length()).finished();
+    return (Eigen::Matrix<double, 1, 1>() << rotation.norm()).finished();
   }
 
   static Quaternion AccelToOrientation(const Point3D& n) {
     Euler euler_rad;
-    euler_rad.roll = std::atan2(-n.x, n.z);
-    euler_rad.pitch = std::atan2(n.y, std::sqrt(n.x * n.x + n.z * n.z));
+    euler_rad.roll = std::atan2(-n.x(), n.z());
+    euler_rad.pitch = std::atan2(n.y(), std::sqrt(n.x() * n.x() +
+                                                  n.z() * n.z()));
 
     return Quaternion::FromEuler(euler_rad);
   }
@@ -203,7 +202,7 @@ class AttitudeEstimator {
       const Point3D& accel_g) {
     current_gyro_rps_ = body_rate_rps;
 
-    const Point3D norm_g = accel_g.scaled(1.0 / accel_g.length());
+    const Point3D norm_g = accel_g * (1.0 / accel_g.norm());
 
     if (!initialized_) {
       initialized_ = true;
@@ -221,8 +220,7 @@ class AttitudeEstimator {
                   std::placeholders::_1, std::placeholders::_2));
     filter_.UpdateMeasurement(
         MeasureAccel,
-        (Eigen::Matrix<double, 3, 1>() <<
-         norm_g.x, norm_g.y, norm_g.z).finished(),
+        norm_g,
         (Eigen::DiagonalMatrix<double, 3, 3>(
             (Eigen::Matrix<double, 3, 1>() <<
              measurement_noise_accel_,

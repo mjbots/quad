@@ -362,19 +362,19 @@ class RippleGait : public Gait {
 
     // Setting the body frame here doesn't really accomplish much of
     // anything.  We'll just do it for completeness.
-    result.body_frame.transform.translation.z = config_.body_z_offset_mm;
+    result.body_frame.transform.translation.z() = config_.body_z_offset_mm;
 
     for (const auto& leg_config: config_.mechanical.leg_config) {
       base::Point3D point;
 
-      const double x_sign = base::GetSign(leg_config.mount_mm.x);
-      point.x = leg_config.mount_mm.x + leg_config.idle_mm.x * x_sign;
+      const double x_sign = base::GetSign(leg_config.mount_mm.x());
+      point.x() = leg_config.mount_mm.x() + leg_config.idle_mm.x() * x_sign;
 
-      const double y_sign = base::GetSign(leg_config.mount_mm.y);
-      point.y = leg_config.mount_mm.y + leg_config.idle_mm.y * y_sign;
+      const double y_sign = base::GetSign(leg_config.mount_mm.y());
+      point.y() = leg_config.mount_mm.y() + leg_config.idle_mm.y() * y_sign;
 
-      point.z = leg_config.mount_mm.z +
-          leg_config.idle_mm.z -
+      point.z() = leg_config.mount_mm.z() +
+          leg_config.idle_mm.z() -
           config_.body_z_offset_mm -
           z_offset_mm;
 
@@ -547,10 +547,10 @@ class RippleGait : public Gait {
 
   void ApplyBodyCommand(RippleState* state, const Command& command) const {
     // TODO jpieper: Handle statically stable gaits.
-    state->body_frame.transform.translation.x = command.body_x_mm;
-    state->body_frame.transform.translation.y = command.body_y_mm;
-    state->body_frame.transform.translation.z = command.body_z_mm;
-    state->body_frame.transform.translation.z += config_.body_z_offset_mm;
+    state->body_frame.transform.translation.x() = command.body_x_mm;
+    state->body_frame.transform.translation.y() = command.body_y_mm;
+    state->body_frame.transform.translation.z() = command.body_z_mm;
+    state->body_frame.transform.translation.z() += config_.body_z_offset_mm;
     state->body_frame.transform.rotation = base::Quaternion::FromEuler(
         base::Radians(command.body_roll_deg),
         base::Radians(command.body_pitch_deg),
@@ -583,7 +583,7 @@ class RippleGait : public Gait {
             config_.lift_height_mm *
             command_.lift_height_percent / 100.0;
         if (leg_phase < lift_fraction) {
-          leg.point.z = (leg_phase / lift_fraction) * height_mm;
+          leg.point.z() = (leg_phase / lift_fraction) * height_mm;
         } else if (leg_phase < (1.0 - lower_fraction)) {
           if (leg.frame != &state_.robot_frame) {
             leg.point = state_.robot_frame.MapFromFrame(
@@ -596,17 +596,17 @@ class RippleGait : public Gait {
               (leg_phase - lift_fraction) / (1.0 - lower_fraction - lift_fraction);
 
           const auto delta = *leg.swing_end_pos - *leg.swing_start_pos;
-          const auto current = *leg.swing_start_pos + delta.scaled(swing_phase);
+          const auto current = *leg.swing_start_pos + delta * (swing_phase);
           leg.point = current;
 
-          leg.point.z = height_mm;
+          leg.point.z() = height_mm;
         } else {
           if (leg.frame != &state_.world_frame) {
             leg.point = state_.world_frame.MapFromFrame(
                 leg.frame, leg.point);
             leg.frame = &state_.world_frame;
           }
-          leg.point.z = ((1.0 - leg_phase) / lower_fraction) * height_mm;
+          leg.point.z() = ((1.0 - leg_phase) / lower_fraction) * height_mm;
         }
       }
     }
@@ -627,7 +627,7 @@ class RippleGait : public Gait {
         leg.mode = Leg::Mode::kStance;
         leg.point = state_.world_frame.MapFromFrame(
             leg.frame, leg.point);
-        leg.point.z = 0;
+        leg.point.z() = 0;
         leg.frame = &state_.world_frame;
         if (old_mode == Leg::Mode::kSwing) {
           leg.stance_phase_start = action.phase;
@@ -665,8 +665,8 @@ class RippleGait : public Gait {
           base::Quaternion::FromEuler(0, 0, dt * vyaw);
     }
 
-    result->transform.translation.x = dx;
-    result->transform.translation.y = dy;
+    result->transform.translation.x() = dx;
+    result->transform.translation.y() = dy;
   }
 
   base::Point3D GetSwingEndPos(int leg_num) const {

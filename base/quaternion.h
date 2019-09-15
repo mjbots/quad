@@ -41,9 +41,9 @@ class Quaternion {
 
   Point3D Rotate(const Point3D& vector3d) const {
     Quaternion p(0.0,
-                 vector3d[0],
-                 vector3d[1],
-                 vector3d[2]);
+                 vector3d(0),
+                 vector3d(1),
+                 vector3d(2));
     Quaternion q = *this * p * conjugated();
     return Point3D(q.x(), q.y(), q.z());
   }
@@ -128,14 +128,14 @@ class Quaternion {
     // delta is too large.
     const double kMaxIntegrationAngle = 0.5;
 
-    BOOST_VERIFY(rate_rps.x * dt_s < kMaxIntegrationAngle);
-    BOOST_VERIFY(rate_rps.y * dt_s < kMaxIntegrationAngle);
-    BOOST_VERIFY(rate_rps.z * dt_s < kMaxIntegrationAngle);
+    BOOST_VERIFY(rate_rps.x() * dt_s < kMaxIntegrationAngle);
+    BOOST_VERIFY(rate_rps.y() * dt_s < kMaxIntegrationAngle);
+    BOOST_VERIFY(rate_rps.z() * dt_s < kMaxIntegrationAngle);
 
     return Quaternion(1.0,
-                      0.5 * rate_rps.x * dt_s,
-                      0.5 * rate_rps.y * dt_s,
-                      0.5 * rate_rps.z * dt_s).normalized();
+                      0.5 * rate_rps.x() * dt_s,
+                      0.5 * rate_rps.y() * dt_s,
+                      0.5 * rate_rps.z() * dt_s).normalized();
   }
 
   double w() const { return w_; }

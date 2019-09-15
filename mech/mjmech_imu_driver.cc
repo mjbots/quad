@@ -423,15 +423,15 @@ class MjmechImuDriver::Impl : boost::noncopyable {
     const auto& gdata = buffer_;
 
     base::Point3D body_rate_dps;
-    body_rate_dps.x =
+    body_rate_dps.x() =
         to_int16(gdata[1], gdata[2]) * gyro_sensitivity_ *
-        parameters_.gyro_scale.x;
-    body_rate_dps.y =
+        parameters_.gyro_scale.x();
+    body_rate_dps.y() =
         to_int16(gdata[3], gdata[4]) * gyro_sensitivity_ *
-        parameters_.gyro_scale.y;
-    body_rate_dps.z =
+        parameters_.gyro_scale.y();
+    body_rate_dps.z() =
         to_int16(gdata[5], gdata[6]) * gyro_sensitivity_ *
-        parameters_.gyro_scale.z;
+        parameters_.gyro_scale.z();
 
     auto rate_dps = transform_.Rotate(body_rate_dps);
 
@@ -449,15 +449,15 @@ class MjmechImuDriver::Impl : boost::noncopyable {
     const auto& adata = buffer_;
     base::Point3D accel_mps2;
 
-    accel_mps2.x =
+    accel_mps2.x() =
         to_int16(adata[1], adata[2]) * accel_sensitivity_ * kGravity *
-        parameters_.accel_scale.x;
-    accel_mps2.y =
+        parameters_.accel_scale.x();
+    accel_mps2.y() =
           to_int16(adata[3], adata[4]) * accel_sensitivity_ * kGravity *
-        parameters_.accel_scale.y;
-    accel_mps2.z =
+        parameters_.accel_scale.y();
+    accel_mps2.z() =
           to_int16(adata[5], adata[6]) * accel_sensitivity_ * kGravity *
-        parameters_.accel_scale.z;
+        parameters_.accel_scale.z();
 
     imu_data.accel_mps2 = transform_.Rotate(accel_mps2);
 

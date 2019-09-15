@@ -21,9 +21,9 @@ using namespace mjmech::base;
 
 void CheckVectorsClose(const Point3D& p1,
                        const Point3D& p2) {
-  BOOST_CHECK_SMALL(p1.x - p2.x, 1e-3);
-  BOOST_CHECK_SMALL(p1.y - p2.y, 1e-3);
-  BOOST_CHECK_SMALL(p1.z - p2.z, 1e-3);
+  BOOST_CHECK_SMALL(p1.x() - p2.x(), 1e-3);
+  BOOST_CHECK_SMALL(p1.y() - p2.y(), 1e-3);
+  BOOST_CHECK_SMALL(p1.z() - p2.z(), 1e-3);
 }
 
 void CheckMapping(const Frame& frame,

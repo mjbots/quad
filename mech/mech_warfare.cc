@@ -14,19 +14,18 @@
 
 #include "mech_warfare.h"
 
+#include <fstream>
 #include <optional>
-
-#include <boost/property_tree/json_parser.hpp>
 
 #include <fmt/format.h>
 
 #include "mjlib/base/fail.h"
+#include "mjlib/base/json5_read_archive.h"
 #include "mjlib/base/program_options_archive.h"
 
 #include "base/common.h"
 #include "base/context_full.h"
 #include "base/now.h"
-#include "base/property_tree_archive.h"
 
 #include "drive_command.h"
 #include "mech_telemetry.h"
@@ -83,6 +82,37 @@ class MechWarfare::Impl : boost::noncopyable {
     parent_->parameters_.children.Start(handler);
   }
 
+  struct LoadRipple {
+    struct GaitConfig {
+      RippleConfig ripple;
+
+      template <typename Archive>
+      void Serialize(Archive* a) {
+        a->Visit(MJ_NVP(ripple));
+      }
+    };
+
+    struct IkConfig {
+      std::string iktype;
+      std::vector<MammalIK::Config> leg;
+
+      template <typename Archive>
+      void Serialize(Archive* a) {
+        a->Visit(MJ_NVP(iktype));
+        a->Visit(MJ_NVP(leg));
+      }
+    };
+
+    GaitConfig gaitconfig;
+    IkConfig ikconfig;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(gaitconfig));
+      a->Visit(MJ_NVP(ikconfig));
+    }
+  };
+
   RippleConfig LoadRippleConfig() {
     RippleConfig ripple_config;
     try {
@@ -91,51 +121,16 @@ class MechWarfare::Impl : boost::noncopyable {
         throw mjlib::base::system_error::syserrno("error opening config");
       }
 
-      boost::property_tree::ptree tree;
-      boost::property_tree::read_json(inf, tree);
-      auto optional_child = tree.get_child_optional("gaitconfig.ripple");
-      if (!optional_child) {
-        throw mjlib::base::system_error::einval("could not find ripple config in file");
-      }
+      auto load_ripple = mjlib::base::Json5ReadArchive::Read<LoadRipple>(inf);
+      ripple_config = load_ripple.gaitconfig.ripple;
+      const auto type = load_ripple.ikconfig.iktype;
+      MJ_ASSERT(type == "Mammal");
 
-      base::PropertyTreeReadArchive(
-          *optional_child,
-          base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&ripple_config);
-
-      std::string type = tree.get<std::string>("ikconfig.iktype");
       auto& leg_configs = ripple_config.mechanical.leg_config;
       for (size_t i = 0; i < leg_configs.size(); i++) {
-        if (type == "Mammal") {
-          MammalIK::Config config;
-
-          std::string field = fmt::format("ikconfig.leg.{}", i);
-          auto optional_child = tree.get_child_optional(field);
-          if (!optional_child) {
-            throw mjlib::base::system_error::einval("could not locate field: " + field);
-          }
-
-          base::PropertyTreeReadArchive(
-              *optional_child,
-              base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&config);
-          leg_configs[i].leg_ik =
-              boost::shared_ptr<IKSolver>(new MammalIK(config));
-        } else if (type == "Lizard") {
-          LizardIK::Config config;
-
-          std::string field = fmt::format("ikconfig.leg.{}", i);
-          auto optional_child = tree.get_child_optional(field);
-          if (!optional_child) {
-            throw mjlib::base::system_error::einval("could not locate field: " + field);
-          }
-
-          base::PropertyTreeReadArchive(
-              *optional_child,
-              base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&config);
-          leg_configs[i].leg_ik =
-              boost::shared_ptr<IKSolver>(new LizardIK(config));
-        } else {
-          throw mjlib::base::system_error::einval("unknown iktype: " + type);
-        }
+        leg_configs[i].leg_ik =
+            boost::shared_ptr<IKSolver>(
+                new MammalIK(load_ripple.ikconfig.leg[i]));
       }
     } catch (mjlib::base::system_error& se) {
       se.code().Append(
@@ -302,8 +297,8 @@ class MechWarfare::Impl : boost::noncopyable {
     turret.fire_control = data_.current_drive.fire_control;
     if (data_.current_drive.turret_target_relative) {
       TurretCommand::TargetRelative relative;
-      relative.x = data_.current_drive.turret_target_relative->x;
-      relative.y = data_.current_drive.turret_target_relative->y;
+      relative.x = data_.current_drive.turret_target_relative->x();
+      relative.y = data_.current_drive.turret_target_relative->y();
       turret.target_relative = relative;
     } else if (data_.current_drive.turret_rate_dps) {
       turret.rate = TurretCommand::Rate();
@@ -313,9 +308,9 @@ class MechWarfare::Impl : boost::noncopyable {
 
     const auto body_offset_mm =
         data_.current_drive.body_offset_mm + p.body_offset_mm;
-    gait.body_x_mm = body_offset_mm.x;
-    gait.body_y_mm = body_offset_mm.y;
-    gait.body_z_mm = body_offset_mm.z;
+    gait.body_x_mm = body_offset_mm.x();
+    gait.body_y_mm = body_offset_mm.y();
+    gait.body_z_mm = body_offset_mm.z();
 
     // NOTE jpieper: Yeah, I know that rotations don't compose this
     // way.  This is really only a fudge factor though, so I'm intent
@@ -348,10 +343,10 @@ class MechWarfare::Impl : boost::noncopyable {
     // want to be messing around with rotations if we are trying to
     // stop.
     if (want_active) {
-      const double heading_deg = body_mm_s.heading_deg();
+      const double heading_deg = base::Point3DHeadingDeg(body_mm_s);
       const double forward_error_deg = base::WrapNeg180To180(heading_deg);
       const double drive_heading_deg =
-          data_.current_drive.drive_mm_s.heading_deg();
+          base::Point3DHeadingDeg(data_.current_drive.drive_mm_s);
       double error_deg = 0.0;
       if (std::abs(forward_error_deg) < 145 &&
           std::abs(drive_heading_deg) < 135) {
@@ -377,20 +372,33 @@ class MechWarfare::Impl : boost::noncopyable {
                 0.0f, 1.0f) *
           p.drive_max_translate_mm_s;
 
-      if (body_mm_s.length() > max_translate_mm_s) {
-        body_mm_s = body_mm_s.scaled(max_translate_mm_s / body_mm_s.length());
+      if (body_mm_s.norm() > max_translate_mm_s) {
+        body_mm_s = body_mm_s * (max_translate_mm_s / body_mm_s.norm());
       }
     }
 
     // HACK: Don't allow side stepping unless we are frozen.  It just
     // causes the current robot to fall over.
-    gait.translate_x_mm_s = data_.current_drive.freeze_rotation ? body_mm_s.x : 0;
-    gait.translate_y_mm_s = body_mm_s.y;
+    gait.translate_x_mm_s = data_.current_drive.freeze_rotation ? body_mm_s.x() : 0;
+    gait.translate_y_mm_s = body_mm_s.y();
 
     // Give the commands to our members.
     parent_->m_.turret->SetCommand(turret);
     parent_->m_.gait_driver->SetCommand(gait);
   }
+
+  struct Message {
+    std::optional<DriveCommand> drive;
+    std::optional<Command> gait;
+    std::optional<TurretCommand> turret;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(drive));
+      a->Visit(MJ_NVP(gait));
+      a->Visit(MJ_NVP(turret));
+    }
+  };
 
   void HandleRead(mjlib::base::error_code ec, std::size_t size) {
     mjlib::base::FailIf(ec);
@@ -398,34 +406,20 @@ class MechWarfare::Impl : boost::noncopyable {
     std::string data(receive_buffer_, size);
     StartRead();
 
-    log_.debug("got data: " + data);
+    const auto message = mjlib::base::Json5ReadArchive::Read<Message>(data);
 
-    boost::property_tree::ptree tree;
-    try {
-      std::istringstream inf(data);
-      boost::property_tree::read_json(inf, tree);
-    } catch (std::exception& e) {
-      std::cerr << "error reading network command: " << e.what() << "\n";
-      return;
-    }
-
-    HandleMessage(tree);
-  }
-
-  void HandleMessage(const boost::property_tree::ptree& tree) {
     data_.last_command_timestamp = base::Now(service_);
 
-    auto optional_drive = tree.get_child_optional("drive");
-    if (optional_drive) {
-      HandleMessageDrive(*optional_drive);
+    if (message.drive) {
+      HandleMessageDrive(*message.drive);
       return;
     }
-
-    auto optional_gait = tree.get_child_optional("gait");
-    if (optional_gait) { HandleMessageGait(*optional_gait); }
-
-    auto optional_turret = tree.get_child_optional("turret");
-    if (optional_turret) { HandleMessageTurret(*optional_turret); }
+    if (message.gait) {
+      HandleMessageGait(*message.gait);
+    }
+    if (message.turret) {
+      HandleMessageTurret(*message.turret);
+    }
   }
 
   void StartTurretBias() {
@@ -531,11 +525,7 @@ class MechWarfare::Impl : boost::noncopyable {
     }
   }
 
-  void HandleMessageGait(const boost::property_tree::ptree& tree) {
-    Command command;
-    base::PropertyTreeReadArchive(
-        tree, base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&command);
-
+  void HandleMessageGait(const Command& command) {
     MaybeEnterActiveMode(Data::Mode::kManual);
     manual_gait_ = command;
 
@@ -544,11 +534,7 @@ class MechWarfare::Impl : boost::noncopyable {
     }
   }
 
-  void HandleMessageTurret(const boost::property_tree::ptree& tree) {
-    TurretCommand command;
-    base::PropertyTreeReadArchive(
-        tree, base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&command);
-
+  void HandleMessageTurret(const TurretCommand& command) {
     MaybeEnterActiveMode(Data::Mode::kManual);
 
     if (data_.mode == Data::Mode::kManual) {
@@ -556,11 +542,7 @@ class MechWarfare::Impl : boost::noncopyable {
     }
   }
 
-  void HandleMessageDrive(const boost::property_tree::ptree& tree) {
-    DriveCommand command;
-    base::PropertyTreeReadArchive(
-        tree, base::PropertyTreeReadArchive::kErrorOnMissing).Accept(&command);
-
+  void HandleMessageDrive(const DriveCommand& command) {
     data_.current_drive = command;
     MaybeEnterActiveMode(Data::Mode::kDrive);
 
@@ -674,8 +656,8 @@ MechWarfare::MechWarfare(base::Context& context)
   m_.video->target_tracker()->data_signal()->connect([this](const TargetTrackerData* data) {
       std::optional<base::Point3D> point3d;
       if (data->target) {
-        point3d = base::Point3D(data->target->center.x,
-                                data->target->center.y,
+        point3d = base::Point3D(data->target->center.x(),
+                                data->target->center.y(),
                                 0.0);
       }
       m_.turret->UpdateTrackedTarget(point3d);

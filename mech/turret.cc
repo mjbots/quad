@@ -493,8 +493,8 @@ class Turret::Impl : boost::noncopyable {
       data_.target_relative_rate.y_deg_s *= factor;
     } else {
       // Update the rates with the new target position.
-      const double delta_x = target->x - data_.target_relative->x;
-      const double delta_y = target->y - data_.target_relative->y;
+      const double delta_x = target->x() - data_.target_relative->x;
+      const double delta_y = target->y() - data_.target_relative->y;
       data_.target_relative_rate.x_deg_s =
           (delta_x / parameters_.pixels_per_degree) /
           parameters_.target_time_constant_s;
