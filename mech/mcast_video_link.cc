@@ -27,10 +27,10 @@
 #include "mjlib/base/fail.h"
 #include "mjlib/base/system_error.h"
 #include "mjlib/io/deadline_timer.h"
+#include "mjlib/io/now.h"
 
 #include "base/common.h"
 #include "base/context_full.h"
-#include "base/now.h"
 
 #include "base/logging.h"
 
@@ -219,18 +219,19 @@ const std::string kControlCommandPrefix = "MVC1";
 
 class McastVideoLinkTransmitter::Impl : boost::noncopyable {
  public:
-  Impl(McastVideoLinkTransmitter* parent, boost::asio::io_context& service)
-      : service_(service),
+  Impl(McastVideoLinkTransmitter* parent,
+       const boost::asio::executor& executor)
+      : executor_(executor),
         parameters_(parent->parameters_),
         main_id_(std::this_thread::get_id()),
-        tx_timer_(service) {}
+        tx_timer_(executor) {}
 
   ~Impl() {
   }
 
   void AsyncStart(mjlib::io::ErrorCallback handler) {
     link_.reset(new base::UdpDataLink(
-                    service_, log_, parameters_.link));
+                    executor_, log_, parameters_.link));
     link_->data_signal()->connect(
         std::bind(&Impl::HandleUdpPacket,
                   this, std::placeholders::_1, std::placeholders::_2));
@@ -239,7 +240,10 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
       log_.info("video_link tx disabled -- repeat_count is zero");
     }
     started_ = true;
-    service_.post(std::bind(handler, mjlib::base::error_code()));
+
+    boost::asio::post(
+        executor_,
+        std::bind(handler, mjlib::base::error_code()));
   }
 
   void HandleVideoPacket(uint8_t* data, int video_len, bool key_frame) {
@@ -324,11 +328,12 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
     double tx_time_s = 1.0 / parameters_.min_fps;
     // TODO theamk: add framerate estimation, and decrease tx_time_s as
     // needed.
-    tx_deadline_ = base::Now(service_) +
+    tx_deadline_ = mjlib::io::Now(executor_.context()) +
                    base::ConvertSecondsToDuration(tx_time_s);
     if (!tx_running_) {
       tx_running_ = true;
-      service_.post(
+      boost::asio::post(
+          executor_,
           std::bind(&Impl::TxNextPacket, this, boost::system::error_code()));
     }
   }
@@ -355,7 +360,7 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
     BOOST_ASSERT(tx_running_);
     BOOST_ASSERT(!to_tx_.empty());
 
-    boost::posix_time::ptime now = base::Now(service_);
+    boost::posix_time::ptime now = mjlib::io::Now(executor_.context());
     to_tx_.front().header().tx_time_us = base::ConvertPtimeToMicroseconds(now);
 
     DataPacketLog dpl;
@@ -387,7 +392,7 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
 
   // NOTE: This requires that the queue_mutex_ lock be held.
   void ExpireTelemetry() {
-    const auto now = base::Now(service_);
+    const auto now = mjlib::io::Now(executor_.context());
 
     for (auto it = telemetry_.begin(); it != telemetry_.end();) {
       auto next = std::next(it);
@@ -426,7 +431,7 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
   // Variables which are only set in constructor or in Start()
   DataPacketSignal packet_signal_;
   // McastVideoLinkTransmitter* const parent_;
-  boost::asio::io_context& service_;
+  boost::asio::executor executor_;
   const Parameters& parameters_;
   std::thread::id main_id_;
   bool started_ = false;
@@ -505,7 +510,7 @@ class McastVideoLinkTransmitter::TelemetryImpl :
 };
 
 McastVideoLinkTransmitter::McastVideoLinkTransmitter(base::Context& context)
-    : impl_(new Impl(this, context.service)),
+    : impl_(new Impl(this, context.executor)),
       frame_consumer_impl_(new FrameConsumerImpl(impl_)),
       telemetry_impl_(new TelemetryImpl(impl_)) {
   context.telemetry_registry->Register("mvl_data_tx", impl_->packet_signal());
@@ -693,9 +698,9 @@ class RxFrameBuffer : boost::noncopyable {
 
 class McastVideoLinkReceiver::Impl : boost::noncopyable {
  public:
-  Impl(McastVideoLinkReceiver* parent, boost::asio::io_context& service)
+  Impl(McastVideoLinkReceiver* parent, const boost::asio::executor& executor)
       : parent_(parent),
-        service_(service),
+        executor_(executor),
         parameters_(parent->parameters_),
         main_id_(std::this_thread::get_id()) {}
 
@@ -704,12 +709,15 @@ class McastVideoLinkReceiver::Impl : boost::noncopyable {
 
   void AsyncStart(mjlib::io::ErrorCallback handler) {
     link_.reset(new base::UdpDataLink(
-                    service_, log_, parameters_.link));
+                    executor_, log_, parameters_.link));
     link_->data_signal()->connect(
         std::bind(&Impl::HandlePacket, this, std::placeholders::_1,
                   std::placeholders::_2));
     started_ = true;
-    service_.post(std::bind(handler, mjlib::base::error_code()));
+
+    boost::asio::post(
+        executor_,
+        std::bind(handler, mjlib::base::error_code()));
   }
 
   DataPacketSignal* packet_signal() { return &packet_signal_; }
@@ -754,7 +762,7 @@ class McastVideoLinkReceiver::Impl : boost::noncopyable {
                  header->packet_index, header->total_packets,
                  header->repeat_index, header->repeat_count);
     }
-    boost::posix_time::ptime now = base::Now(service_);
+    boost::posix_time::ptime now = mjlib::io::Now(executor_.context());
 
     // Log the packet before RxFrameBuffer graphs it.
     DataPacketLog dpl;
@@ -822,7 +830,7 @@ class McastVideoLinkReceiver::Impl : boost::noncopyable {
   DataPacketSignal packet_signal_;
   ReceivedFrameInfoSignal frame_info_signal_;
   McastVideoLinkReceiver* const parent_;
-  boost::asio::io_context& service_;
+  boost::asio::executor executor_;
   const Parameters& parameters_;
   std::thread::id main_id_;
   bool started_ = false;
@@ -836,7 +844,7 @@ class McastVideoLinkReceiver::Impl : boost::noncopyable {
 
 
 McastVideoLinkReceiver::McastVideoLinkReceiver(base::Context& context)
-    : impl_(new Impl(this, context.service)) {
+    : impl_(new Impl(this, context.executor)) {
   context.telemetry_registry->Register("mvl_data_rx", impl_->packet_signal());
   context.telemetry_registry->Register(
       "mvl_frame_rx", impl_->frame_info_signal());

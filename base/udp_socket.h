@@ -18,7 +18,7 @@
 #include <optional>
 #include <string>
 
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/executor.hpp>
 #include <boost/asio/ip/udp.hpp>
 #include <boost/signals2/signal.hpp>
 
@@ -42,21 +42,20 @@ class UdpSocket {
   struct Parameters;
   struct ParseResult;
 
-  // Creat an object. io_service is aliased, all other parameters
-  // are copied. May raise.
+  // May raise.
   // @p listen_addr -- where to listen. If it contains multicast address,
   //    it subscribes to this address; else it overrides parameters.bind
   // @p server_mode -- what to do when neither listen_addr nor parameters.bind
   //    contain port number, and we are not listening to multicast/broadcast:
   //       true = use parameters.default_port.
   //       false = use zero.
-  UdpSocket(boost::asio::io_context&, LogRef&,
+  UdpSocket(const boost::asio::executor&, LogRef&,
             const std::string& listen_addr,
             bool server_mode,
             const Parameters&);
 
   // A version of the constructor when address is already parsed
-  UdpSocket(boost::asio::io_context&, LogRef&,
+  UdpSocket(const boost::asio::executor&, LogRef&,
             const ParseResult&,
             bool server_mode,
             const Parameters&);

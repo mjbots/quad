@@ -119,7 +119,8 @@ int safe_main(int argc, char**argv) {
   log_signal->connect(
       [&log_signal_mt, &context](const TextLogMessage* msg) {
         const TextLogMessage msg_copy = *msg;
-        context.service.post(
+        boost::asio::post(
+            context.executor,
             [msg_copy, &log_signal_mt]() {log_signal_mt(&msg_copy);});
       });
 
@@ -135,7 +136,7 @@ int safe_main(int argc, char**argv) {
   context.remote_debug->AsyncStart(joiner->Wrap("starting remote_debug"));
   module.AsyncStart(joiner->Wrap("starting main module"));
 
-  context.service.run();
+  context.context.run();
   return 0;
 }
 

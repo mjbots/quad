@@ -746,7 +746,7 @@ class SimulatorWindow::Impl {
     }
 
     debug_deadline_service_->SetTime(
-        base::Now(context_.service) +
+        mjlib::io::Now(context_.service) +
         base::ConvertSecondsToDuration(dt_s));
     context_.service.poll();
     context_.service.reset();
@@ -845,7 +845,7 @@ class SimulatorWindow::Impl {
 
   void PostDelayed(base::NullHandler handler,
                    boost::posix_time::time_duration delay) {
-    auto next = base::Now(context_.service) + delay;
+    auto next = mjlib::io::Now(context_.service) + delay;
     if (callbacks_.empty() || next < callbacks_.begin()->first) {
       // This will be our new first item.
       callback_timer_.expires_at(next);
@@ -859,7 +859,7 @@ class SimulatorWindow::Impl {
   }
 
   void HandleCallbackTimer() {
-    auto now = base::Now(context_.service);
+    auto now = mjlib::io::Now(context_.service);
     while (!callbacks_.empty() && callbacks_.begin()->first <= now) {
       context_.service.post(callbacks_.begin()->second);
       callbacks_.erase(callbacks_.begin());

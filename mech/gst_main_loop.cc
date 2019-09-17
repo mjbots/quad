@@ -21,6 +21,7 @@
 #include <gst/gst.h>
 
 #include <boost/asio/deadline_timer.hpp>
+#include <boost/asio/post.hpp>
 
 #include "mjlib/base/fail.h"
 
@@ -70,10 +71,10 @@ class GstMainLoop::Impl :
       public std::enable_shared_from_this<Impl>,
                   boost::noncopyable {
  public:
-  Impl(GstMainLoop* parent, boost::asio::io_context& service)
+  Impl(GstMainLoop* parent, const boost::asio::executor& executor)
       : parent_(parent),
-        service_(service),
-        work_(service_),
+        executor_(executor),
+        work_(executor),
         parent_id_(std::this_thread::get_id()) {}
 
   ~Impl() {
@@ -92,7 +93,9 @@ class GstMainLoop::Impl :
 
     std::lock_guard<std::mutex> guard(thread_mutex_);
     child_ = std::thread(std::bind(&Impl::Run, shared_from_this(), handler));
-    service_.post(std::bind(handler, mjlib::base::error_code()));
+    boost::asio::post(
+        executor_,
+        std::bind(handler, mjlib::base::error_code()));
   }
 
   void WaitForQuit() {
@@ -127,7 +130,7 @@ class GstMainLoop::Impl :
 
         log_.debug("somehow the gst loop isn't active, sleeping");
 
-        boost::asio::deadline_timer timer(service_);
+        boost::asio::deadline_timer timer(executor_);
         timer.expires_from_now(boost::posix_time::milliseconds(1000));
         timer.wait();
       }
@@ -261,7 +264,9 @@ class GstMainLoop::Impl :
     GstMainLoopRefObj::QuitPostponerPtr ptr(new QuitPostponerImpl(impl_ptr));
     quit_request_signal_(ptr);
 
-    service_.post(std::bind(&Impl::DoShutdown, impl_ptr));
+    boost::asio::post(
+        executor_,
+        std::bind(&Impl::DoShutdown, impl_ptr));
     // Will call FinishShutdownRequest in destructor
   }
 
@@ -292,8 +297,8 @@ class GstMainLoop::Impl :
   boost::signals2::signal<
     void (GstMainLoopRefObj::QuitPostponerPtr&)> quit_request_signal_;
 
-  boost::asio::io_context& service_;
-  boost::asio::io_context::work work_;
+  boost::asio::executor executor_;
+  boost::asio::executor_work_guard<boost::asio::executor> work_;
 
   base::LogRef log_ = base::GetLogInstance("gst_main");
   Parameters parameters_;
@@ -302,8 +307,8 @@ class GstMainLoop::Impl :
 };
 
 
-GstMainLoop::GstMainLoop(boost::asio::io_context& service)
-  : impl_(new Impl(this, service)) {};
+GstMainLoop::GstMainLoop(const boost::asio::executor& executor)
+  : impl_(new Impl(this, executor)) {};
 
 GstMainLoop::~GstMainLoop() {}
 

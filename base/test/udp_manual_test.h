@@ -15,6 +15,8 @@
 
 #pragma once
 
+#include <boost/asio/post.hpp>
+
 #include <fmt/format.h>
 
 #include "base/common.h"
@@ -36,14 +38,14 @@ class SocketTesterBase : boost::noncopyable {
  public:
   struct BaseParameters;
 
-  SocketTesterBase(boost::asio::io_context& service,
+  SocketTesterBase(const boost::asio::executor& executor,
                    const char* logname,
                    const BaseParameters& base_parameters)
-      : service_(service),
+      : executor_(executor),
         log_(base::GetLogInstance(logname)),
         base_parameters_(base_parameters),
-        send_timer_(service_),
-        stats_timer_(service_) {
+        send_timer_(executor_),
+        stats_timer_(executor_) {
   };
 
   virtual ~SocketTesterBase() {};
@@ -159,7 +161,7 @@ class SocketTesterBase : boost::noncopyable {
       });
   }
 
-  boost::asio::io_context& service_;
+  boost::asio::executor executor_;
   LogRef log_;
 
  private:
@@ -176,10 +178,10 @@ class SocketTester: public SocketTesterBase {
  public:
   struct Parameters;
 
-  SocketTester(boost::asio::io_context& service,
+  SocketTester(const boost::asio::executor& executor,
                const char* logname,
                const Parameters& parameters)
-      : SocketTesterBase(service, logname, parameters.base),
+      : SocketTesterBase(executor, logname, parameters.base),
         parameters_(parameters) {
   };
 
@@ -214,7 +216,7 @@ class SocketTester: public SocketTesterBase {
       return;
     }
     socket_.reset(
-        new UdpSocket(service_, log_,
+        new UdpSocket(executor_, log_,
                       parameters_.listen_addr,
                       parameters_.server_mode,
                       parameters_.opts));
@@ -259,10 +261,10 @@ class LinkTester: public SocketTesterBase {
  public:
   struct Parameters;
 
-  LinkTester(boost::asio::io_context& service,
-               const char* logname,
-               const Parameters& parameters)
-      : SocketTesterBase(service, logname, parameters.base),
+  LinkTester(const boost::asio::executor& executor,
+             const char* logname,
+             const Parameters& parameters)
+      : SocketTesterBase(executor, logname, parameters.base),
         parameters_(parameters) {
   };
 
@@ -290,7 +292,7 @@ class LinkTester: public SocketTesterBase {
       return;
     }
     link_.reset(
-        new UdpDataLink(service_, log_,
+        new UdpDataLink(executor_, log_,
                         parameters_.opts));
 
     link_->data_signal()->connect(
@@ -325,20 +327,20 @@ class UdpManualTest : boost::noncopyable {
  public:
   template <typename Context>
     UdpManualTest(Context& context)
-        : service_(context.service),
-          exit_timer_(service_) {
+        : executor_(context.executor),
+          exit_timer_(executor_) {
     ProgramOptionsArchive(&options_).Accept(&parameters_);
   }
 
   void AsyncStart(base::ErrorHandler handler) {
     testers_.push_back(
-        TesterPtr(new SocketTester(service_, "socket1", parameters_.socket1)));
+        TesterPtr(new SocketTester(executor_, "socket1", parameters_.socket1)));
     testers_.push_back(
-        TesterPtr(new SocketTester(service_, "socket2", parameters_.socket2)));
+        TesterPtr(new SocketTester(executor_, "socket2", parameters_.socket2)));
     testers_.push_back(
-        TesterPtr(new LinkTester(service_, "link1", parameters_.link1)));
+        TesterPtr(new LinkTester(executor_, "link1", parameters_.link1)));
     testers_.push_back(
-        TesterPtr(new LinkTester(service_, "link2", parameters_.link2)));
+        TesterPtr(new LinkTester(executor_, "link2", parameters_.link2)));
 
     for (auto& obj: testers_) {
       obj->Start();
@@ -353,12 +355,15 @@ class UdpManualTest : boost::noncopyable {
           for (auto& obj: testers_) {
             obj->PrintStats();
           }
-          service_.stop();
+
+          std::exit(0);
         });
     }
 
     log_.info("running");
-    service_.post(std::bind(handler, mjlib::base::error_code()));
+    boost::asio::post(
+        executor_,
+        std::bind(handler, mjlib::base::error_code()));
   }
 
   struct Parameters {
@@ -384,7 +389,7 @@ class UdpManualTest : boost::noncopyable {
   boost::program_options::options_description* options() { return &options_; }
 
  private:
-  boost::asio::io_context& service_;
+  boost::asio::executor executor_;
   Parameters parameters_;
   boost::program_options::options_description options_;
   typedef std::shared_ptr<SocketTesterBase> TesterPtr;

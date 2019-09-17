@@ -17,7 +17,7 @@
 
 #include <memory>
 
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/executor.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/signals2/signal.hpp>
 
@@ -37,11 +37,11 @@ class VideoDisplay : boost::noncopyable {
  public:
   template <typename Context>
   VideoDisplay(Context& context)
-      : VideoDisplay(context.service) {
+      : VideoDisplay(context.executor, false) {
     context.telemetry_registry->Register("video_stats", &stats_signal_);
   }
 
-  VideoDisplay(boost::asio::io_context&);
+  VideoDisplay(const boost::asio::executor&, bool);
   ~VideoDisplay();
 
   void AsyncStart(mjlib::io::ErrorCallback handler);

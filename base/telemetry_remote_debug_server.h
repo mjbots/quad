@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/udp.hpp>
 #include <boost/signals2/signal.hpp>
 
@@ -28,7 +28,7 @@ class TelemetryRemoteDebugServer : boost::noncopyable {
  public:
   typedef boost::asio::ip::udp udp;
 
-  TelemetryRemoteDebugServer(boost::asio::io_context&);
+  TelemetryRemoteDebugServer(const boost::asio::executor&);
   ~TelemetryRemoteDebugServer();
 
   struct Parameters {

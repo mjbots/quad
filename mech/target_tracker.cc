@@ -24,8 +24,9 @@
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 
+#include "mjlib/io/now.h"
+
 #include "base/logging.h"
-#include "base/now.h"
 #include "base/telemetry_registry.h"
 
 namespace mjmech {
@@ -35,7 +36,7 @@ class TargetTracker::Impl : public CameraFrameConsumer {
  public:
   Impl(TargetTracker* parent, base::Context& context)
       : parent_(parent),
-        service_(context.service) {
+        executor_(context.executor) {
     context.telemetry_registry->Register("target_data", &data_signal_);
 
     cv::setNumThreads(1);
@@ -46,7 +47,10 @@ class TargetTracker::Impl : public CameraFrameConsumer {
   void AsyncStart(mjlib::io::ErrorCallback handler) {
     log_.debug("AsyncStart");
     enabled_ = true;
-    service_.post(std::bind(handler, mjlib::base::error_code()));
+
+    boost::asio::post(
+        executor_,
+        std::bind(handler, mjlib::base::error_code()));
   }
 
   // The CameraFrameConsumer interface.
@@ -102,7 +106,7 @@ class TargetTracker::Impl : public CameraFrameConsumer {
     auto data = [&]() {
       std::lock_guard<std::mutex> guard(mutex_);
       auto copy = data_;
-      copy.timestamp = base::Now(this->service_);
+      copy.timestamp = mjlib::io::Now(this->executor_.context());
       return copy;
     }();
 
@@ -154,7 +158,9 @@ class TargetTracker::Impl : public CameraFrameConsumer {
       data_ = data;
     }
 
-    service_.post(std::bind(&Impl::Update, this));
+    boost::asio::post(
+        executor_,
+        std::bind(&Impl::Update, this));
   }
 
   void Update() {
@@ -163,7 +169,7 @@ class TargetTracker::Impl : public CameraFrameConsumer {
   }
 
   TargetTracker* const parent_;
-  boost::asio::io_context& service_;
+  boost::asio::executor executor_;
   base::LogRef log_ = base::GetLogInstance("TargetTracker");
 
   bool enabled_ = false;

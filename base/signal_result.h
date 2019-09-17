@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <boost/asio/executor.hpp>
 #include <boost/signals2/signal.hpp>
 #include <boost/signals2/connection.hpp>
 
@@ -35,7 +36,7 @@ class SignalResult : boost::noncopyable {
  public:
 
   template <typename Handler, typename T>
-  static void Wait(boost::asio::io_context& service,
+  static void Wait(const boost::asio::executor& executor,
                    boost::signals2::signal<void (const T*)>* signal,
                    double timeout_s,
                    Handler handler) {
@@ -44,7 +45,7 @@ class SignalResult : boost::noncopyable {
       bool active = true;
       boost::signals2::connection connection;
 
-      Context(boost::asio::io_context& service) : timer(service) {}
+      Context(const boost::asio::executor& executor) : timer(executor) {}
     };
 
     // TODO jpieper: It would be nice to implement this in a way that
@@ -55,7 +56,7 @@ class SignalResult : boost::noncopyable {
     // along with its stack by the time the canceled timer callback is
     // invoked, this is the only way I can think of to ensure it
     // doesn't access anything it shouldn't.
-    std::shared_ptr<Context> context(new Context(service));
+    std::shared_ptr<Context> context(new Context(executor));
 
     context->timer.expires_from_now(ConvertSecondsToDuration(timeout_s));
     context->timer.async_wait(

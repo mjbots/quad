@@ -14,6 +14,8 @@
 
 #include "telemetry_remote_debug_server.h"
 
+#include <boost/asio/post.hpp>
+
 #include "mjlib/base/json5_read_archive.h"
 #include "mjlib/base/json5_write_archive.h"
 #include "mjlib/base/fail.h"
@@ -22,9 +24,9 @@ namespace mjmech {
 namespace base {
 class TelemetryRemoteDebugServer::Impl : boost::noncopyable {
  public:
-  Impl(boost::asio::io_context& service)
-      : service_(service),
-        socket_(service) {}
+  Impl(const boost::asio::executor& executor)
+      : executor_(executor),
+        socket_(executor) {}
 
   void StartRead() {
     socket_.async_receive_from(
@@ -115,7 +117,7 @@ class TelemetryRemoteDebugServer::Impl : boost::noncopyable {
     mjlib::base::FailIf(ec);
   }
 
-  boost::asio::io_context& service_;
+  boost::asio::executor executor_;
   Parameters parameters_;
   udp::socket socket_;
   char receive_buffer_[3000] = {};
@@ -125,8 +127,8 @@ class TelemetryRemoteDebugServer::Impl : boost::noncopyable {
 };
 
 TelemetryRemoteDebugServer::TelemetryRemoteDebugServer(
-    boost::asio::io_context& service)
-    : impl_(new Impl(service)) {}
+    const boost::asio::executor& executor)
+    : impl_(new Impl(executor)) {}
 
 TelemetryRemoteDebugServer::~TelemetryRemoteDebugServer() {}
 
@@ -141,7 +143,9 @@ void TelemetryRemoteDebugServer::AsyncStart(mjlib::io::ErrorCallback handler) {
   impl_->socket_.bind(endpoint);
   impl_->StartRead();
 
-  impl_->service_.post(std::bind(handler, mjlib::base::error_code()));
+  boost::asio::post(
+      impl_->executor_,
+      std::bind(handler, mjlib::base::error_code()));
 }
 
 void TelemetryRemoteDebugServer::RegisterHandler(

@@ -16,19 +16,20 @@
 
 #include <fmt/format.h>
 
+#include "mjlib/io/now.h"
+
 #include "base/component_archives.h"
 #include "base/fail.h"
 #include "base/logging.h"
-#include "base/now.h"
 #include "base/program_options_archive.h"
 #include "base/stringify.h"
 
-#include "camera_driver.h"
-#include "gst_main_loop.h"
-#include "mcast_video_link.h"
-#include "rtsp_server.h"
-#include "target_tracker.h"
-#include "video_display.h"
+#include "mech/camera_driver.h"
+#include "mech/gst_main_loop.h"
+#include "mech/mcast_video_link.h"
+#include "mech/rtsp_server.h"
+#include "mech/target_tracker.h"
+#include "mech/video_display.h"
 
 namespace mjmech {
 namespace mech {
@@ -37,7 +38,7 @@ class VideoLoopbackApp : boost::noncopyable {
  public:
   template <typename Context>
     VideoLoopbackApp(Context& context)
-    : service_(context.service) {
+    : executor_(context.executor) {
     m_.gst_main.reset(new GstMainLoop(context));
     m_.camera.reset(new CameraDriver(context));
     m_.video_link_tx.reset(new McastVideoLinkTransmitter(context));
@@ -151,7 +152,7 @@ class VideoLoopbackApp : boost::noncopyable {
     }
     if (parameters_.max_stats && parameters_.max_stats <= stats_count_) {
       log_.notice("Got required number of stats, quitting");
-      service_.stop();
+      std::exit(0);
     }
   }
 
@@ -175,22 +176,22 @@ class VideoLoopbackApp : boost::noncopyable {
     StartTimer();
 
     auto tel = m_.video_link_tx->get_telemetry_interface().lock();
-    const auto now = base::Now(service_);
+    const auto now = mjlib::io::Now(executor_.context());
     const auto next = now + base::ConvertSecondsToDuration(
         parameters_.debug_telemetry_expire_s);
     tel->SetTelemetry(
         "debug",
-        base::Stringify(base::Now(service_)),
+        base::Stringify(mjlib::io::Now(executor_.context())),
         next);
   }
 
-  boost::asio::io_context& service_;
+  boost::asio::executor executor_;
   Members m_;
   Parameters parameters_{&m_};
   boost::program_options::options_description options_;
   int stats_count_ = 0;
   base::LogRef log_ = base::GetLogInstance("video_loopback_app");
-  base::DeadlineTimer timer_{service_};
+  base::DeadlineTimer timer_{executor_};
 };
 
 }

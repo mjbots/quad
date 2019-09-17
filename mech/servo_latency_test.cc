@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/executor.hpp>
 #include <boost/program_options.hpp>
 
 #include <fmt/format.h>
@@ -20,10 +20,9 @@
 #include "mjlib/base/fail.h"
 #include "mjlib/base/program_options_archive.h"
 #include "mjlib/base/time_conversions.h"
+#include "mjlib/io/now.h"
 #include "mjlib/io/repeating_timer.h"
 #include "mjlib/multiplex/threaded_client.h"
-
-#include "base/now.h"
 
 namespace base = mjlib::base;
 namespace io = mjlib::io;
@@ -44,12 +43,12 @@ struct Options {
 
 class CommandRunner {
  public:
-  CommandRunner(boost::asio::io_context& service,
+  CommandRunner(const boost::asio::executor& executor,
                 const Options& options)
-      : service_(service),
+      : executor_(executor),
         options_(options) {
     client_.emplace(
-        service_,
+        executor_,
         [&]() {
           mp::ThreadedClient::Options options;
           options.port = options_.port;
@@ -133,7 +132,7 @@ class CommandRunner {
   }
 
   void StartCycle() {
-    start_time_ = mjmech::base::Now(service_);
+    start_time_ = mjlib::io::Now(executor_.context());
 
     MakeRequest();
 
@@ -145,7 +144,7 @@ class CommandRunner {
 
   void HandleCycle(const base::error_code& ec) {
     busy_ = false;
-    const auto end_time = mjmech::base::Now(service_);
+    const auto end_time = mjlib::io::Now(executor_.context());
 
     if (ec == boost::asio::error::operation_aborted) {
       stats_.send_timeout++;
@@ -202,11 +201,11 @@ class CommandRunner {
     stats_.valid_reply++;
   }
 
-  boost::asio::io_context& service_;
+  boost::asio::executor executor_;
   const Options options_;
   std::optional<mp::ThreadedClient> client_;
 
-  io::RepeatingTimer timer_{service_};
+  io::RepeatingTimer timer_{executor_};
   mp::ThreadedClient::Request request_;
   mp::ThreadedClient::Reply reply_;
 
@@ -241,7 +240,7 @@ class CommandRunner {
 }
 
 int main(int argc, char** argv) {
-  boost::asio::io_context service;
+  boost::asio::io_context context;
 
   po::options_description desc("Allowable options");
 
@@ -262,10 +261,10 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  CommandRunner command_runner{service, options};
+  CommandRunner command_runner{context.get_executor(), options};
   command_runner.Start();
 
-  service.run();
+  context.run();
 
   return 0;
 }

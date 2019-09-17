@@ -32,7 +32,7 @@ class UdpDataLink : boost::noncopyable {
   struct Parameters;
   // @p log will be used for message logging
   // @p params -- parameters to use, will be copied
-  UdpDataLink(boost::asio::io_context&, LogRef& log,
+  UdpDataLink(const boost::asio::executor&, LogRef& log,
               const Parameters& params);
   ~UdpDataLink() {};
 
@@ -122,7 +122,7 @@ class UdpDataLink : boost::noncopyable {
 
   const int kUdpV4HeaderSize = 28; // 20 byte IPv4 + 8 bytes UDP
 
-  boost::asio::io_context& service_;
+  boost::asio::executor executor_;
   mjlib::io::DeadlineTimer periodic_timer_;
   const Parameters params_;
   LogRef log_;

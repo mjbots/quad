@@ -18,6 +18,7 @@
 
 #include <iostream>
 
+#include <boost/asio/io_context.hpp>
 #include <boost/program_options.hpp>
 
 #include "mjlib/base/fail.h"
@@ -76,8 +77,8 @@ int work(int argc, char** argv) {
   }
 
 
-  boost::asio::io_context service;
-  LinuxInput linux_input(service);
+  boost::asio::io_context context;
+  LinuxInput linux_input(context.get_executor());
   linux_input.Open(device);
 
   std::cout << linux_input << "\n";
@@ -94,7 +95,7 @@ int work(int argc, char** argv) {
   if (wait) {
     Reader reader(&linux_input, absinfo);
     reader.StartRead();
-    service.run();
+    context.run();
   }
   return 0;
 }

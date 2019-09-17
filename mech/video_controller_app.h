@@ -39,7 +39,7 @@ class VideoControllerApp : boost::noncopyable {
  public:
   template <typename Context>
     VideoControllerApp(Context& context)
-    : service_(context.service) {
+    : executor_(context.executor) {
     m_.gst_main.reset(new GstMainLoop(context));
     m_.display.reset(new VideoDisplay(context));
     m_.video_link.reset(new McastVideoLinkReceiver(context));
@@ -129,7 +129,7 @@ class VideoControllerApp : boost::noncopyable {
     }
     if (parameters_.max_stats && parameters_.max_stats <= stats_count_) {
       log_.notice("Got required number of stats, quitting");
-      service_.stop();
+      std::exit(0);
     }
   }
 
@@ -175,7 +175,7 @@ class VideoControllerApp : boost::noncopyable {
     }
   }
 
-  boost::asio::io_context& service_;
+  boost::asio::executor executor_;
   Members m_;
   Parameters parameters_{&m_};
   boost::program_options::options_description options_;

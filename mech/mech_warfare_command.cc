@@ -16,6 +16,7 @@
 
 #include <linux/input.h>
 
+#include <boost/asio/post.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/program_options.hpp>
 
@@ -194,11 +195,11 @@ std::string SerializeCommand(const T& message) {
 class Commander::Impl {
  public:
   Impl(Commander::Parameters& params,
-       boost::asio::io_context& service)
+       const boost::asio::executor& executor)
       : parameters_(params),
         options_(params.opt),
-        service_(service),
-        timer_(service) {
+        executor_(executor),
+        timer_(executor) {
     mjlib::base::ProgramOptionsArchive(&po_options_).Accept(&params);
   }
 
@@ -206,7 +207,7 @@ class Commander::Impl {
     // Create joystick, if needed.
     if (!parameters_.joystick.empty()) {
       log_.infoStream() << "Opening joystick: " << parameters_.joystick;
-      linux_input_.reset(new LinuxInput(service_, parameters_.joystick));
+      linux_input_.reset(new LinuxInput(executor_, parameters_.joystick));
       mapping_ = GetAxisMapping(linux_input_.get());
     }
 
@@ -226,13 +227,13 @@ class Commander::Impl {
       port_str = "13356";
     }
 
-    udp::resolver resolver(service_);
+    udp::resolver resolver(executor_);
     auto it = resolver.resolve(udp::resolver::query(host, port_str));
     target_ = *it;
 
     log_.infoStream() << "Will send commands to " << target_;
 
-    socket_.reset(new udp::socket(service_, udp::v4()));
+    socket_.reset(new udp::socket(executor_, udp::v4()));
 
     // Start reading
     if (linux_input_) {
@@ -240,7 +241,10 @@ class Commander::Impl {
       // Do not send command when we have no joystick.
       StartTimer();
     }
-    service_.post(std::bind(handler, mjlib::base::error_code()));
+
+    boost::asio::post(
+        executor_,
+        std::bind(handler, mjlib::base::error_code()));
   }
 
   void SendMechMessage(const MechMessage& message) {
@@ -587,7 +591,7 @@ class Commander::Impl {
   const OptOptions& options_;
   boost::program_options::options_description po_options_;
   Command command_;
-  boost::asio::io_context& service_;
+  boost::asio::executor executor_;
   udp::endpoint target_;
   std::unique_ptr<LinuxInput> linux_input_;
   std::unique_ptr<udp::socket> socket_;
@@ -607,8 +611,8 @@ class Commander::Impl {
   TargetOffsetSignal target_offset_signal_;
 };
 
-Commander::Commander(boost::asio::io_context& service)
-    : impl_(new Impl(parameters_, service)) {
+Commander::Commander(const boost::asio::executor& executor)
+    : impl_(new Impl(parameters_, executor)) {
 }
 
 Commander::~Commander() {};

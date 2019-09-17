@@ -19,6 +19,7 @@
 #include <functional>
 
 #include <boost/algorithm/string.hpp>
+#include <boost/asio/post.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/filesystem.hpp>
 
@@ -57,9 +58,9 @@ namespace mech {
 
 class MultiplexClient::Impl {
  public:
-  Impl(boost::asio::io_context& service)
-      : service_(service),
-        timer_(service) {
+  Impl(const boost::asio::executor& executor)
+      : executor_(executor),
+        timer_(executor) {
     mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
   }
 
@@ -69,7 +70,7 @@ class MultiplexClient::Impl {
     options.baud_rate = parameters_.serial_baud;
     options.query_timeout_s = 0.001;
     options.cpu_affinity = parameters_.cpu_affinity;
-    client_ = std::make_unique<Client>(service_, options);
+    client_ = std::make_unique<Client>(executor_, options);
     ProcessRequests();
 
     // Now we kick off a timer to fix up the real time priorities if
@@ -78,7 +79,9 @@ class MultiplexClient::Impl {
                  std::bind(&Impl::FixPriorities, this,
                            std::placeholders::_1));
 
-    service_.post(std::bind(handler, mjlib::base::error_code()));
+    boost::asio::post(
+        executor_,
+        std::bind(handler, mjlib::base::error_code()));
   }
 
   void FixPriorities(const mjlib::base::error_code& ec) {
@@ -141,9 +144,11 @@ class MultiplexClient::Impl {
     BOOST_ASSERT(client_);
 
     for (auto callback : callbacks_) {
-      service_.post([client=client_.get(), callback]() {
-          callback({}, client);
-        });
+      boost::asio::post(
+          executor_,
+          [client=client_.get(), callback]() {
+            callback({}, client);
+          });
     }
 
     callbacks_.clear();
@@ -152,7 +157,7 @@ class MultiplexClient::Impl {
   base::LogRef log_ = base::GetLogInstance("MultiplexClient");
   Parameters parameters_;
 
-  boost::asio::io_context& service_;
+  boost::asio::executor executor_;
   mjlib::io::RepeatingTimer timer_;
 
   boost::program_options::options_description options_;
@@ -162,8 +167,8 @@ class MultiplexClient::Impl {
   bool done_ = false;
 };
 
-MultiplexClient::MultiplexClient(boost::asio::io_context& service)
-    : impl_(std::make_unique<Impl>(service)) {}
+MultiplexClient::MultiplexClient(const boost::asio::executor& executor)
+    : impl_(std::make_unique<Impl>(executor)) {}
 
 MultiplexClient::~MultiplexClient() {}
 
@@ -181,7 +186,8 @@ void MultiplexClient::AsyncStart(mjlib::io::ErrorCallback callback) {
 
 void MultiplexClient::RequestClient(ClientCallback callback) {
   if (impl_->client_) {
-    impl_->service_.post(
+    boost::asio::post(
+        impl_->executor_,
         std::bind(
             callback, mjlib::base::error_code(), impl_->client_.get()));
   } else {

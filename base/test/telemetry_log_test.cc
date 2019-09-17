@@ -15,7 +15,7 @@
 #include "base/telemetry_log.h"
 
 #include <boost/asio/deadline_timer.hpp>
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/io_context.hpp>
 #include <boost/asio/posix/stream_descriptor.hpp>
 #include <boost/asio/read.hpp>
 #include <boost/asio/read_until.hpp>
@@ -25,14 +25,15 @@
 using namespace mjmech::base;
 
 BOOST_AUTO_TEST_CASE(TelemetryLogBasicTest) {
-  boost::asio::io_context service;
+  boost::asio::io_context context;
+  auto executor = context.get_executor();
   TelemetryLog log;
 
   int pipefd[2] = {};
   int result = ::pipe(pipefd);
   BOOST_REQUIRE(result >= 0);
 
-  boost::asio::posix::stream_descriptor in(service, pipefd[0]);
+  boost::asio::posix::stream_descriptor in(executor, pipefd[0]);
   log.Open(pipefd[1]);
 
   log.WriteBlock(
@@ -45,13 +46,13 @@ BOOST_AUTO_TEST_CASE(TelemetryLogBasicTest) {
       in, streambuf, '\n',
       [&](boost::system::error_code ec, std::size_t){
         BOOST_REQUIRE(!ec);
-        service.stop();
+        context.stop();
       });
-  boost::asio::deadline_timer timer(service);
+  boost::asio::deadline_timer timer(executor);
   timer.expires_from_now(boost::posix_time::milliseconds(500));
-  timer.async_wait([&](boost::system::error_code){ service.stop(); });
+  timer.async_wait([&](boost::system::error_code){ context.stop(); });
 
-  service.run();
+  context.run();
 
   std::ostringstream ostr;
   ostr << &streambuf;

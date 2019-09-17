@@ -17,14 +17,13 @@
 #include <memory>
 
 #include <boost/noncopyable.hpp>
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/io_context.hpp>
 
 #include "mjlib/io/stream_factory.h"
 
 namespace mjmech {
 namespace base {
 
-class I2CFactory;
 class TelemetryLog;
 class TelemetryRemoteDebugServer;
 class TelemetryRegistry;
@@ -33,12 +32,12 @@ struct Context : boost::noncopyable {
   Context();
   ~Context();
 
-  boost::asio::io_context service;
+  boost::asio::io_context context;
+  boost::asio::executor executor{context.get_executor()};
   std::unique_ptr<TelemetryLog> telemetry_log;
   std::unique_ptr<TelemetryRemoteDebugServer> remote_debug;
   std::unique_ptr<TelemetryRegistry> telemetry_registry;
   std::unique_ptr<mjlib::io::StreamFactory> factory;
-  std::unique_ptr<I2CFactory> i2c_factory;
 };
 
 }

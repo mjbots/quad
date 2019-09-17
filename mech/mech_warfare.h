@@ -14,15 +14,14 @@
 
 #pragma once
 
+#include <boost/asio/executor.hpp>
 #include <boost/asio/ip/udp.hpp>
 #include <boost/property_tree/ptree.hpp>
 
 #include "base/component_archives.h"
 
-#include "mech/ahrs.h"
 #include "mech/gait_driver.h"
 #include "mech/mech_defines.h"
-#include "mech/mjmech_imu_driver.h"
 #include "mech/moteus_servo.h"
 #include "mech/multiplex_client.h"
 #include "mech/ripple.h"
@@ -50,8 +49,6 @@ class MechWarfare : boost::noncopyable {
     std::unique_ptr<Mech::Servo> servo;
     std::unique_ptr<MoteusServo> moteus_servo;
     std::unique_ptr<ServoSelector> servo_selector;
-    std::unique_ptr<MjmechImuDriver> imu;
-    std::unique_ptr<Ahrs> ahrs;
     std::unique_ptr<GaitDriver> gait_driver;
     std::unique_ptr<Turret> turret;
     std::unique_ptr<VideoSenderApp> video;
@@ -63,8 +60,6 @@ class MechWarfare : boost::noncopyable {
       a->Visit(MJ_NVP(servo));
       a->Visit(MJ_NVP(moteus_servo));
       a->Visit(MJ_NVP(servo_selector));
-      a->Visit(MJ_NVP(imu));
-      a->Visit(MJ_NVP(ahrs));
       a->Visit(MJ_NVP(gait_driver));
       a->Visit(MJ_NVP(turret));
       a->Visit(MJ_NVP(video));
@@ -130,7 +125,7 @@ class MechWarfare : boost::noncopyable {
   boost::program_options::options_description* options();
 
  private:
-  boost::asio::io_context& service_;
+  boost::asio::executor executor_;
 
   Members m_;
   Parameters parameters_{&m_};

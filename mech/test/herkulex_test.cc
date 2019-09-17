@@ -69,15 +69,16 @@ class Fixture {
   }
 
   void Poll() {
-    service_.poll();
-    service_.reset();
+    context_.poll();
+    context_.reset();
   }
 
-  boost::asio::io_context service_;
+  boost::asio::io_context context_;
+  boost::asio::executor executor_{context_.get_executor()};
   typedef mjlib::io::StreamFactory Factory;
-  Factory factory_{service_};
+  Factory factory_{executor_};
   typedef HerkuleX Servo;
-  Servo herkulex_{service_, factory_};
+  Servo herkulex_{executor_, factory_};
   mjlib::io::SharedStream stream_;
   boost::asio::streambuf streambuf_;
   boost::signals2::signal<void (const bool*)> data_received_;

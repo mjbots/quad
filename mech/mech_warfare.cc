@@ -23,11 +23,11 @@
 #include "mjlib/base/json5_read_archive.h"
 #include "mjlib/base/program_options_archive.h"
 
+#include "mjlib/io/now.h"
 #include "mjlib/io/repeating_timer.h"
 
 #include "base/common.h"
 #include "base/context_full.h"
-#include "base/now.h"
 
 #include "drive_command.h"
 #include "mech_telemetry.h"
@@ -79,9 +79,9 @@ class MechWarfare::Impl : boost::noncopyable {
        base::Context& context)
       : parent_(parent),
         context_(context),
-        service_(context.service),
-        server_(service_),
-        timer_(service_) {
+        executor_(context.executor),
+        server_(executor_),
+        timer_(executor_) {
     context_.telemetry_registry->Register("gait_data", &gait_data_signal_);
     context_.telemetry_registry->Register("joint_data", &joint_data_signal_);
     context_.telemetry_registry->Register("gait_command_state",
@@ -99,7 +99,9 @@ class MechWarfare::Impl : boost::noncopyable {
 
       NetworkListen();
     } catch (mjlib::base::system_error& se) {
-      service_.post(std::bind(handler, se.code()));
+      boost::asio::post(
+          executor_,
+          std::bind(handler, se.code()));
       return;
     }
 
@@ -110,7 +112,9 @@ class MechWarfare::Impl : boost::noncopyable {
               mjlib::base::ConvertSecondsToDuration(
                   parent_->parameters_.period_s),
               std::bind(&Impl::HandleTimer, this, pl::_1));
-          service_.post(std::bind(handler, ec));
+          boost::asio::post(
+              executor_,
+              std::bind(handler, ec));
         });
   }
 
@@ -207,14 +211,14 @@ class MechWarfare::Impl : boost::noncopyable {
       case Data::Mode::kManual:
       case Data::Mode::kDrive: {
         // Start sitting.
-        data_.sitting_start_timestamp = base::Now(service_);
+        data_.sitting_start_timestamp = Now();
         parent_->m_.gait_driver->CommandSitting();
         data_.mode = Data::Mode::kSitting;
         break;
       }
       case Data::Mode::kSitting: {
         // TODO: Wait for our timeout.
-        const auto now = base::Now(service_);
+        const auto now = Now();
         const auto elapsed_s = base::ConvertDurationToSeconds(
             now - data_.sitting_start_timestamp);
         if (elapsed_s > parent_->parameters_.sitting_timeout_s) {
@@ -234,7 +238,7 @@ class MechWarfare::Impl : boost::noncopyable {
     if (ec == boost::asio::error::operation_aborted) { return; }
     mjlib::base::FailIf(ec);
 
-    const auto start = base::Now(service_);
+    const auto start = Now();
 
     if (outstanding_) {
       data_.skipped_updates++;
@@ -243,7 +247,7 @@ class MechWarfare::Impl : boost::noncopyable {
 
     if (data_.mode != Data::Mode::kIdle) {
       const double elapsed_s = base::ConvertDurationToSeconds(
-          base::Now(service_) - data_.last_command_timestamp);
+          Now() - data_.last_command_timestamp);
       if (elapsed_s > parent_->parameters_.idle_timeout_s) {
         WorkTowardsIdle();
       }
@@ -377,7 +381,7 @@ class MechWarfare::Impl : boost::noncopyable {
     outstanding_ = false;
     mjlib::base::FailIf(ec);
 
-    joint_data_.timestamp = base::Now(service_);
+    joint_data_.timestamp = Now();
     joint_data_.cycle_time_s =
         mjlib::base::ConvertDurationToSeconds(joint_data_.timestamp - start);
     CleanupJointData();
@@ -387,7 +391,7 @@ class MechWarfare::Impl : boost::noncopyable {
     CheckForJointErrors();
     UpdateStatus();
 
-    data_.timestamp = base::Now(context_.service);
+    data_.timestamp = Now();
     data_signal_(&data_);
 
     MechTelemetry telemetry;
@@ -409,7 +413,7 @@ class MechWarfare::Impl : boost::noncopyable {
     telemetry_->SetTelemetry(
         "mech",
         mjlib::telemetry::TelemetryWriteArchive<MechTelemetry>::Serialize(&telemetry),
-        base::Now(service_) +
+        Now() +
         mjlib::base::ConvertSecondsToDuration(kTelemetryTimeoutS));
   }
 
@@ -559,7 +563,7 @@ class MechWarfare::Impl : boost::noncopyable {
 
     const auto message = mjlib::base::Json5ReadArchive::Read<Message>(data);
 
-    data_.last_command_timestamp = base::Now(service_);
+    data_.last_command_timestamp = Now();
 
     if (message.drive) {
       HandleMessageDrive(*message.drive);
@@ -574,12 +578,12 @@ class MechWarfare::Impl : boost::noncopyable {
   }
 
   void StartTurretBias() {
-    data_.turret_bias_start_timestamp = base::Now(service_);
+    data_.turret_bias_start_timestamp = Now();
     parent_->m_.turret->StartBias();
   }
 
   void MaybeEnterActiveMode(Data::Mode mode) {
-    const auto now = base::Now(service_);
+    const auto now = Now();
     switch (data_.mode) {
       case Data::Mode::kIdle: {
         // Start the turret bias process.
@@ -659,10 +663,13 @@ class MechWarfare::Impl : boost::noncopyable {
     }
   }
 
+  boost::posix_time::ptime Now() {
+    return mjlib::io::Now(executor_.context());
+  }
 
   MechWarfare* const parent_;
   base::Context& context_;
-  boost::asio::io_context& service_;
+  boost::asio::executor executor_;
   boost::program_options::options_description options_;
 
   base::LogRef log_ = base::GetLogInstance("MechWarfare");
@@ -694,22 +701,19 @@ class MechWarfare::Impl : boost::noncopyable {
 };
 
 MechWarfare::MechWarfare(base::Context& context)
-    : service_(context.service),
+    : executor_(context.executor),
       impl_(new Impl(this, context)) {
-  m_.multiplex_client = std::make_unique<MultiplexClient>(service_);
-  m_.servo_base.reset(new Mech::ServoBase(service_, *context.factory));
+  m_.multiplex_client = std::make_unique<MultiplexClient>(executor_);
+  m_.servo_base.reset(new Mech::ServoBase(executor_, *context.factory));
   m_.servo.reset(new Mech::Servo(m_.servo_base.get()));
-  m_.moteus_servo = std::make_unique<MoteusServo>(service_, context.telemetry_registry.get());
+  m_.moteus_servo = std::make_unique<MoteusServo>(executor_, context.telemetry_registry.get());
 
   m_.servo_selector = std::make_unique<ServoSelector>();
   m_.servo_selector->AddInterface("herkulex", m_.servo.get());
   m_.servo_selector->AddInterface("moteus", m_.moteus_servo.get());
 
-  m_.imu.reset(new MjmechImuDriver(context));
-  m_.ahrs.reset(new Ahrs(context, m_.imu->imu_data_signal()));
-  m_.gait_driver.reset(new GaitDriver(service_,
-                                      context.telemetry_registry.get(),
-                                      m_.ahrs->ahrs_data_signal()));
+  m_.gait_driver.reset(new GaitDriver(executor_,
+                                      context.telemetry_registry.get()));
   m_.turret.reset(new Turret(context, m_.servo_base.get()));
 
   m_.multiplex_client->RequestClient([this](const auto& ec, auto* client) {

@@ -120,7 +120,7 @@ class MAX21000 : public I2CDevice {
       }
     }
     if (enabled_ && rate_hz_ != 0.0) {
-      timer_.expires_at(base::Now(service_));
+      timer_.expires_at(mjlib::io::Now(service_));
       StartTimer();
     }
   }
@@ -251,7 +251,7 @@ class MMA8451Q : public I2CDevice {
     }
 
     if (rate_hz_ != 0.0 && enabled_) {
-      timer_.expires_at(base::Now(service_));
+      timer_.expires_at(mjlib::io::Now(service_));
       StartTimer();
     }
   }

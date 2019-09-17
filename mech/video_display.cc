@@ -24,14 +24,15 @@
 #include <gst/app/gstappsrc.h>
 
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/asio/post.hpp>
 
 #include <fmt/format.h>
 
 #include "mjlib/base/fail.h"
+#include "mjlib/io/now.h"
 
 #include "base/common.h"
 #include "base/logging.h"
-#include "base/now.h"
 
 #include "gst_helpers.h"
 
@@ -40,9 +41,9 @@ namespace mech {
 
 class VideoDisplay::Impl : boost::noncopyable {
  public:
-  Impl(VideoDisplay* parent, boost::asio::io_context& service)
+  Impl(VideoDisplay* parent, const boost::asio::executor& executor)
       : parent_(parent),
-        parent_service_(service),
+        parent_executor_(executor),
         parent_id_(std::this_thread::get_id()),
         stats_(new Stats()) {}
 
@@ -58,7 +59,10 @@ class VideoDisplay::Impl : boost::noncopyable {
 
     started_ = true;
     parameters_ = parent_->parameters_;
-    parent_service_.post(std::bind(handler, mjlib::base::error_code()));
+
+    boost::asio::post(
+        parent_executor_,
+        std::bind(handler, mjlib::base::error_code()));
   }
 
   void HandleGstReady(GstMainLoopRef& loop_ref) {
@@ -258,7 +262,7 @@ class VideoDisplay::Impl : boost::noncopyable {
           }
           stats_->decoded_frames++;
 
-          const auto now = base::Now(parent_service_);
+          const auto now = mjlib::io::Now(parent_executor_.context());
           if (last_decoded_time_) {
             stats_->decoded_max_interval_s = std::max(
                 stats_->decoded_max_interval_s,
@@ -294,7 +298,9 @@ class VideoDisplay::Impl : boost::noncopyable {
            parameters_.stats_interval_s,
            std::bind(&Impl::HandleStatsTimeout, this));
     }
-    parent_service_.post([=]() { pipeline_ready_ = true; });
+    boost::asio::post(
+        parent_executor_,
+        [=]() { pipeline_ready_ = true; });
   }
 
   void HandleVideoAnalyzeMessage(const gst::VideoAnalyzeMessage& msg) {
@@ -311,10 +317,12 @@ class VideoDisplay::Impl : boost::noncopyable {
       std::swap(stats_, other);
     }
 
-    other->timestamp = base::Now(parent_service_);
+    other->timestamp = mjlib::io::Now(parent_executor_.context());
 
-    parent_service_.post(std::bind(&VideoDisplay::Impl::HandleStatsMainThread,
-                                   this, other));
+    boost::asio::post(
+        parent_executor_,
+        std::bind(&VideoDisplay::Impl::HandleStatsMainThread,
+                  this, other));
   }
 
   void HandleStatsMainThread(std::shared_ptr<Stats> stats) {
@@ -331,7 +339,7 @@ class VideoDisplay::Impl : boost::noncopyable {
 
   // From both.
   VideoDisplay* const parent_;
-  boost::asio::io_context& parent_service_;
+  boost::asio::executor parent_executor_;
 
   Parameters parameters_;
   bool started_ = false;
@@ -359,8 +367,8 @@ class VideoDisplay::Impl : boost::noncopyable {
 };
 
 
-VideoDisplay::VideoDisplay(boost::asio::io_context& service)
-  : impl_(new Impl(this, service)) {};
+VideoDisplay::VideoDisplay(const boost::asio::executor& executor, bool)
+  : impl_(new Impl(this, executor)) {};
 
 VideoDisplay::~VideoDisplay() {}
 

@@ -17,7 +17,7 @@
 
 #include <memory>
 
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/executor.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/signals2/signal.hpp>
 

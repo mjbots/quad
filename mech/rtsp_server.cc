@@ -24,6 +24,8 @@
 #include <gst/app/gstappsrc.h>
 #include <gst/rtsp-server/rtsp-server.h>
 
+#include <boost/asio/post.hpp>
+
 #include <fmt/format.h>
 
 #include "mjlib/base/fail.h"
@@ -45,8 +47,8 @@ const char* kLaunchCmd =
 
 class RtspServer::Impl : boost::noncopyable {
  public:
-  Impl(RtspServer* parent, boost::asio::io_context& service)
-      : service_(service),
+  Impl(RtspServer* parent, const boost::asio::executor& executor)
+      : executor_(executor),
         parameters_(parent->parameters_),
         parent_id_(std::this_thread::get_id()) {}
 
@@ -62,7 +64,10 @@ class RtspServer::Impl : boost::noncopyable {
     // on the main glib loop instead of just crashing here.
     BOOST_ASSERT(!gst_started_);
     started_ = true;
-    service_.post(std::bind(handler, mjlib::base::error_code()));
+
+    boost::asio::post(
+        executor_,
+        std::bind(handler, mjlib::base::error_code()));
   }
 
   void HandleGstReady(GstMainLoopRef& ref) {
@@ -389,7 +394,7 @@ class RtspServer::Impl : boost::noncopyable {
     g_free(name);
   }
 
-  boost::asio::io_context& service_;
+  boost::asio::executor executor_;
   const Parameters& parameters_;
   const std::thread::id parent_id_;
   std::thread::id gst_id_;
@@ -451,8 +456,8 @@ class RtspServer::FrameConsumerImpl : public CameraFrameConsumer {
   std::shared_ptr<RtspServer::Impl> impl_;
 };
 
-RtspServer::RtspServer(boost::asio::io_context& service)
-    : impl_(new Impl(this, service)),
+RtspServer::RtspServer(const boost::asio::executor& executor)
+    : impl_(new Impl(this, executor)),
       frame_consumer_impl_(new FrameConsumerImpl(impl_)) {
 }
 

@@ -36,24 +36,24 @@ Cool UDP features:
 
 namespace ip = boost::asio::ip;
 
-UdpSocket::UdpSocket(boost::asio::io_context& service,
+UdpSocket::UdpSocket(const boost::asio::executor& executor,
                      LogRef& log,
                      const std::string& listen_addr,
                      bool server_mode,
                      const Parameters& parameters)
-    : UdpSocket(service, log, ParseAddress(listen_addr),
+    : UdpSocket(executor, log, ParseAddress(listen_addr),
                 server_mode, parameters) {
 };
 
 
-UdpSocket::UdpSocket(boost::asio::io_context& service,
+UdpSocket::UdpSocket(const boost::asio::executor& executor,
                      LogRef& log,
                      const ParseResult& listen_p,
                      bool server_mode,
                      const Parameters& parameters)
     : log_(log),
       parameters_(parameters),
-      socket_(service) {
+      socket_(executor) {
 
   PrepareSocket();
 

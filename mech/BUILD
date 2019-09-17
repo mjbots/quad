@@ -32,7 +32,6 @@ cc_library(
         "mcast_video_link.cc",
         "mech_warfare.cc",
         "mech_warfare_command.cc",
-        "mjmech_imu_driver.cc",
         "moteus_servo.cc",
         "multiplex_client.cc",
         "rtsp_server.cc",
@@ -51,6 +50,7 @@ cc_library(
         "@gst-plugins-ugly//:plugins",
         "@gst-libav//:plugins",
         "@gst-rtsp-server//:rtsp-server",
+        "@moteus//mjlib/io:exclusive_command",
         "@moteus//mjlib/multiplex:threaded_client",
         "@opencv//:core",
         "@opencv//:aruco",
@@ -111,13 +111,6 @@ cc_binary(
     srcs = ["aruco_draw.cc"],
     deps = ["//base", "@boost", "@boost//:timer",
             "@opencv//:aruco", "@opencv//:imgcodecs"],
-)
-
-module_main(
-    name = "mjmech_imu_driver",
-    cname = "mjmech::mech::MjmechImuDriver",
-    prefix = "mech",
-    deps = [":mech"],
 )
 
 module_main(

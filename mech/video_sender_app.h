@@ -34,7 +34,7 @@ class VideoSenderApp : boost::noncopyable {
  public:
   template <typename Context>
   VideoSenderApp(Context& context)
-    : service_(context.service) {
+    : executor_(context.executor) {
     m_.gst_main.reset(new GstMainLoop(context));
     m_.camera.reset(new CameraDriver(context));
     m_.rtsp.reset(new RtspServer(context));
@@ -130,11 +130,11 @@ class VideoSenderApp : boost::noncopyable {
     }
     if (parameters_.max_stats && parameters_.max_stats <= stats_count_) {
       log_.notice("Got required number of camera stats, quitting");
-      service_.stop();
+      std::exit(0);
     }
   }
 
-  boost::asio::io_context& service_;
+  boost::asio::executor executor_;
   Members m_;
   Parameters parameters_{&m_};
   boost::program_options::options_description options_;

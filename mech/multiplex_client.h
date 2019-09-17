@@ -24,7 +24,7 @@ namespace mech {
 
 class MultiplexClient {
  public:
-  MultiplexClient(boost::asio::io_context&);
+  MultiplexClient(const boost::asio::executor&);
   ~MultiplexClient();
 
   struct Parameters {

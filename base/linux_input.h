@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/executor.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/dynamic_bitset.hpp>
 #include <boost/noncopyable.hpp>
@@ -26,13 +26,13 @@ namespace base {
 /// Support reading events from a linux input device.
 class LinuxInput : boost::noncopyable {
  public:
-  explicit LinuxInput(boost::asio::io_context&);
-  LinuxInput(boost::asio::io_context&, const std::string& device);
+  explicit LinuxInput(const boost::asio::executor&);
+  LinuxInput(const boost::asio::executor&, const std::string& device);
   void Open(const std::string& device);
 
   ~LinuxInput();
 
-  boost::asio::io_context& get_io_service();
+  boost::asio::executor get_executor();
 
   /// @return the underlying file descriptor for this device.
   int fileno() const;
@@ -83,7 +83,7 @@ class LinuxInput : boost::noncopyable {
   };
 
   /// Read one event asynchronously.  This function returns
-  /// immediately, @p handler will be invoked using io_service::post
+  /// immediately, @p handler will be invoked using boost::asio::post
   /// and @p event must be valid until the handler is invoked.
   void AsyncRead(Event* event, mjlib::io::ErrorCallback handler);
 

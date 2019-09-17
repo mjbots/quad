@@ -32,9 +32,9 @@ class MWCommand : boost::noncopyable {
  public:
   template <typename Context>
   MWCommand(Context& context)
-    : service_(context.service) {
+    : executor_(context.executor) {
     m_.video_controller.reset(new VideoControllerApp(context));
-    m_.commander.reset(new mw_command::Commander(service_));
+    m_.commander.reset(new mw_command::Commander(executor_));
 
     mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
   }
@@ -44,7 +44,9 @@ class MWCommand : boost::noncopyable {
         std::make_shared<base::ErrorHandlerJoiner>(
             [=](mjlib::base::error_code ec) {
               if (!ec) {
-                service_.post([=]() {MaybeSendOnce(); });
+                boost::asio::post(
+                    executor_,
+                    [=]() {MaybeSendOnce(); });
               }
               handler(ec);
             });
@@ -119,11 +121,16 @@ class MWCommand : boost::noncopyable {
       turret.rate->y_deg_s = parameters_.turret_pitch_rate_dps;
     }
     m_.commander->SendMechMessage(message);
-    service_.stop();
     log_.info("message sent, exiting");
+
+    boost::asio::post(
+        executor_,
+        []() {
+          std::exit(0);
+        });
   };
 
-  boost::asio::io_context& service_;
+  boost::asio::executor executor_;
   Members m_;
   Parameters parameters_ = Parameters(m_);
   boost::program_options::options_description options_;

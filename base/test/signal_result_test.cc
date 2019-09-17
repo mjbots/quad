@@ -18,79 +18,16 @@
 
 using namespace mjmech::base;
 
-// BOOST_AUTO_TEST_CASE(TestSignalResultCoroutine1) {
-//   boost::asio::io_context service;
-
-//   boost::signals2::signal<void (const int*)> signal;
-
-//   bool done = false;
-
-//   boost::asio::spawn(service, [&](boost::asio::yield_context yield) {
-//       int result = SignalResult::Wait(service, &signal, 1.0, yield);
-//       BOOST_CHECK_EQUAL(result, 3);
-//       done = true;
-//     });
-
-//   boost::asio::spawn(service, [&](boost::asio::yield_context yield) {
-//       int result = 3;
-//       BOOST_CHECK_EQUAL(done, false);
-//       signal(&result);
-
-//       // When a signal is emitted, the result should have been made
-//       // available immediately.
-//       BOOST_CHECK_EQUAL(done, true);
-//     });
-
-//   service.run();
-// }
-
-// BOOST_AUTO_TEST_CASE(TestSignalResultCoroutine2) {
-//   boost::asio::io_context service;
-
-//   boost::signals2::signal<void (const int*)> signal;
-
-//   bool done = false;
-//   bool timeout = false;
-
-//   boost::asio::spawn(service, [&](boost::asio::yield_context yield) {
-//       try {
-//         SignalResult::Wait(service, &signal, 1.0, yield);
-//         BOOST_CHECK(false);
-//         done = true;
-//       } catch (TimeoutError& e) {
-//         timeout = true;
-//       }
-//     });
-
-//   boost::asio::spawn(service, [&](boost::asio::yield_context yield) {
-//       BOOST_CHECK_EQUAL(done, false);
-//       BOOST_CHECK_EQUAL(timeout, false);
-
-//       DeadlineTimer timer(service);
-//       timer.expires_from_now(boost::posix_time::milliseconds(900));
-//       timer.async_wait(yield);
-//       BOOST_CHECK_EQUAL(timeout, false);
-
-//       timer.expires_from_now(boost::posix_time::milliseconds(200));
-//       timer.async_wait(yield);
-//       BOOST_CHECK_EQUAL(timeout, true);
-//     });
-
-
-//   service.run();
-//   BOOST_CHECK_EQUAL(done, false);
-//   BOOST_CHECK_EQUAL(timeout, true);
-// }
-
 BOOST_AUTO_TEST_CASE(TestSignalResultCallback1) {
-  boost::asio::io_context service;
+  boost::asio::io_context context;
+  auto executor = context.get_executor();
 
   boost::signals2::signal<void (const int*)> signal;
   int value = 0;
   bool done = false;
   int count = 0;
 
-  SignalResult::Wait(service, &signal, 1.0,
+  SignalResult::Wait(executor, &signal, 1.0,
                      [&](const boost::system::error_code& ec,
                          int value_in) {
                        BOOST_CHECK(!ec);
@@ -99,12 +36,12 @@ BOOST_AUTO_TEST_CASE(TestSignalResultCallback1) {
                        count++;
                      });
 
-  // We haven't even started the io_service yet, so nothing should be
+  // We haven't even started the io_context yet, so nothing should be
   // running.
   BOOST_CHECK_EQUAL(done, false);
   BOOST_CHECK_EQUAL(value, 0);
 
-  mjlib::io::DeadlineTimer timer1(service);
+  mjlib::io::DeadlineTimer timer1(executor);
   timer1.expires_from_now(boost::posix_time::milliseconds(500));
   timer1.async_wait([&](const boost::system::error_code& ec) {
       BOOST_CHECK(!ec);
@@ -118,19 +55,20 @@ BOOST_AUTO_TEST_CASE(TestSignalResultCallback1) {
       BOOST_CHECK_EQUAL(count, 1);
     });
 
-  service.run();
+  context.run();
   BOOST_CHECK_EQUAL(done, true);
   BOOST_CHECK_EQUAL(count, 1);
 }
 
 BOOST_AUTO_TEST_CASE(TestSignalResultCallback2) {
-  boost::asio::io_context service;
+  boost::asio::io_context context;
+  auto executor = context.get_executor();
 
   boost::signals2::signal<void (const int*)> signal;
   bool done = false;
   int count = 0;
 
-  SignalResult::Wait(service, &signal, 1.0,
+  SignalResult::Wait(executor, &signal, 1.0,
                      [&](const boost::system::error_code& ec,
                          int) {
                        BOOST_CHECK(ec);
@@ -139,7 +77,7 @@ BOOST_AUTO_TEST_CASE(TestSignalResultCallback2) {
                        count++;
                      });
 
-  mjlib::io::DeadlineTimer timer1(service);
+  mjlib::io::DeadlineTimer timer1(executor);
   timer1.expires_from_now(boost::posix_time::milliseconds(1500));
   timer1.async_wait([&](const boost::system::error_code& ec) {
       BOOST_CHECK(!ec);
@@ -147,6 +85,6 @@ BOOST_AUTO_TEST_CASE(TestSignalResultCallback2) {
       BOOST_CHECK_EQUAL(count, 1);
     });
 
-  service.run();
+  context.run();
   BOOST_CHECK_EQUAL(count, 1);
 }

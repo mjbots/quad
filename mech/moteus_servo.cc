@@ -23,10 +23,10 @@
 #include "mjlib/base/fail.h"
 #include "mjlib/base/limit.h"
 #include "mjlib/base/program_options_archive.h"
+#include "mjlib/io/now.h"
 #include "mjlib/multiplex/threaded_client.h"
 
 #include "base/logging.h"
-#include "base/now.h"
 #include "mech/moteus.h"
 
 namespace pl = std::placeholders;
@@ -169,15 +169,17 @@ struct Command {
 
 class MoteusServo::Impl {
  public:
-  Impl(boost::asio::io_context& service,
+  Impl(const boost::asio::executor& executor,
        base::TelemetryRegistry* telemetry_registry)
-      : service_(service) {
+      : executor_(executor) {
     mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
     telemetry_registry->Register("moteus_command", &command_signal_);
   }
 
   void AsyncStart(mjlib::io::ErrorCallback handler) {
-    service_.post(std::bind(handler, mjlib::base::error_code()));
+    boost::asio::post(
+        executor_,
+        std::bind(handler, mjlib::base::error_code()));
   }
 
   void SetPose(const std::vector<Joint>& joints,
@@ -185,7 +187,7 @@ class MoteusServo::Impl {
 
     {
       Command command;
-      command.timestamp = base::Now(service_);
+      command.timestamp = mjlib::io::Now(executor_.context());
       command.joints = joints;
       std::sort(command.joints.begin(), command.joints.end(),
                 [](const auto& lhs, const auto& rhs) {
@@ -202,7 +204,9 @@ class MoteusServo::Impl {
     if (!mp_client_) { return; }
     if (outstanding_) {
       log_.debug("skipping SetPose because we are backed up");
-      service_.post(std::bind(handler, boost::asio::error::operation_aborted));
+      boost::asio::post(
+          executor_,
+          std::bind(handler, boost::asio::error::operation_aborted));
       return;
     }
 
@@ -318,7 +322,9 @@ class MoteusServo::Impl {
                     StatusHandler handler) {
     if (ec) {
       log_.debug(fmt::format("reply with error: {}", ec.message()));
-      service_.post(std::bind(handler, ec, std::vector<JointStatus>()));
+      boost::asio::post(
+          executor_,
+          std::bind(handler, ec, std::vector<JointStatus>()));
       return;
     }
 
@@ -334,7 +340,9 @@ class MoteusServo::Impl {
       result.push_back(this_status);
     }
 
-    service_.post(std::bind(handler, ec, result));
+    boost::asio::post(
+        executor_,
+        std::bind(handler, ec, result));
   }
 
   void Update(PowerState power_state,
@@ -423,7 +431,9 @@ class MoteusServo::Impl {
                     std::vector<JointStatus>* output,
                     mjlib::io::ErrorCallback callback) {
     if (ec) {
-      service_.post(std::bind(callback, ec));
+      boost::asio::post(
+          executor_,
+          std::bind(callback, ec));
       return;
     }
 
@@ -435,7 +445,9 @@ class MoteusServo::Impl {
       ReadJoint(reply_pair.reply, &joint);
     }
 
-    service_.post(std::bind(callback, ec));
+    boost::asio::post(
+        executor_,
+        std::bind(callback, ec));
   }
 
   void PopulateQuery(const StatusOptions& status_options,
@@ -534,7 +546,7 @@ class MoteusServo::Impl {
 
   boost::signals2::signal<void (const Command*)> command_signal_;
 
-  boost::asio::io_context& service_;
+  boost::asio::executor executor_;
 
   Parameters parameters_;
   boost::program_options::options_description options_;
@@ -550,9 +562,9 @@ class MoteusServo::Impl {
   std::vector<Value> values_cache_;
 };
 
-MoteusServo::MoteusServo(boost::asio::io_context& service,
+MoteusServo::MoteusServo(const boost::asio::executor& executor,
                          base::TelemetryRegistry* telemetry_registry)
-    : impl_(std::make_unique<Impl>(service, telemetry_registry)) {}
+    : impl_(std::make_unique<Impl>(executor, telemetry_registry)) {}
 MoteusServo::~MoteusServo() {}
 
 MoteusServo::Parameters* MoteusServo::parameters() {
@@ -592,7 +604,9 @@ void MoteusServo::GetStatus(const std::vector<int>& ids,
 
 void MoteusServo::ClearErrors(const std::vector<int>&,
                               mjlib::io::ErrorCallback callback) {
-  impl_->service_.post(std::bind(callback, mjlib::base::error_code()));
+  boost::asio::post(
+      impl_->executor_,
+      std::bind(callback, mjlib::base::error_code()));
 }
 
 void MoteusServo::Update(PowerState power_state,

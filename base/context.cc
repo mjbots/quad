@@ -14,21 +14,16 @@
 
 #include "context_full.h"
 
-#include "linux_i2c_generator.h"
-
 namespace mjmech {
 namespace base {
 
 Context::Context()
     : telemetry_log(std::make_unique<TelemetryLog>()),
-      remote_debug(std::make_unique<TelemetryRemoteDebugServer>(service)),
+      remote_debug(std::make_unique<TelemetryRemoteDebugServer>(executor)),
       telemetry_registry(std::make_unique<TelemetryRegistry>(
                              telemetry_log.get(), remote_debug.get())),
-      factory(std::make_unique<mjlib::io::StreamFactory>(service)),
-      i2c_factory(std::make_unique<I2CFactory>(service))
+      factory(std::make_unique<mjlib::io::StreamFactory>(executor))
 {
-  i2c_factory->Register(
-      std::make_unique<LinuxI2CGenerator>(service));
 }
 
 Context::~Context() {}

@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/executor.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/program_options.hpp>
 #include <boost/signals2/signal.hpp>
@@ -35,16 +35,8 @@ class RippleGait;
 /// commands out to some servos.
 class GaitDriver : boost::noncopyable {
  public:
-  template <typename AhrsData>
-  GaitDriver(boost::asio::io_context& service,
-             base::TelemetryRegistry* telemetry_registry,
-             boost::signals2::signal<void (const AhrsData*)>* body_ahrs_signal)
-      : GaitDriver(service, telemetry_registry) {
-    body_ahrs_signal->connect(
-        std::bind(&GaitDriver::HandleBodyAhrs<AhrsData>,
-                  this, std::placeholders::_1));
-  }
-
+  GaitDriver(const boost::asio::executor&,
+             base::TelemetryRegistry*);
   ~GaitDriver();
 
   void AsyncStart(mjlib::io::ErrorCallback);
@@ -110,9 +102,6 @@ class GaitDriver : boost::noncopyable {
     base::Transform body_world;
     base::Transform robot_world;
 
-    base::Quaternion attitude;
-    base::Point3D body_rate_dps;
-
     std::array<base::Point3D, 4> legs;
     // The command as sent by the user.
     JointCommand command;
@@ -129,8 +118,6 @@ class GaitDriver : boost::noncopyable {
       a->Visit(MJ_NVP(cog_robot));
       a->Visit(MJ_NVP(body_world));
       a->Visit(MJ_NVP(robot_world));
-      a->Visit(MJ_NVP(attitude));
-      a->Visit(MJ_NVP(body_rate_dps));
       a->Visit(MJ_NVP(legs));
       a->Visit(MJ_NVP(command));
       a->Visit(MJ_NVP(input_command));
@@ -154,21 +141,6 @@ class GaitDriver : boost::noncopyable {
   const Gait* gait() const;
 
  private:
-  GaitDriver(boost::asio::io_context& service,
-             base::TelemetryRegistry*);
-
-  template <typename AhrsData>
-  void HandleBodyAhrs(const AhrsData* data) {
-    ProcessBodyAhrs(
-        data->timestamp, data->valid,
-        data->attitude, data->body_rate_dps);
-  }
-
-  void ProcessBodyAhrs(boost::posix_time::ptime timestamp,
-                       bool valid,
-                       const base::Quaternion& attitude,
-                       const base::Point3D& body_rate_dps);
-
   class Impl;
   std::unique_ptr<Impl> impl_;
 };

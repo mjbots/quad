@@ -18,10 +18,10 @@
 
 #include "mjlib/base/fail.h"
 #include "mjlib/io/deadline_timer.h"
+#include "mjlib/io/now.h"
 
 #include "base/common.h"
 #include "base/logging.h"
-#include "base/now.h"
 
 namespace pl = std::placeholders;
 namespace mp = mjlib::multiplex;
@@ -105,12 +105,12 @@ class Parser {
 class Turret::Impl : boost::noncopyable {
  public:
   Impl(Turret* parent,
-       boost::asio::io_context& service,
+       const boost::asio::executor& executor,
        Mech::ServoBase* servo)
       : parent_(parent),
-        service_(service),
+        executor_(executor),
         servo_(servo),
-        timer_(service_) {}
+        timer_(executor_) {}
 
   void StartTimer() {
     timer_.expires_from_now(
@@ -257,7 +257,7 @@ class Turret::Impl : boost::noncopyable {
   }
 
   void Emit() {
-    data_.timestamp = base::Now(service_);
+    data_.timestamp = Now();
     parent_->turret_data_signal_(&data_);
   }
 
@@ -318,7 +318,7 @@ class Turret::Impl : boost::noncopyable {
           fmt::format(
               "device unresponsive, disabling for {} seconds",
               data_.disable_period_s));
-      disable_until_ = base::Now(service_) +
+      disable_until_ = Now() +
           base::ConvertSecondsToDuration(data_.disable_period_s);
     }
   }
@@ -333,12 +333,12 @@ class Turret::Impl : boost::noncopyable {
 
   bool is_disabled() const {
     if (disable_until_.is_not_a_date_time()) { return false; }
-    const auto now = base::Now(service_);
+    const auto now = Now();
     return now < disable_until_;
   }
 
   void SetFireControl(const TurretCommand::FireControl& command) {
-    const auto now = base::Now(service_);
+    const auto now = Now();
 
     // Update the laser status.
     if (parameters_.use_moteus_turret) {
@@ -482,7 +482,7 @@ class Turret::Impl : boost::noncopyable {
     // If we're not in target relative mode, then nothing to do here.
     if (!data_.target_relative) { return; }
 
-    const auto now = base::Now(service_);
+    const auto now = Now();
 
     if (!target) {
       // We don't currently have a target.  Just scale our rates by
@@ -527,9 +527,13 @@ class Turret::Impl : boost::noncopyable {
         });
   }
 
+  boost::posix_time::ptime Now() const {
+    return mjlib::io::Now(executor_.context());
+  }
+
   base::LogRef log_ = base::GetLogInstance("turret");
   Turret* const parent_;
-  boost::asio::io_context& service_;
+  boost::asio::executor executor_;
   Mech::ServoBase* const servo_;
   mp::ThreadedClient* mp_client_ = nullptr;
   mjlib::io::DeadlineTimer timer_;
@@ -546,16 +550,19 @@ class Turret::Impl : boost::noncopyable {
   std::list<TC::Request> outstanding_requests_;
 };
 
-Turret::Turret(boost::asio::io_context& service,
-               Mech::ServoBase* servo)
-    : impl_(new Impl(this, service, servo)) {}
+Turret::Turret(const boost::asio::executor& executor,
+               Mech::ServoBase* servo,
+               bool)
+    : impl_(new Impl(this, executor, servo)) {}
 
 Turret::~Turret() {}
 
 void Turret::AsyncStart(mjlib::io::ErrorCallback handler) {
   impl_->StartTimer();
 
-  impl_->service_.post(std::bind(handler, mjlib::base::error_code()));
+  boost::asio::post(
+      impl_->executor_,
+      std::bind(handler, mjlib::base::error_code()));
 }
 
 void Turret::SetMultiplexClient(mp::ThreadedClient* client) {
@@ -564,7 +571,7 @@ void Turret::SetMultiplexClient(mp::ThreadedClient* client) {
 
 void Turret::SetCommand(const TurretCommand& command) {
   CommandLog log;
-  log.timestamp = base::Now(impl_->service_);
+  log.timestamp = impl_->Now();
   log.command = command;
 
   turret_command_signal_(&log);
@@ -599,7 +606,7 @@ void Turret::SetCommand(const TurretCommand& command) {
   if (command.target_relative) {
     impl_->data_.target_relative = command.target_relative;
     impl_->data_.target_relative_rate = {};
-    impl_->data_.target_relative_last_time = base::Now(impl_->service_);
+    impl_->data_.target_relative_last_time = impl_->Now();
   } else if (command.absolute) {
     const double limited_pitch_deg =
         std::max(impl_->parameters_.min_y_deg,

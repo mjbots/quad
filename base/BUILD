@@ -20,9 +20,6 @@ cc_library(
     name = "base",
     srcs = [
         "context.cc",
-        "debug_i2c_generator.cc",
-        "i2c_factory.cc",
-        "linux_i2c_generator.cc",
         "linux_input.cc",
         "logging.cc",
         "program_options.cc",
@@ -43,7 +40,6 @@ cc_library(
         "@boost//:system",
         "@eigen",
         "@fmt",
-        "@i2c-tools",
         "@log4cpp",
         "@moteus//mjlib/base:eigen",
         "@moteus//mjlib/base:error_code",
@@ -57,6 +53,7 @@ cc_library(
         "@moteus//mjlib/base:system_error",
         "@moteus//mjlib/base:visitor",
         "@moteus//mjlib/base:visit_archive",
+        "@moteus//mjlib/io:async_sequence",
         "@moteus//mjlib/io:async_types",
         "@moteus//mjlib/io:debug_time",
         "@moteus//mjlib/io:repeating_timer",
@@ -74,7 +71,6 @@ cc_library(
 cc_test(
     name = "test",
     srcs = ["test/" + x for x in [
-        "async_sequence_test.cc",
         "attitude_estimator_test.cc",
         "program_options_test.cc",
         "quaternion_test.cc",

@@ -15,7 +15,7 @@
 
 #pragma once
 
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/executor.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/signals2/signal.hpp>
 
@@ -32,11 +32,11 @@ namespace mech {
 class RtspServer : boost::noncopyable {
  public:
   RtspServer(base::Context& context)
-      : RtspServer(context.service) {
+      : RtspServer(context.executor) {
     // no stats -- we log to camera
   }
 
-  RtspServer(boost::asio::io_context&);
+  RtspServer(const boost::asio::executor&);
   ~RtspServer();
 
   void AsyncStart(mjlib::io::ErrorCallback handler);

@@ -18,7 +18,7 @@
 #include <sstream>
 
 #include <boost/algorithm/string.hpp>
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/executor.hpp>
 #include <boost/asio/read_until.hpp>
 #include <boost/asio/streambuf.hpp>
 #include <boost/date_time/posix_time/posix_time_io.hpp>
@@ -28,10 +28,9 @@
 #include "mjlib/base/fail.h"
 #include "mjlib/base/program_options_archive.h"
 #include "mjlib/base/time_conversions.h"
+#include "mjlib/io/async_sequence.h"
 #include "mjlib/io/deadline_timer.h"
-
-#include "base/async_sequence.h"
-#include "base/now.h"
+#include "mjlib/io/now.h"
 
 namespace mjmech {
 namespace mech {
@@ -79,9 +78,9 @@ class JumpTest::Impl {
        base::Context& context)
       : parent_(parent),
         param_(&parent_->parameters_),
-        service_(context.service),
+        executor_(context.executor),
         factory_(context.factory.get()),
-        timer_(service_) {
+        timer_(executor_) {
     stdin_options_.type = mjlib::io::StreamFactory::Type::kStdio;
   }
 
@@ -89,7 +88,7 @@ class JumpTest::Impl {
     if (param_->skip_powered) {
       state_ = State::kPrepositioning;
     }
-    base::AsyncSequence(service_)
+    mjlib::io::AsyncSequence(executor_)
         .Add([this](auto callback) {
             std::cout << "starting children\n";
             param_->children.Start(callback);
@@ -202,7 +201,7 @@ class JumpTest::Impl {
 
     std::cout << fmt::format(
         "{} {:16} \n  {}\n\n",
-        boost::lexical_cast<std::string>(base::Now(service_)),
+        boost::lexical_cast<std::string>(mjlib::io::Now(executor_.context())),
         StateMapper().at(state_),
         FormatCurrent());
 
@@ -309,7 +308,7 @@ class JumpTest::Impl {
   }
 
   void ProcessState() {
-    const auto now = base::Now(service_);
+    const auto now = mjlib::io::Now(executor_.context());
     if (state_ != start_time_state_ ||
         start_time_time_.is_special()) {
       start_time_state_ = state_;
@@ -438,7 +437,7 @@ class JumpTest::Impl {
 
   JumpTest* const parent_;
   JumpTest::Parameters* const param_;
-  boost::asio::io_context& service_;
+  boost::asio::executor executor_;
   mjlib::io::StreamFactory* const factory_;
   boost::program_options::options_description options_;
   mjlib::io::DeadlineTimer timer_;
@@ -462,9 +461,9 @@ class JumpTest::Impl {
 JumpTest::JumpTest(base::Context& context)
     : impl_(std::make_unique<Impl>(this, context)) {
   m_.multiplex_client = std::make_unique<MultiplexClient>(
-      impl_->service_);
+      impl_->executor_);
   m_.moteus_servo = std::make_unique<MoteusServo>(
-      impl_->service_, context.telemetry_registry.get());
+      impl_->executor_, context.telemetry_registry.get());
 
   mjlib::base::ProgramOptionsArchive(&impl_->options_).Accept(&impl_->stdin_options_);
   mjlib::base::ProgramOptionsArchive(&impl_->options_).Accept(&parameters_);

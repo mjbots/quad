@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/executor.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/noncopyable.hpp>
 #include <boost/program_options.hpp>
@@ -38,7 +38,7 @@ class Ahrs : boost::noncopyable {
             typename ImuData>
   Ahrs(Context& context,
        boost::signals2::signal<void (const ImuData*)>* imu_signal)
-      : Ahrs(context.service, context.telemetry_registry.get()) {
+      : Ahrs(context.executor, context.telemetry_registry.get()) {
     imu_signal->connect(std::bind(&Ahrs::HandleImuData<ImuData>, this,
                                   std::placeholders::_1));
   }
@@ -52,7 +52,7 @@ class Ahrs : boost::noncopyable {
   boost::signals2::signal<void (const AhrsData*)>* ahrs_data_signal();
 
  private:
-  Ahrs(boost::asio::io_context&, base::TelemetryRegistry*);
+  Ahrs(const boost::asio::executor&, base::TelemetryRegistry*);
 
   template <typename ImuData>
   void HandleImuData(const ImuData* data) {

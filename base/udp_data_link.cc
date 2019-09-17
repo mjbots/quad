@@ -16,11 +16,10 @@
 #include "udp_data_link.h"
 
 #include "mjlib/base/fail.h"
+#include "mjlib/io/now.h"
 
-#include "base/now.h"
-
-#include "common.h"
-#include "stringify.h"
+#include "base/common.h"
+#include "base/stringify.h"
 
 /*
 Precise semantics:
@@ -45,11 +44,11 @@ Precise semantics:
 namespace mjmech {
 namespace base {
 
-UdpDataLink::UdpDataLink(boost::asio::io_context& service,
+UdpDataLink::UdpDataLink(const boost::asio::executor& executor,
                          LogRef& log,
                          const Parameters& params)
-    : service_(service),
-      periodic_timer_(service),
+    : executor_(executor),
+      periodic_timer_(executor_),
       params_(params),
       log_(log) {
 
@@ -86,7 +85,7 @@ UdpDataLink::UdpDataLink(boost::asio::io_context& service,
   // We listen on default_port only if we have no destination address.
   bool server_mode = !dest_p.address;
   rx_socket_ = std::make_shared<UdpSocket>(
-      service, log_, source_p, server_mode,
+      executor_, log_, source_p, server_mode,
       params_.socket_params);
 
   auto logmsg = log_.noticeStream();
@@ -94,7 +93,7 @@ UdpDataLink::UdpDataLink(boost::asio::io_context& service,
   if (rx_socket_->is_receiving_multicast()) {
     // We need a separate tx socket
     tx_socket_ = std::make_shared<UdpSocket>(
-        service, base::GetSubLogger(log_, "tx"),
+        executor_, base::GetSubLogger(log_, "tx"),
         "", false,  params_.socket_params);
     logmsg << "Receiving multicast " << rx_socket_->local_endpoint()
            << ", sending from " << tx_socket_->local_endpoint();
@@ -172,7 +171,7 @@ void UdpDataLink::HandleUdpPacket(
         << "Peer " << new_peer.id << " appeared, address " << new_peer.name;
   }
   iter->second.packet_count++;
-  iter->second.last_rx_time = Now(service_);
+  iter->second.last_rx_time = mjlib::io::Now(executor_.context());
   data_signal_(data, iter->second);
 }
 
@@ -180,7 +179,7 @@ void UdpDataLink::HandlePeriodicTimer() {
   if (params_.peer_timeout_s <= 0) {
     return;
   }
-  const boost::posix_time::ptime now = Now(service_);
+  const boost::posix_time::ptime now = mjlib::io::Now(executor_.context());
   const boost::posix_time::time_duration timeout =
       ConvertSecondsToDuration(params_.peer_timeout_s);
 

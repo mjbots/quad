@@ -34,7 +34,7 @@ class Turret : boost::noncopyable {
   template <typename Context>
   Turret(Context& context,
          Mech::ServoBase* servo)
-      : Turret(context.service, servo) {
+      : Turret(context.executor, servo, false) {
     context.telemetry_registry->Register("turret",
                                         &turret_data_signal_);
     context.telemetry_registry->Register("turret_command",
@@ -148,8 +148,8 @@ class Turret : boost::noncopyable {
   const Data& data() const;
 
  private:
-  Turret(boost::asio::io_context& service,
-         Mech::ServoBase* servo);
+  Turret(const boost::asio::executor& executor,
+         Mech::ServoBase* servo, bool);
 
   struct CommandLog {
     boost::posix_time::ptime timestamp;

@@ -46,18 +46,18 @@ typedef HerkuleX Servo;
 typedef HerkuleXConstants HC;
 
 struct CommandContext {
-  CommandContext(boost::asio::io_context& service_in,
+  CommandContext(const boost::asio::executor& executor_in,
                  const Options& options_in,
                  Servo& servo_in,
                  ServoInterface& servo_interface_in,
                  const std::string& args_in)
-      : service(service_in),
+      : executor(executor_in),
         options(options_in),
         servo(servo_in),
         servo_interface(servo_interface_in),
         args(args_in) {}
 
-  boost::asio::io_context& service;
+  boost::asio::executor executor;
   const Options& options;
   Servo& servo;
   ServoInterface& servo_interface;
@@ -224,7 +224,7 @@ class EnumerateCommand : public std::enable_shared_from_this<EnumerateCommand> {
 const std::map<std::string, Command> g_commands = {
   { "stdio", { kNoArgs, DoStdio } },
   { "sleep", { kArg, [](CommandContext& ctx, mjlib::io::ErrorCallback handler) {
-        auto timer = std::make_shared<mjlib::io::DeadlineTimer>(ctx.service);
+        auto timer = std::make_shared<mjlib::io::DeadlineTimer>(ctx.executor);
         double delay_s = std::stod(ctx.args);
         timer->expires_from_now(ConvertSecondsToDuration(delay_s));
         timer->async_wait([timer, handler](const mjlib::base::error_code& ec) {
@@ -367,7 +367,7 @@ class CommandRunner {
         this->Start();
       });
 
-    service_.run();
+    context_.run();
   }
 
   Options* options() { return &options_; }
@@ -376,7 +376,7 @@ class CommandRunner {
  private:
   void Start() {
     if (commands_.empty()) {
-      service_.stop();
+      context_.stop();
       return;
     }
 
@@ -384,7 +384,7 @@ class CommandRunner {
     commands_.pop_front();
 
     auto ctx = std::make_shared<CommandContext>(
-      service_, options_, servo_, servo_interface_,
+      executor_, options_, servo_, servo_interface_,
       this_command.args);
     auto it = g_commands.find(this_command.name);
     BOOST_ASSERT(it != g_commands.end());
@@ -395,9 +395,10 @@ class CommandRunner {
       });
   }
 
-  boost::asio::io_context service_;
-  mjlib::io::StreamFactory factory_{service_};
-  Servo servo_{service_, factory_};
+  boost::asio::io_context context_;
+  boost::asio::executor executor_{context_.get_executor()};
+  mjlib::io::StreamFactory factory_{executor_};
+  Servo servo_{executor_, factory_};
   HerkuleXServoInterface<Servo> servo_interface_{&servo_};
   Options options_;
   std::deque<CommandText> commands_;
@@ -478,7 +479,7 @@ class StdioHandler : public std::enable_shared_from_this<StdioHandler> {
     }
 
     auto sub_context = std::make_shared<CommandContext>(
-      context_.service, context_.options, context_.servo, context_.servo_interface,
+      context_.executor, context_.options, context_.servo, context_.servo_interface,
       args);
     auto it = g_commands.find(command_name);
     if (it == g_commands.end()) {
@@ -496,7 +497,7 @@ class StdioHandler : public std::enable_shared_from_this<StdioHandler> {
 
   CommandContext& context_;
   boost::asio::posix::stream_descriptor descriptor_{
-    context_.service, ::dup(0)};
+    context_.executor, ::dup(0)};
   std::string last_line_;
   mjlib::io::ErrorCallback final_handler_;
   boost::asio::streambuf stream_;

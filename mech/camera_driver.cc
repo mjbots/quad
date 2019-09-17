@@ -26,13 +26,13 @@
 #include <fmt/format.h>
 
 #include "mjlib/base/fail.h"
+#include "mjlib/io/now.h"
 
 #include "base/common.h"
 #include "base/context_full.h"
 #include "base/logging.h"
-#include "base/now.h"
 
-#include "gst_helpers.h"
+#include "mech/gst_helpers.h"
 
 namespace mjmech {
 namespace mech {
@@ -307,9 +307,9 @@ class H264Encoder {
 
 class CameraDriver::Impl : boost::noncopyable {
  public:
-  Impl(CameraDriver* parent, boost::asio::io_context& service)
+  Impl(CameraDriver* parent, const boost::asio::executor& executor)
       : parent_(parent),
-        parent_service_(service),
+        parent_executor_(executor),
         parent_id_(std::this_thread::get_id()),
         stats_(new CameraStats()) {}
 
@@ -335,7 +335,9 @@ class CameraDriver::Impl : boost::noncopyable {
     if (i_preset < 0 || i_preset > kMaxPresets) {
       std::string msg = fmt::format("Preset {} is not in the range 0..{}",
                                     i_preset, kMaxPresets);
-      parent_service_.post(std::bind(handler, mjlib::base::error_code::einval(msg)));
+      boost::asio::post(
+          parent_executor_,
+          std::bind(handler, mjlib::base::error_code::einval(msg)));
       return;
     }
     const Preset& preset = kPresets[i_preset];
@@ -350,7 +352,9 @@ class CameraDriver::Impl : boost::noncopyable {
       parameters_.h264_height = preset.h264_size.height;
     }
 
-    parent_service_.post(std::bind(handler, mjlib::base::error_code()));
+    boost::asio::post(
+        parent_executor_,
+        std::bind(handler, mjlib::base::error_code()));
   }
 
   void AddFrameConsumer(std::weak_ptr<CameraFrameConsumer> c) {
@@ -610,7 +614,7 @@ class CameraDriver::Impl : boost::noncopyable {
     }
 
     double interval = 0;
-    const auto now = base::Now(parent_service_);
+    const auto now = mjlib::io::Now(parent_executor_.context());
     if (last_h264_time_) {
       interval = base::ConvertDurationToSeconds(now - *last_h264_time_);
     }
@@ -637,7 +641,7 @@ class CameraDriver::Impl : boost::noncopyable {
       std::swap(stats_, other);
     }
 
-    other->timestamp = base::Now(parent_service_);
+    other->timestamp = mjlib::io::Now(parent_executor_.context());
 
     for (std::weak_ptr<CameraFrameConsumer>& c_weak: consumers_) {
       std::shared_ptr<CameraFrameConsumer> c = c_weak.lock();
@@ -648,8 +652,10 @@ class CameraDriver::Impl : boost::noncopyable {
       c->PreEmitStats(other.get());
     }
 
-    parent_service_.post(std::bind(&CameraDriver::Impl::HandleStatsMainThread,
-                                   this, other));
+    boost::asio::post(
+        parent_executor_,
+        std::bind(&CameraDriver::Impl::HandleStatsMainThread,
+                  this, other));
   }
 
   void HandleStatsMainThread(std::shared_ptr<CameraStats> stats) {
@@ -662,7 +668,7 @@ class CameraDriver::Impl : boost::noncopyable {
 
   // From both, changed only on startup
   CameraDriver* const parent_;
-  boost::asio::io_context& parent_service_;
+  boost::asio::executor parent_executor_;
 
   Parameters parameters_;
   std::vector<std::weak_ptr<CameraFrameConsumer> > consumers_;
@@ -689,7 +695,7 @@ class CameraDriver::Impl : boost::noncopyable {
 
 
 CameraDriver::CameraDriver(base::Context& context)
-    : impl_(new Impl(this, context.service)) {
+    : impl_(new Impl(this, context.executor)) {
   context.telemetry_registry->Register(
       "camera_stats", &camera_stats_signal_);
 }

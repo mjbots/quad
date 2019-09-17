@@ -18,9 +18,9 @@
 #include "mjlib/base/limit.h"
 #include "mjlib/base/program_options_archive.h"
 #include "mjlib/io/deadline_timer.h"
+#include "mjlib/io/now.h"
 
 #include "base/logging.h"
-#include "base/now.h"
 #include "base/telemetry_registry.h"
 
 #include "ripple.h"
@@ -82,16 +82,18 @@ class FailHandler {
 
 class GaitDriver::Impl : boost::noncopyable {
  public:
-  Impl(boost::asio::io_context& service,
+  Impl(const boost::asio::executor& executor,
        base::TelemetryRegistry* telemetry_registry)
-      : service_(service) {
+      : executor_(executor) {
     mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
     telemetry_registry->Register("gait_command", &command_data_signal_);
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
     log_.warn("AsyncStart");
-    service_.post(std::bind(callback, mjlib::base::error_code()));
+    boost::asio::post(
+        executor_,
+        std::bind(callback, mjlib::base::error_code()));
   }
 
   void SetGait(std::unique_ptr<RippleGait> gait) {
@@ -108,7 +110,7 @@ class GaitDriver::Impl : boost::noncopyable {
     gait_command_.translate_y_mm_s = old_translate_y_mm_s;
 
     CommandData data;
-    data.timestamp = base::Now(service_);
+    data.timestamp = Now();
     data.command = input_command_;
     command_data_signal_(&data);
 
@@ -123,7 +125,7 @@ class GaitDriver::Impl : boost::noncopyable {
     state_ = kUnpowered;
 
     CommandState result;
-    result.timestamp = base::Now(service_);
+    result.timestamp = Now();
     result.power_state = ServoInterface::kPowerFree;
 
     for (int i = 1; i <= 12; i++) {
@@ -202,13 +204,13 @@ class GaitDriver::Impl : boost::noncopyable {
 
   void CommandPrepositioning() {
     log_.debug("CommandPrepositioning");
-    stand_sit_start_time_ = base::Now(service_);
+    stand_sit_start_time_ = Now();
     state_ = kPrepositioning;
   }
 
   CommandState MakeCommandState(std::vector<ServoInterface::Joint> joints) {
     CommandState result;
-    result.timestamp = base::Now(service_);
+    result.timestamp = Now();
     result.joints = std::move(joints);
     result.power_state = ServoInterface::kPowerEnable;
     return result;
@@ -224,7 +226,7 @@ class GaitDriver::Impl : boost::noncopyable {
 
   void CommandStandup() {
     log_.debug("CommandStandup");
-    stand_sit_start_time_ = base::Now(service_);
+    stand_sit_start_time_ = Now();
     state_ = kStandup;
   }
 
@@ -240,12 +242,12 @@ class GaitDriver::Impl : boost::noncopyable {
 
   void CommandSitting() {
     log_.debug("CommandSitting");
-    stand_sit_start_time_ = base::Now(service_);
+    stand_sit_start_time_ = Now();
     state_ = kSitting;
   }
 
   double GetSitStandRatio() {
-    const auto now = base::Now(service_);
+    const auto now = Now();
     const double delay_s = base::ConvertDurationToSeconds(now - stand_sit_start_time_);
     const double ratio = std::max(0.0, std::min(1.0, delay_s / parameters_.stand_sit_time_s));
     return ratio;
@@ -258,20 +260,6 @@ class GaitDriver::Impl : boost::noncopyable {
         DerateStandupCommands(
             MakeRegularServoCommands(gait_commands_.joints),
             1.0 - GetSitStandRatio()));
-  }
-
-  void ProcessBodyAhrs(boost::posix_time::ptime,
-                       bool valid,
-                       const base::Quaternion& world_attitude,
-                       const base::Point3D& body_rate_dps) {
-    if (!valid) {
-      attitude_ = base::Quaternion();
-      body_rate_dps_ = base::Point3D();
-      return;
-    }
-
-    attitude_ = world_attitude;
-    body_rate_dps_ = body_rate_dps;
   }
 
   UpdateResult Update(double period_s) {
@@ -294,7 +282,7 @@ class GaitDriver::Impl : boost::noncopyable {
     }
 
 
-    const auto now = base::Now(service_);
+    const auto now = Now();
     const auto elapsed = now - last_command_timestamp_;
     const bool timeout =
         (parameters_.command_timeout_s > 0.0) &&
@@ -381,7 +369,7 @@ class GaitDriver::Impl : boost::noncopyable {
 
     auto& data = result.gait_data;
 
-    data.timestamp = base::Now(service_);
+    data.timestamp = Now();
 
     data.state = state_;
     data.command = gait_commands_;
@@ -393,8 +381,6 @@ class GaitDriver::Impl : boost::noncopyable {
     data.cog_robot = state.cog_frame.TransformToFrame(&state.robot_frame);
     data.body_world = state.body_frame.TransformToFrame(&state.world_frame);
     data.robot_world = state.robot_frame.TransformToFrame(&state.world_frame);
-    data.attitude = attitude_;
-    data.body_rate_dps = body_rate_dps_;
     BOOST_ASSERT(state.legs.size() == 4);
     for (size_t i = 0; i < state.legs.size(); i++) {
       data.legs[i] = state.robot_frame.MapFromFrame(
@@ -406,9 +392,13 @@ class GaitDriver::Impl : boost::noncopyable {
     return result;
   }
 
+  boost::posix_time::ptime Now() {
+    return mjlib::io::Now(executor_.context());
+  }
+
   base::LogRef log_ = base::GetLogInstance("GaitDriver");
 
-  boost::asio::io_context& service_;
+  boost::asio::executor executor_;
   std::unique_ptr<RippleGait> gait_;
 
   boost::program_options::options_description options_;
@@ -419,8 +409,6 @@ class GaitDriver::Impl : boost::noncopyable {
 
   State state_ = kUnpowered;
   boost::posix_time::ptime last_command_timestamp_;
-  base::Quaternion attitude_;
-  base::Point3D body_rate_dps_;
   JointCommand gait_commands_;
 
   Command input_command_;
@@ -429,9 +417,9 @@ class GaitDriver::Impl : boost::noncopyable {
   boost::posix_time::ptime stand_sit_start_time_;
 };
 
-GaitDriver::GaitDriver(boost::asio::io_context& service,
+GaitDriver::GaitDriver(const boost::asio::executor& executor,
                        base::TelemetryRegistry* registry)
-    : impl_(new Impl(service, registry)) {}
+    : impl_(new Impl(executor, registry)) {}
 
 GaitDriver::~GaitDriver() {}
 
@@ -476,13 +464,6 @@ const Command& GaitDriver::input_command() const {
 
 const Command& GaitDriver::gait_command() const {
   return impl_->gait_command();
-}
-
-void GaitDriver::ProcessBodyAhrs(boost::posix_time::ptime timestamp,
-                                 bool valid,
-                                 const base::Quaternion& attitude,
-                                 const base::Point3D& body_rate_dps) {
-  impl_->ProcessBodyAhrs(timestamp, valid, attitude, body_rate_dps);
 }
 
 GaitDriver::UpdateResult GaitDriver::Update(double period_s) {

@@ -18,7 +18,7 @@
 #include <memory>
 #include <thread>
 
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/executor.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/signals2/signal.hpp>
 
@@ -65,16 +65,16 @@ class GstMainLoop : boost::noncopyable {
  public:
   template <typename Context>
     GstMainLoop(Context& context)
-    : GstMainLoop(context.service,
+    : GstMainLoop(context.executor,
                    context.telemetry_registry.get()) {}
 
   template <typename TelemetryRegistry>
-    GstMainLoop(boost::asio::io_context& service,
+    GstMainLoop(const boost::asio::executor& executor,
                 TelemetryRegistry*)
-    : GstMainLoop(service) {
+    : GstMainLoop(executor) {
   }
 
-  GstMainLoop(boost::asio::io_context&);
+  GstMainLoop(const boost::asio::executor&);
   ~GstMainLoop();
 
   void AsyncStart(mjlib::io::ErrorCallback handler);

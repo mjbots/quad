@@ -17,6 +17,7 @@
 #include <numeric>
 #include <optional>
 
+#include <boost/asio/post.hpp>
 #include <boost/asio/read.hpp>
 #include <boost/asio/read_until.hpp>
 #include <boost/asio/streambuf.hpp>
@@ -28,9 +29,9 @@
 #include "mjlib/base/fail.h"
 #include "mjlib/base/program_options_archive.h"
 #include "mjlib/base/visitor.h"
+#include "mjlib/io/exclusive_command.h"
 #include "mjlib/io/stream_factory.h"
 
-#include "base/command_sequencer.h"
 #include "base/common.h"
 #include "base/program_options.h"
 #include "base/signal_result.h"
@@ -204,11 +205,11 @@ struct HerkuleXConstants {
 
 class HerkuleXProtocol : public HerkuleXBase {
  public:
-  HerkuleXProtocol(boost::asio::io_context& service,
+  HerkuleXProtocol(const boost::asio::executor& executor,
                    mjlib::io::StreamFactory& factory)
-      : service_(service),
+      : executor_(executor),
         factory_(factory),
-        sequencer_(service) {
+        sequencer_(executor) {
     mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
     mjlib::base::ProgramOptionsArchive(&stream_options_).Accept(&stream_parameters_);
     base::MergeProgramOptions(&stream_options_, "stream.", &options_);
@@ -250,7 +251,7 @@ class HerkuleXProtocol : public HerkuleXBase {
   template <typename Handler>
   void ReceivePacket(Handler handler) {
     base::SignalResult::Wait(
-        service_, &read_signal_,
+        executor_, &read_signal_,
         parameters_.packet_timeout_s, handler);
   }
 
@@ -269,7 +270,7 @@ class HerkuleXProtocol : public HerkuleXBase {
                 }
 
                 base::SignalResult::Wait(
-                    service_, &read_signal_,
+                    executor_, &read_signal_,
                     parameters_.packet_timeout_s, packet_handler);
               });
         },
@@ -277,12 +278,16 @@ class HerkuleXProtocol : public HerkuleXBase {
   }
 
   template <typename Handler>
-  void Post(Handler handler) { service_.post(handler); }
+  void Post(Handler handler) {
+    boost::asio::post(executor_, handler);
+  }
 
  private:
   void RawSendPacket(const Packet& packet, mjlib::io::ErrorCallback handler) {
     if (!stream_) {
-      service_.post(std::bind(handler, mjlib::base::error_code()));
+      boost::asio::post(
+          executor_,
+          std::bind(handler, mjlib::base::error_code()));
       return;
     }
 
@@ -316,7 +321,9 @@ class HerkuleXProtocol : public HerkuleXBase {
                    mjlib::base::error_code ec,
                    mjlib::io::SharedStream stream) {
     if (ec) {
-      service_.post(std::bind(handler, ec));
+      boost::asio::post(
+          executor_,
+          std::bind(handler, ec));
       return;
     }
 
@@ -325,7 +332,9 @@ class HerkuleXProtocol : public HerkuleXBase {
 
     ReadLoop1();
 
-    service_.post(std::bind(handler, mjlib::base::error_code()));
+    boost::asio::post(
+        executor_,
+        std::bind(handler, mjlib::base::error_code()));
   }
 
   void ReadLoop1() {
@@ -447,13 +456,13 @@ class HerkuleXProtocol : public HerkuleXBase {
                         [](uint8_t a, uint8_t b) { return a ^ b; });
   }
 
-  boost::asio::io_context& service_;
+  boost::asio::executor executor_;
   mjlib::io::StreamFactory& factory_;
   Parameters parameters_;
   mjlib::io::StreamFactory::Options stream_parameters_;
   boost::program_options::options_description options_;
   boost::program_options::options_description stream_options_;
-  base::CommandSequencer sequencer_;
+  mjlib::io::ExclusiveCommand sequencer_;
   mjlib::io::SharedStream stream_;
   boost::signals2::signal<void (const Packet*)> read_signal_;
   char buffer_[256] = {};

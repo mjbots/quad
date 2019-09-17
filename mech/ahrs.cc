@@ -15,10 +15,10 @@
 #include "ahrs.h"
 
 #include "mjlib/base/program_options_archive.h"
+#include "mjlib/io/now.h"
 
 #include "base/attitude_estimator.h"
 #include "base/common.h"
-#include "base/now.h"
 #include "base/telemetry_registry.h"
 
 namespace mjmech {
@@ -87,9 +87,9 @@ struct AhrsDebugData {
 
 class Ahrs::Impl : boost::noncopyable {
  public:
-  Impl(boost::asio::io_context& service,
+  Impl(const boost::asio::executor& executor,
        base::TelemetryRegistry* registry)
-      : service_(service) {
+      : executor_(executor) {
     mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
 
     registry->Register("ahrs", &ahrs_data_signal_);
@@ -139,7 +139,7 @@ class Ahrs::Impl : boost::noncopyable {
 
     data_.state = AhrsData::kInitializing;
     if (data_debug_.init_start.is_not_a_date_time()) {
-      data_debug_.init_start = base::Now(service_);
+      data_debug_.init_start = mjlib::io::Now(executor_.context());
     }
 
     Point3D body_total_dps =
@@ -161,7 +161,7 @@ class Ahrs::Impl : boost::noncopyable {
     const auto a_g = data_debug_.init_accel_mps2 * (1.0 / kGravity);
     data_.attitude = base::AttitudeEstimator::AccelToOrientation(a_g);
 
-    const auto now = base::Now(service_);
+    const auto now = mjlib::io::Now(executor_.context());
     auto elapsed = (now - data_debug_.init_start);
 
     if (elapsed >
@@ -208,7 +208,7 @@ class Ahrs::Impl : boost::noncopyable {
 
   void Emit(const Point3D& accel_mps2,
             const Point3D& body_rate_dps) {
-    data_.timestamp = base::Now(service_);
+    data_.timestamp = mjlib::io::Now(executor_.context());
     data_debug_.timestamp = data_.timestamp;
 
     data_.valid = (data_.state == AhrsData::kOperational);
@@ -248,7 +248,7 @@ class Ahrs::Impl : boost::noncopyable {
     ahrs_debug_signal_(&data_debug_);
   }
 
-  boost::asio::io_context& service_;
+  boost::asio::executor executor_;
   Parameters parameters_;
   boost::program_options::options_description options_;
 
@@ -263,14 +263,16 @@ class Ahrs::Impl : boost::noncopyable {
   boost::posix_time::ptime start_init_timestamp_;
 };
 
-Ahrs::Ahrs(boost::asio::io_context& service,
+Ahrs::Ahrs(const boost::asio::executor& executor,
            base::TelemetryRegistry* registry)
-    : impl_(new Impl(service, registry)) {}
+    : impl_(new Impl(executor, registry)) {}
 Ahrs::~Ahrs() {}
 
 void Ahrs::AsyncStart(mjlib::io::ErrorCallback handler) {
   impl_->Start();
-  impl_->service_.post(std::bind(handler, mjlib::base::error_code()));
+  boost::asio::post(
+      impl_->executor_,
+      std::bind(handler, mjlib::base::error_code()));
 }
 
 boost::program_options::options_description*

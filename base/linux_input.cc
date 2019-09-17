@@ -17,6 +17,7 @@
 #include <linux/input.h>
 
 #include <boost/asio/posix/stream_descriptor.hpp>
+#include <boost/asio/post.hpp>
 
 #include <fmt/format.h>
 
@@ -27,29 +28,29 @@ namespace mjmech {
 namespace base {
 class LinuxInput::Impl : boost::noncopyable {
  public:
-  Impl(boost::asio::io_context& service) : service_(service) {}
+  Impl(const boost::asio::executor& executor) : executor_(executor) {}
 
-  boost::asio::io_context& service_;
-  boost::asio::posix::stream_descriptor stream_{service_};
+  boost::asio::executor executor_;
+  boost::asio::posix::stream_descriptor stream_{executor_};
 
   struct input_event input_event_;
 
   std::map<int, AbsInfo> abs_info_;
 };
 
-LinuxInput::LinuxInput(boost::asio::io_context& service)
-    : impl_(new Impl(service)) {}
+LinuxInput::LinuxInput(const boost::asio::executor& executor)
+    : impl_(new Impl(executor)) {}
 
-LinuxInput::LinuxInput(boost::asio::io_context& service,
+LinuxInput::LinuxInput(const boost::asio::executor& executor,
                        const std::string& device)
-    : LinuxInput(service) {
+    : LinuxInput(executor) {
   Open(device);
 }
 
 LinuxInput::~LinuxInput() {}
 
-boost::asio::io_context& LinuxInput::get_io_service() {
-  return impl_->service_;
+boost::asio::executor LinuxInput::get_executor() {
+  return impl_->executor_;
 }
 
 void LinuxInput::Open(const std::string& device) {
@@ -160,14 +161,18 @@ void LinuxInput::AsyncRead(Event* event, mjlib::io::ErrorCallback handler) {
       [event, handler, this](mjlib::base::error_code ec, std::size_t size) {
         if (ec) {
           ec.Append("reading input event");
-          impl_->service_.post(std::bind(handler, ec));
+          boost::asio::post(
+              impl_->executor_,
+              std::bind(handler, ec));
           return;
         }
 
         if (size != sizeof(impl_->input_event_)) {
-          impl_->service_.post(
+          boost::asio::post(
+              impl_->executor_,
               std::bind(
-                  handler, mjlib::base::error_code::einval("short read for input event")));
+                  handler,
+                  mjlib::base::error_code::einval("short read for input event")));
           return;
         }
 
@@ -183,7 +188,9 @@ void LinuxInput::AsyncRead(Event* event, mjlib::io::ErrorCallback handler) {
           }
         }
 
-        impl_->service_.post(std::bind(handler, mjlib::base::error_code()));
+        boost::asio::post(
+            impl_->executor_,
+            std::bind(handler, mjlib::base::error_code()));
       });
 }
 
