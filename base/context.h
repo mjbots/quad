@@ -19,6 +19,7 @@
 #include <boost/noncopyable.hpp>
 #include <boost/asio/io_context.hpp>
 
+#include "mjlib/io/realtime_executor.h"
 #include "mjlib/io/stream_factory.h"
 
 namespace mjmech {
@@ -33,7 +34,8 @@ struct Context : boost::noncopyable {
   ~Context();
 
   boost::asio::io_context context;
-  boost::asio::executor executor{context.get_executor()};
+  mjlib::io::RealtimeExecutor rt_executor{context.get_executor()};
+  boost::asio::executor executor{rt_executor};
   std::unique_ptr<TelemetryLog> telemetry_log;
   std::unique_ptr<TelemetryRemoteDebugServer> remote_debug;
   std::unique_ptr<TelemetryRegistry> telemetry_registry;

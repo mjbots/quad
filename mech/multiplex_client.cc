@@ -77,14 +77,11 @@ class MultiplexClient::Impl {
     // we can.
     timer_.start(boost::posix_time::milliseconds(100),
                  std::bind(&Impl::FixPriorities, this,
-                           std::placeholders::_1));
-
-    boost::asio::post(
-        executor_,
-        std::bind(handler, mjlib::base::error_code()));
+                           std::placeholders::_1, handler));
   }
 
-  void FixPriorities(const mjlib::base::error_code& ec) {
+  void FixPriorities(const mjlib::base::error_code& ec,
+                     mjlib::io::ErrorCallback handler) {
     if (ec == boost::asio::error::operation_aborted) { return; }
     mjlib::base::FailIf(ec);
     if (done_) { return; }
@@ -138,6 +135,10 @@ class MultiplexClient::Impl {
     // We no longer have to keep trying.
     done_ = true;
     timer_.cancel();
+
+    boost::asio::post(
+        executor_,
+        std::bind(handler, mjlib::base::error_code()));
   }
 
   void ProcessRequests() {

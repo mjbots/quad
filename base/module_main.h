@@ -42,6 +42,8 @@ int safe_main(int argc, char**argv) {
   std::string log_file;
   bool debug = false;
   bool log_short_name = false;
+  double event_timeout_s = 0;
+  double idle_timeout_s = 0;
 
   po::options_description desc("Allowable options");
   desc.add_options()
@@ -52,6 +54,8 @@ int safe_main(int argc, char**argv) {
        "do not insert timestamp in log file name")
       ("debug,d", po::bool_switch(&debug),
        "disable real-time signals and other debugging hindrances")
+      ("rt.event_timeout_s", po::value(&event_timeout_s))
+      ("rt.idle_timeout_s", po::value(&idle_timeout_s))
       ;
 
   AddLoggingOptions(&desc);
@@ -128,9 +132,18 @@ int safe_main(int argc, char**argv) {
 
   std::shared_ptr<ErrorHandlerJoiner> joiner =
       std::make_shared<ErrorHandlerJoiner>(
-          [=](mjlib::base::error_code ec) {
+          [&](mjlib::base::error_code ec) {
             mjlib::base::FailIf(ec);
-            if (debug) { std::cout << "Started!\n"; }
+
+            std::cout << "Started!\n";
+
+            context.rt_executor.set_options(
+                [&]() {
+                  mjlib::io::RealtimeExecutor::Options options;
+                  options.event_timeout_ns = event_timeout_s * 1000000000;
+                  options.idle_timeout_ns = idle_timeout_s * 1000000000;
+                  return options;
+                }());
           });
 
   context.remote_debug->AsyncStart(joiner->Wrap("starting remote_debug"));
