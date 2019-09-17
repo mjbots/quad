@@ -52,7 +52,7 @@ class Ahrs : boost::noncopyable {
   boost::signals2::signal<void (const AhrsData*)>* ahrs_data_signal();
 
  private:
-  Ahrs(boost::asio::io_service&, base::TelemetryRegistry*);
+  Ahrs(boost::asio::io_context&, base::TelemetryRegistry*);
 
   template <typename ImuData>
   void HandleImuData(const ImuData* data) {

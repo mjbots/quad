@@ -87,7 +87,7 @@ struct AhrsDebugData {
 
 class Ahrs::Impl : boost::noncopyable {
  public:
-  Impl(boost::asio::io_service& service,
+  Impl(boost::asio::io_context& service,
        base::TelemetryRegistry* registry)
       : service_(service) {
     mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
@@ -248,7 +248,7 @@ class Ahrs::Impl : boost::noncopyable {
     ahrs_debug_signal_(&data_debug_);
   }
 
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
   Parameters parameters_;
   boost::program_options::options_description options_;
 
@@ -263,7 +263,7 @@ class Ahrs::Impl : boost::noncopyable {
   boost::posix_time::ptime start_init_timestamp_;
 };
 
-Ahrs::Ahrs(boost::asio::io_service& service,
+Ahrs::Ahrs(boost::asio::io_context& service,
            base::TelemetryRegistry* registry)
     : impl_(new Impl(service, registry)) {}
 Ahrs::~Ahrs() {}

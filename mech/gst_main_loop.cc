@@ -70,7 +70,7 @@ class GstMainLoop::Impl :
       public std::enable_shared_from_this<Impl>,
                   boost::noncopyable {
  public:
-  Impl(GstMainLoop* parent, boost::asio::io_service& service)
+  Impl(GstMainLoop* parent, boost::asio::io_context& service)
       : parent_(parent),
         service_(service),
         work_(service_),
@@ -292,8 +292,8 @@ class GstMainLoop::Impl :
   boost::signals2::signal<
     void (GstMainLoopRefObj::QuitPostponerPtr&)> quit_request_signal_;
 
-  boost::asio::io_service& service_;
-  boost::asio::io_service::work work_;
+  boost::asio::io_context& service_;
+  boost::asio::io_context::work work_;
 
   base::LogRef log_ = base::GetLogInstance("gst_main");
   Parameters parameters_;
@@ -302,7 +302,7 @@ class GstMainLoop::Impl :
 };
 
 
-GstMainLoop::GstMainLoop(boost::asio::io_service& service)
+GstMainLoop::GstMainLoop(boost::asio::io_context& service)
   : impl_(new Impl(this, service)) {};
 
 GstMainLoop::~GstMainLoop() {}

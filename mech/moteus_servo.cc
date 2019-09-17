@@ -169,7 +169,7 @@ struct Command {
 
 class MoteusServo::Impl {
  public:
-  Impl(boost::asio::io_service& service,
+  Impl(boost::asio::io_context& service,
        base::TelemetryRegistry* telemetry_registry)
       : service_(service) {
     mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
@@ -534,7 +534,7 @@ class MoteusServo::Impl {
 
   boost::signals2::signal<void (const Command*)> command_signal_;
 
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
 
   Parameters parameters_;
   boost::program_options::options_description options_;
@@ -550,7 +550,7 @@ class MoteusServo::Impl {
   std::vector<Value> values_cache_;
 };
 
-MoteusServo::MoteusServo(boost::asio::io_service& service,
+MoteusServo::MoteusServo(boost::asio::io_context& service,
                          base::TelemetryRegistry* telemetry_registry)
     : impl_(std::make_unique<Impl>(service, telemetry_registry)) {}
 MoteusServo::~MoteusServo() {}

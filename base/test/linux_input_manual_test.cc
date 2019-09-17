@@ -76,7 +76,7 @@ int work(int argc, char** argv) {
   }
 
 
-  boost::asio::io_service service;
+  boost::asio::io_context service;
   LinuxInput linux_input(service);
   linux_input.Open(device);
 

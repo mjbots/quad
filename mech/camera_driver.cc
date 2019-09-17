@@ -307,7 +307,7 @@ class H264Encoder {
 
 class CameraDriver::Impl : boost::noncopyable {
  public:
-  Impl(CameraDriver* parent, boost::asio::io_service& service)
+  Impl(CameraDriver* parent, boost::asio::io_context& service)
       : parent_(parent),
         parent_service_(service),
         parent_id_(std::this_thread::get_id()),
@@ -662,7 +662,7 @@ class CameraDriver::Impl : boost::noncopyable {
 
   // From both, changed only on startup
   CameraDriver* const parent_;
-  boost::asio::io_service& parent_service_;
+  boost::asio::io_context& parent_service_;
 
   Parameters parameters_;
   std::vector<std::weak_ptr<CameraFrameConsumer> > consumers_;

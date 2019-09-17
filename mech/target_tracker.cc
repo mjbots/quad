@@ -163,7 +163,7 @@ class TargetTracker::Impl : public CameraFrameConsumer {
   }
 
   TargetTracker* const parent_;
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
   base::LogRef log_ = base::GetLogInstance("TargetTracker");
 
   bool enabled_ = false;

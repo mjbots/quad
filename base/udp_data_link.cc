@@ -45,7 +45,7 @@ Precise semantics:
 namespace mjmech {
 namespace base {
 
-UdpDataLink::UdpDataLink(boost::asio::io_service& service,
+UdpDataLink::UdpDataLink(boost::asio::io_context& service,
                          LogRef& log,
                          const Parameters& params)
     : service_(service),

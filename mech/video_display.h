@@ -41,7 +41,7 @@ class VideoDisplay : boost::noncopyable {
     context.telemetry_registry->Register("video_stats", &stats_signal_);
   }
 
-  VideoDisplay(boost::asio::io_service&);
+  VideoDisplay(boost::asio::io_context&);
   ~VideoDisplay();
 
   void AsyncStart(mjlib::io::ErrorCallback handler);

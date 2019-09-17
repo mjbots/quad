@@ -662,7 +662,7 @@ class MechWarfare::Impl : boost::noncopyable {
 
   MechWarfare* const parent_;
   base::Context& context_;
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
   boost::program_options::options_description options_;
 
   base::LogRef log_ = base::GetLogInstance("MechWarfare");

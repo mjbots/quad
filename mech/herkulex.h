@@ -204,7 +204,7 @@ struct HerkuleXConstants {
 
 class HerkuleXProtocol : public HerkuleXBase {
  public:
-  HerkuleXProtocol(boost::asio::io_service& service,
+  HerkuleXProtocol(boost::asio::io_context& service,
                    mjlib::io::StreamFactory& factory)
       : service_(service),
         factory_(factory),
@@ -447,7 +447,7 @@ class HerkuleXProtocol : public HerkuleXBase {
                         [](uint8_t a, uint8_t b) { return a ^ b; });
   }
 
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
   mjlib::io::StreamFactory& factory_;
   Parameters parameters_;
   mjlib::io::StreamFactory::Options stream_parameters_;

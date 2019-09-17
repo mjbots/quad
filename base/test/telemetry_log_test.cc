@@ -25,7 +25,7 @@
 using namespace mjmech::base;
 
 BOOST_AUTO_TEST_CASE(TelemetryLogBasicTest) {
-  boost::asio::io_service service;
+  boost::asio::io_context service;
   TelemetryLog log;
 
   int pipefd[2] = {};

@@ -194,7 +194,7 @@ std::string SerializeCommand(const T& message) {
 class Commander::Impl {
  public:
   Impl(Commander::Parameters& params,
-       boost::asio::io_service& service)
+       boost::asio::io_context& service)
       : parameters_(params),
         options_(params.opt),
         service_(service),
@@ -587,7 +587,7 @@ class Commander::Impl {
   const OptOptions& options_;
   boost::program_options::options_description po_options_;
   Command command_;
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
   udp::endpoint target_;
   std::unique_ptr<LinuxInput> linux_input_;
   std::unique_ptr<udp::socket> socket_;
@@ -607,7 +607,7 @@ class Commander::Impl {
   TargetOffsetSignal target_offset_signal_;
 };
 
-Commander::Commander(boost::asio::io_service& service)
+Commander::Commander(boost::asio::io_context& service)
     : impl_(new Impl(parameters_, service)) {
 }
 

@@ -44,7 +44,7 @@ struct Options {
 
 class CommandRunner {
  public:
-  CommandRunner(boost::asio::io_service& service,
+  CommandRunner(boost::asio::io_context& service,
                 const Options& options)
       : service_(service),
         options_(options) {
@@ -202,7 +202,7 @@ class CommandRunner {
     stats_.valid_reply++;
   }
 
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
   const Options options_;
   std::optional<mp::ThreadedClient> client_;
 
@@ -241,7 +241,7 @@ class CommandRunner {
 }
 
 int main(int argc, char** argv) {
-  boost::asio::io_service service;
+  boost::asio::io_context service;
 
   po::options_description desc("Allowable options");
 

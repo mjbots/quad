@@ -38,7 +38,7 @@ class MjmechImuDriver : boost::noncopyable {
                         context.i2c_factory.get()) {}
 
   template <typename TelemetryRegistry>
-  MjmechImuDriver(boost::asio::io_service& service,
+  MjmechImuDriver(boost::asio::io_context& service,
                   TelemetryRegistry* telemetry_registry,
                   base::I2CFactory* i2c_factory)
       : MjmechImuDriver(service, i2c_factory) {
@@ -46,7 +46,7 @@ class MjmechImuDriver : boost::noncopyable {
     telemetry_registry->Register("imu_config", &imu_config_signal_);
   }
 
-  MjmechImuDriver(boost::asio::io_service&,
+  MjmechImuDriver(boost::asio::io_context&,
                   base::I2CFactory*);
   ~MjmechImuDriver();
 

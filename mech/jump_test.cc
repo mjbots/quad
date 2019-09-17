@@ -438,7 +438,7 @@ class JumpTest::Impl {
 
   JumpTest* const parent_;
   JumpTest::Parameters* const param_;
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
   mjlib::io::StreamFactory* const factory_;
   boost::program_options::options_description options_;
   mjlib::io::DeadlineTimer timer_;

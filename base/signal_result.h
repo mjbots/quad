@@ -35,7 +35,7 @@ class SignalResult : boost::noncopyable {
  public:
 
   template <typename Handler, typename T>
-  static void Wait(boost::asio::io_service& service,
+  static void Wait(boost::asio::io_context& service,
                    boost::signals2::signal<void (const T*)>* signal,
                    double timeout_s,
                    Handler handler) {
@@ -44,7 +44,7 @@ class SignalResult : boost::noncopyable {
       bool active = true;
       boost::signals2::connection connection;
 
-      Context(boost::asio::io_service& service) : timer(service) {}
+      Context(boost::asio::io_context& service) : timer(service) {}
     };
 
     // TODO jpieper: It would be nice to implement this in a way that

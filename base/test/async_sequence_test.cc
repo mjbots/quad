@@ -21,7 +21,7 @@
 using namespace mjmech::base;
 
 BOOST_AUTO_TEST_CASE(BasicAsyncSequence) {
-  boost::asio::io_service service;
+  boost::asio::io_context service;
 
   bool first_called = false;
   auto first_op = [&](mjlib::io::ErrorCallback cbk) {
@@ -82,7 +82,7 @@ BOOST_AUTO_TEST_CASE(BasicAsyncSequence) {
 }
 
 BOOST_AUTO_TEST_CASE(ErrorAsyncSequence) {
-  boost::asio::io_service service;
+  boost::asio::io_context service;
 
   bool first_called = false;
   auto first_op = [&](mjlib::io::ErrorCallback cbk) {

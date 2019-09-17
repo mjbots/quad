@@ -50,13 +50,13 @@ class UdpSocket {
   //    contain port number, and we are not listening to multicast/broadcast:
   //       true = use parameters.default_port.
   //       false = use zero.
-  UdpSocket(boost::asio::io_service&, LogRef&,
+  UdpSocket(boost::asio::io_context&, LogRef&,
             const std::string& listen_addr,
             bool server_mode,
             const Parameters&);
 
   // A version of the constructor when address is already parsed
-  UdpSocket(boost::asio::io_service&, LogRef&,
+  UdpSocket(boost::asio::io_context&, LogRef&,
             const ParseResult&,
             bool server_mode,
             const Parameters&);

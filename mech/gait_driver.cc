@@ -82,7 +82,7 @@ class FailHandler {
 
 class GaitDriver::Impl : boost::noncopyable {
  public:
-  Impl(boost::asio::io_service& service,
+  Impl(boost::asio::io_context& service,
        base::TelemetryRegistry* telemetry_registry)
       : service_(service) {
     mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
@@ -408,7 +408,7 @@ class GaitDriver::Impl : boost::noncopyable {
 
   base::LogRef log_ = base::GetLogInstance("GaitDriver");
 
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
   std::unique_ptr<RippleGait> gait_;
 
   boost::program_options::options_description options_;
@@ -429,7 +429,7 @@ class GaitDriver::Impl : boost::noncopyable {
   boost::posix_time::ptime stand_sit_start_time_;
 };
 
-GaitDriver::GaitDriver(boost::asio::io_service& service,
+GaitDriver::GaitDriver(boost::asio::io_context& service,
                        base::TelemetryRegistry* registry)
     : impl_(new Impl(service, registry)) {}
 

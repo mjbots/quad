@@ -23,7 +23,7 @@ namespace base {
 
 class LinuxI2CGenerator : public I2CFactory::Generator {
  public:
-  LinuxI2CGenerator(boost::asio::io_service& service);
+  LinuxI2CGenerator(boost::asio::io_context& service);
   virtual ~LinuxI2CGenerator();
 
   class Parameters : public I2CFactory::GeneratorParameters {
@@ -54,7 +54,7 @@ class LinuxI2CGenerator : public I2CFactory::Generator {
                    SharedI2CHandler) const override;
 
  private:
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
 };
 
 }

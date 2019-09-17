@@ -14,14 +14,13 @@
 
 #pragma once
 
-#include "mjlib/io/virtual_deadline_timer.h"
+#include "mjlib/io/now.h"
 
 namespace mjmech {
 namespace base {
 
-inline boost::posix_time::ptime Now(boost::asio::io_service& service) {
-  return boost::asio::use_service<
-    mjlib::io::VirtualDeadlineTimerServiceHolder>(service).now();
+inline boost::posix_time::ptime Now(boost::asio::io_context& service) {
+  return mjlib::io::Now(service);
 }
 
 }

@@ -57,7 +57,7 @@ namespace mech {
 
 class MultiplexClient::Impl {
  public:
-  Impl(boost::asio::io_service& service)
+  Impl(boost::asio::io_context& service)
       : service_(service),
         timer_(service) {
     mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
@@ -152,7 +152,7 @@ class MultiplexClient::Impl {
   base::LogRef log_ = base::GetLogInstance("MultiplexClient");
   Parameters parameters_;
 
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
   mjlib::io::RepeatingTimer timer_;
 
   boost::program_options::options_description options_;
@@ -162,7 +162,7 @@ class MultiplexClient::Impl {
   bool done_ = false;
 };
 
-MultiplexClient::MultiplexClient(boost::asio::io_service& service)
+MultiplexClient::MultiplexClient(boost::asio::io_context& service)
     : impl_(std::make_unique<Impl>(service)) {}
 
 MultiplexClient::~MultiplexClient() {}

@@ -23,7 +23,7 @@ namespace base {
 
 class DebugI2CGenerator : public I2CFactory::Generator {
  public:
-  DebugI2CGenerator(boost::asio::io_service& service);
+  DebugI2CGenerator(boost::asio::io_context& service);
   virtual ~DebugI2CGenerator();
 
   class Parameters : public I2CFactory::GeneratorParameters {
@@ -58,7 +58,7 @@ class DebugI2CGenerator : public I2CFactory::Generator {
   void InstallHandler(const std::string& key, SharedI2C);
 
  private:
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
   std::map<std::string, SharedI2C> handler_map_;
 };
 

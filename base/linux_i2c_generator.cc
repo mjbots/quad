@@ -41,7 +41,7 @@ namespace {
 
 class LinuxI2C : public AsyncI2C {
  public:
-  LinuxI2C(boost::asio::io_service& service,
+  LinuxI2C(boost::asio::io_context& service,
            const std::string& device)
       : parent_id_(std::this_thread::get_id()),
         parent_service_(service),
@@ -62,7 +62,7 @@ class LinuxI2C : public AsyncI2C {
     child_.join();
   }
 
-  boost::asio::io_service& get_io_service() override {
+  boost::asio::io_context& get_io_service() override {
     BOOST_ASSERT(std::this_thread::get_id() == parent_id_);
     return parent_service_;
   }
@@ -144,7 +144,7 @@ class LinuxI2C : public AsyncI2C {
   void Run() {
     BOOST_ASSERT(std::this_thread::get_id() == child_.get_id());
 
-    boost::asio::io_service::work work(child_service_);
+    boost::asio::io_context::work work(child_service_);
     child_service_.run();
   }
 
@@ -165,14 +165,14 @@ class LinuxI2C : public AsyncI2C {
   }
 
   const std::thread::id parent_id_;
-  boost::asio::io_service& parent_service_;
+  boost::asio::io_context& parent_service_;
   const int fd_;
   std::thread child_;
-  boost::asio::io_service child_service_;
+  boost::asio::io_context child_service_;
 };
 }
 
-LinuxI2CGenerator::LinuxI2CGenerator(boost::asio::io_service& service)
+LinuxI2CGenerator::LinuxI2CGenerator(boost::asio::io_context& service)
   : service_(service) {}
 LinuxI2CGenerator::~LinuxI2CGenerator() {}
 

@@ -105,7 +105,7 @@ class Parser {
 class Turret::Impl : boost::noncopyable {
  public:
   Impl(Turret* parent,
-       boost::asio::io_service& service,
+       boost::asio::io_context& service,
        Mech::ServoBase* servo)
       : parent_(parent),
         service_(service),
@@ -529,7 +529,7 @@ class Turret::Impl : boost::noncopyable {
 
   base::LogRef log_ = base::GetLogInstance("turret");
   Turret* const parent_;
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
   Mech::ServoBase* const servo_;
   mp::ThreadedClient* mp_client_ = nullptr;
   mjlib::io::DeadlineTimer timer_;
@@ -546,7 +546,7 @@ class Turret::Impl : boost::noncopyable {
   std::list<TC::Request> outstanding_requests_;
 };
 
-Turret::Turret(boost::asio::io_service& service,
+Turret::Turret(boost::asio::io_context& service,
                Mech::ServoBase* servo)
     : impl_(new Impl(this, service, servo)) {}
 

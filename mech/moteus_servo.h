@@ -27,7 +27,7 @@ namespace mech {
 
 class MoteusServo : public ServoInterface {
  public:
-  MoteusServo(boost::asio::io_service&,
+  MoteusServo(boost::asio::io_context&,
               base::TelemetryRegistry* telemetry_registry);
   ~MoteusServo() override;
 

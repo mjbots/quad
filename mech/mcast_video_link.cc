@@ -219,7 +219,7 @@ const std::string kControlCommandPrefix = "MVC1";
 
 class McastVideoLinkTransmitter::Impl : boost::noncopyable {
  public:
-  Impl(McastVideoLinkTransmitter* parent, boost::asio::io_service& service)
+  Impl(McastVideoLinkTransmitter* parent, boost::asio::io_context& service)
       : service_(service),
         parameters_(parent->parameters_),
         main_id_(std::this_thread::get_id()),
@@ -426,7 +426,7 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
   // Variables which are only set in constructor or in Start()
   DataPacketSignal packet_signal_;
   // McastVideoLinkTransmitter* const parent_;
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
   const Parameters& parameters_;
   std::thread::id main_id_;
   bool started_ = false;
@@ -693,7 +693,7 @@ class RxFrameBuffer : boost::noncopyable {
 
 class McastVideoLinkReceiver::Impl : boost::noncopyable {
  public:
-  Impl(McastVideoLinkReceiver* parent, boost::asio::io_service& service)
+  Impl(McastVideoLinkReceiver* parent, boost::asio::io_context& service)
       : parent_(parent),
         service_(service),
         parameters_(parent->parameters_),
@@ -822,7 +822,7 @@ class McastVideoLinkReceiver::Impl : boost::noncopyable {
   DataPacketSignal packet_signal_;
   ReceivedFrameInfoSignal frame_info_signal_;
   McastVideoLinkReceiver* const parent_;
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
   const Parameters& parameters_;
   std::thread::id main_id_;
   bool started_ = false;

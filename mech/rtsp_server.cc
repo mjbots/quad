@@ -45,7 +45,7 @@ const char* kLaunchCmd =
 
 class RtspServer::Impl : boost::noncopyable {
  public:
-  Impl(RtspServer* parent, boost::asio::io_service& service)
+  Impl(RtspServer* parent, boost::asio::io_context& service)
       : service_(service),
         parameters_(parent->parameters_),
         parent_id_(std::this_thread::get_id()) {}
@@ -389,7 +389,7 @@ class RtspServer::Impl : boost::noncopyable {
     g_free(name);
   }
 
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
   const Parameters& parameters_;
   const std::thread::id parent_id_;
   std::thread::id gst_id_;
@@ -451,7 +451,7 @@ class RtspServer::FrameConsumerImpl : public CameraFrameConsumer {
   std::shared_ptr<RtspServer::Impl> impl_;
 };
 
-RtspServer::RtspServer(boost::asio::io_service& service)
+RtspServer::RtspServer(boost::asio::io_context& service)
     : impl_(new Impl(this, service)),
       frame_consumer_impl_(new FrameConsumerImpl(impl_)) {
 }

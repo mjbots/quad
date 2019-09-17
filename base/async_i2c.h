@@ -24,7 +24,7 @@ namespace base {
 class AsyncI2C : boost::noncopyable {
  public:
   virtual ~AsyncI2C() {}
-  virtual boost::asio::io_service& get_io_service() = 0;
+  virtual boost::asio::io_context& get_io_service() = 0;
 
   virtual void AsyncRead(
       uint8_t device, uint8_t address,

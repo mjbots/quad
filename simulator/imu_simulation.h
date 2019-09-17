@@ -31,7 +31,7 @@ class I2CDevice {
 
 class MAX21000 : public I2CDevice {
  public:
-  MAX21000(boost::asio::io_service& service,
+  MAX21000(boost::asio::io_context& service,
            dart::dynamics::Frame* frame)
       : service_(service),
         timer_(service_),
@@ -149,7 +149,7 @@ class MAX21000 : public I2CDevice {
   }
 
  private:
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
   base::DeadlineTimer timer_;
   dart::dynamics::Frame* const frame_;
   double sensitivity_ = 0.0;
@@ -162,7 +162,7 @@ class MAX21000 : public I2CDevice {
 
 class MMA8451Q : public I2CDevice {
  public:
-  MMA8451Q(boost::asio::io_service& service,
+  MMA8451Q(boost::asio::io_context& service,
            dart::dynamics::Frame* frame,
            const Eigen::Vector3d& offset)
       : service_(service),
@@ -291,7 +291,7 @@ class MMA8451Q : public I2CDevice {
   }
 
  private:
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
   base::DeadlineTimer timer_;
   dart::dynamics::Frame* const frame_;
   const Eigen::Vector3d offset_;

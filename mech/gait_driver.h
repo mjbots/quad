@@ -36,7 +36,7 @@ class RippleGait;
 class GaitDriver : boost::noncopyable {
  public:
   template <typename AhrsData>
-  GaitDriver(boost::asio::io_service& service,
+  GaitDriver(boost::asio::io_context& service,
              base::TelemetryRegistry* telemetry_registry,
              boost::signals2::signal<void (const AhrsData*)>* body_ahrs_signal)
       : GaitDriver(service, telemetry_registry) {
@@ -154,7 +154,7 @@ class GaitDriver : boost::noncopyable {
   const Gait* gait() const;
 
  private:
-  GaitDriver(boost::asio::io_service& service,
+  GaitDriver(boost::asio::io_context& service,
              base::TelemetryRegistry*);
 
   template <typename AhrsData>

@@ -28,7 +28,7 @@ class TelemetryRemoteDebugServer : boost::noncopyable {
  public:
   typedef boost::asio::ip::udp udp;
 
-  TelemetryRemoteDebugServer(boost::asio::io_service&);
+  TelemetryRemoteDebugServer(boost::asio::io_context&);
   ~TelemetryRemoteDebugServer();
 
   struct Parameters {

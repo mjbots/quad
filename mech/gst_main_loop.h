@@ -69,12 +69,12 @@ class GstMainLoop : boost::noncopyable {
                    context.telemetry_registry.get()) {}
 
   template <typename TelemetryRegistry>
-    GstMainLoop(boost::asio::io_service& service,
+    GstMainLoop(boost::asio::io_context& service,
                 TelemetryRegistry*)
     : GstMainLoop(service) {
   }
 
-  GstMainLoop(boost::asio::io_service&);
+  GstMainLoop(boost::asio::io_context&);
   ~GstMainLoop();
 
   void AsyncStart(mjlib::io::ErrorCallback handler);

@@ -184,7 +184,7 @@ class VideoLoopbackApp : boost::noncopyable {
         next);
   }
 
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
   Members m_;
   Parameters parameters_{&m_};
   boost::program_options::options_description options_;

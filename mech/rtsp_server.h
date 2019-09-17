@@ -36,7 +36,7 @@ class RtspServer : boost::noncopyable {
     // no stats -- we log to camera
   }
 
-  RtspServer(boost::asio::io_service&);
+  RtspServer(boost::asio::io_context&);
   ~RtspServer();
 
   void AsyncStart(mjlib::io::ErrorCallback handler);

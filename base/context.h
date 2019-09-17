@@ -33,7 +33,7 @@ struct Context : boost::noncopyable {
   Context();
   ~Context();
 
-  boost::asio::io_service service;
+  boost::asio::io_context service;
   std::unique_ptr<TelemetryLog> telemetry_log;
   std::unique_ptr<TelemetryRemoteDebugServer> remote_debug;
   std::unique_ptr<TelemetryRegistry> telemetry_registry;

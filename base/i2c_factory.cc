@@ -25,13 +25,13 @@ namespace base {
 
 class I2CFactory::Impl {
  public:
-  Impl(boost::asio::io_service& service) : service_(service) {}
+  Impl(boost::asio::io_context& service) : service_(service) {}
 
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
   std::map<std::string, std::unique_ptr<Generator> > generators_;
 };
 
-I2CFactory::I2CFactory(boost::asio::io_service& service)
+I2CFactory::I2CFactory(boost::asio::io_context& service)
   : impl_(new Impl(service)) {}
 
 I2CFactory::~I2CFactory() {}

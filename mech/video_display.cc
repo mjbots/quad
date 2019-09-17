@@ -40,7 +40,7 @@ namespace mech {
 
 class VideoDisplay::Impl : boost::noncopyable {
  public:
-  Impl(VideoDisplay* parent, boost::asio::io_service& service)
+  Impl(VideoDisplay* parent, boost::asio::io_context& service)
       : parent_(parent),
         parent_service_(service),
         parent_id_(std::this_thread::get_id()),
@@ -331,7 +331,7 @@ class VideoDisplay::Impl : boost::noncopyable {
 
   // From both.
   VideoDisplay* const parent_;
-  boost::asio::io_service& parent_service_;
+  boost::asio::io_context& parent_service_;
 
   Parameters parameters_;
   bool started_ = false;
@@ -359,7 +359,7 @@ class VideoDisplay::Impl : boost::noncopyable {
 };
 
 
-VideoDisplay::VideoDisplay(boost::asio::io_service& service)
+VideoDisplay::VideoDisplay(boost::asio::io_context& service)
   : impl_(new Impl(this, service)) {};
 
 VideoDisplay::~VideoDisplay() {}

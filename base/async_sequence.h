@@ -30,7 +30,7 @@ namespace base {
 /// final callback.
 class AsyncSequence {
  public:
-  AsyncSequence(boost::asio::io_service& service) : service_(service) {}
+  AsyncSequence(boost::asio::io_context& service) : service_(service) {}
 
   template <typename Step>
   AsyncSequence& Add(Step step,
@@ -61,7 +61,7 @@ class AsyncSequence {
 
   class LastItem : public Item {
    public:
-    LastItem(boost::asio::io_service& service,
+    LastItem(boost::asio::io_context& service,
              mjlib::io::ErrorCallback callback) :
         service_(service),
         callback_(callback) {}
@@ -75,7 +75,7 @@ class AsyncSequence {
       callback_(ec);
     }
 
-    boost::asio::io_service& service_;
+    boost::asio::io_context& service_;
     mjlib::io::ErrorCallback callback_;
   };
 
@@ -83,7 +83,7 @@ class AsyncSequence {
   class ConcreteItem : public Item,
                        public std::enable_shared_from_this<ConcreteItem<T>> {
    public:
-    ConcreteItem(boost::asio::io_service& service,
+    ConcreteItem(boost::asio::io_context& service,
                  T callback,
                  const std::string_view& reason)
         : service_(service),
@@ -108,7 +108,7 @@ class AsyncSequence {
       next_->Callback(ec);
     }
 
-    boost::asio::io_service& service_;
+    boost::asio::io_context& service_;
     T callback_;
     std::string reason_;
   };
@@ -123,7 +123,7 @@ class AsyncSequence {
     }
   }
 
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
   std::shared_ptr<Item> first_item_;
   std::shared_ptr<Item> last_item_;
 };

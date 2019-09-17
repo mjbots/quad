@@ -74,7 +74,7 @@ struct Parameters {
 
 class MjmechImuDriver::Impl : boost::noncopyable {
  public:
-  Impl(MjmechImuDriver* parent, boost::asio::io_service& service,
+  Impl(MjmechImuDriver* parent, boost::asio::io_context& service,
        base::I2CFactory* i2c_factory)
       : parent_(parent),
         service_(service),
@@ -506,7 +506,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
   MjmechImuDriver* const parent_;
   Parameters parameters_;
   boost::program_options::options_description options_;
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
   base::I2CFactory* const i2c_factory_;
   base::SharedI2C i2c_;
 
@@ -519,7 +519,7 @@ class MjmechImuDriver::Impl : boost::noncopyable {
   double gyro_sensitivity_ = 0.0;
 };
 
-MjmechImuDriver::MjmechImuDriver(boost::asio::io_service& service,
+MjmechImuDriver::MjmechImuDriver(boost::asio::io_context& service,
                                  base::I2CFactory* i2c_factory)
     : impl_(new Impl(this, service, i2c_factory)) {
 }

@@ -73,7 +73,7 @@ class Fixture {
     service_.reset();
   }
 
-  boost::asio::io_service service_;
+  boost::asio::io_context service_;
   typedef mjlib::io::StreamFactory Factory;
   Factory factory_{service_};
   typedef HerkuleX Servo;

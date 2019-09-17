@@ -94,7 +94,7 @@ struct OptOptions {
 
 class Commander {
  public:
-  Commander(boost::asio::io_service& service);
+  Commander(boost::asio::io_context& service);
   virtual ~Commander();
 
   void AsyncStart(mjlib::io::ErrorCallback);

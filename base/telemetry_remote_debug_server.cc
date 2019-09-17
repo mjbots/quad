@@ -22,7 +22,7 @@ namespace mjmech {
 namespace base {
 class TelemetryRemoteDebugServer::Impl : boost::noncopyable {
  public:
-  Impl(boost::asio::io_service& service)
+  Impl(boost::asio::io_context& service)
       : service_(service),
         socket_(service) {}
 
@@ -115,7 +115,7 @@ class TelemetryRemoteDebugServer::Impl : boost::noncopyable {
     mjlib::base::FailIf(ec);
   }
 
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
   Parameters parameters_;
   udp::socket socket_;
   char receive_buffer_[3000] = {};
@@ -125,7 +125,7 @@ class TelemetryRemoteDebugServer::Impl : boost::noncopyable {
 };
 
 TelemetryRemoteDebugServer::TelemetryRemoteDebugServer(
-    boost::asio::io_service& service)
+    boost::asio::io_context& service)
     : impl_(new Impl(service)) {}
 
 TelemetryRemoteDebugServer::~TelemetryRemoteDebugServer() {}

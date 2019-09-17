@@ -27,9 +27,9 @@ namespace mjmech {
 namespace base {
 class LinuxInput::Impl : boost::noncopyable {
  public:
-  Impl(boost::asio::io_service& service) : service_(service) {}
+  Impl(boost::asio::io_context& service) : service_(service) {}
 
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
   boost::asio::posix::stream_descriptor stream_{service_};
 
   struct input_event input_event_;
@@ -37,10 +37,10 @@ class LinuxInput::Impl : boost::noncopyable {
   std::map<int, AbsInfo> abs_info_;
 };
 
-LinuxInput::LinuxInput(boost::asio::io_service& service)
+LinuxInput::LinuxInput(boost::asio::io_context& service)
     : impl_(new Impl(service)) {}
 
-LinuxInput::LinuxInput(boost::asio::io_service& service,
+LinuxInput::LinuxInput(boost::asio::io_context& service,
                        const std::string& device)
     : LinuxInput(service) {
   Open(device);
@@ -48,7 +48,7 @@ LinuxInput::LinuxInput(boost::asio::io_service& service,
 
 LinuxInput::~LinuxInput() {}
 
-boost::asio::io_service& LinuxInput::get_io_service() {
+boost::asio::io_context& LinuxInput::get_io_service() {
   return impl_->service_;
 }
 

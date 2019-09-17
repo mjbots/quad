@@ -23,7 +23,7 @@
 using namespace mjmech;
 
 BOOST_AUTO_TEST_CASE(BasicDebugDeadlineServiceTest) {
-  boost::asio::io_service service;
+  boost::asio::io_context service;
   auto debug_service = base::DebugDeadlineService::Install(service);
 
   auto start = boost::posix_time::microsec_clock::universal_time();

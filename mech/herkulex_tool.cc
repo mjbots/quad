@@ -46,7 +46,7 @@ typedef HerkuleX Servo;
 typedef HerkuleXConstants HC;
 
 struct CommandContext {
-  CommandContext(boost::asio::io_service& service_in,
+  CommandContext(boost::asio::io_context& service_in,
                  const Options& options_in,
                  Servo& servo_in,
                  ServoInterface& servo_interface_in,
@@ -57,7 +57,7 @@ struct CommandContext {
         servo_interface(servo_interface_in),
         args(args_in) {}
 
-  boost::asio::io_service& service;
+  boost::asio::io_context& service;
   const Options& options;
   Servo& servo;
   ServoInterface& servo_interface;
@@ -395,7 +395,7 @@ class CommandRunner {
       });
   }
 
-  boost::asio::io_service service_;
+  boost::asio::io_context service_;
   mjlib::io::StreamFactory factory_{service_};
   Servo servo_{service_, factory_};
   HerkuleXServoInterface<Servo> servo_interface_{&servo_};

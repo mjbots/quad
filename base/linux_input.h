@@ -26,13 +26,13 @@ namespace base {
 /// Support reading events from a linux input device.
 class LinuxInput : boost::noncopyable {
  public:
-  explicit LinuxInput(boost::asio::io_service&);
-  LinuxInput(boost::asio::io_service&, const std::string& device);
+  explicit LinuxInput(boost::asio::io_context&);
+  LinuxInput(boost::asio::io_context&, const std::string& device);
   void Open(const std::string& device);
 
   ~LinuxInput();
 
-  boost::asio::io_service& get_io_service();
+  boost::asio::io_context& get_io_service();
 
   /// @return the underlying file descriptor for this device.
   int fileno() const;

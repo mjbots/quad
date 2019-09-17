@@ -36,7 +36,7 @@ class SocketTesterBase : boost::noncopyable {
  public:
   struct BaseParameters;
 
-  SocketTesterBase(boost::asio::io_service& service,
+  SocketTesterBase(boost::asio::io_context& service,
                    const char* logname,
                    const BaseParameters& base_parameters)
       : service_(service),
@@ -159,7 +159,7 @@ class SocketTesterBase : boost::noncopyable {
       });
   }
 
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
   LogRef log_;
 
  private:
@@ -176,7 +176,7 @@ class SocketTester: public SocketTesterBase {
  public:
   struct Parameters;
 
-  SocketTester(boost::asio::io_service& service,
+  SocketTester(boost::asio::io_context& service,
                const char* logname,
                const Parameters& parameters)
       : SocketTesterBase(service, logname, parameters.base),
@@ -259,7 +259,7 @@ class LinkTester: public SocketTesterBase {
  public:
   struct Parameters;
 
-  LinkTester(boost::asio::io_service& service,
+  LinkTester(boost::asio::io_context& service,
                const char* logname,
                const Parameters& parameters)
       : SocketTesterBase(service, logname, parameters.base),
@@ -384,7 +384,7 @@ class UdpManualTest : boost::noncopyable {
   boost::program_options::options_description* options() { return &options_; }
 
  private:
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
   Parameters parameters_;
   boost::program_options::options_description options_;
   typedef std::shared_ptr<SocketTesterBase> TesterPtr;

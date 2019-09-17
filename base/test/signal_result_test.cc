@@ -19,7 +19,7 @@
 using namespace mjmech::base;
 
 // BOOST_AUTO_TEST_CASE(TestSignalResultCoroutine1) {
-//   boost::asio::io_service service;
+//   boost::asio::io_context service;
 
 //   boost::signals2::signal<void (const int*)> signal;
 
@@ -45,7 +45,7 @@ using namespace mjmech::base;
 // }
 
 // BOOST_AUTO_TEST_CASE(TestSignalResultCoroutine2) {
-//   boost::asio::io_service service;
+//   boost::asio::io_context service;
 
 //   boost::signals2::signal<void (const int*)> signal;
 
@@ -83,7 +83,7 @@ using namespace mjmech::base;
 // }
 
 BOOST_AUTO_TEST_CASE(TestSignalResultCallback1) {
-  boost::asio::io_service service;
+  boost::asio::io_context service;
 
   boost::signals2::signal<void (const int*)> signal;
   int value = 0;
@@ -124,7 +124,7 @@ BOOST_AUTO_TEST_CASE(TestSignalResultCallback1) {
 }
 
 BOOST_AUTO_TEST_CASE(TestSignalResultCallback2) {
-  boost::asio::io_service service;
+  boost::asio::io_context service;
 
   boost::signals2::signal<void (const int*)> signal;
   bool done = false;

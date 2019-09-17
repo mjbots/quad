@@ -437,7 +437,7 @@ class SimulatorWindow::Impl {
     ImuI2C(Impl* parent) : parent_(parent) {}
     virtual ~ImuI2C() {}
 
-    boost::asio::io_service& get_io_service() override {
+    boost::asio::io_context& get_io_service() override {
       return parent_->context_.service;
     }
 

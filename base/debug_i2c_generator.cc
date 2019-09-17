@@ -25,7 +25,7 @@ DebugI2CGenerator::Parameters::Parameters() {
   mjlib::base::ProgramOptionsArchive(&options_description_).Accept(this);
 }
 
-DebugI2CGenerator::DebugI2CGenerator(boost::asio::io_service& service)
+DebugI2CGenerator::DebugI2CGenerator(boost::asio::io_context& service)
   : service_(service) {}
 DebugI2CGenerator::~DebugI2CGenerator() {}
 

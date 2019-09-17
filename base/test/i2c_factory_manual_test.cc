@@ -36,7 +36,7 @@ using namespace std::placeholders;
 namespace {
 class I2CInterface {
  public:
-  I2CInterface(boost::asio::io_service& service)
+  I2CInterface(boost::asio::io_context& service)
       : in_(service, dup(0)),
         out_(service, dup(1)) {}
 
@@ -107,7 +107,7 @@ class I2CInterface {
 }
 
 int main(int argc, char** argv) {
-  boost::asio::io_service service;
+  boost::asio::io_context service;
 
   po::options_description options;
   options.add_options()

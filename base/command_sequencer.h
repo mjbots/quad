@@ -24,7 +24,7 @@ namespace base {
 /// at a time.
 class CommandSequencer : boost::noncopyable {
  public:
-  CommandSequencer(boost::asio::io_service& service) : service_(service) {}
+  CommandSequencer(boost::asio::io_context& service) : service_(service) {}
 
   template <typename Command, typename Handler>
   void Invoke(Command command, Handler handler) {
@@ -34,7 +34,7 @@ class CommandSequencer : boost::noncopyable {
     MaybeStart();
   };
 
-  boost::asio::io_service& get_io_service() { return service_; }
+  boost::asio::io_context& get_io_service() { return service_; }
 
  private:
   void WaitingFinished() {
@@ -94,7 +94,7 @@ class CommandSequencer : boost::noncopyable {
     Handler handler_;
   };
 
-  boost::asio::io_service& service_;
+  boost::asio::io_context& service_;
   std::shared_ptr<Base> waiting_;
   std::list<std::shared_ptr<Base>> queued_;
 };

@@ -25,7 +25,7 @@ namespace base {
 
 class I2CFactory : boost::noncopyable {
  public:
-  I2CFactory(boost::asio::io_service&);
+  I2CFactory(boost::asio::io_context&);
   ~I2CFactory();
 
   class GeneratorParameters {

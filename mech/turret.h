@@ -148,7 +148,7 @@ class Turret : boost::noncopyable {
   const Data& data() const;
 
  private:
-  Turret(boost::asio::io_service& service,
+  Turret(boost::asio::io_context& service,
          Mech::ServoBase* servo);
 
   struct CommandLog {
