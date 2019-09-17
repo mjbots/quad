@@ -30,9 +30,6 @@ namespace mjmech {
 namespace mech {
 namespace {
 struct Parameters {
-  /// Update the gait engine (and send servo commands) at this rate.
-  double period_s = 0.05; // 20Hz
-
   /// This long with no commands will result in stopping the gait
   /// engine and setting all servos to unpowered.
   double command_timeout_s = 0.0;
@@ -51,7 +48,6 @@ struct Parameters {
 
   template <typename Archive>
   void Serialize(Archive* a) {
-    a->Visit(MJ_NVP(period_s));
     a->Visit(MJ_NVP(command_timeout_s));
     a->Visit(MJ_NVP(max_acceleration_mm_s2));
     a->Visit(MJ_NVP(preposition_speed_dps));
@@ -60,61 +56,6 @@ struct Parameters {
     a->Visit(MJ_NVP(stand_sit_time_s));
     a->Visit(MJ_NVP(joint_speed_scale));
     a->Visit(MJ_NVP(joint_max_speed_dps));
-  }
-};
-
-enum State : int {
-  kUnpowered,
-  kActive,
-  kPrepositioning,
-  kStandup,
-  kSitting,
-};
-
-static std::map<State, const char*> StateMapper() {
-  return std::map<State, const char*>{
-    { kUnpowered, "kUnpowered" },
-    { kActive, "kActive" },
-    { kPrepositioning, "kPrepositioning" },
-    { kStandup, "kStandup" },
-    { kSitting, "kSitting" },
-};
-}
-
-struct GaitData {
-  boost::posix_time::ptime timestamp;
-
-  State state;
-  base::Transform body_robot;
-  base::Transform cog_robot;
-  base::Transform body_world;
-  base::Transform robot_world;
-
-  base::Quaternion attitude;
-  base::Point3D body_rate_dps;
-
-  std::array<base::Point3D, 4> legs;
-  // The command as sent by the user.
-  JointCommand command;
-
-  // The command as given to the gait engine.
-  Command input_command;
-  Command gait_command;
-
-  template <typename Archive>
-  void Serialize(Archive* a) {
-    a->Visit(MJ_NVP(timestamp));
-    a->Visit(MJ_ENUM(state, StateMapper));
-    a->Visit(MJ_NVP(body_robot));
-    a->Visit(MJ_NVP(cog_robot));
-    a->Visit(MJ_NVP(body_world));
-    a->Visit(MJ_NVP(robot_world));
-    a->Visit(MJ_NVP(attitude));
-    a->Visit(MJ_NVP(body_rate_dps));
-    a->Visit(MJ_NVP(legs));
-    a->Visit(MJ_NVP(command));
-    a->Visit(MJ_NVP(input_command));
-    a->Visit(MJ_NVP(gait_command));
   }
 };
 
@@ -130,32 +71,26 @@ struct CommandData {
   }
 };
 
+}
+
 class FailHandler {
  public:
   void operator()(mjlib::base::error_code ec) const {
     mjlib::base::FailIf(ec);
   }
 };
-}
 
 class GaitDriver::Impl : boost::noncopyable {
  public:
   Impl(boost::asio::io_service& service,
-       base::TelemetryRegistry* telemetry_registry,
-       ServoInterface* servo)
-      : service_(service),
-        servo_(servo),
-        timer_(service) {
+       base::TelemetryRegistry* telemetry_registry)
+      : service_(service) {
     mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
-
-    telemetry_registry->Register("gait", &gait_data_signal_);
     telemetry_registry->Register("gait_command", &command_data_signal_);
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
     log_.warn("AsyncStart");
-    timer_.expires_from_now(base::ConvertSecondsToDuration(0.0));
-    StartTimer();
     service_.post(std::bind(callback, mjlib::base::error_code()));
   }
 
@@ -179,21 +114,24 @@ class GaitDriver::Impl : boost::noncopyable {
 
     last_command_timestamp_ = data.timestamp;
 
-    if (state_ != kActive) {
-      // This may already be the case, but it doesn't hurt to do it
-      // again.
-      servo_->EnablePower(ServoInterface::kPowerEnable, {}, FailHandler());
-    }
     state_ = kActive;
 
     gait_->SetCommand(gait_command_);
   }
 
-  void SetFree() {
-    servo_->EnablePower(ServoInterface::kPowerBrake, {}, FailHandler());
+  CommandState SetFree() {
     state_ = kUnpowered;
 
-    Emit();
+    CommandState result;
+    result.timestamp = base::Now(service_);
+    result.power_state = ServoInterface::kPowerFree;
+
+    for (int i = 1; i <= 12; i++) {
+      ServoInterface::Joint joint;
+      joint.address = i;
+      result.joints.push_back(joint);
+    }
+    return result;
   }
 
   std::vector<ServoInterface::Joint> DerateTibiaCommands(
@@ -266,53 +204,44 @@ class GaitDriver::Impl : boost::noncopyable {
     log_.debug("CommandPrepositioning");
     stand_sit_start_time_ = base::Now(service_);
     state_ = kPrepositioning;
-
-    SendPrepositionCommand();
-
-    Emit();
   }
 
-  void SendPrepositionCommand() {
+  CommandState MakeCommandState(std::vector<ServoInterface::Joint> joints) {
+    CommandState result;
+    result.timestamp = base::Now(service_);
+    result.joints = std::move(joints);
+    result.power_state = ServoInterface::kPowerEnable;
+    return result;
+  }
+
+  CommandState SendPrepositionCommand() {
     gait_commands_ = gait_->MakeJointCommand(
         gait_->GetPrepositioningState(1.0));
     const auto servo_commands =
         MakeServoCommands(gait_commands_, parameters_.preposition_speed_dps);
-    servo_->SetPose(DerateTibiaCommands(servo_commands, GetSitStandRatio()),
-                    FailHandler());
-
-    Emit();
+    return MakeCommandState(DerateTibiaCommands(servo_commands, GetSitStandRatio()));
   }
 
   void CommandStandup() {
     log_.debug("CommandStandup");
     stand_sit_start_time_ = base::Now(service_);
     state_ = kStandup;
-
-    SendStandupCommand();
-
-    Emit();
   }
 
-  void SendStandupCommand() {
+  CommandState SendStandupCommand() {
     gait_commands_ = gait_->MakeJointCommand(
         gait_->GetPrepositioningState(1.0 - GetSitStandRatio()));
-    servo_->SetPose(
-        DerateStandupCommands(
-            MakeRegularServoCommands(gait_commands_.joints),
-            GetSitStandRatio()),
-        FailHandler());
-
-    Emit();
+    return
+        MakeCommandState(
+            DerateStandupCommands(
+                MakeRegularServoCommands(gait_commands_.joints),
+                GetSitStandRatio()));
   }
 
   void CommandSitting() {
     log_.debug("CommandSitting");
     stand_sit_start_time_ = base::Now(service_);
     state_ = kSitting;
-
-    SendSittingCommand();
-
-    Emit();
   }
 
   double GetSitStandRatio() {
@@ -322,15 +251,13 @@ class GaitDriver::Impl : boost::noncopyable {
     return ratio;
   }
 
-  void SendSittingCommand() {
+  CommandState SendSittingCommand() {
     gait_commands_ = gait_->MakeJointCommand(
         gait_->GetPrepositioningState(GetSitStandRatio()));
-    servo_->SetPose(
+    return MakeCommandState(
         DerateStandupCommands(
             MakeRegularServoCommands(gait_commands_.joints),
-            1.0 - GetSitStandRatio()),
-        FailHandler());
-    Emit();
+            1.0 - GetSitStandRatio()));
   }
 
   void ProcessBodyAhrs(boost::posix_time::ptime,
@@ -345,6 +272,51 @@ class GaitDriver::Impl : boost::noncopyable {
 
     attitude_ = world_attitude;
     body_rate_dps_ = body_rate_dps;
+  }
+
+  UpdateResult Update(double period_s) {
+    switch (state_) {
+      case kUnpowered: {
+        return PackResult(SetFree());
+      }
+      case kPrepositioning: {
+        return PackResult(SendPrepositionCommand());
+      }
+      case kSitting: {
+        return PackResult(SendSittingCommand());
+      }
+      case kStandup: {
+        return PackResult(SendStandupCommand());
+      }
+      case kActive: {
+        break;
+      }
+    }
+
+
+    const auto now = base::Now(service_);
+    const auto elapsed = now - last_command_timestamp_;
+    const bool timeout =
+        (parameters_.command_timeout_s > 0.0) &&
+        (elapsed > base::ConvertSecondsToDuration(
+            parameters_.command_timeout_s));
+    if (timeout) {
+      return PackResult(SetFree());
+    }
+
+    UpdateAxisAccel(input_command_.translate_x_mm_s,
+                    &gait_command_.translate_x_mm_s,
+                    parameters_.max_acceleration_mm_s2.x(),
+                    period_s);
+    UpdateAxisAccel(input_command_.translate_y_mm_s,
+                    &gait_command_.translate_y_mm_s,
+                    parameters_.max_acceleration_mm_s2.y(),
+                    period_s);
+
+    // Advance our gait, then send the requisite servo commands out.
+    gait_commands_ = gait_->AdvanceTime(period_s);
+
+    return PackResult(MakeCommandState(MakeRegularServoCommands(gait_commands_.joints)));
   }
 
   boost::program_options::options_description* options() {
@@ -364,19 +336,12 @@ class GaitDriver::Impl : boost::noncopyable {
   }
 
  private:
-  void StartTimer() {
-    timer_.expires_at(
-        timer_.expires_at() +
-        base::ConvertSecondsToDuration(parameters_.period_s));
-    timer_.async_wait(std::bind(&Impl::HandleTimer, this,
-                                std::placeholders::_1));
-  }
-
   void UpdateAxisAccel(double input_mm_s,
                        double* gait_mm_s,
-                       double accel_mm_s2) {
+                       double accel_mm_s2,
+                       double period_s) {
     double delta_mm_s = input_mm_s - *gait_mm_s;
-    const double max_step_mm_s = parameters_.period_s * accel_mm_s2;
+    const double max_step_mm_s = period_s * accel_mm_s2;
     const double step_mm_s = [&]() {
       if (delta_mm_s > max_step_mm_s) { return max_step_mm_s; }
       if (delta_mm_s < -max_step_mm_s) { return -max_step_mm_s; }
@@ -408,64 +373,14 @@ class GaitDriver::Impl : boost::noncopyable {
     return result;
   }
 
-  void HandleTimer(const boost::system::error_code& ec) {
-    if (ec == boost::asio::error::operation_aborted) { return; }
-    StartTimer();
+  UpdateResult PackResult(CommandState command_state) {
+    UpdateResult result;
+    result.command_state = std::move(command_state);
 
-    switch (state_) {
-      case kUnpowered: {
-        SetFree();
-        return;
-      }
-      case kPrepositioning: {
-        SendPrepositionCommand();
-        return;
-      }
-      case kSitting: {
-        SendSittingCommand();
-        return;
-      }
-      case kStandup: {
-        SendStandupCommand();
-        return;
-      }
-      case kActive: {
-        break;
-      }
-    }
-
-
-    const auto now = base::Now(service_);
-    const auto elapsed = now - last_command_timestamp_;
-    const bool timeout =
-        (parameters_.command_timeout_s > 0.0) &&
-        (elapsed > base::ConvertSecondsToDuration(
-            parameters_.command_timeout_s));
-    if (timeout) {
-      SetFree();
-      return;
-    }
-
-    UpdateAxisAccel(input_command_.translate_x_mm_s,
-                    &gait_command_.translate_x_mm_s,
-                    parameters_.max_acceleration_mm_s2.x());
-    UpdateAxisAccel(input_command_.translate_y_mm_s,
-                    &gait_command_.translate_y_mm_s,
-                    parameters_.max_acceleration_mm_s2.y());
-
-    // Advance our gait, then send the requisite servo commands out.
-    gait_commands_ = gait_->AdvanceTime(parameters_.period_s);
-
-    auto commands = MakeRegularServoCommands(gait_commands_.joints);
-    servo_->SetPose(commands, FailHandler());
-
-    Emit();
-  }
-
-  void Emit() {
     const auto& state = gait_->state();
 
-    GaitData data;
+    auto& data = result.gait_data;
+
     data.timestamp = base::Now(service_);
 
     data.state = state_;
@@ -487,23 +402,21 @@ class GaitDriver::Impl : boost::noncopyable {
     }
     data.input_command = input_command_;
     data.gait_command = gait_command_;
-    gait_data_signal_(&data);
+
+    return result;
   }
 
   base::LogRef log_ = base::GetLogInstance("GaitDriver");
 
   boost::asio::io_service& service_;
   std::unique_ptr<RippleGait> gait_;
-  ServoInterface* const servo_;
 
   boost::program_options::options_description options_;
 
   Parameters parameters_;
 
-  boost::signals2::signal<void (const GaitData*)> gait_data_signal_;
   boost::signals2::signal<void (const CommandData*)> command_data_signal_;
 
-  mjlib::io::DeadlineTimer timer_;
   State state_ = kUnpowered;
   boost::posix_time::ptime last_command_timestamp_;
   base::Quaternion attitude_;
@@ -517,9 +430,8 @@ class GaitDriver::Impl : boost::noncopyable {
 };
 
 GaitDriver::GaitDriver(boost::asio::io_service& service,
-                       base::TelemetryRegistry* registry,
-                       ServoInterface* servo)
-    : impl_(new Impl(service, registry, servo)) {}
+                       base::TelemetryRegistry* registry)
+    : impl_(new Impl(service, registry)) {}
 
 GaitDriver::~GaitDriver() {}
 
@@ -571,6 +483,10 @@ void GaitDriver::ProcessBodyAhrs(boost::posix_time::ptime timestamp,
                                  const base::Quaternion& attitude,
                                  const base::Point3D& body_rate_dps) {
   impl_->ProcessBodyAhrs(timestamp, valid, attitude, body_rate_dps);
+}
+
+GaitDriver::UpdateResult GaitDriver::Update(double period_s) {
+  return impl_->Update(period_s);
 }
 
 }

@@ -35,7 +35,7 @@ namespace {
 
 constexpr int kSetupRegister = 0;  // mode
 constexpr int kSetupValue = 0;  // kStopped
-constexpr int kNonceRegister = 0x10;  // kPwmPhaseA
+constexpr int kNonceRegister = 0x20;  // kPositionCommand
 
 struct Options {
   double rate_s = 0.1;
@@ -77,8 +77,8 @@ class CommandRunner {
           kNonceRegister, {i16(nonce_count_), i16(0), i16(0)});
 
       request.request.ReadMultiple(kNonceRegister, 3, 1);
-      // And read two i8 regs, like voltage and fault
-      request.request.ReadMultiple(0x006, 2, 0);
+      // And read 3 i8 regs, like voltage and fault
+      request.request.ReadMultiple(0x000, 1, 0);
 
       request_.requests[i] = request;
     }
@@ -118,7 +118,7 @@ class CommandRunner {
   void EmitStatus() {
     std::cout << fmt::format(
         "{:5d}  sk={:3d} st={:3d} qt={:3d} mr={:3d} "
-        "er={:3d} wrt={:3d} wn={:3d}  lat={:.6f}\n",
+        "er={:3d} wrt={:3d} wn={:3d}  lat={:.6f} ck={}\n",
         stats_.valid_reply,
         stats_.skipped,
         stats_.send_timeout,
@@ -128,7 +128,8 @@ class CommandRunner {
         stats_.wrong_reply_type,
         stats_.wrong_nonce,
         base::ConvertDurationToSeconds(stats_.total_valid_time) /
-        stats_.valid_reply);
+        stats_.valid_reply,
+        client_->stats().checksum_errors);
   }
 
   void StartCycle() {

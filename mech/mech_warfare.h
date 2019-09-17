@@ -26,7 +26,6 @@
 #include "mech/moteus_servo.h"
 #include "mech/multiplex_client.h"
 #include "mech/ripple.h"
-#include "mech/servo_monitor.h"
 #include "mech/servo_selector.h"
 #include "mech/turret.h"
 #include "mech/video_sender_app.h"
@@ -54,7 +53,6 @@ class MechWarfare : boost::noncopyable {
     std::unique_ptr<MjmechImuDriver> imu;
     std::unique_ptr<Ahrs> ahrs;
     std::unique_ptr<GaitDriver> gait_driver;
-    std::unique_ptr<ServoMonitor> servo_monitor;
     std::unique_ptr<Turret> turret;
     std::unique_ptr<VideoSenderApp> video;
 
@@ -68,7 +66,6 @@ class MechWarfare : boost::noncopyable {
       a->Visit(MJ_NVP(imu));
       a->Visit(MJ_NVP(ahrs));
       a->Visit(MJ_NVP(gait_driver));
-      a->Visit(MJ_NVP(servo_monitor));
       a->Visit(MJ_NVP(turret));
       a->Visit(MJ_NVP(video));
     }
@@ -77,7 +74,7 @@ class MechWarfare : boost::noncopyable {
   struct Parameters {
     int port = 13356;
     std::string gait_config;
-    double period_s = 0.05;
+    double period_s = 0.01;
     double idle_timeout_s = 1.0;
     double drive_rotate_factor = 0.5;
     double drive_max_rotate_dps = 40.0;

@@ -23,6 +23,8 @@
 #include "mjlib/base/json5_read_archive.h"
 #include "mjlib/base/program_options_archive.h"
 
+#include "mjlib/io/repeating_timer.h"
+
 #include "base/common.h"
 #include "base/context_full.h"
 #include "base/now.h"
@@ -30,6 +32,8 @@
 #include "drive_command.h"
 #include "mech_telemetry.h"
 #include "mech_warfare_data.h"
+
+namespace pl = std::placeholders;
 
 namespace mjmech {
 namespace mech {
@@ -50,6 +54,23 @@ double Limit(double value, double max) {
 }
 
 typedef MechWarfareData Data;
+
+struct JointData {
+  boost::posix_time::ptime timestamp;
+  std::vector<ServoInterface::JointStatus> joints;
+  int32_t missing = 0;
+  mjlib::multiplex::ThreadedClient::Stats serial_stats;
+  double cycle_time_s = 0.0;
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(MJ_NVP(timestamp));
+    a->Visit(MJ_NVP(joints));
+    a->Visit(MJ_NVP(missing));
+    a->Visit(MJ_NVP(serial_stats));
+    a->Visit(MJ_NVP(cycle_time_s));
+  }
+};
 }
 
 class MechWarfare::Impl : boost::noncopyable {
@@ -61,6 +82,10 @@ class MechWarfare::Impl : boost::noncopyable {
         service_(context.service),
         server_(service_),
         timer_(service_) {
+    context_.telemetry_registry->Register("gait_data", &gait_data_signal_);
+    context_.telemetry_registry->Register("joint_data", &joint_data_signal_);
+    context_.telemetry_registry->Register("gait_command_state",
+                                          &command_state_signal_);
     context_.telemetry_registry->Register("mech_warfare", &data_signal_);
   }
 
@@ -73,13 +98,20 @@ class MechWarfare::Impl : boost::noncopyable {
                                            new RippleGait(ripple_config)));
 
       NetworkListen();
-      StartTimer();
     } catch (mjlib::base::system_error& se) {
       service_.post(std::bind(handler, se.code()));
       return;
     }
 
-    parent_->parameters_.children.Start(handler);
+    parent_->parameters_.children.Start(
+        [this, handler](auto ec) {
+          mjlib::base::FailIf(ec);
+          timer_.start(
+              mjlib::base::ConvertSecondsToDuration(
+                  parent_->parameters_.period_s),
+              std::bind(&Impl::HandleTimer, this, pl::_1));
+          service_.post(std::bind(handler, ec));
+        });
   }
 
   struct LoadRipple {
@@ -153,16 +185,7 @@ class MechWarfare::Impl : boost::noncopyable {
     server_.async_receive_from(
         boost::asio::buffer(receive_buffer_),
         receive_endpoint_,
-        std::bind(&Impl::HandleRead, this,
-                  std::placeholders::_1,
-                  std::placeholders::_2));
-  }
-
-  void StartTimer() {
-    timer_.expires_from_now(base::ConvertSecondsToDuration(
-                                parent_->parameters_.period_s));
-    timer_.async_wait(std::bind(&Impl::HandleTimer, this,
-                                std::placeholders::_1));
+        std::bind(&Impl::HandleRead, this, pl::_1, pl::_2));
   }
 
   void WorkTowardsIdle() {
@@ -197,18 +220,26 @@ class MechWarfare::Impl : boost::noncopyable {
         if (elapsed_s > parent_->parameters_.sitting_timeout_s) {
           data_.mode = Data::Mode::kIdle;
           parent_->m_.gait_driver->SetFree();
-          parent_->m_.servo_monitor->ExpectTorqueOff();
         }
+        break;
+      }
+      case Data::Mode::kFault: {
+        // We never exit a fault case through this mechanism.
         break;
       }
     }
   }
 
-  void HandleTimer(mjlib::base::error_code ec) {
+  void HandleTimer(const mjlib::base::error_code& ec) {
     if (ec == boost::asio::error::operation_aborted) { return; }
     mjlib::base::FailIf(ec);
 
-    StartTimer();
+    const auto start = base::Now(service_);
+
+    if (outstanding_) {
+      data_.skipped_updates++;
+      return;
+    }
 
     if (data_.mode != Data::Mode::kIdle) {
       const double elapsed_s = base::ConvertDurationToSeconds(
@@ -234,7 +265,127 @@ class MechWarfare::Impl : boost::noncopyable {
         DoDrive();
         break;
       }
+      case Data::Mode::kFault: {
+        // Everything should be stopped.
+        parent_->m_.gait_driver->SetFree();
+        break;
+      }
     }
+
+    auto result = parent_->m_.gait_driver->Update(
+        parent_->parameters_.period_s);
+
+    joint_command_ = result.command_state.joints;
+    joint_data_.joints.clear();
+
+    outstanding_ = true;
+    parent_->m_.moteus_servo->Update(
+        result.command_state.power_state,
+        []() {
+          ServoInterface::StatusOptions status;
+          status.pose = true;
+          status.velocity = true;
+
+          // Our raspberry PI UART and multiplex register encoding
+          // limit the amount of data that can be returned.  If we ask
+          // for torque, we go over that limit. :(
+          status.torque = false;
+
+          status.voltage = false;
+          status.temperature = false;
+          status.error = true;
+          return status;
+        }(),
+        &joint_command_,
+        &joint_data_.joints,
+        std::bind(&Impl::HandleServoUpdate, this, pl::_1, start));
+
+    gait_data_signal_(&result.gait_data);
+
+    std::sort(result.command_state.joints.begin(),
+              result.command_state.joints.end(),
+              [](const auto& lhs, const auto& rhs) {
+                return lhs.address < rhs.address;
+              });
+    command_state_signal_(&result.command_state);
+  }
+
+  void CheckForJointErrors() {
+    for (const auto& joint : joint_data_.joints) {
+      if (joint.error) {
+        // We need to immediately cut power to everything.
+        log_.warn(fmt::format("servo {} reported error {}, idling",
+                              joint.address, joint.error));
+        data_.mode = Data::Mode::kFault;
+        return;
+      }
+    }
+  }
+
+  void UpdateStatus() {
+    auto min_max = [&](auto getter) -> std::pair<double, double> {
+      bool first = true;
+      std::pair<double, double> result = {};
+      for (const auto& servo : joint_data_.joints) {
+        const auto value = getter(servo);
+        if (!value) { continue; }
+        if (first || *value < result.first) {
+          result.first = *value;
+        }
+        if (first || *value > result.second) {
+          result.second = *value;
+        }
+        first = false;
+      }
+      return result;
+    };
+
+    std::tie(servo_min_voltage_V_, servo_max_voltage_V_) =
+        min_max([](const auto& servo) { return servo.voltage; });
+    std::tie(servo_min_temp_C_, servo_max_temp_C_) =
+        min_max([](const auto& servo) { return servo.temperature_C; });
+  }
+
+  void CleanupJointData() {
+    // Ensure that we have something for all 12 servos, even if some
+    // are not present.
+    std::set<int> present;
+    for (const auto& joint : joint_data_.joints) {
+      present.insert(joint.address);
+    }
+    joint_data_.missing = 0;
+    for (int i = 1; i <= 12; i++) {
+      if (present.count(i) == 0) {
+        joint_data_.missing++;
+        joint_data_.joints.push_back({});
+        joint_data_.joints.back().address = i;
+      }
+    }
+
+    if (multiplex_client_) {
+      joint_data_.serial_stats = multiplex_client_->stats();
+    }
+
+    std::sort(joint_data_.joints.begin(), joint_data_.joints.end(),
+              [](const auto& lhs, const auto& rhs) {
+                return lhs.address < rhs.address;
+              });
+  }
+
+  void HandleServoUpdate(const mjlib::base::error_code& ec,
+                         boost::posix_time::ptime start) {
+    outstanding_ = false;
+    mjlib::base::FailIf(ec);
+
+    joint_data_.timestamp = base::Now(service_);
+    joint_data_.cycle_time_s =
+        mjlib::base::ConvertDurationToSeconds(joint_data_.timestamp - start);
+    CleanupJointData();
+
+    joint_data_signal_(&joint_data_);
+
+    CheckForJointErrors();
+    UpdateStatus();
 
     data_.timestamp = base::Now(context_.service);
     data_signal_(&data_);
@@ -425,48 +576,6 @@ class MechWarfare::Impl : boost::noncopyable {
   void StartTurretBias() {
     data_.turret_bias_start_timestamp = base::Now(service_);
     parent_->m_.turret->StartBias();
-
-    // During this bias period, we will also verify that each of our
-    // servos is configured properly.
-    servos_to_configure_ =
-        ServoMonitor::SplitServoIds(parent_->parameters_.config_servos);
-    DoNextServoConfigure();
-  }
-
-  void DoNextServoConfigure() {
-    // For now, we are only verifying a single RAM address.  This will
-    // be harder when we want to verify multiple things.
-    if (servos_to_configure_.empty()) { return; }
-
-    const int this_id = servos_to_configure_.back();
-    servos_to_configure_.pop_back();
-
-    parent_->m_.servo_base->RamRead(
-        this_id, HC::min_voltage(),
-        std::bind(&Impl::HandleServoConfigure, this, this_id,
-                  std::placeholders::_1, std::placeholders::_2));
-  }
-
-  void HandleServoConfigure(int servo_id,
-                            mjlib::base::error_code ec,
-                            int value) {
-    if (ec == boost::asio::error::operation_aborted ||
-        ec == herkulex_error::synchronization_error) {
-      // Ignore this.
-    } else {
-      mjlib::base::FailIf(ec);
-    }
-
-    const int measured = value;
-    const int expected =
-        static_cast<int>(parent_->parameters_.servo_min_voltage_counts);
-    if (measured != expected) {
-      log_.warn(fmt::format(
-                    "Servo {} has misconfigured min_voltage 0x{:02X} != 0x{:02X}",
-                    servo_id, measured, expected));
-    }
-
-    DoNextServoConfigure();
   }
 
   void MaybeEnterActiveMode(Data::Mode mode) {
@@ -479,11 +588,7 @@ class MechWarfare::Impl : boost::noncopyable {
         break;
       }
       case Data::Mode::kTurretBias: {
-        // Wait until the turret bias process is finished and all
-        // servos are configured.
-        if (!servos_to_configure_.empty()) {
-          break;
-        }
+        // Wait until the turret bias process is finished.
 
         const double elapsed_s = base::ConvertDurationToSeconds(
             now - data_.turret_bias_start_timestamp);
@@ -491,7 +596,6 @@ class MechWarfare::Impl : boost::noncopyable {
           parent_->m_.gait_driver->CommandPrepositioning();
           data_.prepositioning_start_timestamp = now;
           data_.mode = Data::Mode::kPrepositioning;
-          parent_->m_.servo_monitor->ExpectTorqueOn();
         }
         break;
       }
@@ -520,6 +624,9 @@ class MechWarfare::Impl : boost::noncopyable {
       case Data::Mode::kManual: // fall-through
       case Data::Mode::kDrive: {
         data_.mode = mode;
+        break;
+      }
+      case Data::Mode::kFault: {
         break;
       }
     }
@@ -552,45 +659,6 @@ class MechWarfare::Impl : boost::noncopyable {
     }
   }
 
-  void HandleServoData(const ServoMonitor::ServoData* data) {
-    bool error = false;
-
-    for (const auto& servo: data->servos) {
-      if (servo.error && !error) {
-        error = true;
-        // We need to immediately cut power to everything.
-        log_.warn(fmt::format("servo {} reported error {}, idling",
-                              servo.address, servo.error));
-
-        parent_->m_.gait_driver->SetFree();
-        parent_->m_.servo_monitor->ExpectTorqueOff();
-        data_.mode = Data::Mode::kIdle;
-      }
-    }
-
-    auto min_max = [&](auto getter) -> std::pair<double, double> {
-      bool first = true;
-      std::pair<double, double> result = {};
-      for (const auto& servo : data->servos) {
-        if (servo.last_update.is_not_a_date_time()) { continue; }
-        const auto value = getter(servo);
-        if (value == 0.0) { continue; }
-        if (first || value < result.first) {
-          result.first = value;
-        }
-        if (first || value > result.second) {
-          result.second = value;
-        }
-        first = false;
-      }
-      return result;
-    };
-
-    std::tie(servo_min_voltage_V_, servo_max_voltage_V_) =
-        min_max([](const auto& servo) { return servo.voltage_V; });
-    std::tie(servo_min_temp_C_, servo_max_temp_C_) =
-        min_max([](const auto& servo) { return servo.temperature_C; });
-  }
 
   MechWarfare* const parent_;
   base::Context& context_;
@@ -603,18 +671,25 @@ class MechWarfare::Impl : boost::noncopyable {
   char receive_buffer_[3000] = {};
   boost::asio::ip::udp::endpoint receive_endpoint_;
 
-  mjlib::io::DeadlineTimer timer_;
+  mjlib::io::RepeatingTimer timer_;
 
   std::shared_ptr<McastTelemetryInterface> telemetry_;
 
-  std::vector<int> servos_to_configure_;
   double servo_min_voltage_V_ = 0.0;
   double servo_max_voltage_V_ = 0.0;
   double servo_min_temp_C_ = 0.0;
   double servo_max_temp_C_ = 0.0;
 
+  bool outstanding_ = false;
   Data data_;
   Command manual_gait_;
+  std::vector<ServoInterface::Joint> joint_command_;
+  JointData joint_data_;
+  mjlib::multiplex::ThreadedClient* multiplex_client_ = nullptr;
+
+  boost::signals2::signal<void (const GaitDriver::GaitData*)> gait_data_signal_;
+  boost::signals2::signal<void (const JointData*)> joint_data_signal_;
+  boost::signals2::signal<void (const GaitDriver::CommandState*)> command_state_signal_;
   boost::signals2::signal<void (const Data*)> data_signal_;
 };
 
@@ -634,24 +709,19 @@ MechWarfare::MechWarfare(base::Context& context)
   m_.ahrs.reset(new Ahrs(context, m_.imu->imu_data_signal()));
   m_.gait_driver.reset(new GaitDriver(service_,
                                       context.telemetry_registry.get(),
-                                      m_.servo_selector.get(),
                                       m_.ahrs->ahrs_data_signal()));
-  m_.servo_monitor.reset(new ServoMonitor(context, m_.servo_selector.get()));
-  m_.servo_monitor->parameters()->servos = "1-12";
   m_.turret.reset(new Turret(context, m_.servo_base.get()));
 
   m_.multiplex_client->RequestClient([this](const auto& ec, auto* client) {
         mjlib::base::FailIf(ec);
         m_.moteus_servo->SetClient(client);
         m_.turret->SetMultiplexClient(client);
+        this->impl_->multiplex_client_ = client;
       });
 
   m_.video.reset(new VideoSenderApp(context));
 
   impl_->telemetry_ = m_.video->telemetry_interface().lock();
-  m_.servo_monitor->data_signal()->connect(
-      std::bind(&Impl::HandleServoData, impl_.get(),
-                std::placeholders::_1));
 
   m_.video->target_tracker()->data_signal()->connect([this](const TargetTrackerData* data) {
       std::optional<base::Point3D> point3d;

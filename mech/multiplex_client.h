@@ -30,11 +30,13 @@ class MultiplexClient {
   struct Parameters {
     std::string serial_port;
     int serial_baud = 3000000;
+    int cpu_affinity = 3;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(serial_port));
       a->Visit(MJ_NVP(serial_baud));
+      a->Visit(MJ_NVP(cpu_affinity));
     }
   };
 

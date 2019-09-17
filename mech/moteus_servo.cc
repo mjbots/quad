@@ -462,9 +462,14 @@ class MoteusServo::Impl {
       if (status_options.temperature) { max_reg = moteus::kTemperature; }
       if (status_options.error) { max_reg = moteus::kFault; }
 
+      std::optional<moteus::Register> min_reg;
+      if (status_options.error) { min_reg = moteus::kFault; }
+      if (status_options.temperature) { min_reg = moteus::kTemperature; }
+      if (status_options.voltage) { min_reg = moteus::kVoltage; }
+
       if (!!max_reg) {
-        const auto len = u32(*max_reg) - u32(moteus::kVoltage) + 1;
-        request->ReadMultiple(moteus::kVoltage, len, 0);
+        const auto len = u32(*max_reg) - u32(*min_reg) + 1;
+        request->ReadMultiple(*min_reg, len, 0);
       }
     }
   }
@@ -484,6 +489,9 @@ class MoteusServo::Impl {
       values.resize(6);
     }
     if (std::isfinite(joint.goal_deg )) { values.resize(7); }
+
+    // Guess we're not sending anything.
+    if (values.empty()) { return; }
 
     for (size_t i = 0; i < values.size(); i++) {
       switch (i) {

@@ -25,11 +25,11 @@
 #include "base/tf.h"
 
 #include "mech/gait.h"
+#include "mech/servo_interface.h"
 
 namespace mjmech {
 namespace mech {
 class RippleGait;
-class ServoInterface;
 
 /// Advance a gait through time, accept commands, and send those gait
 /// commands out to some servos.
@@ -38,9 +38,8 @@ class GaitDriver : boost::noncopyable {
   template <typename AhrsData>
   GaitDriver(boost::asio::io_service& service,
              base::TelemetryRegistry* telemetry_registry,
-             ServoInterface* servo,
              boost::signals2::signal<void (const AhrsData*)>* body_ahrs_signal)
-      : GaitDriver(service, telemetry_registry, servo) {
+      : GaitDriver(service, telemetry_registry) {
     body_ahrs_signal->connect(
         std::bind(&GaitDriver::HandleBodyAhrs<AhrsData>,
                   this, std::placeholders::_1));
@@ -70,6 +69,84 @@ class GaitDriver : boost::noncopyable {
   /// Gently sit down.
   void CommandSitting();
 
+
+  struct CommandState {
+    boost::posix_time::ptime timestamp;
+    ServoInterface::PowerState power_state = ServoInterface::kPowerFree;
+    std::vector<ServoInterface::Joint> joints;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(timestamp));
+      a->Visit(MJ_ENUM(power_state, ServoInterface::PowerStateMapper));
+      a->Visit(MJ_NVP(joints));
+    }
+  };
+
+  enum State : int {
+    kUnpowered,
+    kActive,
+    kPrepositioning,
+    kStandup,
+    kSitting,
+  };
+
+  static std::map<State, const char*> StateMapper() {
+    return std::map<State, const char*>{
+      { kUnpowered, "kUnpowered" },
+      { kActive, "kActive" },
+      { kPrepositioning, "kPrepositioning" },
+      { kStandup, "kStandup" },
+      { kSitting, "kSitting" },
+    };
+  }
+
+  struct GaitData {
+    boost::posix_time::ptime timestamp;
+
+    State state;
+    base::Transform body_robot;
+    base::Transform cog_robot;
+    base::Transform body_world;
+    base::Transform robot_world;
+
+    base::Quaternion attitude;
+    base::Point3D body_rate_dps;
+
+    std::array<base::Point3D, 4> legs;
+    // The command as sent by the user.
+    JointCommand command;
+
+    // The command as given to the gait engine.
+    Command input_command;
+    Command gait_command;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(timestamp));
+      a->Visit(MJ_ENUM(state, StateMapper));
+      a->Visit(MJ_NVP(body_robot));
+      a->Visit(MJ_NVP(cog_robot));
+      a->Visit(MJ_NVP(body_world));
+      a->Visit(MJ_NVP(robot_world));
+      a->Visit(MJ_NVP(attitude));
+      a->Visit(MJ_NVP(body_rate_dps));
+      a->Visit(MJ_NVP(legs));
+      a->Visit(MJ_NVP(command));
+      a->Visit(MJ_NVP(input_command));
+      a->Visit(MJ_NVP(gait_command));
+    }
+  };
+
+  struct UpdateResult {
+    CommandState command_state;
+    GaitData gait_data;
+  };
+
+  /// This should be called at a high rate when the gait driver is
+  /// active.  It returns the current set of commands to request.
+  UpdateResult Update(double period_s);
+
   boost::program_options::options_description* options();
 
   const Command& input_command() const;
@@ -78,8 +155,7 @@ class GaitDriver : boost::noncopyable {
 
  private:
   GaitDriver(boost::asio::io_service& service,
-             base::TelemetryRegistry*,
-             ServoInterface* servo);
+             base::TelemetryRegistry*);
 
   template <typename AhrsData>
   void HandleBodyAhrs(const AhrsData* data) {

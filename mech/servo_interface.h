@@ -69,6 +69,15 @@ class ServoInterface : boost::noncopyable {
     kPowerBrake,
     kPowerEnable,
   };
+
+  static std::map<PowerState, const char*> PowerStateMapper() {
+    return {
+      { kPowerFree, "kPowerFree" },
+      { kPowerBrake, "kPowerBrake" },
+      { kPowerEnable, "kPowerEnable" },
+    };
+  }
+
   virtual void EnablePower(PowerState power_state, const std::vector<int>&,
                            mjlib::io::ErrorCallback) = 0;
 
@@ -90,6 +99,18 @@ class ServoInterface : boost::noncopyable {
     std::optional<double> voltage;
     std::optional<double> velocity_dps;
     std::optional<double> torque_Nm;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(address));
+      a->Visit(MJ_NVP(torque_on));
+      a->Visit(MJ_NVP(error));
+      a->Visit(MJ_NVP(angle_deg));
+      a->Visit(MJ_NVP(temperature_C));
+      a->Visit(MJ_NVP(voltage));
+      a->Visit(MJ_NVP(velocity_dps));
+      a->Visit(MJ_NVP(torque_Nm));
+    }
   };
 
   typedef std::function<

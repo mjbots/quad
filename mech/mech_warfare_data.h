@@ -32,6 +32,7 @@ struct MechWarfareData {
     kManual,
     kDrive,
     kSitting,
+    kFault,
   };
 
   Mode mode = Mode::kIdle;
@@ -43,6 +44,7 @@ struct MechWarfareData {
   boost::posix_time::ptime prepositioning_start_timestamp;
   boost::posix_time::ptime standing_start_timestamp;
   bool active = false;
+  uint64_t skipped_updates = 0;
 
   static std::map<Mode, const char*> ModeMapper() {
     return std::map<Mode, const char*>{
@@ -53,6 +55,7 @@ struct MechWarfareData {
       {Mode::kManual, "kManual"},
       {Mode::kDrive, "kDrive"},
       {Mode::kSitting, "kSitting"},
+      {Mode::kFault, "kFault"},
     };
   }
 
@@ -67,6 +70,7 @@ struct MechWarfareData {
     a->Visit(MJ_NVP(prepositioning_start_timestamp));
     a->Visit(MJ_NVP(standing_start_timestamp));
     a->Visit(MJ_NVP(active));
+    a->Visit(MJ_NVP(skipped_updates));
   }
 };
 

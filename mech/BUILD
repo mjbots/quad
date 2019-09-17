@@ -36,7 +36,6 @@ cc_library(
         "moteus_servo.cc",
         "multiplex_client.cc",
         "rtsp_server.cc",
-        "servo_monitor.cc",
         "target_tracker.cc",
         "turret.cc",
         "video_display.cc",
@@ -44,6 +43,7 @@ cc_library(
     hdrs = glob(["*.h"]),
     deps = [
         "//base",
+        "@boost//:filesystem",
         "@gstreamer",
         "@gst-plugins-base//:gstapp",
         "@gst-plugins-base//:plugins",
