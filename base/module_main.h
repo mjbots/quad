@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <sched.h>
+
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
@@ -44,6 +46,7 @@ int safe_main(int argc, char**argv) {
   bool log_short_name = false;
   double event_timeout_s = 0;
   double idle_timeout_s = 0;
+  int cpu_affinity = -1;
 
   po::options_description desc("Allowable options");
   desc.add_options()
@@ -56,6 +59,7 @@ int safe_main(int argc, char**argv) {
        "disable real-time signals and other debugging hindrances")
       ("rt.event_timeout_s", po::value(&event_timeout_s))
       ("rt.idle_timeout_s", po::value(&idle_timeout_s))
+      ("rt.cpu_affinity", po::value(&cpu_affinity))
       ;
 
   AddLoggingOptions(&desc);
@@ -135,6 +139,17 @@ int safe_main(int argc, char**argv) {
           [&](mjlib::base::error_code ec) {
             mjlib::base::FailIf(ec);
 
+            if (cpu_affinity >= 0) {
+              std::cout << "Setting CPU affinity for main thread to: "
+                        << cpu_affinity << "\n";
+              cpu_set_t cpuset = {};
+              CPU_ZERO(&cpuset);
+              CPU_SET(cpu_affinity, &cpuset);
+
+              mjlib::base::system_error::throw_if(
+                  ::sched_setaffinity(0, sizeof(cpu_set_t), &cpuset) < 0);
+            }
+
             std::cout << "Started!\n";
 
             context.rt_executor.set_options(
@@ -148,6 +163,7 @@ int safe_main(int argc, char**argv) {
 
   context.remote_debug->AsyncStart(joiner->Wrap("starting remote_debug"));
   module.AsyncStart(joiner->Wrap("starting main module"));
+
 
   context.context.run();
   return 0;
