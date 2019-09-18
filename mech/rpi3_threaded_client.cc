@@ -37,15 +37,20 @@
 
 #include "mjlib/base/buffer_stream.h"
 #include "mjlib/base/system_error.h"
+#include "mjlib/io/deadline_timer.h"
 #include "mjlib/multiplex/frame.h"
 #include "mjlib/multiplex/stream.h"
 
 #include "mech/rpi3_raw_uart.h"
 
+namespace pl = std::placeholders;
+
 namespace mjmech {
 namespace mech {
 
 namespace {
+auto u32 = [](auto v) { return static_cast<uint32_t>(v); };
+
 void ThrowIf(bool value, std::string_view message = "") {
   if (value) {
     throw mjlib::base::system_error::syserrno(message.data());
@@ -106,6 +111,85 @@ class Rpi3ThreadedClient::Impl {
     return result;
   }
 
+  class Tunnel : public mjlib::io::AsyncStream,
+                 public std::enable_shared_from_this<Tunnel> {
+   public:
+    Tunnel(Impl* parent, uint8_t id, uint32_t channel,
+           const TunnelOptions& options)
+        : parent_(parent),
+          id_(id),
+          channel_(channel),
+          options_(options) {}
+
+    ~Tunnel() override {}
+
+    void async_read_some(mjlib::io::MutableBufferSequence buffers,
+                         mjlib::io::ReadHandler handler) override {
+      boost::asio::post(
+          parent_->child_context_,
+          [self=shared_from_this(), buffers, handler]() {
+            const auto bytes_read =
+                self->parent_->ThreadTunnelPoll(
+                    self->id_, self->channel_, buffers);
+            if (bytes_read > 0) {
+              boost::asio::post(
+                  self->parent_->executor_, [self, handler, bytes_read]() {
+                    handler(mjlib::base::error_code(), bytes_read);
+                  });
+            } else {
+              self->timer_.expires_from_now(self->options_.poll_rate);
+              self->timer_.async_wait(
+                  std::bind(&Tunnel::HandlePoll, self, pl::_1,
+                            buffers, handler));
+            }
+          });
+    }
+
+    void async_write_some(mjlib::io::ConstBufferSequence buffers,
+                          mjlib::io::WriteHandler handler) override {
+      boost::asio::post(
+          parent_->child_context_,
+          [self=shared_from_this(), buffers, handler]() {
+            self->parent_->ThreadTunnelWrite(
+                self->id_, self->channel_, buffers, handler);
+          });
+    }
+
+    boost::asio::executor get_executor() override {
+      return parent_->executor_;
+    }
+
+    void cancel() override {
+      timer_.cancel();
+    }
+
+   private:
+    void HandlePoll(const mjlib::base::error_code& ec,
+                    mjlib::io::MutableBufferSequence buffers,
+                    mjlib::io::ReadHandler handler) {
+      if (ec) {
+        handler(ec, 0);
+        return;
+      }
+
+      async_read_some(buffers, handler);
+    }
+
+    Impl* const parent_;
+    const uint8_t id_;
+    const uint32_t channel_;
+    const TunnelOptions options_;
+
+    mjlib::io::DeadlineTimer timer_{parent_->executor_};
+  };
+
+  mjlib::io::SharedStream MakeTunnel(
+      uint8_t id,
+      uint32_t channel,
+      const TunnelOptions& options) {
+    return std::make_shared<Tunnel>(this, id, channel, options);
+  }
+
  private:
   void Run() {
     startup_future_.get();
@@ -135,6 +219,145 @@ class Rpi3ThreadedClient::Impl {
           options.baud_rate = options_.baud_rate;
           return options;
       }());
+  }
+
+  size_t ThreadTunnelPoll(uint8_t id, uint32_t channel,
+                          mjlib::io::MutableBufferSequence buffers) {
+    AssertThread();
+
+    mjlib::base::FastOStringStream stream;
+    mjlib::multiplex::WriteStream writer{stream};
+
+    writer.WriteVaruint(
+        u32(mjlib::multiplex::Format::Subframe::kClientPollServer));
+    writer.WriteVaruint(channel);
+    writer.WriteVaruint(
+        std::min<uint32_t>(64, boost::asio::buffer_size(buffers)));
+
+    mjlib::multiplex::Frame frame;
+    frame.source_id = 0;
+    frame.dest_id = id;
+    frame.request_reply = true;
+    frame.payload = stream.str();
+
+    auto result = frame.encode();
+
+    serial_->write(result);
+
+    FrameItem item;
+    ReadFrame(&item);
+
+    return ParseTunnelPoll(&item, channel, buffers);
+  }
+
+  size_t ParseTunnelPoll(const FrameItem* item,
+                         uint32_t channel,
+                         mjlib::io::MutableBufferSequence buffers) {
+    AssertThread();
+
+    mjlib::base::BufferReadStream buffer_stream(
+        {item->encoded, item->size});
+    mjlib::multiplex::ReadStream<
+      mjlib::base::BufferReadStream> stream{buffer_stream};
+
+    stream.Read<uint16_t>();  // ignore header
+    const auto maybe_source = stream.Read<uint8_t>();
+    const auto maybe_dest = stream.Read<uint8_t>();
+    const auto packet_size = stream.ReadVaruint();
+
+    if (!maybe_source || !maybe_dest || !packet_size) {
+      malformed_++;
+      return 0;
+    }
+
+    const auto maybe_subframe = stream.ReadVaruint();
+    if (!maybe_subframe || *maybe_subframe !=
+        u32(mjlib::multiplex::Format::Subframe::kServerToClient)) {
+      malformed_++;
+      return 0;
+    }
+
+    const auto maybe_channel = stream.ReadVaruint();
+    if (!maybe_channel || *maybe_channel != channel) {
+      malformed_++;
+      return 0;
+    }
+
+    const auto maybe_stream_size = stream.ReadVaruint();
+    if (!maybe_stream_size) {
+      malformed_++;
+      return 0;
+    }
+
+    const auto stream_size = *maybe_stream_size;
+
+    auto remaining_data = stream_size;
+    size_t bytes_read = 0;
+    for (auto buffer : buffers) {
+      if (remaining_data == 0) { break; }
+
+      const auto to_read = std::min<size_t>(buffer.size(), remaining_data);
+      buffer_stream.read({static_cast<char*>(buffer.data()),
+              static_cast<std::streamsize>(to_read)});
+      remaining_data -= to_read;
+      bytes_read += to_read;
+    }
+
+    // Ignore anything left over.
+    buffer_stream.ignore(remaining_data);
+
+    const auto maybe_read_crc = stream.Read<uint16_t>();
+    if (!maybe_read_crc) {
+      malformed_++;
+      return 0;
+    }
+    const auto read_crc = *maybe_read_crc;
+    boost::crc_ccitt_type crc;
+    crc.process_bytes(item->encoded, item->size - 2);
+    const auto expected_crc = crc.checksum();
+
+    if (read_crc != expected_crc) {
+      checksum_errors_++;
+      return 0;
+    }
+
+    return bytes_read;
+  }
+
+  void ThreadTunnelWrite(uint8_t id, uint32_t channel,
+                         mjlib::io::ConstBufferSequence buffers,
+                         mjlib::io::WriteHandler callback) {
+    AssertThread();
+
+    mjlib::base::FastOStringStream stream;
+    mjlib::multiplex::WriteStream writer{stream};
+
+    writer.WriteVaruint(u32(mjlib::multiplex::Format::Subframe::kClientToServer));
+    writer.WriteVaruint(channel);
+
+    const auto size = boost::asio::buffer_size(buffers);
+    writer.WriteVaruint(size);
+    for (auto buffer : buffers) {
+      stream.write({static_cast<const char*>(buffer.data()), buffer.size()});
+    }
+
+    mjlib::multiplex::Frame frame;
+    frame.source_id = 0;
+    frame.dest_id = id;
+    frame.request_reply = false;
+    frame.payload = stream.str();
+
+    auto result = frame.encode();
+
+    serial_->write(result);
+
+    // Give the device a chance to turn around the line before we do
+    // anything else.
+    ::usleep(100);
+
+    boost::asio::post(
+        executor_,
+        std::bind(callback, mjlib::base::error_code(), size));
   }
 
   void ThreadAsyncRegister(const Request* requests,
@@ -441,6 +664,13 @@ void Rpi3ThreadedClient::AsyncRegister(const Request* request,
 
 Rpi3ThreadedClient::Stats Rpi3ThreadedClient::stats() const {
   return impl_->stats();
+}
+
+mjlib::io::SharedStream Rpi3ThreadedClient::MakeTunnel(
+    uint8_t id,
+    uint32_t channel,
+    const TunnelOptions& options) {
+  return impl_->MakeTunnel(id, channel, options);
 }
 
 }

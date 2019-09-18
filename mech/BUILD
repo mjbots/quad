@@ -169,6 +169,7 @@ cc_binary(
     name = "moteus_tool",
     srcs = ["moteus_tool_main.cc"],
     deps = [
+        ":mech",
         "@moteus//moteus/tool:moteus_tool_lib",
         "@org_llvm_libcxx//:libcxx",
     ],

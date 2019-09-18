@@ -19,9 +19,11 @@
 #include <vector>
 
 #include <boost/asio/executor.hpp>
+#include <boost/date_time/posix_time/posix_time_types.hpp>
 
 #include "mjlib/base/visitor.h"
 #include "mjlib/io/async_types.h"
+#include "mjlib/io/async_stream.h"
 #include "mjlib/multiplex/register.h"
 
 namespace mjmech {
@@ -91,6 +93,19 @@ class Rpi3ThreadedClient {
     }
   };
   Stats stats() const;
+
+  struct TunnelOptions {
+    // Poll this often for data to be received.
+    boost::posix_time::time_duration poll_rate =
+        boost::posix_time::milliseconds(10);
+
+    TunnelOptions() {}
+  };
+
+  mjlib::io::SharedStream MakeTunnel(
+      uint8_t id,
+      uint32_t channel,
+      const TunnelOptions& options);
 
  private:
   class Impl;
