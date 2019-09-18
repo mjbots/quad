@@ -17,11 +17,11 @@
 #include <optional>
 
 #include "mjlib/base/visitor.h"
-#include "mjlib/multiplex/threaded_client.h"
 
 #include "base/point3d.h"
 
 #include "mech/mech_defines.h"
+#include "mech/multiplex_client.h"
 #include "mech/turret_command.h"
 
 namespace mjmech {
@@ -45,7 +45,7 @@ class Turret : boost::noncopyable {
 
   void AsyncStart(mjlib::io::ErrorCallback);
 
-  void SetMultiplexClient(mjlib::multiplex::ThreadedClient*);
+  void SetMultiplexClient(MultiplexClient::Client*);
 
   void SetCommand(const TurretCommand&);
   void SetFireControl(const TurretCommand::FireControl&);

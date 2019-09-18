@@ -17,7 +17,7 @@
 #include <boost/program_options.hpp>
 
 #include "mjlib/base/visitor.h"
-#include "mjlib/multiplex/threaded_client.h"
+#include "mech/rpi3_threaded_client.h"
 
 namespace mjmech {
 namespace mech {
@@ -44,7 +44,7 @@ class MultiplexClient {
   boost::program_options::options_description* options();
   void AsyncStart(mjlib::io::ErrorCallback);
 
-  using Client = mjlib::multiplex::ThreadedClient;
+  using Client = Rpi3ThreadedClient;
   using ClientCallback = std::function<void (const mjlib::base::error_code&, Client*)>;
   void RequestClient(ClientCallback);
 

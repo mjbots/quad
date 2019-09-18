@@ -59,7 +59,7 @@ struct JointData {
   boost::posix_time::ptime timestamp;
   std::vector<ServoInterface::JointStatus> joints;
   int32_t missing = 0;
-  mjlib::multiplex::ThreadedClient::Stats serial_stats;
+  MultiplexClient::Client::Stats serial_stats;
   double cycle_time_s = 0.0;
 
   template <typename Archive>
@@ -289,14 +289,10 @@ class MechWarfare::Impl : boost::noncopyable {
           ServoInterface::StatusOptions status;
           status.pose = true;
           status.velocity = true;
+          status.torque = true;
 
-          // Our raspberry PI UART and multiplex register encoding
-          // limit the amount of data that can be returned.  If we ask
-          // for torque, we go over that limit. :(
-          status.torque = false;
-
-          status.voltage = false;
-          status.temperature = false;
+          status.voltage = true;
+          status.temperature = true;
           status.error = true;
           return status;
         }(),
@@ -692,7 +688,7 @@ class MechWarfare::Impl : boost::noncopyable {
   Command manual_gait_;
   std::vector<ServoInterface::Joint> joint_command_;
   JointData joint_data_;
-  mjlib::multiplex::ThreadedClient* multiplex_client_ = nullptr;
+  MultiplexClient::Client* multiplex_client_ = nullptr;
 
   boost::signals2::signal<void (const GaitDriver::GaitData*)> gait_data_signal_;
   boost::signals2::signal<void (const JointData*)> joint_data_signal_;

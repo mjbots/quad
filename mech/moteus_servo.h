@@ -17,9 +17,10 @@
 #include <boost/program_options.hpp>
 
 #include "mjlib/io/stream_factory.h"
-#include "mjlib/multiplex/threaded_client.h"
 
 #include "base/telemetry_registry.h"
+
+#include "mech/multiplex_client.h"
 #include "mech/servo_interface.h"
 
 namespace mjmech {
@@ -46,7 +47,7 @@ class MoteusServo : public ServoInterface {
   boost::program_options::options_description* options();
 
   void AsyncStart(mjlib::io::ErrorCallback);
-  void SetClient(mjlib::multiplex::ThreadedClient*);
+  void SetClient(MultiplexClient::Client*);
 
   void SetPose(const std::vector<Joint>&, mjlib::io::ErrorCallback) override;
   void EnablePower(PowerState, const std::vector<int>&,

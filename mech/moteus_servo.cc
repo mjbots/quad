@@ -24,7 +24,6 @@
 #include "mjlib/base/limit.h"
 #include "mjlib/base/program_options_archive.h"
 #include "mjlib/io/now.h"
-#include "mjlib/multiplex/threaded_client.h"
 
 #include "base/logging.h"
 #include "mech/moteus.h"
@@ -552,13 +551,14 @@ class MoteusServo::Impl {
   boost::program_options::options_description options_;
 
   bool outstanding_ = false;
-  mp::ThreadedClient::Request request_;
-  mp::ThreadedClient::Reply reply_;
+  using Client = MultiplexClient::Client;
+  Client::Request request_;
+  Client::Reply reply_;
 
-  mp::ThreadedClient::Request read_request_;
-  mp::ThreadedClient::Reply read_reply_;
+  Client::Request read_request_;
+  Client::Reply read_reply_;
 
-  mjlib::multiplex::ThreadedClient* mp_client_ = nullptr;
+  Client* mp_client_ = nullptr;
   std::vector<Value> values_cache_;
 };
 
@@ -579,7 +579,7 @@ void MoteusServo::AsyncStart(mjlib::io::ErrorCallback handler) {
   impl_->AsyncStart(handler);
 }
 
-void MoteusServo::SetClient(mjlib::multiplex::ThreadedClient* client) {
+void MoteusServo::SetClient(MultiplexClient::Client* client) {
   impl_->mp_client_ = client;
 }
 

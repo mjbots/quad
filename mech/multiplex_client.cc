@@ -36,23 +36,6 @@
 namespace pl = std::placeholders;
 namespace fs = boost::filesystem;
 
-namespace {
-void ThrowIf(bool value, std::string_view message = "") {
-  if (value) {
-    throw mjlib::base::system_error::syserrno(message.data());
-  }
-}
-
-std::optional<std::string> ReadContents(const std::string& filename) {
-  std::ifstream inf(filename);
-  if (!inf.is_open()) { return {}; }
-
-  std::ostringstream ostr;
-  ostr << inf.rdbuf();
-  return ostr.str();
-}
-}
-
 namespace mjmech {
 namespace mech {
 
@@ -66,75 +49,11 @@ class MultiplexClient::Impl {
 
   void AsyncStart(mjlib::io::ErrorCallback handler) {
     Client::Options options;
-    options.port = parameters_.serial_port;
     options.baud_rate = parameters_.serial_baud;
-    options.query_timeout_s = 0.001;
+    options.query_timeout_s = 0.00025;
     options.cpu_affinity = parameters_.cpu_affinity;
     client_ = std::make_unique<Client>(executor_, options);
     ProcessRequests();
-
-    // Now we kick off a timer to fix up the real time priorities if
-    // we can.
-    timer_.start(boost::posix_time::milliseconds(100),
-                 std::bind(&Impl::FixPriorities, this,
-                           std::placeholders::_1, handler));
-  }
-
-  void FixPriorities(const mjlib::base::error_code& ec,
-                     mjlib::io::ErrorCallback handler) {
-    if (ec == boost::asio::error::operation_aborted) { return; }
-    mjlib::base::FailIf(ec);
-    if (done_) { return; }
-
-    // See if we can fix the priorities of the interrupt thread yet.
-    // It sure would be nice if linux provided a non-racy way to do
-    // this, but, it is free?
-    auto maybe_irq =
-        ReadContents("/sys/class/tty/" +
-                     fs::path(parameters_.serial_port).filename().string() +
-                     "/irq");
-    if (!maybe_irq) { return; }
-
-    const int irq = std::stoi(boost::algorithm::trim_copy(*maybe_irq));
-    const auto desired_prefix = fmt::format("irq/{}-", irq);
-
-    const auto maybe_irq_pid = [&]() -> std::optional<int> {
-      // Now we have to look through all of /proc for any processes that
-      // are named after irq/#.  Ick.
-      for (auto item : fs::directory_iterator("/proc")) {
-        auto maybe_contents = ReadContents((item.path() / "comm").string());
-        if (!maybe_contents) { continue; }
-
-        if (boost::starts_with(*maybe_contents, desired_prefix)) {
-          return std::stoi(item.path().filename().string());
-        }
-      }
-      return {};
-    }();
-
-    if (!maybe_irq_pid) { return; }
-
-    const auto irq_pid = *maybe_irq_pid;
-
-    if (parameters_.cpu_affinity >= 0) {
-      log_.warn(fmt::format("Setting serial IRQ {} (pid={}) priorities",
-                            irq, irq_pid));
-      // Now we've got the PID.  We're going to try and set the affinity
-      // as well as the real time priority.
-      cpu_set_t cpuset = {};
-      CPU_ZERO(&cpuset);
-      CPU_SET(parameters_.cpu_affinity, &cpuset);
-      ThrowIf(::sched_setaffinity(
-                  irq_pid, sizeof(cpu_set_t), &cpuset) < 0);
-
-      struct sched_param params = {};
-      params.sched_priority = 99;
-      ThrowIf(::sched_setscheduler(irq_pid, SCHED_RR, &params) < 0);
-    }
-
-    // We no longer have to keep trying.
-    done_ = true;
-    timer_.cancel();
 
     boost::asio::post(
         executor_,

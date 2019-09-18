@@ -34,6 +34,8 @@ cc_library(
         "mech_warfare_command.cc",
         "moteus_servo.cc",
         "multiplex_client.cc",
+        "rpi3_raw_uart.cc",
+        "rpi3_threaded_client.cc",
         "rtsp_server.cc",
         "target_tracker.cc",
         "turret.cc",
@@ -96,6 +98,12 @@ cc_binary(
 cc_binary(
     name = "direct_servo_latency_test",
     srcs = ["direct_servo_latency_test.cc"],
+    deps = [":mech"],
+)
+
+cc_binary(
+    name = "rpi_serial_test",
+    srcs = ["rpi_serial_test.cc"],
     deps = [":mech"],
 )
 

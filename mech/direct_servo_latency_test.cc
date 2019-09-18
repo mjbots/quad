@@ -34,6 +34,8 @@
 #include "mjlib/multiplex/register.h"
 #include "mjlib/multiplex/stream.h"
 
+#include "base/system_fd.h"
+
 namespace po = boost::program_options;
 
 namespace base = mjlib::base;
@@ -44,33 +46,7 @@ constexpr int kSetupRegister = 0;  // mode
 constexpr int8_t kSetupValue = 0;  // kStopped
 constexpr int kNonceRegister = 0x10;  // kPwmPhaseA
 
-class SystemFd {
- public:
-  SystemFd(int fd) : fd_(fd) {}
-
-  ~SystemFd() {
-    if (fd_ >= 0) { ::close(fd_); }
-  }
-
-  SystemFd(const SystemFd&) = delete;
-  SystemFd& operator=(const SystemFd&) = delete;
-
-  SystemFd(SystemFd&& rhs) {
-    fd_ = rhs.fd_;
-    rhs.fd_ = -1;
-  }
-
-  SystemFd& operator=(SystemFd&& rhs) {
-    fd_ = rhs.fd_;
-    rhs.fd_ = -1;
-    return *this;
-  }
-
-  operator int() const { return fd_; }
-
- private:
-  int fd_;
-};
+using mjmech::base::SystemFd;
 
 SystemFd open_serial(const std::string& serial_port) {
   SystemFd fd{::open(serial_port.c_str(), O_RDWR | O_CLOEXEC | O_NOCTTY)};

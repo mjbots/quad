@@ -24,6 +24,7 @@ cc_library(
         "logging.cc",
         "program_options.cc",
         "quaternion.cc",
+        "system_fd.cc",
         "telemetry_log.cc",
         "telemetry_remote_debug_server.cc",
         "udp_data_link.cc",

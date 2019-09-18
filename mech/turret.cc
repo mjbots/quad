@@ -535,7 +535,10 @@ class Turret::Impl : boost::noncopyable {
   Turret* const parent_;
   boost::asio::executor executor_;
   Mech::ServoBase* const servo_;
-  mp::ThreadedClient* mp_client_ = nullptr;
+
+  using Client = MultiplexClient::Client;
+
+  Client* mp_client_ = nullptr;
   mjlib::io::DeadlineTimer timer_;
   Parameters parameters_;
   boost::posix_time::ptime disable_until_;
@@ -544,10 +547,9 @@ class Turret::Impl : boost::noncopyable {
 
   Data data_;
 
-  using TC = mp::ThreadedClient;
-  TC::Request read_request_;
-  TC::Reply read_reply_;
-  std::list<TC::Request> outstanding_requests_;
+  Client::Request read_request_;
+  Client::Reply read_reply_;
+  std::list<Client::Request> outstanding_requests_;
 };
 
 Turret::Turret(const boost::asio::executor& executor,
@@ -565,7 +567,7 @@ void Turret::AsyncStart(mjlib::io::ErrorCallback handler) {
       std::bind(handler, mjlib::base::error_code()));
 }
 
-void Turret::SetMultiplexClient(mp::ThreadedClient* client) {
+void Turret::SetMultiplexClient(MultiplexClient::Client* client) {
   impl_->mp_client_ = client;
 }
 
