@@ -93,6 +93,7 @@ class ServoInterface : boost::noncopyable {
   struct JointStatus {
     int address = 0;
     bool torque_on = false;
+    int8_t mode = 0;
     uint32_t error = 0;
     std::optional<double> angle_deg;
     std::optional<double> temperature_C;
@@ -104,6 +105,7 @@ class ServoInterface : boost::noncopyable {
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(address));
       a->Visit(MJ_NVP(torque_on));
+      a->Visit(MJ_NVP(mode));
       a->Visit(MJ_NVP(error));
       a->Visit(MJ_NVP(angle_deg));
       a->Visit(MJ_NVP(temperature_C));

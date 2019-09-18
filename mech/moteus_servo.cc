@@ -396,6 +396,7 @@ class MoteusServo::Impl {
       switch (static_cast<moteus::Register>(pair.first)) {
         case moteus::kMode: {
           const auto mode = read_int(value);
+          joint->mode = mode;
           joint->torque_on = mode >= 5;
           break;
         }
@@ -417,6 +418,10 @@ class MoteusServo::Impl {
         }
         case moteus::kTemperature: {
           joint->temperature_C = read_temperature(value);
+          break;
+        }
+        case moteus::kFault: {
+          joint->error = read_int(value);
           break;
         }
         default: {
