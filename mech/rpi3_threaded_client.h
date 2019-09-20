@@ -40,7 +40,7 @@ class Rpi3ThreadedClient {
   struct Options {
     int baud_rate = 3000000;
 
-    double query_timeout_s = 0.0005;
+    double query_timeout_s = 0.0003;
 
     // If set to a non-negative number, bind the time sensitive thread
     // to the given CPU.
