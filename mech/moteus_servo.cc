@@ -229,7 +229,13 @@ class MoteusServo::Impl {
             static_cast<float>(joint.torque_Nm),
             static_cast<float>(joint.kp),
             1.0f,
-            static_cast<float>(joint.max_torque_Nm * joint.max_torque_scale),
+            static_cast<float>(
+                std::min(
+                    (joint.max_torque_Nm *
+                     joint.max_torque_scale),
+                    parameters_.max_torque_Nm >= 0.0 ?
+                    parameters_.max_torque_Nm :
+                    std::numeric_limits<double>::infinity())),
             (std::isfinite(joint.goal_deg) ?
               static_cast<float>(joint.goal_deg / 360.0f) :
               std::numeric_limits<float>::quiet_NaN()),
@@ -501,7 +507,8 @@ class MoteusServo::Impl {
     if (joint.torque_Nm != 0.0) { values.resize(3); }
     if (joint.kp != 1.0) { values.resize(4); }
     if (joint.max_torque_scale != 1.0 ||
-        joint.max_torque_Nm != joint.kDefaultMaxTorque) {
+        joint.max_torque_Nm != joint.kDefaultMaxTorque ||
+        parameters_.max_torque_Nm >= 0.0) {
       values.resize(6);
     }
     if (std::isfinite(joint.goal_deg )) { values.resize(7); }
@@ -533,7 +540,12 @@ class MoteusServo::Impl {
         }
         case 5: {
           values[i] = write_torque(
-              joint.max_torque_Nm * joint.max_torque_scale, kInt16);
+              std::min(
+                  joint.max_torque_Nm * joint.max_torque_scale,
+                  (parameters_.max_torque_Nm >= 0.0 ?
+                   parameters_.max_torque_Nm :
+                   std::numeric_limits<double>::infinity())),
+              kInt16);
           break;
         }
         case 6: {

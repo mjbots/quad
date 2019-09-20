@@ -33,13 +33,11 @@ class MoteusServo : public ServoInterface {
   ~MoteusServo() override;
 
   struct Parameters {
-    double max_torque_shoulder_Nm = 40.0;
-    double max_torque_legs_Nm = 40.0;
+    double max_torque_Nm = -1.0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(max_torque_shoulder_Nm));
-      a->Visit(MJ_NVP(max_torque_legs_Nm));
+      a->Visit(MJ_NVP(max_torque_Nm));
     }
   };
 
