@@ -58,8 +58,11 @@ class GaitDriver : boost::noncopyable {
   /// Gently stand up.
   void CommandStandup();
 
+  /// Position feet to sit down.
+  void CommandPrepareToSit();
+
   /// Gently sit down.
-  void CommandSitting();
+  void CommandSitDown();
 
 
   struct CommandState {
@@ -80,6 +83,7 @@ class GaitDriver : boost::noncopyable {
     kActive,
     kPrepositioning,
     kStandup,
+    kPreparingToSit,
     kSitting,
   };
 
@@ -89,6 +93,7 @@ class GaitDriver : boost::noncopyable {
       { kActive, "kActive" },
       { kPrepositioning, "kPrepositioning" },
       { kStandup, "kStandup" },
+      { kPreparingToSit, "kPreparingToSit" },
       { kSitting, "kSitting" },
     };
   }

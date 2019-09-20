@@ -82,6 +82,21 @@ struct Command {
   double time_rate_percent = 100;
   bool reset_phase = false;
 
+  struct RobotFrameLeg {
+    int leg_num = 0;
+    base::Point3D point;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(leg_num));
+      a->Visit(MJ_NVP(point));
+    }
+  };
+
+  /// If set, then the given legs will move to this robot frame
+  /// position during each swing phase.
+  std::vector<RobotFrameLeg> override_foot_placement;
+
   bool IsZero() const {
     return translate_x_mm_s == 0.0 &&
         translate_y_mm_s == 0.0 &&
@@ -102,6 +117,7 @@ struct Command {
     a->Visit(MJ_NVP(lift_height_percent));
     a->Visit(MJ_NVP(time_rate_percent));
     a->Visit(MJ_NVP(reset_phase));
+    a->Visit(MJ_NVP(override_foot_placement));
   }
 };
 
@@ -197,6 +213,7 @@ class Gait : boost::noncopyable {
   };
   virtual Result SetCommand(const Command&) = 0;
   virtual bool are_all_legs_stance() const = 0;
+  virtual void RezeroPhaseCount() = 0;
   virtual int zero_phase_count() const = 0;
 };
 }

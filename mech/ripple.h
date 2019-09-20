@@ -42,6 +42,7 @@
 
 #include "mjlib/base/visitor.h"
 
+#include "base/interpolate.h"
 #include "base/logging.h"
 
 #include "mech/gait.h"
@@ -71,7 +72,7 @@ struct RippleConfig {
   double rate_p_mm_dps = 0.0;
   double rate_i_mm_dps2 = 0.0;
 
-  double preposition_z_offset_mm = -80;
+  double preposition_z_offset_mm = 0;
 
   double mass_kg = 0.0;
   double feedforward_stance_ramp_percent = 5;
@@ -190,6 +191,10 @@ class RippleGait : public Gait {
     return true;
   }
 
+  void RezeroPhaseCount() override {
+    state_.zero_phase_count = 0;
+  }
+
   int zero_phase_count() const override {
     return state_.zero_phase_count;
   }
@@ -299,8 +304,12 @@ class RippleGait : public Gait {
   const Options& options() const { return options_; }
   const Command& command() const { return command_; }
 
+  // scale = 0 means that the robot is laying on the ground, and 1.0
+  // means it is up as high as it will go.
   RippleState GetPrepositioningState(double scale) const {
-    return GetStartupState(config_.preposition_z_offset_mm * scale);
+    return GetRestingState(
+        base::Interpolate(config_.preposition_z_offset_mm,
+                          config_.body_z_offset_mm, scale));
   }
 
   RippleState GetIdleState() const {
@@ -357,6 +366,39 @@ class RippleGait : public Gait {
   }
 
  private:
+  /// Return a state that can be reached from the "reset" position
+  /// while the robot is resting on the ground and is appropriate to
+  /// stand up straight from.
+  RippleState GetRestingState(double z_offset_mm) const {
+    RippleState result;
+
+    for (size_t index = 0;
+         index < config_.mechanical.leg_config.size();
+         index++) {
+      const auto& leg_config = config_.mechanical.leg_config[index];
+
+      base::Frame shoulder_frame;
+      MakeShoulderFrame(config_.mechanical.leg_config.at(index),
+                        &result, &shoulder_frame);
+
+      auto resting = leg_config.leg_ik->Resting();
+
+      result.legs.emplace_back();
+      auto& leg_state = result.legs.back();
+
+      leg_state.point = shoulder_frame.MapToFrame(&result.robot_frame, resting);
+      leg_state.frame = &result.robot_frame;
+      leg_state.mode = Leg::Mode::kStance;
+      leg_state.stance_phase_start = -1.0;
+      leg_state.leg_ik = leg_config.leg_ik;
+    }
+
+    // We set this after so that our legs stay on the ground.
+    result.body_frame.transform.translation.z() = z_offset_mm;
+
+    return result;
+  }
+
   RippleState GetStartupState(double z_offset_mm) const {
     RippleState result;
 
@@ -539,7 +581,15 @@ class RippleGait : public Gait {
     options_ = options;
 
     if (command.reset_phase) {
-      state_ = idle_state_;
+      state_.phase = 0.0;
+      state_.action = 0;
+      state_.zero_phase_count = 0;
+      for (auto& leg : state_.legs) {
+        leg.stance_phase_start = -1.0;
+        leg.swing_start_pos = {};
+        leg.swing_end_pos = {};
+        leg.mode = Leg::Mode::kStance;
+      }
     }
 
     ApplyBodyCommand(&state_, command);
@@ -669,7 +719,19 @@ class RippleGait : public Gait {
     result->transform.translation.y() = dy;
   }
 
+  // Always returns a point in the robot frame.
   base::Point3D GetSwingEndPos(int leg_num) const {
+    if (!command_.override_foot_placement.empty()) {
+      auto maybe_point = [&]() -> std::optional<base::Point3D> {
+        for (const auto& leg : command_.override_foot_placement) {
+          if (leg.leg_num == leg_num) { return leg.point; }
+        }
+        return {};
+      }();
+
+      if (!!maybe_point) { return *maybe_point; }
+    }
+
     // Target swing end positions such that during stance, the leg
     // will spend half its travel time reaching the idle position, and
     // half its travel time going beyond the idle position.

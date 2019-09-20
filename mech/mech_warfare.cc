@@ -212,8 +212,18 @@ class MechWarfare::Impl : boost::noncopyable {
       case Data::Mode::kDrive: {
         // Start sitting.
         data_.sitting_start_timestamp = Now();
-        parent_->m_.gait_driver->CommandSitting();
-        data_.mode = Data::Mode::kSitting;
+        parent_->m_.gait_driver->CommandPrepareToSit();
+        data_.mode = Data::Mode::kPreparingToSit;
+        break;
+      }
+      case Data::Mode::kPreparingToSit: {
+        // Wait for the gait to reach steady state.
+        if (parent_->m_.gait_driver->gait()->zero_phase_count() >= 2 &&
+            parent_->m_.gait_driver->gait()->are_all_legs_stance()) {
+          data_.sitting_start_timestamp = Now();
+          parent_->m_.gait_driver->CommandSitDown();
+          data_.mode = Data::Mode::kSitting;
+        }
         break;
       }
       case Data::Mode::kSitting: {
@@ -258,6 +268,7 @@ class MechWarfare::Impl : boost::noncopyable {
       case Data::Mode::kTurretBias:  // fall through
       case Data::Mode::kPrepositioning:  // fall through
       case Data::Mode::kStanding:  // fall through
+      case Data::Mode::kPreparingToSit:  // fall through
       case Data::Mode::kSitting: {
         break;
       }
@@ -615,6 +626,10 @@ class MechWarfare::Impl : boost::noncopyable {
         if (elapsed_s > parent_->parameters_.standing_timeout_s) {
           data_.mode = mode;
         }
+        break;
+      }
+      case Data::Mode::kPreparingToSit: {
+        // Once we are here, we have to wait for it to finish.
         break;
       }
       case Data::Mode::kSitting: {

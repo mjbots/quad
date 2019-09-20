@@ -217,22 +217,27 @@ class GaitDriver::Impl : boost::noncopyable {
   }
 
   CommandState SendPrepositionCommand() {
-    gait_commands_ = gait_->MakeJointCommand(
-        gait_->GetPrepositioningState(1.0));
+    auto state = gait_->GetPrepositioningState(0.0);
+    gait_->SetState(state);
+    gait_commands_ = gait_->MakeJointCommand(state);
     const auto servo_commands =
         MakeServoCommands(gait_commands_, parameters_.preposition_speed_dps);
-    return MakeCommandState(DerateTibiaCommands(servo_commands, GetSitStandRatio()));
+    return MakeCommandState(
+        DerateTibiaCommands(servo_commands, GetSitStandRatio()));
   }
 
   void CommandStandup() {
     log_.debug("CommandStandup");
+    MJ_ASSERT(state_ == kPrepositioning);
     stand_sit_start_time_ = Now();
     state_ = kStandup;
+    gait_->SetState(gait_->GetPrepositioningState(0.0));
   }
 
   CommandState SendStandupCommand() {
-    gait_commands_ = gait_->MakeJointCommand(
-        gait_->GetPrepositioningState(1.0 - GetSitStandRatio()));
+    auto state = gait_->GetPrepositioningState(GetSitStandRatio());
+    gait_->SetState(state);
+    gait_commands_ = gait_->MakeJointCommand(state);
     return
         MakeCommandState(
             DerateStandupCommands(
@@ -240,8 +245,42 @@ class GaitDriver::Impl : boost::noncopyable {
                 GetSitStandRatio()));
   }
 
-  void CommandSitting() {
-    log_.debug("CommandSitting");
+  void CommandPrepareToSit() {
+    log_.debug("CommandPrepareToSit");
+    stand_sit_start_time_ = Now();
+    state_ = kPreparingToSit;
+
+    auto desired_sitting_state = gait_->GetPrepositioningState(1.0);
+    Command command = gait_command_;
+
+    // We need to sit now, so just instantaneously stop our velocity.
+    command.translate_x_mm_s = 0.0;
+    command.translate_y_mm_s = 0.0;
+    command.rotate_deg_s = 0.0;
+    command.lift_height_percent = 100.0;
+
+    for (size_t i = 0; i < desired_sitting_state.legs.size(); i++) {
+      const auto& leg = desired_sitting_state.legs[i];
+
+      Command::RobotFrameLeg cmd_leg;
+      cmd_leg.leg_num = i;
+      cmd_leg.point = desired_sitting_state.robot_frame.MapFromFrame(
+          leg.frame, leg.point);
+      command.override_foot_placement.push_back(cmd_leg);
+    }
+
+    CommandData command_data;
+    command_data.command = command;
+    command_data.timestamp = Now();
+    command_data_signal_(&command_data);
+
+    gait_->SetCommand(command);
+    gait_->RezeroPhaseCount();
+  }
+
+  void CommandSitDown() {
+    log_.debug("CommandSitDown");
+    MJ_ASSERT(state_ == kPreparingToSit);
     stand_sit_start_time_ = Now();
     state_ = kSitting;
   }
@@ -254,8 +293,9 @@ class GaitDriver::Impl : boost::noncopyable {
   }
 
   CommandState SendSittingCommand() {
-    gait_commands_ = gait_->MakeJointCommand(
-        gait_->GetPrepositioningState(GetSitStandRatio()));
+    auto state = gait_->GetPrepositioningState(1.0 - GetSitStandRatio());
+    gait_->SetState(state);
+    gait_commands_ = gait_->MakeJointCommand(state);;
     return MakeCommandState(
         DerateStandupCommands(
             MakeRegularServoCommands(gait_commands_.joints),
@@ -276,30 +316,33 @@ class GaitDriver::Impl : boost::noncopyable {
       case kStandup: {
         return PackResult(SendStandupCommand());
       }
+      case kPreparingToSit:
       case kActive: {
         break;
       }
     }
 
 
-    const auto now = Now();
-    const auto elapsed = now - last_command_timestamp_;
-    const bool timeout =
-        (parameters_.command_timeout_s > 0.0) &&
-        (elapsed > base::ConvertSecondsToDuration(
-            parameters_.command_timeout_s));
-    if (timeout) {
-      return PackResult(SetFree());
-    }
+    if (state_ != kPreparingToSit) {
+      const auto now = Now();
+      const auto elapsed = now - last_command_timestamp_;
+      const bool timeout =
+          (parameters_.command_timeout_s > 0.0) &&
+          (elapsed > base::ConvertSecondsToDuration(
+              parameters_.command_timeout_s));
+      if (timeout) {
+        return PackResult(SetFree());
+      }
 
-    UpdateAxisAccel(input_command_.translate_x_mm_s,
-                    &gait_command_.translate_x_mm_s,
-                    parameters_.max_acceleration_mm_s2.x(),
-                    period_s);
-    UpdateAxisAccel(input_command_.translate_y_mm_s,
-                    &gait_command_.translate_y_mm_s,
-                    parameters_.max_acceleration_mm_s2.y(),
-                    period_s);
+      UpdateAxisAccel(input_command_.translate_x_mm_s,
+                      &gait_command_.translate_x_mm_s,
+                      parameters_.max_acceleration_mm_s2.x(),
+                      period_s);
+      UpdateAxisAccel(input_command_.translate_y_mm_s,
+                      &gait_command_.translate_y_mm_s,
+                      parameters_.max_acceleration_mm_s2.y(),
+                      period_s);
+    }
 
     // Advance our gait, then send the requisite servo commands out.
     gait_commands_ = gait_->AdvanceTime(period_s);
@@ -447,8 +490,12 @@ void GaitDriver::CommandStandup() {
   impl_->CommandStandup();
 }
 
-void GaitDriver::CommandSitting() {
-  impl_->CommandSitting();
+void GaitDriver::CommandPrepareToSit() {
+  impl_->CommandPrepareToSit();
+}
+
+void GaitDriver::CommandSitDown() {
+  impl_->CommandSitDown();
 }
 
 boost::program_options::options_description*

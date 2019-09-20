@@ -31,6 +31,7 @@ struct MechWarfareData {
     kStanding,
     kManual,
     kDrive,
+    kPreparingToSit,
     kSitting,
     kFault,
   };
@@ -54,6 +55,7 @@ struct MechWarfareData {
       {Mode::kStanding, "kStanding"},
       {Mode::kManual, "kManual"},
       {Mode::kDrive, "kDrive"},
+      {Mode::kPreparingToSit, "kPreparingToSit"},
       {Mode::kSitting, "kSitting"},
       {Mode::kFault, "kFault"},
     };

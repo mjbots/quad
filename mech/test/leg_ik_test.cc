@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -106,6 +106,12 @@ void CheckTorque(T joints, double coxa_Nm, double femur_Nm, double tibia_Nm) {
   BOOST_CHECK_SMALL(std::abs(GetTorque(joints, kFemurIdent) - femur_Nm), 1e-2);
   BOOST_CHECK_SMALL(std::abs(GetTorque(joints, kTibiaIdent) - tibia_Nm), 1e-2);
 }
+
+void CheckPoints(const Eigen::Vector3d& lhs, const Eigen::Vector3d& rhs) {
+  BOOST_CHECK_SMALL(std::abs(lhs.x() - rhs.x()), 1e-3);
+  BOOST_CHECK_SMALL(std::abs(lhs.y() - rhs.y()), 1e-3);
+  BOOST_CHECK_SMALL(std::abs(lhs.z() - rhs.z()), 1e-3);
+}
 }
 
 BOOST_AUTO_TEST_CASE(TestLizard3Dof) {
@@ -199,7 +205,7 @@ void CheckVectorsClose(const Point3D& p1,
 void TestMammalForward(const JointAngles& joints,
                        const MammalIK::Config& config,
                        const Point3D& expected_point) {
-  auto result = MammalIK(config).Forward(joints);
+  auto result = MammalIK(config).MammalForward(joints);
 
   CheckVectorsClose(result.end, expected_point);
 }
@@ -325,4 +331,44 @@ BOOST_AUTO_TEST_CASE(TestSimpleMammalDof) {
                 test.expected_femur_Nm,
                 test.expected_tibia_Nm);
   }
+}
+
+namespace {
+MammalIK::Config MakeMoteusMammalConfig() {
+  MammalIK::Config r;
+
+  r.shoulder.ident = kCoxaIdent;
+  r.femur.ident = kFemurIdent;
+  r.tibia.ident = kTibiaIdent;
+
+  r.femur_attachment_mm.x() = 0;
+  r.femur_attachment_mm.y() = 30;
+  r.femur_attachment_mm.z() = 0;
+
+  r.shoulder.min_deg = -90.0;
+  r.shoulder.idle_deg = 0.0;
+  r.shoulder.max_deg = 90.0;
+
+  r.femur.min_deg = -170.0;
+  r.femur.idle_deg = 0.0;
+  r.femur.max_deg = 170.0;
+  r.femur.length_mm = 140.0;
+
+  r.tibia.min_deg = -170.0;
+  r.tibia.idle_deg = 0.0;
+  r.tibia.max_deg = 170.0;
+  r.tibia.length_mm = 135.0;
+
+  return r;
+}
+}
+
+BOOST_AUTO_TEST_CASE(MammalResting) {
+  auto config = MakeMoteusMammalConfig();
+
+  MammalIK ik(config);
+  const auto actual = ik.Resting();
+  CheckPoints(actual, Eigen::Vector3d{71.325, 30.0, -1.392});
+  const auto joints = ik.Solve(actual, Eigen::Vector3d{0, 0, 0});
+  CheckJoints(joints, 0.0, -160.0, 150.0);
 }

@@ -221,3 +221,87 @@ BOOST_AUTO_TEST_CASE(TestRippleAdvanced) {
     RunCycle(gait, command, 7.0, 0.04);
   }
 }
+
+namespace {
+boost::shared_ptr<IKSolver> MakeMammalIKSolver(int start_servo_num) {
+  MammalIK::Config r;
+
+  r.femur_attachment_mm.x() = 0;
+  r.femur_attachment_mm.y() = 30;
+  r.femur_attachment_mm.z() = 0;
+
+  r.shoulder.min_deg = -90.0;
+  r.shoulder.idle_deg = 0.0;
+  r.shoulder.max_deg = 90.0;
+  r.shoulder.ident = start_servo_num + 0;
+
+  r.femur.min_deg = -170.0;
+  r.femur.idle_deg = 0.0;
+  r.femur.max_deg = 170.0;
+  r.femur.length_mm = 140.0;
+  r.femur.ident = start_servo_num + 1;
+
+  r.tibia.min_deg = -170.0;
+  r.tibia.idle_deg = 0.0;
+  r.tibia.max_deg = 170.0;
+  r.tibia.length_mm = 135.0;
+  r.tibia.ident = start_servo_num + 2;
+
+  r.servo_speed_dps = 360.0;
+
+  r.invert = (start_servo_num == 3 || start_servo_num == 9);
+
+  return boost::shared_ptr<MammalIK>(new MammalIK(r));
+}
+
+RippleConfig MakeMammalConfig() {
+  RippleConfig result;
+
+  double mounts[][2]= {
+    { 175, 65 },
+    { 175, -65 },
+    { -175, -65 },
+    { -175, 65 },
+  };
+
+  for (int i = 0; i < 4; i++) {
+    Leg::Config leg_config;
+    leg_config.mount_mm.x() = mounts[i][0];
+    leg_config.mount_mm.y() = mounts[i][1];
+    leg_config.mount_mm.z() = 0;
+
+    leg_config.idle_mm.x() = 65.0;
+    leg_config.idle_mm.y() = 0;
+    leg_config.idle_mm.z() = 0;
+
+    leg_config.leg_ik = MakeMammalIKSolver(i * 3);
+
+    result.mechanical.leg_config.push_back(leg_config);
+  }
+
+  result.max_cycle_time_s = 4.0;
+  result.lift_height_mm = 20.0;
+  result.swing_percent = 50.0;
+  result.leg_order = { {0}, {2}, {1}, {3} };
+  result.body_z_offset_mm = 257.0;
+
+  return result;
+}
+}
+
+BOOST_AUTO_TEST_CASE(TestRippleResting) {
+  auto config = MakeMammalConfig();
+  RippleGait dut(config);
+
+  {
+    const auto state = dut.GetPrepositioningState(0.0);
+    const auto cmd = dut.MakeJointCommand(state);
+    BOOST_TEST(cmd.joints.size() == 12);
+  }
+
+  {
+    const auto state = dut.GetPrepositioningState(1.0);
+    const auto cmd = dut.MakeJointCommand(state);
+    BOOST_TEST(cmd.joints.size() == 12);
+  }
+}

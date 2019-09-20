@@ -88,6 +88,13 @@ class IKSolver : boost::noncopyable {
   /// If no solution is possible, return an object with NaN values.
   virtual JointAngles Solve(const base::Point3D& point_mm,
                             const base::Point3D& force_N) const = 0;
+
+  virtual base::Point3D Forward(const JointAngles&) const = 0;
+
+  /// Return a valid point that can be used to stand.  This be
+  /// achievable from the "reset" position assuming the robot is
+  /// resting on the ground.
+  virtual base::Point3D Resting() const = 0;
 };
 
 /// Inverse kinematics solver for lizard style 3-dof legs.
@@ -137,8 +144,8 @@ class LizardIK : public IKSolver {
     }
   }
 
-  virtual JointAngles Solve(const base::Point3D& point_mm,
-                            const base::Point3D&) const {
+  JointAngles Solve(const base::Point3D& point_mm,
+                    const base::Point3D&) const override {
     // Solve for the coxa first, as it has only a single solution.
     const double coxa_deg = (
         config_.coxa.sign *
@@ -241,6 +248,14 @@ class LizardIK : public IKSolver {
     return result;
   }
 
+  base::Point3D Forward(const JointAngles&) const override {
+    mjlib::base::AssertNotReached();
+  }
+
+  base::Point3D Resting() const override {
+    mjlib::base::AssertNotReached();
+  }
+
   const Config& config() const { return config_; }
 
  private:
@@ -320,8 +335,8 @@ class MammalIK : public IKSolver {
     }
   }
 
-  virtual JointAngles Solve(const base::Point3D& point_mm,
-                            const base::Point3D& force_N) const {
+  JointAngles Solve(const base::Point3D& point_mm,
+                    const base::Point3D& force_N) const override {
     // Find the angle of the shoulder joint.  This will be tangent
     // angle between the point and the circle with radius
     // femur_attachment_mm.y.
@@ -567,7 +582,7 @@ class MammalIK : public IKSolver {
     }
   };
 
-  ForwardResult Forward(const JointAngles& joints) const {
+  ForwardResult MammalForward(const JointAngles& joints) const {
     ForwardResult result;
 
     result.femur_joint.transform.translation = config_.femur_attachment_mm;
@@ -608,6 +623,35 @@ class MammalIK : public IKSolver {
     result.tibia = result.end;
 
     return result;
+  }
+
+  base::Point3D Forward(const JointAngles& angles) const override {
+    return MammalForward(angles).end;
+  }
+
+  base::Point3D Resting() const override {
+    JointAngles angles;
+    double resting_sign = (config_.invert ? 1 : -1);
+    {
+      JointAngles::Joint shoulder;
+      shoulder.ident = config_.shoulder.ident;
+      shoulder.angle_deg = 0.0;
+      angles.joints.push_back(shoulder);
+    }
+    {
+      JointAngles::Joint femur;
+      femur.ident = config_.femur.ident;
+      femur.angle_deg = config_.femur.sign * resting_sign * 160;
+      angles.joints.push_back(femur);
+    }
+    {
+      JointAngles::Joint tibia;
+      tibia.ident = config_.tibia.ident;
+      tibia.angle_deg = config_.tibia.sign * resting_sign * -150;
+      angles.joints.push_back(tibia);
+    }
+
+    return MammalForward(angles).end;
   }
 
   const Config& config() const { return config_; }
