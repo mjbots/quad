@@ -432,6 +432,11 @@ class Rpi3ThreadedClient::Impl {
   }
 
   void ParseFrame(const FrameItem* frame_item, Reply* reply) {
+    if (frame_item->size == 0) { return; }
+    if (frame_item->size < 7) {
+      malformed_++;
+    }
+
     mjlib::base::BufferReadStream buffer_stream(
         {frame_item->encoded, frame_item->size});
     mjlib::multiplex::ReadStream<
@@ -440,12 +445,8 @@ class Rpi3ThreadedClient::Impl {
     stream.Read<uint16_t>();  // ignore header
     const auto maybe_source = stream.Read<uint8_t>();
     const auto maybe_dest = stream.Read<uint8_t>();
+    (void) maybe_dest;
     const auto packet_size = stream.ReadVaruint();
-
-    if (!maybe_source || !maybe_dest || !packet_size) {
-      malformed_++;
-      return;
-    }
 
     SingleReply this_reply;
     this_reply.id = *maybe_source;
