@@ -448,7 +448,7 @@ class Commander::Impl {
 
     if (options_.verbose) {
       std::cout << fmt::format(
-          "x={:4.0f} y={:4.0f} r={:4.0f} z={:4.0f} bx={:4.0f} by={:4.0f} p={:3.0f} r={:3.0f} {}",
+          "x={:4.0f} y={:4.0f} r={:4.0f} z={:4.0f} bx={:4.0f} by={:4.0f} p={:3.1f} r={:3.1f} {}",
           command.translate_x_mm_s,
           command.translate_y_mm_s,
           command.rotate_deg_s,

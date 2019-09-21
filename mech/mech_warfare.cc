@@ -71,6 +71,24 @@ struct JointData {
     a->Visit(MJ_NVP(cycle_time_s));
   }
 };
+
+class VelocityFilter {
+ public:
+  double Advance(double dt) {
+    const auto alpha = std::pow(0.15, dt);
+    value_ = value_ * alpha + last_measurement_ * (1.0 - alpha);
+
+    return value_;
+  }
+
+  void Measure(double measured_value) {
+    last_measurement_ = measured_value;
+  }
+
+ private:
+  double value_ = 0;
+  double last_measurement_ = 0;
+};
 }
 
 class MechWarfare::Impl : boost::noncopyable {
@@ -442,6 +460,15 @@ class MechWarfare::Impl : boost::noncopyable {
   }
 
   void DoManual() {
+    const double period_s = parent_->parameters_.period_s;
+    manual_gait_.body_x_mm = filter_offset_x_mm_.Advance(period_s);
+    manual_gait_.body_y_mm = filter_offset_y_mm_.Advance(period_s);
+    manual_gait_.body_z_mm = filter_offset_z_mm_.Advance(period_s);
+
+    manual_gait_.body_roll_deg = filter_roll_deg_.Advance(period_s);
+    manual_gait_.body_pitch_deg = filter_pitch_deg_.Advance(period_s);
+    manual_gait_.body_yaw_deg = filter_yaw_deg_.Advance(period_s);
+
     const bool want_active =
         manual_gait_.translate_x_mm_s != 0 ||
         manual_gait_.translate_y_mm_s != 0 ||
@@ -468,11 +495,23 @@ class MechWarfare::Impl : boost::noncopyable {
       turret.rate->y_deg_s = data_.current_drive.turret_rate_dps->pitch;
     }
 
+    const double period_s = parent_->parameters_.period_s;
+    data_.current_drive.body_offset_mm =
+        base::Point3D(
+            filter_offset_x_mm_.Advance(period_s),
+            filter_offset_y_mm_.Advance(period_s),
+            filter_offset_z_mm_.Advance(period_s));
+
     const auto body_offset_mm =
         data_.current_drive.body_offset_mm + p.body_offset_mm;
+
     gait.body_x_mm = body_offset_mm.x();
     gait.body_y_mm = body_offset_mm.y();
     gait.body_z_mm = body_offset_mm.z();
+
+    data_.current_drive.body_attitude_deg.roll = filter_roll_deg_.Advance(period_s);
+    data_.current_drive.body_attitude_deg.pitch = filter_pitch_deg_.Advance(period_s);
+    data_.current_drive.body_attitude_deg.yaw = filter_yaw_deg_.Advance(period_s);
 
     // NOTE jpieper: Yeah, I know that rotations don't compose this
     // way.  This is really only a fudge factor though, so I'm intent
@@ -649,7 +688,24 @@ class MechWarfare::Impl : boost::noncopyable {
 
   void HandleMessageGait(const Command& command) {
     MaybeEnterActiveMode(Data::Mode::kManual);
+
+    filter_offset_x_mm_.Measure(command.body_x_mm);
+    filter_offset_y_mm_.Measure(command.body_y_mm);
+    filter_offset_z_mm_.Measure(command.body_z_mm);
+    filter_roll_deg_.Measure(command.body_roll_deg);
+    filter_pitch_deg_.Measure(command.body_pitch_deg);
+    filter_yaw_deg_.Measure(command.body_yaw_deg);
+
     manual_gait_ = command;
+
+    manual_gait_.body_x_mm = filter_offset_x_mm_.Advance(0.0);
+    manual_gait_.body_y_mm = filter_offset_y_mm_.Advance(0.0);
+    manual_gait_.body_z_mm = filter_offset_z_mm_.Advance(0.0);
+
+    manual_gait_.body_roll_deg = filter_roll_deg_.Advance(0.0);
+    manual_gait_.body_pitch_deg = filter_pitch_deg_.Advance(0.0);
+    manual_gait_.body_yaw_deg = filter_yaw_deg_.Advance(0.0);
+
 
     if (data_.mode == Data::Mode::kManual) {
       parent_->m_.gait_driver->SetCommand(manual_gait_);
@@ -665,7 +721,24 @@ class MechWarfare::Impl : boost::noncopyable {
   }
 
   void HandleMessageDrive(const DriveCommand& command) {
+    // We run the offsets through a filter to smooth them out.
+    filter_offset_x_mm_.Measure(command.body_offset_mm.x());
+    filter_offset_y_mm_.Measure(command.body_offset_mm.y());
+    filter_offset_z_mm_.Measure(command.body_offset_mm.z());
+    filter_roll_deg_.Measure(command.body_attitude_deg.roll);
+    filter_pitch_deg_.Measure(command.body_attitude_deg.pitch);
+    filter_yaw_deg_.Measure(command.body_attitude_deg.yaw);
+
     data_.current_drive = command;
+
+    data_.current_drive.body_offset_mm.x() = filter_offset_x_mm_.Advance(0.0);
+    data_.current_drive.body_offset_mm.y() = filter_offset_y_mm_.Advance(0.0);
+    data_.current_drive.body_offset_mm.z() = filter_offset_z_mm_.Advance(0.0);
+
+    data_.current_drive.body_attitude_deg.roll = filter_roll_deg_.Advance(0.0);
+    data_.current_drive.body_attitude_deg.pitch = filter_pitch_deg_.Advance(0.0);
+    data_.current_drive.body_attitude_deg.yaw = filter_yaw_deg_.Advance(0.0);
+
     MaybeEnterActiveMode(Data::Mode::kDrive);
 
     if (data_.mode == Data::Mode::kDrive) {
@@ -709,6 +782,14 @@ class MechWarfare::Impl : boost::noncopyable {
   boost::signals2::signal<void (const JointData*)> joint_data_signal_;
   boost::signals2::signal<void (const GaitDriver::CommandState*)> command_state_signal_;
   boost::signals2::signal<void (const Data*)> data_signal_;
+
+  VelocityFilter filter_roll_deg_;
+  VelocityFilter filter_pitch_deg_;
+  VelocityFilter filter_yaw_deg_;
+
+  VelocityFilter filter_offset_x_mm_;
+  VelocityFilter filter_offset_y_mm_;
+  VelocityFilter filter_offset_z_mm_;
 };
 
 MechWarfare::MechWarfare(base::Context& context)
