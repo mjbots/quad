@@ -512,7 +512,7 @@ class RippleGait : public Gait {
               const double new_angle_deg = joint.angle_deg;
               const double delta_deg = std::abs(old_angle_deg - new_angle_deg);
               if (!largest_change_deg ||
-                  delta_deg > *largest_change_deg) {
+                  delta_deg > largest_change_deg.value()) {
                 largest_change_deg = delta_deg;
               }
             }
@@ -524,10 +524,10 @@ class RippleGait : public Gait {
           }
 
           if (largest_change_deg) {
-            const double this_speed_deg_s = *largest_change_deg / dt;
+            const double this_speed_deg_s = largest_change_deg.value() / dt;
 
             if (!min_observed_speed ||
-                this_speed_deg_s < *min_observed_speed) {
+                this_speed_deg_s < min_observed_speed.value()) {
               min_observed_speed = this_speed_deg_s;
             }
           }
@@ -639,14 +639,16 @@ class RippleGait : public Gait {
             leg.point = state_.robot_frame.MapFromFrame(
                 leg.frame, leg.point);
             leg.frame = &state_.robot_frame;
-            leg.swing_start_pos = leg.point;
           }
+          leg.swing_start_pos = leg.point;
 
           const double swing_phase =
               (leg_phase - lift_fraction) / (1.0 - lower_fraction - lift_fraction);
 
-          const auto delta = *leg.swing_end_pos - *leg.swing_start_pos;
-          const auto current = *leg.swing_start_pos + delta * (swing_phase);
+          const auto delta = leg.swing_end_pos.value() -
+              leg.swing_start_pos.value();
+          const auto current = leg.swing_start_pos.value() +
+              delta * (swing_phase);
           leg.point = current;
 
           leg.point.z() = height_mm;
