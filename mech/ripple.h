@@ -658,7 +658,10 @@ class RippleGait : public Gait {
                 leg.frame, leg.point);
             leg.frame = &state_.world_frame;
           }
-          leg.point.z() = ((1.0 - leg_phase) / lower_fraction) * height_mm;
+          // Land the leg with constant acceleration in the z
+          // direction.
+          const double fraction = (1.0 - leg_phase) / lower_fraction;
+          leg.point.z() = std::pow(fraction, 2.0) * height_mm;
         }
       }
     }
