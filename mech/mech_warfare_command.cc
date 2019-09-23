@@ -372,9 +372,9 @@ class Commander::Impl {
     // The body mode acts independently of anything else and updates
     // the persistent body pose.
     if (body_enabled()) {
-      MaybeMap(&command_.body_x_mm, mapping_.body_x,
+      MaybeMap(&command_.body_z_mm, mapping_.body_x,
                mapping_.sign_body_x, 0.0,
-               -options_.max_body_x_mm, options_.max_body_x_mm);
+               options_.min_body_z_mm, options_.max_body_z_mm);
       MaybeMap(&command_.body_y_mm, mapping_.body_y,
                mapping_.sign_body_y, 0.0,
                -options_.max_body_y_mm, options_.max_body_y_mm);
