@@ -136,6 +136,21 @@ class GaitDriver::Impl : boost::noncopyable {
     return result;
   }
 
+  CommandState SetSafe() {
+    state_ = kSafe;
+
+    CommandState result;
+    result.timestamp = Now();
+    result.power_state = ServoInterface::kPowerBrake;
+
+    for (int i = 1; i <= 12; i++) {
+      ServoInterface::Joint joint;
+      joint.address = i;
+      result.joints.push_back(joint);
+    }
+    return result;
+  }
+
   std::vector<ServoInterface::Joint> DerateTibiaCommands(
       const std::vector<ServoInterface::Joint>& input,
       double scale) {
@@ -306,6 +321,9 @@ class GaitDriver::Impl : boost::noncopyable {
     switch (state_) {
       case kUnpowered: {
         return PackResult(SetFree());
+      }
+      case kSafe: {
+        return PackResult(SetSafe());
       }
       case kPrepositioning: {
         return PackResult(SendPrepositionCommand());
@@ -480,6 +498,10 @@ void GaitDriver::SetCommand(const Command& command) {
 
 void GaitDriver::SetFree() {
   impl_->SetFree();
+}
+
+void GaitDriver::SetSafe() {
+  impl_->SetSafe();
 }
 
 void GaitDriver::CommandPrepositioning() {

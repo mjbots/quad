@@ -52,6 +52,7 @@ enum Register : uint32_t {
   kCommandKdScale = 0x024,
   kCommandPositionMaxCurrent = 0x025,
   kCommandStopPosition = 0x026,
+  kCommandTimeout = 0x027,
 };
 
 enum class Mode {
@@ -65,6 +66,7 @@ enum class Mode {
     kVoltageFoc = 7,
     kCurrent = 8,
     kPosition = 9,
+    kPositionTimeout = 10,
 };
 
 }

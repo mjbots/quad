@@ -300,7 +300,7 @@ class MechWarfare::Impl : boost::noncopyable {
       }
       case Data::Mode::kFault: {
         // Everything should be stopped.
-        parent_->m_.gait_driver->SetFree();
+        parent_->m_.gait_driver->SetSafe();
         break;
       }
     }
@@ -346,7 +346,8 @@ class MechWarfare::Impl : boost::noncopyable {
         log_.warn(fmt::format("servo {} reported error {}, idling",
                               joint.address, joint.error));
         data_.mode = Data::Mode::kFault;
-        return;
+        // Purposefully keep going so we at least print a text warning
+        // for all the servos that faulted at the same time.
       }
     }
   }
@@ -413,7 +414,15 @@ class MechWarfare::Impl : boost::noncopyable {
 
     joint_data_signal_(&joint_data_);
 
-    CheckForJointErrors();
+    // We try to zero out servo errors when we start, but that won't
+    // be reported in the very first query.  Just ignore them for now.
+    //
+    // TODO: Provide a mechanism to recover from servo errors that
+    // doesn't involve restarting the process.
+    if (data_.mode != Data::Mode::kFault && !first_servo_query_) {
+      CheckForJointErrors();
+    }
+    first_servo_query_ = false;
     UpdateStatus();
 
     data_.timestamp = Now();
@@ -790,6 +799,8 @@ class MechWarfare::Impl : boost::noncopyable {
   VelocityFilter filter_offset_x_mm_;
   VelocityFilter filter_offset_y_mm_;
   VelocityFilter filter_offset_z_mm_;
+
+  bool first_servo_query_ = true;
 };
 
 MechWarfare::MechWarfare(base::Context& context)

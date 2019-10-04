@@ -270,7 +270,7 @@ class MoteusServo::Impl {
       const auto value = [&]() {
         switch (power_state) {
           case PowerState::kPowerFree: return moteus::Mode::kStopped;
-          case PowerState::kPowerBrake: return moteus::Mode::kStopped;
+          case PowerState::kPowerBrake: return moteus::Mode::kPositionTimeout;
           case PowerState::kPowerEnable: return moteus::Mode::kPosition;
         }
       }();
@@ -357,11 +357,13 @@ class MoteusServo::Impl {
               mjlib::io::ErrorCallback callback) {
     MJ_ASSERT(!outstanding_);
 
-    auto map_power_state = [](auto power_state) {
+    auto map_power_state = [&]() {
       switch (power_state) {
-        case kPowerFree:
-        case kPowerBrake: {
+        case kPowerFree: {
           return static_cast<int8_t>(moteus::Mode::kStopped);
+        }
+        case kPowerBrake: {
+          return static_cast<int8_t>(moteus::Mode::kPositionTimeout);
         }
         case kPowerEnable: {
           return static_cast<int8_t>(moteus::Mode::kPosition);
@@ -379,7 +381,7 @@ class MoteusServo::Impl {
 
       // First, set our power state.
       request.WriteSingle(moteus::kMode,
-                          map_power_state(power_state));
+                          map_power_state());
 
       PopulateCommand(joint, &request);
       PopulateQuery(status_options, &request);

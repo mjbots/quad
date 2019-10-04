@@ -51,6 +51,11 @@ class GaitDriver : boost::noncopyable {
   /// engine.
   void SetFree();
 
+  /// Set all servos to a "safe" configuration.  This should be usable
+  /// from any state the machine could be in to achieve minimal
+  /// possible damage due to loss of control.
+  void SetSafe();
+
   /// Prepare legs to stand up by gently positioning them above the
   /// idle state.
   void CommandPrepositioning();
@@ -85,6 +90,7 @@ class GaitDriver : boost::noncopyable {
     kStandup,
     kPreparingToSit,
     kSitting,
+    kSafe,
   };
 
   static std::map<State, const char*> StateMapper() {
@@ -95,6 +101,7 @@ class GaitDriver : boost::noncopyable {
       { kStandup, "kStandup" },
       { kPreparingToSit, "kPreparingToSit" },
       { kSitting, "kSitting" },
+      { kSafe, "kSafe" },
     };
   }
 
