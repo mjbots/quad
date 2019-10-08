@@ -63,6 +63,7 @@ cc_library(
         "@moteus//mjlib/telemetry:telemetry_archive",
         "@moteus//mjlib/telemetry:telemetry_util",
         "@snappy",
+        "@sophus",
         "@org_llvm_libcxx//:libcxx",
     ],
     defines = [

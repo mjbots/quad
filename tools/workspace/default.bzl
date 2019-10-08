@@ -20,6 +20,7 @@ load("//tools/workspace/gst-rpicamsrc:repository.bzl", "gst_rpicamsrc_repository
 load("//tools/workspace/i2c-tools:repository.bzl", "i2c_tools_repository")
 load("//tools/workspace/moteus:repository.bzl", "moteus_repository")
 load("//tools/workspace/raspberrypi-firmware:repository.bzl", "raspberrypi_firmware_repository")
+load("//tools/workspace/sophus:repository.bzl", "sophus_repository")
 
 def add_default_repositories(excludes = []):
     if "rpi_bazel" not in excludes:
@@ -34,3 +35,5 @@ def add_default_repositories(excludes = []):
         moteus_repository(name = "moteus")
     if "raspberrypi-firmware" not in excludes:
         raspberrypi_firmware_repository(name = "raspberrypi-firmware")
+    if "sophus" not in excludes:
+        sophus_repository(name = "sophus")
