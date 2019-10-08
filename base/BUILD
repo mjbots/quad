@@ -74,7 +74,6 @@ cc_library(
 cc_test(
     name = "test",
     srcs = ["test/" + x for x in [
-        "attitude_estimator_test.cc",
         "program_options_test.cc",
         "quaternion_test.cc",
         "signal_result_test.cc",

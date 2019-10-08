@@ -22,7 +22,6 @@ load("@bazel_tools//tools/build_defs/pkg:pkg.bzl", "pkg_tar")
 cc_library(
     name = "mech",
     srcs = [
-        "ahrs.cc",
         "camera_driver.cc",
         "gait_driver.cc",
         "gst_helpers.cc",
