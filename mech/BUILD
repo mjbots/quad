@@ -28,6 +28,7 @@ cc_library(
         "gst_main_loop.cc",
         "herkulex.cc",
         "jump_test.cc",
+        "mammal_ik.cc",
         "mcast_video_link.cc",
         "mech_warfare.cc",
         "mech_warfare_command.cc",
@@ -44,6 +45,7 @@ cc_library(
     deps = [
         "//base",
         "@boost//:filesystem",
+        "@dart",
         "@gstreamer",
         "@gst-plugins-base//:gstapp",
         "@gst-plugins-base//:plugins",
@@ -73,6 +75,7 @@ cc_test(
     srcs = ["test/" + x for x in [
         "herkulex_test.cc",
         "leg_ik_test.cc",
+        "mammal_ik_test.cc",
         "ripple_test.cc",
         "test_main.cc",
     ]],
