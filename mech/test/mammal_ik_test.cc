@@ -390,12 +390,88 @@ BOOST_AUTO_TEST_CASE(OldMammalTest, * boost::unit_test::tolerance(1e-2)) {
                                    test.x, test.y, test.z)) {
       IkSolver::Effector input;
       input.pose_mm_J = { test.x, test.y, test.z };
-      auto result = dut.Inverse(input, {});
+      const auto result = dut.Inverse(input, {});
       BOOST_TEST_REQUIRE(!!result);
 
       BOOST_TEST(Shoulder(*result).angle_deg == test.expected_shoulder_deg);
       BOOST_TEST(Femur(*result).angle_deg == test.expected_femur_deg);
       BOOST_TEST(Tibia(*result).angle_deg == test.expected_tibia_deg);
+    }
+  }
+}
+
+BOOST_AUTO_TEST_CASE(MammalInverseVelocityTest,
+                     * boost::unit_test::tolerance(1e-2)) {
+  MammalIk dut{[]() {
+      MammalIk::Config config;
+
+      config.shoulder.pose_mm = {0.0, 0.0, 0.0};
+      config.shoulder.id = 1;
+      config.femur.pose_mm = {0.0, 0.0, 100.0};
+      config.femur.id = 2;
+      config.tibia.pose_mm = {0.0, 0.0, 100.0};
+      config.tibia.id = 3;
+
+      return config;
+    }()};
+
+  struct Test {
+    double x;
+    double y;
+    double z;
+
+    double vx;
+    double vy;
+    double vz;
+
+    double expected_shoulder_deg;
+    double expected_femur_deg;
+    double expected_tibia_deg;
+
+    double expected_shoulder_dps;
+    double expected_femur_dps;
+    double expected_tibia_dps;
+  };
+
+  Test tests[] = {
+    { 0,  0,  195,   10,  0,  0,    0,    12.84, -25.68,     0,     2.94, 0 },
+    { 0,  0,  195,    0, 10,  0,    0,    12.84, -25.68,    -2.94,  0,    0 },
+    { 0,  0,  195,    0,  0, 10,    0,    12.84, -25.68,     0,   -12.89, 25.79 },
+
+    { 0,  0,  195,  -10,  0,  0,    0,    12.84, -25.68,     0,    -2.94, 0 },
+    { 0,  0,  195,    0,-10,  0,    0,    12.84, -25.68,     2.94,  0,    0 },
+    { 0,  0,  195,    0,  0,-10,    0,    12.84, -25.68,     0,    12.89,-25.79 },
+
+    { 0,  0,  170,   10,  0,  0,    0,    31.79, -63.58,     0,     3.37, 0 },
+    { 0,  0,  170,    0, 10,  0,    0,    31.79, -63.58,    -3.37,  0,    0 },
+    { 0,  0,  170,    0,  0, 10,    0,    31.79, -63.58,     0,    -5.44, 10.88 },
+
+    { 0,  30, 170,   10,  0,  0,  -10.01, 30.33, -60.65,     0,     3.32,  0.0 },
+    { 0,  30, 170,    0,  0, 10,  -10.01, 30.33, -60.65,     0.58, -5.59, 11.17 },
+
+    { 20, 30, 170,   10,  0,  0,  -10.01, 36.28, -59.34,     0,     2.61,  1.33 },
+    { 20, 30, 170,    0, 10,  0,  -10.01, 36.28, -59.34,    -3.27, -1.07,  2.00 },
+    { 20, 30, 170,    0,  0, 10,  -10.01, 36.28, -59.34,     0.58, -6.04, 11.32 },
+  };
+
+  for (const auto& test : tests) {
+    BOOST_TEST_CONTEXT(
+        fmt::format(
+            "x={} y={} z={} vx={} vy={} vz={}",
+            test.x, test.y, test.z,
+            test.vx, test.vy, test.vz)) {
+      IkSolver::Effector input;
+      input.pose_mm_J = { test.x, test.y, test.z };
+      input.velocity_mm_s_J = { test.vx, test.vy, test.vz };
+      const auto result = dut.Inverse(input, {});
+      BOOST_TEST_REQUIRE(!!result);
+
+      BOOST_TEST(Shoulder(*result).angle_deg == test.expected_shoulder_deg);
+      BOOST_TEST(Femur(*result).angle_deg == test.expected_femur_deg);
+      BOOST_TEST(Tibia(*result).angle_deg == test.expected_tibia_deg);
+      BOOST_TEST(Shoulder(*result).velocity_dps == test.expected_shoulder_dps);
+      BOOST_TEST(Femur(*result).velocity_dps == test.expected_femur_dps);
+      BOOST_TEST(Tibia(*result).velocity_dps == test.expected_tibia_dps);
     }
   }
 }

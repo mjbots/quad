@@ -289,20 +289,49 @@ IkSolver::InverseResult MammalIk::Inverse(
 
   if (!maybe_femur_tibia_rad) { return {}; }
 
+
+  // Now that we have the position, lets run the DART forward dynamics
+  // and get the Jacobian out so we can determine our velocities.
+  auto set_joint = [](auto& dart_joint, double value) {
+    dart_joint->setPosition(0, value);
+    dart_joint->setVelocity(0, 0.0);
+    dart_joint->setForce(0, 0.0);
+  };
+  set_joint(shoulder_joint_, *shoulder_rad);
+  set_joint(femur_joint_, maybe_femur_tibia_rad->first);
+  set_joint(tibia_joint_, maybe_femur_tibia_rad->second);
+
+  skel_->computeForwardKinematics();
+  skel_->computeForwardDynamics();
+
+  auto linear_jacobian = foot_body_->getLinearJacobian();
+  // Since we only have 3 joints, this should be a 3x3 matrix.
+  BOOST_ASSERT(linear_jacobian.cols() == 3);
+
+  // This is a tiny 3x3 matrix, so we'll just invert it directly.
+  Eigen::Vector3d joint_dps =
+      linear_jacobian.inverse() * (effector.velocity_mm_s_J * 0.001);
+
   JointAngles result;
 
   result.push_back(
       Joint()
       .set_id(config_.shoulder.id)
-      .set_angle_deg(base::Degrees(*shoulder_rad)));
+      .set_angle_deg(base::Degrees(*shoulder_rad))
+      .set_velocity_dps(base::Degrees(joint_dps.x()))
+  );
   result.push_back(
       Joint()
       .set_id(config_.femur.id)
-      .set_angle_deg(base::Degrees(maybe_femur_tibia_rad->first)));
+      .set_angle_deg(base::Degrees(maybe_femur_tibia_rad->first))
+      .set_velocity_dps(base::Degrees(joint_dps.y()))
+  );
   result.push_back(
       Joint()
       .set_id(config_.tibia.id)
-      .set_angle_deg(base::Degrees(maybe_femur_tibia_rad->second)));
+      .set_angle_deg(base::Degrees(maybe_femur_tibia_rad->second))
+      .set_velocity_dps(base::Degrees(joint_dps.z()))
+  );
 
   return result;
 }
