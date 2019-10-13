@@ -434,6 +434,8 @@ BOOST_AUTO_TEST_CASE(MammalInverseVelocityTest,
   };
 
   Test tests[] = {
+    { 0,  0,  195,    0,  0,  0,    0,    12.84, -25.68,     0,     0,    0 },
+
     { 0,  0,  195,   10,  0,  0,    0,    12.84, -25.68,     0,     2.94, 0 },
     { 0,  0,  195,    0, 10,  0,    0,    12.84, -25.68,    -2.94,  0,    0 },
     { 0,  0,  195,    0,  0, 10,    0,    12.84, -25.68,     0,   -12.89, 25.79 },
@@ -472,6 +474,93 @@ BOOST_AUTO_TEST_CASE(MammalInverseVelocityTest,
       BOOST_TEST(Shoulder(*result).velocity_dps == test.expected_shoulder_dps);
       BOOST_TEST(Femur(*result).velocity_dps == test.expected_femur_dps);
       BOOST_TEST(Tibia(*result).velocity_dps == test.expected_tibia_dps);
+    }
+  }
+}
+
+BOOST_AUTO_TEST_CASE(MammalInverseForceTest,
+                     * boost::unit_test::tolerance(1e-2)) {
+  struct Test {
+    double sy;
+
+    double x;
+    double y;
+    double z;
+
+    double fx;
+    double fy;
+    double fz;
+
+    double e_shoulder_deg;
+    double e_femur_deg;
+    double e_tibia_deg;
+
+    double e_shoulder_Nm;
+    double e_femur_Nm;
+    double e_tibia_Nm;
+  };
+
+  Test tests[] = {
+    { 0, 0,  0,  195,   0,  0,  0,    0,    12.84, -25.68,   0,    0,    0 },
+
+    { 0, 0,  0,  195,   0, 10,  0,    0,    12.84, -25.68,  -1.95, 0,    0 },
+    { 0, 0,  0,  195,   0,-10,  0,    0,    12.84, -25.68,   1.95, 0,    0 },
+
+    { 0, 0,  0,  195,   0,  0, 10,    0,    12.84, -25.68,   0,    0,    0.223 },
+    { 0, 0,  0,  195,   0,  0,-10,    0,    12.84, -25.68,   0,    0,   -0.223 },
+
+    { 0, 0,  0,  195,  10,  0,  0,    0,    12.84, -25.68,   0,    1.95, 0.98 },
+    { 0, 0,  0,  195, -10,  0,  0,    0,    12.84, -25.68,   0,   -1.95,-0.98 },
+
+    { 0, 0,  0,  170,  10,  0,  0,    0,    31.79, -63.58,   0,    1.70, 0.85 },
+    { 0, 0,  0,  170,   0, 10,  0,    0,    31.79, -63.58,  -1.70, 0,    0 },
+    { 0, 0,  0,  170,   0,  0, 10,    0,    31.79, -63.58,   0,    0,    0.53 },
+
+    { 0, 0, 30,  170,  10,  0,  0,  -10.01, 30.33, -60.65,   0,    1.73, 0.86 },
+    { 0, 0, 30,  170,   0, 10,  0,  -10.01, 30.33, -60.65,  -1.70, 0,    0.0878 },
+    { 0, 0, 30,  170,   0,  0, 10,  -10.01, 30.33, -60.65,   0.30, 0,    0.497 },
+
+    { 0,20, 30,  170,  10,  0,  0,  -10.01, 36.28, -59.34,   0,    1.73, 0.92 },
+    { 0,20, 30,  170,   0, 10,  0,  -10.01, 36.28, -59.34,  -1.70,-0.0347, 0.0681},
+    { 0,20, 30,  170,   0,  0, 10,  -10.01, 36.28, -59.34,   0.30,-0.197,  0.386},
+
+    // Directly below a shoulder with an offset.
+    {30, 0, 30,  170,   0,  0,  0,    0,    31.79, -63.58,   0,    0,    0 },
+    {30, 0, 30,  170,  10,  0,  0,    0,    31.79, -63.58,   0,    1.70, 0.85 },
+    {30, 0, 30,  170,   0, 10,  0,    0,    31.79, -63.58,  -1.70, 0,    0 },
+    {30, 0, 30,  170,   0,  0, 10,    0,    31.79, -63.58,   0.30, 0,    0.53 },
+  };
+
+  for (const auto& test : tests) {
+    BOOST_TEST_CONTEXT(
+        fmt::format("sy={} x={} y={} z={} fx={} fy={} fz={}",
+                    test.sy, test.x, test.y, test.z,
+                    test.fx, test.fy, test.fz)) {
+      MammalIk dut{[&]() {
+          MammalIk::Config config;
+
+          config.shoulder.pose_mm = {0.0, test.sy, 0.0};
+          config.shoulder.id = 1;
+          config.femur.pose_mm = {0.0, 0.0, 100.0};
+          config.femur.id = 2;
+          config.tibia.pose_mm = {0.0, 0.0, 100.0};
+          config.tibia.id = 3;
+
+          return config;
+        }()};
+
+      IkSolver::Effector input;
+      input.pose_mm_J = { test.x, test.y, test.z };
+      input.force_N_J = { test.fx, test.fy, test.fz };
+      const auto result = dut.Inverse(input, {});
+      BOOST_TEST_REQUIRE(!!result);
+
+      BOOST_TEST(Shoulder(*result).angle_deg == test.e_shoulder_deg);
+      BOOST_TEST(Femur(*result).angle_deg == test.e_femur_deg);
+      BOOST_TEST(Tibia(*result).angle_deg == test.e_tibia_deg);
+      BOOST_TEST(Shoulder(*result).torque_Nm == test.e_shoulder_Nm);
+      BOOST_TEST(Femur(*result).torque_Nm == test.e_femur_Nm);
+      BOOST_TEST(Tibia(*result).torque_Nm == test.e_tibia_Nm);
     }
   }
 }

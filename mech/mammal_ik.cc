@@ -309,9 +309,10 @@ IkSolver::InverseResult MammalIk::Inverse(
   BOOST_ASSERT(linear_jacobian.cols() == 3);
 
   // This is a tiny 3x3 matrix, so we'll just invert it directly.
-  Eigen::Vector3d joint_dps =
+  const Eigen::Vector3d joint_dps =
       linear_jacobian.inverse() * (effector.velocity_mm_s_J * 0.001);
 
+  // Assemble our result with everything but torque.
   JointAngles result;
 
   result.push_back(
@@ -332,6 +333,57 @@ IkSolver::InverseResult MammalIk::Inverse(
       .set_angle_deg(base::Degrees(maybe_femur_tibia_rad->second))
       .set_velocity_dps(base::Degrees(joint_dps.z()))
   );
+
+  // Now we do force.  If we have it, use the joint angles provided,
+  // otherwise, use those we just calculated.
+  const JointAngles* joints_for_force = (!!current ? &*current : &result);
+
+  auto get_id = [&](int id) {
+    for (const auto& joint : *joints_for_force) {
+      if (joint.id == id) { return joint; }
+    }
+    mjlib::base::AssertNotReached();
+  };
+
+  set_joint(shoulder_joint_, base::Radians(get_id(config_.shoulder.id).angle_deg));
+  set_joint(femur_joint_, base::Radians(get_id(config_.femur.id).angle_deg));
+  set_joint(tibia_joint_, base::Radians(get_id(config_.tibia.id).angle_deg));
+
+  // DART doesn't provide a way to get the acceleration Jacobian
+  // w.r.t. joint torques.  Thus we numerically calculate it.  First,
+  // get the baseline w/ no torque.
+
+  skel_->computeForwardKinematics();
+  skel_->computeForwardDynamics();
+
+  const Eigen::Vector3d baseline = foot_body_->getCOMLinearAcceleration();
+
+  // Then solve for each axis separately.
+  Eigen::Matrix3d acceleration_force_jacobian;
+  for (int axis = 0; axis < 3; axis++) {
+    shoulder_joint_->setForce(0, axis == 0 ? 1.0 : 0);
+    femur_joint_->setForce(0, axis == 1 ? 1.0 : 0);
+    tibia_joint_->setForce(0, axis == 2 ? 1.0 : 0);
+
+    skel_->computeForwardKinematics();
+    skel_->computeForwardDynamics();
+
+    acceleration_force_jacobian.col(axis) =
+        (foot_body_->getCOMLinearAcceleration() - baseline);
+  }
+
+  // Now we invert that matrix to determine the joint torques required
+  // for the force we want.  This is just a 3x3, so directly
+  // calculating the inverse should be fine.
+  const Eigen::Vector3d joint_torque =
+      (acceleration_force_jacobian.inverse() * effector.force_N_J) * 1e-6;
+
+  // Now stick our torques into our result vector.
+  for (auto& rj : result) {
+    if (rj.id == config_.shoulder.id) { rj.set_torque_Nm(joint_torque(0)); }
+    if (rj.id == config_.femur.id) { rj.set_torque_Nm(joint_torque(1)); }
+    if (rj.id == config_.tibia.id) { rj.set_torque_Nm(joint_torque(2)); }
+  }
 
   return result;
 }
