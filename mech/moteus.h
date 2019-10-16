@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "mjlib/base/limit.h"
+#include "mjlib/multiplex/format.h"
+
 namespace mjmech {
 namespace mech {
 namespace moteus {
@@ -68,6 +71,118 @@ enum class Mode {
     kPosition = 9,
     kPositionTimeout = 10,
 };
+
+using Value = mjlib::multiplex::Format::Value;
+
+template <typename T>
+Value ScaleSaturate(double value, double scale) {
+  if (!std::isfinite(value)) {
+    return std::numeric_limits<T>::min();
+  }
+
+  const double scaled = value / scale;
+  const auto max = std::numeric_limits<T>::max();
+  // We purposefully limit to +- max, rather than to min.  The minimum
+  // value for our two's complement types is reserved for NaN.
+  return mjlib::base::Limit<T>(static_cast<T>(scaled), -max, max);
+}
+
+enum RegisterTypes {
+  kInt8 = 0,
+  kInt16 = 1,
+  kInt32 = 2,
+  kFloat = 3,
+};
+
+inline Value ScaleMapping(double value,
+                   double int8_scale, double int16_scale, double int32_scale,
+                   RegisterTypes type) {
+  switch (type) {
+    case kInt8: return ScaleSaturate<int8_t>(value, int8_scale);
+    case kInt16: return ScaleSaturate<int16_t>(value, int16_scale);
+    case kInt32: return ScaleSaturate<int32_t>(value, int32_scale);
+    case kFloat: return static_cast<float>(value);
+  }
+  MJ_ASSERT(false);
+  return Value(static_cast<int8_t>(0));
+}
+
+inline Value WritePosition(double value, RegisterTypes reg) {
+  return ScaleMapping(value / 360.0, 0.01, 0.001, 0.00001, reg);
+}
+
+inline Value WriteVelocity(double value, RegisterTypes reg) {
+  return ScaleMapping(value / 360.0, 0.1, 0.001, 0.00001, reg);
+}
+
+inline Value WriteTorque(double value, RegisterTypes reg) {
+  return ScaleMapping(value, 0.5, 0.01, 0.001, reg);
+}
+
+inline Value WritePwm(double value, RegisterTypes reg) {
+  return ScaleMapping(value, 1.0 / 127.0,
+                      1.0 / 32767.0,
+                      1.0 / 2147483647.0,
+                      reg);
+}
+
+struct ValueScaler {
+  double int8_scale;
+  double int16_scale;
+  double int32_scale;
+
+  double operator()(int8_t value) const {
+    if (value == std::numeric_limits<int8_t>::min()) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    return value * int8_scale;
+  }
+
+  double operator()(int16_t value) const {
+    if (value == std::numeric_limits<int16_t>::min()) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    return value * int16_scale;
+  }
+
+  double operator()(int32_t value) const {
+    if (value == std::numeric_limits<int32_t>::min()) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    return value * int32_scale;
+  }
+
+  double operator()(float value) const {
+    return value;
+  }
+};
+
+inline double ReadScale(Value value,
+                        double int8_scale,
+                        double int16_scale,
+                        double int32_scale) {
+  return std::visit(ValueScaler{int8_scale, int16_scale, int32_scale}, value);
+}
+
+inline double ReadPosition(Value value) {
+  return ReadScale(value, 0.01, 0.001, 0.00001) * 360.0;
+}
+
+inline double ReadTorque(Value value) {
+  return ReadScale(value, 0.5, 0.01, 0.001);
+}
+
+inline double ReadVoltage(Value value) {
+  return ReadScale(value, 1, 0.1, 0.001);
+}
+
+inline double ReadTemperature(Value value) {
+  return ReadScale(value, 1.0, 0.1, 0.001);
+}
+
+inline int ReadInt(Value value) {
+  return std::visit([](auto v) { return static_cast<int>(v); }, value);
+}
 
 }
 }

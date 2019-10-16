@@ -34,6 +34,8 @@ cc_library(
         "mech_warfare_command.cc",
         "moteus_servo.cc",
         "multiplex_client.cc",
+        "quadruped.cc",
+        "quadruped_control.cc",
         "rpi3_raw_uart.cc",
         "rpi3_threaded_client.cc",
         "rtsp_server.cc",
@@ -58,6 +60,7 @@ cc_library(
         "@opencv//:core",
         "@opencv//:aruco",
         "@opencv//:imgcodecs",
+        "@sophus",
     ] + select({
         "//conditions:default" : [],
         "//:raspberrypi" : ["@gst-rpicamsrc"],
@@ -145,6 +148,13 @@ module_main(
 )
 
 module_main(
+    name = "quadruped",
+    cname = "mjmech::mech::Quadruped",
+    prefix = "mech",
+    deps = [":mech"],
+)
+
+module_main(
     name = "mw_command",
     cname = "mjmech::mech::MWCommand",
     prefix = "mech",
@@ -197,6 +207,7 @@ pkg_tar(
         ":mech_warfare",
         ":moteus_tool",
         ":multiplex_tool",
+        ":quadruped",
         ":servo_latency_test",
         ":video_sender_app",
     ],
@@ -208,6 +219,8 @@ pkg_tar(
         "//configs:moteus.ini": "configs/moteus.ini",
         "//configs:moteus_ik.cfg": "configs/moteus_ik.cfg",
         "//configs:jump_test.ini": "configs/jump_test.ini",
+        "//configs:quadruped.ini": "configs/quadruped.ini",
+        "//configs:quada0.cfg": "configs/quada0.cfg",
         "//utils:start-robot.sh": "start-robot.sh",
         "//utils:performance_governor.sh": "performance_governor.sh",
         "//utils:rezero.sh": "rezero.sh",
