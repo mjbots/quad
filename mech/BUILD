@@ -53,8 +53,8 @@ cc_library(
         "@gst-plugins-ugly//:plugins",
         "@gst-libav//:plugins",
         "@gst-rtsp-server//:rtsp-server",
-        "@moteus//mjlib/io:exclusive_command",
-        "@moteus//mjlib/multiplex:threaded_client",
+        "@mjlib//mjlib/io:exclusive_command",
+        "@mjlib//mjlib/multiplex:threaded_client",
         "@opencv//:core",
         "@opencv//:aruco",
         "@opencv//:imgcodecs",
@@ -162,7 +162,7 @@ cc_binary(
     name = "multiplex_tool",
     srcs = ["multiplex_tool_main.cc"],
     deps = [
-        "@moteus//mjlib/multiplex:libmultiplex_tool",
+        "@mjlib//mjlib/multiplex:libmultiplex_tool",
         "@org_llvm_libcxx//:libcxx",
     ],
 )
