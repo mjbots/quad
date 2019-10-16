@@ -4,6 +4,10 @@ test --crosstool_top=@rpi_bazel//tools/cc_toolchain:toolchain
 build --define CLANG=true
 test --define CLANG=true
 
+# Debugging information makes the distributable 10x the size.
+build:pi --copt -g0
+test:pi --copt -g0
+
 build:pi --cpu=armeabihf
 test:pi --cpu=armeabihf
 
