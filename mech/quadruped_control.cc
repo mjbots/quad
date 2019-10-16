@@ -330,8 +330,10 @@ class QuadrupedControl::Impl {
 
       out_leg_B.leg = leg.leg;
       out_leg_B.position_mm = leg.pose_mm_BG * effector.pose_mm_G;
-      out_leg_B.velocity_mm_s = leg.pose_mm_BG * effector.velocity_mm_s_G;
-      out_leg_B.force_N = leg.pose_mm_BG * effector.force_N_G;
+      out_leg_B.velocity_mm_s =
+          leg.pose_mm_BG.so3() * effector.velocity_mm_s_G;
+      out_leg_B.force_N =
+          leg.pose_mm_BG.so3() * effector.force_N_G;
 
       out_leg_B.links.push_back(get_link(leg.config.ik.shoulder.id));
       out_leg_B.links.push_back(get_link(leg.config.ik.femur.id));
