@@ -144,8 +144,8 @@ int main(int argc, char** argv) {
     for (auto y : yvals) {
       if (use_new) {
         IkSolver::Effector input;
-        input.pose_mm_J = { x, y, 160 };
-        input.force_N_J = { 0, 0, 10.0 };
+        input.pose_mm_G = { x, y, 160 };
+        input.force_N_G = { 0, 0, 10.0 };
         const auto result = ik_new.Inverse(input, {});
 
         BOOST_ASSERT(!!result);

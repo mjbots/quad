@@ -69,11 +69,11 @@ class IkSolver : boost::noncopyable {
   using JointAngles = std::vector<Joint>;
   using InverseResult = std::optional<JointAngles>;
 
-  // End effector positions are in the joint (J) frame.
+  // End effector positions are in the leg (G) frame.
   struct Effector {
-    base::Point3D pose_mm_J;
-    base::Point3D velocity_mm_s_J;
-    base::Point3D force_N_J;
+    base::Point3D pose_mm_G;
+    base::Point3D velocity_mm_s_G;
+    base::Point3D force_N_G;
   };
 
   virtual ~IkSolver() {}
@@ -83,9 +83,9 @@ class IkSolver : boost::noncopyable {
   /// request.
   virtual InverseResult Inverse(
       const Effector&,
-      const std::optional<JointAngles>& current) = 0;
+      const std::optional<JointAngles>& current) const = 0;
 
-  virtual Effector Forward(const JointAngles&) = 0;
+  virtual Effector Forward(const JointAngles&) const = 0;
 };
 
 }

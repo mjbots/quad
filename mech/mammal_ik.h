@@ -67,10 +67,10 @@ class MammalIk : public IkSolver {
 
   MammalIk(const Config& config);
 
-  Effector Forward(const JointAngles& angles) override;
+  Effector Forward(const JointAngles& angles) const override;
 
   InverseResult Inverse(const Effector&,
-                        const std::optional<JointAngles>&) override;
+                        const std::optional<JointAngles>&) const override;
 
   const Config config_;
   dart::dynamics::SkeletonPtr skel_;
