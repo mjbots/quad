@@ -177,6 +177,15 @@ cc_binary(
     ],
 )
 
+cc_binary(
+    name = "ik_plot_generator",
+    srcs = ["ik_plot_generator.cc"],
+    deps = [
+        ":mech",
+        "@org_llvm_libcxx//:libcxx",
+    ],
+)
+
 pkg_tar(
     name = "deploy",
     extension = "tar",
