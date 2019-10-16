@@ -67,7 +67,8 @@ class Gpio {
 
 Rpi3RawUart::Rpi3RawUart(const Options& options) {
   fd_ = ::open("/dev/mem", O_RDWR | O_SYNC);
-  mjlib::base::system_error::throw_if(fd_ < 0);
+  mjlib::base::system_error::throw_if(
+      fd_ < 0, "rpi3_uart: could not open /dev/mem");
 
   uart_mmap_ = base::SystemMmap(fd_, 4096, RASPI_23_PERI_BASE + UART0_BASE);
   uart_ = reinterpret_cast<volatile Pl011Uart*>(uart_mmap_.ptr());
