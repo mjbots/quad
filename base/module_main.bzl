@@ -41,5 +41,6 @@ EOF
         deps = deps + [
             "@boost//:filesystem",
             "@boost//:date_time",
+            "@org_llvm_libcxx//:libcxx",
         ],
     )
