@@ -77,6 +77,7 @@ cc_test(
         "program_options_test.cc",
         "quaternion_test.cc",
         "signal_result_test.cc",
+        "sophus_test.cc",
         "telemetry_log_registrar_test.cc",
         "telemetry_log_test.cc",
         "telemetry_registry_test.cc",
