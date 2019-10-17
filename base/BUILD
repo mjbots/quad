@@ -52,6 +52,7 @@ cc_library(
         "@mjlib//mjlib/base:program_options_archive",
         "@mjlib//mjlib/base:recording_stream",
         "@mjlib//mjlib/base:system_error",
+        "@mjlib//mjlib/base:tokenizer",
         "@mjlib//mjlib/base:visitor",
         "@mjlib//mjlib/base:visit_archive",
         "@mjlib//mjlib/io:async_sequence",

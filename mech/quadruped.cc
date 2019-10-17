@@ -16,13 +16,19 @@
 
 #include "mjlib/base/program_options_archive.h"
 
+#include "base/logging.h"
+#include "mech/quadruped_debug.h"
+
+namespace pl = std::placeholders;
+
 namespace mjmech {
 namespace mech {
 
 class Quadruped::Impl {
  public:
   Impl(base::Context& context)
-      : executor_(context.executor) {
+      : executor_(context.executor),
+        factory_(context.factory.get()) {
     m_.multiplex_client = std::make_unique<MultiplexClient>(executor_);
     m_.quadruped_control = std::make_unique<QuadrupedControl>(context);
 
@@ -31,17 +37,48 @@ class Quadruped::Impl {
         m_.quadruped_control->SetClient(client);
       });
 
+    debug_stream_.type = mjlib::io::StreamFactory::Type::kTcpServer;
+    debug_stream_.tcp_server_port = 4556;
+
     mjlib::base::ProgramOptionsArchive(&options_).Accept(&p_);
+    mjlib::base::ProgramOptionsArchive(&options_, "debug").Accept(&debug_stream_);
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
-    p_.children.Start(callback);
+    p_.children.Start([this, callback](auto ec) {
+        mjlib::base::FailIf(ec);
+        this->StartDebug(callback);
+      });
+  }
+
+  void StartDebug(mjlib::io::ErrorCallback callback) {
+    factory_->AsyncCreate(
+        debug_stream_,
+        std::bind(&Impl::HandleDebugStream, this, pl::_1, pl::_2));
+
+    boost::asio::post(executor_, std::bind(callback, mjlib::base::error_code()));
+  }
+
+  void HandleDebugStream(const mjlib::base::error_code& ec,
+                         mjlib::io::SharedStream stream) {
+    mjlib::base::FailIf(ec);
+
+    quad_debug_ = std::make_unique<QuadrupedDebug>(
+        m_.quadruped_control.get(), stream);
   }
 
   boost::asio::executor executor_;
+  mjlib::io::StreamFactory* const factory_;
+  boost::program_options::options_description options_;
+
+  base::LogRef log_ = base::GetLogInstance("Quadruped");
+
   Members m_;
   Parameters p_{&m_};
-  boost::program_options::options_description options_;
+
+  mjlib::io::StreamFactory::Options debug_stream_;
+
+  std::unique_ptr<QuadrupedDebug> quad_debug_;
 };
 
 Quadruped::Quadruped(base::Context& context)

@@ -64,9 +64,10 @@ struct QuadrupedCommand {
   struct Joint {
     int id = 0;
     bool power = false;
+    bool zero_velocity = false;
     double angle_deg = 0.0;
     double velocity_dps = 0.0;
-    double feedforward_torque_Nm = 0.0;
+    double torque_Nm = 0.0;
     std::optional<double> kp_scale;
     std::optional<double> kd_scale;
     std::optional<double> max_torque_Nm;
@@ -76,9 +77,10 @@ struct QuadrupedCommand {
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(id));
       a->Visit(MJ_NVP(power));
+      a->Visit(MJ_NVP(zero_velocity));
       a->Visit(MJ_NVP(angle_deg));
       a->Visit(MJ_NVP(velocity_dps));
-      a->Visit(MJ_NVP(feedforward_torque_Nm));
+      a->Visit(MJ_NVP(torque_Nm));
       a->Visit(MJ_NVP(kp_scale));
       a->Visit(MJ_NVP(kd_scale));
       a->Visit(MJ_NVP(max_torque_Nm));
@@ -87,7 +89,7 @@ struct QuadrupedCommand {
   };
 
   // Only valid for kJoint mode.
-  std::vector<Joint> joint;
+  std::vector<Joint> joints;
 
   struct Leg {
     int leg_id = 0;
@@ -116,7 +118,7 @@ struct QuadrupedCommand {
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_ENUM(mode, ModeMapper));
-    a->Visit(MJ_NVP(joint));
+    a->Visit(MJ_NVP(joints));
     a->Visit(MJ_NVP(legs_B));
   }
 };

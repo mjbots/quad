@@ -102,6 +102,17 @@ struct CommandLog {
     const_cast<QuadrupedCommand*>(command)->Serialize(a);
   }
 };
+
+struct ControlLog {
+  boost::posix_time::ptime timestamp;
+  std::vector<QuadrupedCommand::Joint> joints;
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(MJ_NVP(timestamp));
+    a->Visit(MJ_NVP(joints));
+  }
+};
 }
 
 class QuadrupedControl::Impl {
@@ -109,10 +120,9 @@ class QuadrupedControl::Impl {
   Impl(base::Context& context)
       : executor_(context.executor),
         timer_(executor_) {
-    context.telemetry_registry->Register(
-        "quadruped_control_status", &status_signal_);
-    context.telemetry_registry->Register(
-        "quadruped_control_command", &command_signal_);
+    context.telemetry_registry->Register("qc_status", &status_signal_);
+    context.telemetry_registry->Register("qc_command", &command_signal_);
+    context.telemetry_registry->Register("qc_control", &control_signal_);
 
     mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
   }
@@ -207,7 +217,7 @@ class QuadrupedControl::Impl {
     UpdateStatus();
 
     // Now run our control loop and generate our command.
-    client_command_ = {};
+    control_log_ = {};
     RunControl();
 
     timestamps_.control_done = Now();
@@ -242,6 +252,13 @@ class QuadrupedControl::Impl {
     status_signal_(&status_);
   }
 
+  double GetSign(int id) const {
+    for (const auto& joint : config_.joints) {
+      if (joint.id == id) { return joint.sign; }
+    }
+    mjlib::base::AssertNotReached();
+  }
+
   void UpdateStatus() {
     IkSolver::JointAngles joint_angles;
     std::vector<QuadrupedState::Link> links;
@@ -258,12 +275,7 @@ class QuadrupedControl::Impl {
 
       out_joint.id = out_link.id = ik_joint.id = reply.id;
 
-      const double sign = [&]() {
-        for (const auto& joint : config_.joints) {
-          if (joint.id == reply.id) { return joint.sign; }
-        }
-        mjlib::base::AssertNotReached();
-      }();
+      const double sign = GetSign(reply.id);
 
       for (const auto& pair : reply.reply) {
         const auto* maybe_value = std::get_if<moteus::Value>(&pair.second);
@@ -344,6 +356,192 @@ class QuadrupedControl::Impl {
   }
 
   void RunControl() {
+    if (current_command_.mode != status_.mode) {
+      MaybeChangeMode();
+    }
+
+    using QM = QuadrupedCommand::Mode;
+
+    switch (status_.mode) {
+      case QM::kStopped: {
+        DoControl_Stopped();
+        break;
+      }
+      case QM::kFault: {
+        DoControl_Fault();
+        break;
+      }
+      case QM::kZeroVelocity: {
+        DoControl_ZeroVelocity();
+        break;
+      }
+      case QM::kJoint: {
+        DoControl_Joint();
+        break;
+      }
+      case QM::kLeg: {
+        DoControl_Leg();
+        break;
+      }
+      case QM::kNumModes: {
+        mjlib::base::AssertNotReached();
+      }
+    }
+  }
+
+  void MaybeChangeMode() {
+    using QM = QuadrupedCommand::Mode;
+    switch (current_command_.mode) {
+      case QM::kNumModes:
+      case QM::kFault: {
+        mjlib::base::AssertNotReached();
+      }
+      case QM::kStopped: {
+        // It is always valid (although I suppose not always a good
+        // idea) to enter the stopped mode.
+        status_.mode = QM::kStopped;
+        return;
+      }
+      case QM::kZeroVelocity:
+      case QM::kJoint:
+      case QM::kLeg: {
+        // We can always do these if not faulted.
+        if (status_.mode == QM::kFault) { return; }
+        status_.mode = current_command_.mode;
+        return;
+      }
+    }
+  }
+
+  void DoControl_Stopped() {
+    std::vector<QuadrupedCommand::Joint> out_joints;
+    for (const auto& joint : config_.joints) {
+      QuadrupedCommand::Joint out_joint;
+      out_joint.id = joint.id;
+      out_joint.power = false;
+      out_joints.push_back(out_joint);
+    }
+
+    ControlJoints(std::move(out_joints));
+  }
+
+  void DoControl_Fault() {
+    DoControl_ZeroVelocity();
+  }
+
+  void DoControl_ZeroVelocity() {
+    std::vector<QuadrupedCommand::Joint> out_joints;
+    for (const auto& joint : config_.joints) {
+      QuadrupedCommand::Joint out_joint;
+      out_joint.id = joint.id;
+      out_joint.power = true;
+      out_joint.zero_velocity = true;
+      out_joints.push_back(out_joint);
+    }
+
+    ControlJoints(std::move(out_joints));
+  }
+
+  void DoControl_Joint() {
+    ControlJoints(current_command_.joints);
+  }
+
+  void DoControl_Leg() {
+  }
+
+  void ControlJoints(std::vector<QuadrupedCommand::Joint> joints) {
+    control_log_.joints = joints;
+
+    EmitControl();
+  }
+
+  void EmitControl() {
+    control_log_.timestamp = Now();
+    control_signal_(&control_log_);
+
+    client_command_ = {};
+    for (const auto& joint : control_log_.joints) {
+      client_command_.requests.push_back({});
+      auto& request = client_command_.requests.back();
+      request.id = joint.id;
+
+      const auto mode = [&]() {
+        if (joint.power == false) {
+          return moteus::Mode::kStopped;
+        } else if (joint.zero_velocity) {
+          return moteus::Mode::kPositionTimeout;
+        } else {
+          return moteus::Mode::kPosition;
+        }
+      }();
+
+      request.request.WriteSingle(moteus::kMode, static_cast<int8_t>(mode));
+
+      auto& values = values_cache_;
+      values.resize(0);
+
+      if (mode == moteus::Mode::kPosition) {
+        const double sign = GetSign(joint.id);
+
+        if (joint.angle_deg != 0.0) { values.resize(1); }
+        if (joint.velocity_dps != 0.0) { values.resize(2); }
+        if (joint.torque_Nm != 0.0) { values.resize(3); }
+        if (joint.kp_scale) { values.resize(4); }
+        if (joint.kd_scale) { values.resize(5); }
+        if (joint.max_torque_Nm) { values.resize(6); }
+        if (joint.stop_position_deg) { values.resize(7); }
+
+        for (size_t i = 0; i < values.size(); i++) {
+          switch (i) {
+            case 0: {
+              values[i] = moteus::WritePosition(
+                  sign * joint.angle_deg, moteus::kInt16);
+              break;
+            }
+            case 1: {
+              values[i] = moteus::WriteVelocity(
+                  sign * joint.velocity_dps, moteus::kInt16);
+              break;
+            }
+            case 2: {
+              values[i] = moteus::WriteTorque(
+                  sign * joint.torque_Nm, moteus::kInt16);
+              break;
+            }
+            case 3: {
+              values[i] = moteus::WritePwm(
+                  joint.kp_scale.value_or(1.0), moteus::kInt16);
+              break;
+            }
+            case 4: {
+              values[i] = moteus::WritePwm(
+                  joint.kd_scale.value_or(1.0), moteus::kInt16);
+              break;
+            }
+            case 5: {
+              values[i] = moteus::WriteTorque(
+                  joint.max_torque_Nm.value_or(
+                      std::numeric_limits<double>::infinity()),
+                  moteus::kInt16);
+              break;
+            }
+            case 6: {
+              values[i] = moteus::WritePosition(
+                  sign * joint.stop_position_deg.value_or(
+                      std::numeric_limits<double>::quiet_NaN()),
+                  moteus::kInt16);
+              break;
+            }
+
+          }
+        }
+
+        if (!values.empty()) {
+          request.request.WriteMultiple(moteus::kCommandPosition, values);
+        }
+      }
+
+    }
   }
 
   boost::posix_time::ptime Now() {
@@ -361,6 +559,7 @@ class QuadrupedControl::Impl {
 
   QuadrupedControl::Status status_;
   QuadrupedCommand current_command_;
+  ControlLog control_log_;
 
   mjlib::io::RepeatingTimer timer_;
   using Client = MultiplexClient::Client;
@@ -384,6 +583,9 @@ class QuadrupedControl::Impl {
 
   boost::signals2::signal<void (const Status*)> status_signal_;
   boost::signals2::signal<void (const CommandLog*)> command_signal_;
+  boost::signals2::signal<void (const ControlLog*)> control_signal_;
+
+  std::vector<moteus::Value> values_cache_;
 };
 
 QuadrupedControl::QuadrupedControl(base::Context& context)
