@@ -266,10 +266,7 @@ class QuadrupedControl::Impl {
     status_.state.joints.clear();
 
     for (const auto& reply : status_reply_.replies) {
-      // This has raw values
       QuadrupedState::Joint out_joint;
-
-      // And this has values which have had a sign correction applied.
       QuadrupedState::Link out_link;
       IkSolver::Joint ik_joint;
 
@@ -287,21 +284,21 @@ class QuadrupedControl::Impl {
             break;
           }
           case moteus::kPosition: {
-            out_joint.angle_deg = moteus::ReadPosition(value);
+            out_joint.angle_deg = sign * moteus::ReadPosition(value);
             out_link.angle_deg = ik_joint.angle_deg =
-                sign * out_joint.angle_deg;
+                out_joint.angle_deg;
             break;
           }
           case moteus::kVelocity: {
-            out_joint.velocity_dps = moteus::ReadPosition(value);
+            out_joint.velocity_dps = sign * moteus::ReadPosition(value);
             out_link.velocity_dps = ik_joint.velocity_dps =
-                sign * out_joint.velocity_dps;
+                out_joint.velocity_dps;
             break;
           }
           case moteus::kTorque: {
-            out_joint.torque_Nm = moteus::ReadTorque(value);
+            out_joint.torque_Nm = sign * moteus::ReadTorque(value);
             out_link.torque_Nm = ik_joint.torque_Nm =
-                sign * out_joint.torque_Nm;
+                out_joint.torque_Nm;
             break;
           }
           case moteus::kVoltage: {
@@ -447,6 +444,80 @@ class QuadrupedControl::Impl {
   }
 
   void DoControl_Leg() {
+    std::vector<QuadrupedCommand::Joint> out_joints;
+
+    const std::vector<IkSolver::Joint> current_joints = [&]() {
+      std::vector<IkSolver::Joint> result;
+      for (const auto& joint : status_.state.joints) {
+        IkSolver::Joint ik_joint;
+        ik_joint.id = joint.id;
+        ik_joint.angle_deg = joint.angle_deg;
+        ik_joint.velocity_dps = joint.velocity_dps;
+        ik_joint.torque_Nm = joint.torque_Nm;
+        result.push_back(ik_joint);
+      }
+      return result;
+    }();
+
+    for (const auto& leg_B : current_command_.legs_B) {
+      const auto& qleg = GetLeg(leg_B.leg_id);
+
+      auto add_joints = [&](auto base) {
+        base.id = qleg.config.ik.shoulder.id;
+        out_joints.push_back(base);
+        base.id = qleg.config.ik.femur.id;
+        out_joints.push_back(base);
+        base.id = qleg.config.ik.tibia.id;
+        out_joints.push_back(base);
+      };
+      if (!leg_B.power) {
+        QuadrupedCommand::Joint out_joint;
+        out_joint.power = false;
+        add_joints(out_joint);
+      } else if (leg_B.zero_velocity) {
+        QuadrupedCommand::Joint out_joint;
+        out_joint.power = true;
+        out_joint.zero_velocity = true;
+        add_joints(out_joint);
+      } else {
+        const Sophus::SE3d pose_mm_GB = qleg.pose_mm_BG.inverse();
+
+        IkSolver::Effector effector;
+        effector.pose_mm_G = pose_mm_GB * leg_B.position_mm;
+        effector.velocity_mm_s_G = pose_mm_GB.so3() * leg_B.velocity_mm_s;
+        effector.force_N_G = pose_mm_GB.so3() * leg_B.force_N;
+
+        const auto result = qleg.ik.Inverse(effector, current_joints);
+
+        if (!result) {
+          // Hmmm, for now, we'll just command all zero velocity, but
+          // in the future we should probably just stick to the
+          // command we had the last cycle?
+          QuadrupedCommand::Joint out_joint;
+          out_joint.power = true;
+          out_joint.zero_velocity = true;
+          add_joints(out_joint);
+        } else {
+          for (const auto& joint_angle : *result) {
+            QuadrupedCommand::Joint out_joint;
+            out_joint.id = joint_angle.id;
+            out_joint.power = true;
+            out_joint.angle_deg = joint_angle.angle_deg;
+            out_joint.torque_Nm = joint_angle.torque_Nm;
+            out_joint.velocity_dps = joint_angle.velocity_dps;
+
+            // TODO: Propagate kp and kd from 3D into joints.
+            out_joint.kp_scale = leg_B.kp_scale ? leg_B.kp_scale->x() :
+                std::optional<double>();
+            out_joint.kd_scale = leg_B.kd_scale ? leg_B.kd_scale->x() :
+                std::optional<double>();
+            out_joints.push_back(out_joint);
+          }
+        }
+      }
+    }
+
+    ControlJoints(out_joints);
   }
 
   void ControlJoints(std::vector<QuadrupedCommand::Joint> joints) {
@@ -546,6 +617,13 @@ class QuadrupedControl::Impl {
 
   boost::posix_time::ptime Now() {
     return mjlib::io::Now(executor_.context());
+  }
+
+  const Leg& GetLeg(int id) const {
+    for (const auto& leg : legs_) {
+      if (leg.leg == id) { return leg; }
+    }
+    mjlib::base::AssertNotReached();
   }
 
   boost::asio::executor executor_;

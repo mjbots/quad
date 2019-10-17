@@ -67,6 +67,10 @@ class QuadrupedDebug::Impl {
       if (!ParseJoint(&qcommand, tokenizer.remaining())) {
         return;
       }
+    } else if (cmd == "l") {
+      if (!ParseLeg(&qcommand, tokenizer.remaining())) {
+        return;
+      }
     } else {
       Write("unknown command");
       return;
@@ -74,6 +78,54 @@ class QuadrupedDebug::Impl {
 
     Write("OK");
     control_->Command(qcommand);
+  }
+
+  bool ParseLeg(QuadrupedCommand* qcommand, std::string_view remaining) {
+    qcommand->mode = QM::kLeg;
+
+    mjlib::base::Tokenizer tokenizer(remaining, " ");
+
+    QuadrupedCommand::Leg* current_leg = nullptr;
+
+    while (true) {
+      const auto token = std::string(tokenizer.next());
+      if (token.size() < 1) { return true; }
+
+      if (token[0] == 'l') {
+        // A new leg.
+        qcommand->legs_B.push_back({});
+        current_leg = &qcommand->legs_B.back();
+        current_leg->power = true;
+        current_leg->leg_id = std::stoi(token.substr(1));
+      } else if (token[0] == 'o' && current_leg) {
+        current_leg->power = false;
+      } else if (token[0] == 'z' && current_leg) {
+        current_leg->zero_velocity = true;
+      } else if (token[0] == 'p' && current_leg) {
+        current_leg->position_mm = ParseVector(token.substr(1));
+      } else if (token[0] == 'v' && current_leg) {
+        current_leg->velocity_mm_s = ParseVector(token.substr(1));
+      } else if (token[0] == 'f' && current_leg) {
+        current_leg->force_N = ParseVector(token.substr(1));
+      } else if (token[0] == 'k' && current_leg) {
+        current_leg->kp_scale = ParseVector(token.substr(1));
+      } else if (token[0] == 'd' && current_leg) {
+        current_leg->kd_scale = ParseVector(token.substr(1));
+      } else {
+        Write("leg parse error:" + token);
+        return false;
+      }
+    }
+    return true;
+  }
+
+  base::Point3D ParseVector(std::string_view str) {
+    mjlib::base::Tokenizer tokenizer(str, ",");
+
+    const auto x = std::stod(std::string(tokenizer.next()));
+    const auto y = std::stod(std::string(tokenizer.next()));
+    const auto z = std::stod(std::string(tokenizer.next()));
+    return base::Point3D{x, y, z};
   }
 
   bool ParseJoint(QuadrupedCommand* qcommand, std::string_view remaining) {
@@ -84,7 +136,7 @@ class QuadrupedDebug::Impl {
     QuadrupedCommand::Joint* current_joint = nullptr;
 
     while (true) {
-      auto token = std::string(tokenizer.next());
+      const auto token = std::string(tokenizer.next());
       if (token.size() < 1) { return true; }
 
       if (token[0] == 'j') {

@@ -94,6 +94,7 @@ struct QuadrupedCommand {
   struct Leg {
     int leg_id = 0;
     bool power = false;
+    bool zero_velocity = false;
     base::Point3D position_mm;
     base::Point3D velocity_mm_s;
     base::Point3D force_N;
@@ -104,6 +105,7 @@ struct QuadrupedCommand {
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(leg_id));
       a->Visit(MJ_NVP(power));
+      a->Visit(MJ_NVP(zero_velocity));
       a->Visit(MJ_NVP(position_mm));
       a->Visit(MJ_NVP(velocity_mm_s));
       a->Visit(MJ_NVP(force_N));
