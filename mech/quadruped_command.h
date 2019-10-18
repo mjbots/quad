@@ -144,7 +144,7 @@ inline QuadrupedCommand::Leg operator*(const Sophus::SE3d& pose_mm_AB,
 
   result_A.position_mm = pose_mm_AB * leg_B.position_mm;
   result_A.velocity_mm_s = pose_mm_AB.so3() * leg_B.velocity_mm_s;
-  result_A.force_N = pose_mm_AB.so3() * leg_B.velocity_mm_s;
+  result_A.force_N = pose_mm_AB.so3() * leg_B.force_N;
   result_A.kp_scale = leg_B.kp_scale ? (pose_mm_AB.so3() * *leg_B.kp_scale) :
       std::optional<base::Point3D>();
   result_A.kd_scale = leg_B.kd_scale ? (pose_mm_AB.so3() * *leg_B.kd_scale) :
