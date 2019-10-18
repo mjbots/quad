@@ -71,6 +71,10 @@ class QuadrupedDebug::Impl {
       if (!ParseLeg(&qcommand, tokenizer.remaining())) {
         return;
       }
+    } else if (cmd == "stand") {
+      if (!ParseStand(&qcommand, tokenizer.remaining())) {
+        return;
+      }
     } else {
       Write("unknown command");
       return;
@@ -78,6 +82,14 @@ class QuadrupedDebug::Impl {
 
     Write("OK");
     control_->Command(qcommand);
+  }
+
+  bool ParseStand(QuadrupedCommand* qcommand, std::string_view remaining) {
+    qcommand->mode = QM::kStandUp;
+    qcommand->stand_up_pose_mm_SR = Sophus::SE3d(
+        Sophus::SO3d(), ParseVector(remaining));
+
+    return true;
   }
 
   bool ParseLeg(QuadrupedCommand* qcommand, std::string_view remaining) {
@@ -162,7 +174,7 @@ class QuadrupedDebug::Impl {
       } else if (token[0] == 'm' && current_joint) {
         current_joint->max_torque_Nm = std::stod(token.substr(1));
       } else if (token[0] == 's' && current_joint) {
-        current_joint->stop_position_deg = std::stod(token.substr(1));
+        current_joint->stop_angle_deg = std::stod(token.substr(1));
       } else {
         Write("joint parse error:" + token);
         return false;

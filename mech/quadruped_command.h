@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "base/point3d.h"
+#include "base/sophus.h"
 
 namespace mjmech {
 namespace mech {
@@ -46,6 +47,12 @@ struct QuadrupedCommand {
     // position, velocity, and force.
     kLeg = 4,
 
+    // This mode can be entered only from the kStopped or
+    // kZeroVelocity state.  It positions the legs in an appropriate
+    // location, then stands the robot up to the given surface frame
+    // (S) pose.
+    kStandUp = 5,
+
     kNumModes,
   };
 
@@ -71,7 +78,7 @@ struct QuadrupedCommand {
     std::optional<double> kp_scale;
     std::optional<double> kd_scale;
     std::optional<double> max_torque_Nm;
-    std::optional<double> stop_position_deg;
+    std::optional<double> stop_angle_deg;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -84,7 +91,7 @@ struct QuadrupedCommand {
       a->Visit(MJ_NVP(kp_scale));
       a->Visit(MJ_NVP(kd_scale));
       a->Visit(MJ_NVP(max_torque_Nm));
-      a->Visit(MJ_NVP(stop_position_deg));
+      a->Visit(MJ_NVP(stop_angle_deg));
     }
   };
 
@@ -112,18 +119,39 @@ struct QuadrupedCommand {
       a->Visit(MJ_NVP(kp_scale));
       a->Visit(MJ_NVP(kd_scale));
     }
+
+    friend Leg operator*(const Sophus::SE3d& pose_mm, const Leg&);
   };
 
   // Only valid for kLeg mode.
   std::vector<Leg> legs_B;
+
+  // Only valid for kStandUp mode
+  Sophus::SE3d stand_up_pose_mm_SR;
 
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_ENUM(mode, ModeMapper));
     a->Visit(MJ_NVP(joints));
     a->Visit(MJ_NVP(legs_B));
+    a->Visit(MJ_NVP(stand_up_pose_mm_SR));
   }
 };
+
+inline QuadrupedCommand::Leg operator*(const Sophus::SE3d& pose_mm_AB,
+                                       const QuadrupedCommand::Leg& leg_B) {
+  QuadrupedCommand::Leg result_A = leg_B;
+
+  result_A.position_mm = pose_mm_AB * leg_B.position_mm;
+  result_A.velocity_mm_s = pose_mm_AB.so3() * leg_B.velocity_mm_s;
+  result_A.force_N = pose_mm_AB.so3() * leg_B.velocity_mm_s;
+  result_A.kp_scale = leg_B.kp_scale ? (pose_mm_AB.so3() * *leg_B.kp_scale) :
+      std::optional<base::Point3D>();
+  result_A.kd_scale = leg_B.kd_scale ? (pose_mm_AB.so3() * *leg_B.kd_scale) :
+      std::optional<base::Point3D>();
+
+  return result_A;
+}
 
 }
 }

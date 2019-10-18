@@ -56,6 +56,7 @@ class QuadrupedControl : boost::noncopyable {
     boost::posix_time::ptime timestamp;
 
     QuadrupedCommand::Mode mode = QuadrupedCommand::Mode::kStopped;
+    boost::posix_time::ptime mode_start;
     std::string fault;
 
     QuadrupedState state;
@@ -63,16 +64,19 @@ class QuadrupedControl : boost::noncopyable {
     double time_status_s;
     double time_control_s;
     double time_command_s;
+    double time_cycle_s;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(timestamp));
       a->Visit(MJ_ENUM(mode, QuadrupedCommand::ModeMapper));
+      a->Visit(MJ_NVP(mode_start));
       a->Visit(MJ_NVP(fault));
       a->Visit(MJ_NVP(state));
       a->Visit(MJ_NVP(time_status_s));
       a->Visit(MJ_NVP(time_control_s));
       a->Visit(MJ_NVP(time_command_s));
+      a->Visit(MJ_NVP(time_cycle_s));
     }
   };
 

@@ -36,6 +36,9 @@ namespace mjmech {
 namespace mech {
 
 namespace {
+using QC = QuadrupedCommand;
+using QM = QC::Mode;
+
 // This represents the JSON used to configure the geometry of the
 // robot.
 struct Config {
@@ -71,10 +74,47 @@ struct Config {
 
   std::vector<Leg> legs;
 
+  struct MammalJoint {
+    double shoulder_deg = 0.0;
+    double femur_deg = 135.0;
+    double tibia_deg = -120.0;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(shoulder_deg));
+      a->Visit(MJ_NVP(femur_deg));
+      a->Visit(MJ_NVP(tibia_deg));
+    }
+  };
+
+  struct StandUp {
+    MammalJoint pose;
+    double velocity_dps = 30.0;
+    double max_preposition_torque_Nm = 3.0;
+    double timeout_s = 4.0;
+    double tolerance_deg = 1.0;
+    double tolerance_mm = 10;
+    double velocity_mm_s = 100.0;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(pose));
+      a->Visit(MJ_NVP(velocity_dps));
+      a->Visit(MJ_NVP(max_preposition_torque_Nm));
+      a->Visit(MJ_NVP(timeout_s));
+      a->Visit(MJ_NVP(tolerance_deg));
+      a->Visit(MJ_NVP(tolerance_mm));
+      a->Visit(MJ_NVP(velocity_mm_s));
+    }
+  };
+
+  StandUp stand_up;
+
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(joints));
     a->Visit(MJ_NVP(legs));
+    a->Visit(MJ_NVP(stand_up));
   }
 };
 
@@ -94,23 +134,31 @@ struct Leg {
 struct CommandLog {
   boost::posix_time::ptime timestamp;
 
-  const QuadrupedCommand* command = nullptr;
+  const QC* command = &ignored_command;
 
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(timestamp));
-    const_cast<QuadrupedCommand*>(command)->Serialize(a);
+    const_cast<QC*>(command)->Serialize(a);
   }
+
+  static QC ignored_command;
 };
+
+QC CommandLog::ignored_command;
 
 struct ControlLog {
   boost::posix_time::ptime timestamp;
-  std::vector<QuadrupedCommand::Joint> joints;
+  std::vector<QC::Joint> joints;
+  std::vector<QC::Leg> legs_B;
+  std::vector<QC::Leg> legs_R;
 
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(timestamp));
     a->Visit(MJ_NVP(joints));
+    a->Visit(MJ_NVP(legs_B));
+    a->Visit(MJ_NVP(legs_R));
   }
 };
 }
@@ -156,7 +204,7 @@ class QuadrupedControl::Impl {
         std::bind(callback, mjlib::base::error_code()));
   }
 
-  void Command(const QuadrupedCommand& command) {
+  void Command(const QC& command) {
     CommandLog command_log;
     command_log.timestamp = Now();
     command_log.command = &command;
@@ -248,6 +296,9 @@ class QuadrupedControl::Impl {
     status_.time_command_s =
         mjlib::base::ConvertDurationToSeconds(
             timestamps_.command_done - timestamps_.control_done);
+    status_.time_cycle_s =
+        mjlib::base::ConvertDurationToSeconds(
+            timestamps_.command_done - timestamps_.cycle_start);
 
     status_signal_(&status_);
   }
@@ -357,8 +408,6 @@ class QuadrupedControl::Impl {
       MaybeChangeMode();
     }
 
-    using QM = QuadrupedCommand::Mode;
-
     switch (status_.mode) {
       case QM::kStopped: {
         DoControl_Stopped();
@@ -380,6 +429,10 @@ class QuadrupedControl::Impl {
         DoControl_Leg();
         break;
       }
+      case QM::kStandUp: {
+        DoControl_StandUp();
+        break;
+      }
       case QM::kNumModes: {
         mjlib::base::AssertNotReached();
       }
@@ -387,7 +440,7 @@ class QuadrupedControl::Impl {
   }
 
   void MaybeChangeMode() {
-    using QM = QuadrupedCommand::Mode;
+    const auto old_mode = status_.mode;
     switch (current_command_.mode) {
       case QM::kNumModes:
       case QM::kFault: {
@@ -397,7 +450,7 @@ class QuadrupedControl::Impl {
         // It is always valid (although I suppose not always a good
         // idea) to enter the stopped mode.
         status_.mode = QM::kStopped;
-        return;
+        break;
       }
       case QM::kZeroVelocity:
       case QM::kJoint:
@@ -405,15 +458,29 @@ class QuadrupedControl::Impl {
         // We can always do these if not faulted.
         if (status_.mode == QM::kFault) { return; }
         status_.mode = current_command_.mode;
-        return;
+        break;
       }
+      case QM::kStandUp: {
+        // We can only do this from stopped.
+        if (status_.mode != QM::kStopped) { return; }
+        status_.mode = current_command_.mode;
+
+        // Since we're just switching to this mode, start from
+        // scratch.
+        status_.state.stand_up = {};
+        break;
+      }
+    }
+
+    if (status_.mode != old_mode) {
+      status_.mode_start = Now();
     }
   }
 
   void DoControl_Stopped() {
-    std::vector<QuadrupedCommand::Joint> out_joints;
+    std::vector<QC::Joint> out_joints;
     for (const auto& joint : config_.joints) {
-      QuadrupedCommand::Joint out_joint;
+      QC::Joint out_joint;
       out_joint.id = joint.id;
       out_joint.power = false;
       out_joints.push_back(out_joint);
@@ -422,14 +489,22 @@ class QuadrupedControl::Impl {
     ControlJoints(std::move(out_joints));
   }
 
+  void Fault(std::string_view message) {
+    status_.mode = QM::kFault;
+    status_.fault = message;
+    status_.mode_start = Now();
+
+    DoControl_Fault();
+  }
+
   void DoControl_Fault() {
     DoControl_ZeroVelocity();
   }
 
   void DoControl_ZeroVelocity() {
-    std::vector<QuadrupedCommand::Joint> out_joints;
+    std::vector<QC::Joint> out_joints;
     for (const auto& joint : config_.joints) {
-      QuadrupedCommand::Joint out_joint;
+      QC::Joint out_joint;
       out_joint.id = joint.id;
       out_joint.power = true;
       out_joint.zero_velocity = true;
@@ -444,7 +519,133 @@ class QuadrupedControl::Impl {
   }
 
   void DoControl_Leg() {
-    std::vector<QuadrupedCommand::Joint> out_joints;
+    ControlLegs_B(current_command_.legs_B);
+  }
+
+  void DoControl_StandUp() {
+    using M = QuadrupedState::StandUp::Mode;
+    // See if we can advance to the next state.
+
+    const double elapsed_s =
+        base::ConvertDurationToSeconds(Now() - status_.mode_start);
+    if (elapsed_s > config_.stand_up.timeout_s) {
+      Fault("timeout");
+      return;
+    }
+
+    switch (status_.state.stand_up.mode) {
+      case M::kPrepositioning: {
+        const bool done = CheckPrepositioning();
+        if (done) {
+          status_.state.stand_up.mode = M::kStanding;
+        }
+        break;
+      }
+      case M::kStanding: {
+        const base::Point3D error = status_.state.robot.pose_mm_SR.translation() -
+            current_command_.stand_up_pose_mm_SR.translation();
+        if (error.norm() < config_.stand_up.tolerance_mm) {
+          status_.state.stand_up.mode = M::kDone;
+        }
+        break;
+      }
+      case M::kDone: {
+        // We never leave this state automatically.
+        break;
+      }
+    }
+
+
+    // Now execute our control.
+    switch (status_.state.stand_up.mode) {
+      case M::kPrepositioning: {
+        DoControl_StandUp_Prepositioning();
+        break;
+      }
+      case M::kStanding:
+      case M::kDone: {
+        DoControl_StandUp_Standing();
+        break;
+      }
+    };
+  }
+
+  bool CheckPrepositioning() const {
+    // We're done when all our joints are close enough.
+    const std::map<int, double> current_deg = [&]() {
+      std::map<int, double> result;
+      for (const auto& joint : status_.state.joints) {
+        result[joint.id] = joint.angle_deg;
+      }
+      return result;
+    }();
+
+    for (const auto& leg : legs_) {
+      auto check = [&](int id, int expected_deg) {
+        const auto it = current_deg.find(id);
+        BOOST_ASSERT(it != current_deg.end());
+        if (std::abs(it->second - expected_deg) > config_.stand_up.tolerance_deg) {
+          return false;
+        }
+        return true;
+      };
+
+      if (!check(leg.config.ik.shoulder.id, config_.stand_up.pose.shoulder_deg)) {
+        return false;
+      }
+      if (!check(leg.config.ik.femur.id, config_.stand_up.pose.femur_deg)) {
+        return false;
+      }
+      if (!check(leg.config.ik.tibia.id, config_.stand_up.pose.tibia_deg)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  void DoControl_StandUp_Prepositioning() {
+    std::vector<QC::Joint> joints;
+    for (const auto& leg : legs_) {
+      QC::Joint joint;
+      joint.power = true;
+      joint.angle_deg = std::numeric_limits<double>::quiet_NaN();
+      joint.velocity_dps = config_.stand_up.velocity_dps;
+      joint.max_torque_Nm = config_.stand_up.max_preposition_torque_Nm;
+
+      auto add_joint = [&](int id, double angle_deg) {
+        joint.id = id;
+        joint.stop_angle_deg = angle_deg;
+        joints.push_back(joint);
+      };
+
+      add_joint(leg.config.ik.shoulder.id, config_.stand_up.pose.shoulder_deg);
+      add_joint(leg.config.ik.femur.id, config_.stand_up.pose.femur_deg);
+      add_joint(leg.config.ik.tibia.id, config_.stand_up.pose.tibia_deg);
+    }
+    ControlJoints(joints);
+  }
+
+  void DoControl_StandUp_Standing() {
+    Fault("not implemented");
+  }
+
+  void ControlLegs_R(std::vector<QC::Leg> legs_R) {
+    control_log_.legs_R = std::move(legs_R);
+
+    const Sophus::SE3d pose_mm_BR = status_.state.robot.pose_mm_RB.inverse();
+
+    std::vector<QC::Leg> legs_B;
+    for (const auto& leg_R : control_log_.legs_R) {
+      legs_B.push_back(pose_mm_BR * leg_R);
+    }
+
+    ControlLegs_B(legs_B);
+  }
+
+  void ControlLegs_B(std::vector<QC::Leg> legs_B) {
+    control_log_.legs_B = std::move(legs_B);
+
+    std::vector<QC::Joint> out_joints;
 
     const std::vector<IkSolver::Joint> current_joints = [&]() {
       std::vector<IkSolver::Joint> result;
@@ -459,7 +660,7 @@ class QuadrupedControl::Impl {
       return result;
     }();
 
-    for (const auto& leg_B : current_command_.legs_B) {
+    for (const auto& leg_B : control_log_.legs_B) {
       const auto& qleg = GetLeg(leg_B.leg_id);
 
       auto add_joints = [&](auto base) {
@@ -471,11 +672,11 @@ class QuadrupedControl::Impl {
         out_joints.push_back(base);
       };
       if (!leg_B.power) {
-        QuadrupedCommand::Joint out_joint;
+        QC::Joint out_joint;
         out_joint.power = false;
         add_joints(out_joint);
       } else if (leg_B.zero_velocity) {
-        QuadrupedCommand::Joint out_joint;
+        QC::Joint out_joint;
         out_joint.power = true;
         out_joint.zero_velocity = true;
         add_joints(out_joint);
@@ -493,13 +694,13 @@ class QuadrupedControl::Impl {
           // Hmmm, for now, we'll just command all zero velocity, but
           // in the future we should probably just stick to the
           // command we had the last cycle?
-          QuadrupedCommand::Joint out_joint;
+          QC::Joint out_joint;
           out_joint.power = true;
           out_joint.zero_velocity = true;
           add_joints(out_joint);
         } else {
           for (const auto& joint_angle : *result) {
-            QuadrupedCommand::Joint out_joint;
+            QC::Joint out_joint;
             out_joint.id = joint_angle.id;
             out_joint.power = true;
             out_joint.angle_deg = joint_angle.angle_deg;
@@ -520,7 +721,7 @@ class QuadrupedControl::Impl {
     ControlJoints(out_joints);
   }
 
-  void ControlJoints(std::vector<QuadrupedCommand::Joint> joints) {
+  void ControlJoints(std::vector<QC::Joint> joints) {
     control_log_.joints = joints;
 
     EmitControl();
@@ -560,7 +761,7 @@ class QuadrupedControl::Impl {
         if (joint.kp_scale) { values.resize(4); }
         if (joint.kd_scale) { values.resize(5); }
         if (joint.max_torque_Nm) { values.resize(6); }
-        if (joint.stop_position_deg) { values.resize(7); }
+        if (joint.stop_angle_deg) { values.resize(7); }
 
         for (size_t i = 0; i < values.size(); i++) {
           switch (i) {
@@ -598,7 +799,7 @@ class QuadrupedControl::Impl {
             }
             case 6: {
               values[i] = moteus::WritePosition(
-                  sign * joint.stop_position_deg.value_or(
+                  sign * joint.stop_angle_deg.value_or(
                       std::numeric_limits<double>::quiet_NaN()),
                   moteus::kInt16);
               break;
@@ -636,7 +837,7 @@ class QuadrupedControl::Impl {
   std::deque<Leg> legs_;
 
   QuadrupedControl::Status status_;
-  QuadrupedCommand current_command_;
+  QC current_command_;
   ControlLog control_log_;
 
   mjlib::io::RepeatingTimer timer_;
@@ -679,7 +880,7 @@ void QuadrupedControl::SetClient(MultiplexClient::Client* client) {
   impl_->client_ = client;
 }
 
-void QuadrupedControl::Command(const QuadrupedCommand& command) {
+void QuadrupedControl::Command(const QC& command) {
   impl_->Command(command);
 }
 

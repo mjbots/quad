@@ -106,27 +106,59 @@ struct QuadrupedState {
 
   // And finally, the robot level.
   struct Robot {
-    Sophus::SO3d attitude_LB;
+    Sophus::SE3d pose_mm_LS;
+    Sophus::SE3d pose_mm_SR;
+    Sophus::SE3d pose_mm_RB;
     base::Point3D v_mm_s_LB;  // velocity
     base::Point3D w_LB;  // angular rate
-    base::Point3D cog_CB;  // relationship between CoG and body frame
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(attitude_LB));
+      a->Visit(MJ_NVP(pose_mm_LS));
+      a->Visit(MJ_NVP(pose_mm_SR));
+      a->Visit(MJ_NVP(pose_mm_RB));
       a->Visit(MJ_NVP(v_mm_s_LB));
       a->Visit(MJ_NVP(w_LB));
-      a->Visit(MJ_NVP(cog_CB));
     }
   };
 
   Robot robot;
+
+  // Now the state associated with various control modes.  Each mode's
+  // data is only valid while that mode is active.
+
+  struct StandUp {
+    enum Mode {
+      kPrepositioning,
+      kStanding,
+      kDone,
+    };
+
+    static inline std::map<Mode, const char*> ModeMapper() {
+      return {
+        { kPrepositioning, "prepositioning" },
+        { kStanding, "standing" },
+        { kDone, "done" },
+      };
+    };
+
+    Mode mode = kPrepositioning;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_ENUM(mode, ModeMapper));
+    }
+  };
+
+  StandUp stand_up;
 
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(joints));
     a->Visit(MJ_NVP(legs_B));
     a->Visit(MJ_NVP(robot));
+
+    a->Visit(MJ_NVP(stand_up));
   }
 };
 

@@ -33,9 +33,17 @@ joint, with +x facing forward, +y facing right, and +z facing down.
 Body Frame (B): This frame is oriented at the center of the quadruped
 body and fixed to the chassis.
 
-Local Frame (L): This frame is oriented such that down is parallel to
-gravity.  Other degrees of freedom are locally integrated after turn
-on, and have no absolute correlation with the outside world.
+Robot Frame (R): This frame is nominally at the center of the
+quadruped body and oriented identically, but may be offset or rotated
+to account for the robot body shifting relative to its feet.
 
-Center of Gravity Frame (C): This frame is located at the robot's
-center of gravity, with the same orientation as the body frame.
+Surface Frame (S): This frame is under the Robot Frame on the surface
+of the ground.  With uneven surfaces, that does not necessarily mean
+that every foot will be at the same height.  This could be referenced
+to the robot frame using an average of the foot positions, or some
+other sensor.
+
+Local Frame (L): This frame is oriented such that down is parallel to
+gravity.  Other degrees of freedom are initialized with the quadrupeds
+body center at turn on, and have no absolute correlation with the
+outside world.
