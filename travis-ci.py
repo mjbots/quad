@@ -19,6 +19,7 @@ CMDS = [
     "./tools/bazel test //base/...",
     "./tools/bazel build @ffmpeg//...",
     "./tools/bazel build @opencv//...",
+    "./tools/bazel build @dart//...",
     "./tools/bazel test //...",
 ]
 

@@ -3,6 +3,7 @@ stages:
   - build1
   - build2
   - build3
+  - build4
 jobs:
   include:
     - stage: build0
@@ -13,6 +14,8 @@ jobs:
       script: ./travis-ci.py 2
     - stage: build3
       script: ./travis-ci.py 3
+    - stage: build4
+      script: ./travis-ci.py 4
 dist: bionic
 language: cpp
 cache:
