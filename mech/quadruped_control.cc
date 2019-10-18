@@ -39,6 +39,8 @@ namespace {
 using QC = QuadrupedCommand;
 using QM = QC::Mode;
 
+constexpr double kGravity = 9.81;
+
 // This represents the JSON used to configure the geometry of the
 // robot.
 struct Config {
@@ -74,10 +76,12 @@ struct Config {
 
   std::vector<Leg> legs;
 
+  double mass_kg = 10.0;
+
   struct MammalJoint {
     double shoulder_deg = 0.0;
-    double femur_deg = 135.0;
-    double tibia_deg = -120.0;
+    double femur_deg = 125.0;
+    double tibia_deg = -135.0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -92,10 +96,10 @@ struct Config {
     double velocity_dps = 30.0;
     double velocity_mm_s = 100.0;
     double max_preposition_torque_Nm = 3.0;
-    double timeout_s = 4.0;
+    double timeout_s = 8.0;
     double tolerance_deg = 1.0;
-    double tolerance_mm = 10;
-    double tolerance_mm_s = 10;
+    double tolerance_mm = 1;
+    double force_scale_window_mm = 100;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -106,7 +110,7 @@ struct Config {
       a->Visit(MJ_NVP(timeout_s));
       a->Visit(MJ_NVP(tolerance_deg));
       a->Visit(MJ_NVP(tolerance_mm));
-      a->Visit(MJ_NVP(tolerance_mm_s));
+      a->Visit(MJ_NVP(force_scale_window_mm));
     }
   };
 
@@ -116,6 +120,7 @@ struct Config {
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(joints));
     a->Visit(MJ_NVP(legs));
+    a->Visit(MJ_NVP(mass_kg));
     a->Visit(MJ_NVP(stand_up));
   }
 };
@@ -241,7 +246,11 @@ class QuadrupedControl::Impl {
     if (!client_) { return; }
     if (outstanding_) { return; }
 
+    timestamps_.last_cycle_start = timestamps_.cycle_start;
     timestamps_.cycle_start = Now();
+
+    timestamps_.delta_s = base::ConvertDurationToSeconds(
+        timestamps_.cycle_start - timestamps_.last_cycle_start);
 
     outstanding_ = true;
 
@@ -259,8 +268,13 @@ class QuadrupedControl::Impl {
     if (status_reply_.replies.size() != 12) {
       log_.warn(fmt::format("missing replies, sz={}",
                             status_reply_.replies.size()));
-      outstanding_ = false;
-      return;
+
+      if (status_.state.joints.size() != 12) {
+        // We have to get at least one full set before we can start
+        // updating.
+        outstanding_ = false;
+        return;
+      }
     }
 
     // Fill in the status structure.
@@ -301,6 +315,7 @@ class QuadrupedControl::Impl {
     status_.time_cycle_s =
         mjlib::base::ConvertDurationToSeconds(
             timestamps_.command_done - timestamps_.cycle_start);
+    status_.time_delta_s = timestamps_.delta_s;
 
     status_signal_(&status_);
   }
@@ -313,17 +328,23 @@ class QuadrupedControl::Impl {
   }
 
   void UpdateStatus() {
-    IkSolver::JointAngles joint_angles;
     std::vector<QuadrupedState::Link> links;
 
-    status_.state.joints.clear();
+    auto find_or_make_joint = [&](int id) -> QuadrupedState::Joint& {
+      for (auto& joint : status_.state.joints) {
+        if (joint.id == id) { return joint; }
+      }
+      status_.state.joints.push_back({});
+      auto& result = status_.state.joints.back();
+      result.id = id;
+      return result;
+    };
 
     for (const auto& reply : status_reply_.replies) {
-      QuadrupedState::Joint out_joint;
+      QuadrupedState::Joint& out_joint = find_or_make_joint(reply.id);
       QuadrupedState::Link out_link;
-      IkSolver::Joint ik_joint;
 
-      out_joint.id = out_link.id = ik_joint.id = reply.id;
+      out_joint.id = out_link.id = reply.id;
 
       const double sign = GetSign(reply.id);
 
@@ -338,20 +359,17 @@ class QuadrupedControl::Impl {
           }
           case moteus::kPosition: {
             out_joint.angle_deg = sign * moteus::ReadPosition(value);
-            out_link.angle_deg = ik_joint.angle_deg =
-                out_joint.angle_deg;
+            out_link.angle_deg = out_joint.angle_deg;
             break;
           }
           case moteus::kVelocity: {
             out_joint.velocity_dps = sign * moteus::ReadPosition(value);
-            out_link.velocity_dps = ik_joint.velocity_dps =
-                out_joint.velocity_dps;
+            out_link.velocity_dps = out_joint.velocity_dps;
             break;
           }
           case moteus::kTorque: {
             out_joint.torque_Nm = sign * moteus::ReadTorque(value);
-            out_link.torque_Nm = ik_joint.torque_Nm =
-                out_joint.torque_Nm;
+            out_link.torque_Nm = out_joint.torque_Nm;
             break;
           }
           case moteus::kVoltage: {
@@ -372,9 +390,24 @@ class QuadrupedControl::Impl {
         }
       }
 
-      status_.state.joints.push_back(out_joint);
-      joint_angles.push_back(ik_joint);
       links.push_back(out_link);
+    }
+
+    std::sort(status_.state.joints.begin(), status_.state.joints.end(),
+              [](const auto& lhs, const auto& rhs) {
+                return lhs.id < rhs.id;
+              });
+
+    IkSolver::JointAngles joint_angles;
+    for (const auto& joint : status_.state.joints) {
+      IkSolver::Joint ik_joint;
+
+      ik_joint.id = joint.id;
+      ik_joint.angle_deg = joint.angle_deg;
+      ik_joint.velocity_dps = joint.velocity_dps;
+      ik_joint.torque_Nm = joint.torque_Nm;
+
+      joint_angles.push_back(ik_joint);
     }
 
     status_.state.legs_B.clear();
@@ -383,11 +416,22 @@ class QuadrupedControl::Impl {
       for (const auto& link : links) {
         if (link.id == id) { return link; }
       }
-      mjlib::base::AssertNotReached();
+      return QuadrupedState::Link();
+    };
+
+    auto find_or_make_leg = [&](int id) -> QuadrupedState::Leg& {
+      for (auto& leg : status_.state.legs_B) {
+        if (leg.leg == id) { return leg; }
+      }
+
+      status_.state.legs_B.push_back({});
+      auto& result = status_.state.legs_B.back();
+      result.leg = id;
+      return result;
     };
 
     for (const auto& leg : legs_) {
-      QuadrupedState::Leg out_leg_B;
+      QuadrupedState::Leg& out_leg_B = find_or_make_leg(leg.leg);
       const auto effector_G = leg.ik.Forward_G(joint_angles);
       const auto effector_B = leg.pose_mm_BG * effector_G;
 
@@ -396,12 +440,16 @@ class QuadrupedControl::Impl {
       out_leg_B.velocity_mm_s = effector_B.velocity_mm_s;
       out_leg_B.force_N = effector_B.force_N;
 
+      out_leg_B.links.clear();
       out_leg_B.links.push_back(get_link(leg.config.ik.shoulder.id));
       out_leg_B.links.push_back(get_link(leg.config.ik.femur.id));
       out_leg_B.links.push_back(get_link(leg.config.ik.tibia.id));
-
-      status_.state.legs_B.push_back(std::move(out_leg_B));
     }
+
+    std::sort(status_.state.legs_B.begin(), status_.state.legs_B.end(),
+              [](const auto& lhs, const auto& rhs) {
+                return lhs.leg < rhs.leg;
+              });
 
     // Now update the robot values.
 
@@ -536,7 +584,8 @@ class QuadrupedControl::Impl {
 
     const double elapsed_s =
         base::ConvertDurationToSeconds(Now() - status_.mode_start);
-    if (elapsed_s > config_.stand_up.timeout_s) {
+    if (status_.state.stand_up.mode != M::kDone &&
+        elapsed_s > config_.stand_up.timeout_s) {
       Fault("timeout");
       return;
     }
@@ -579,28 +628,13 @@ class QuadrupedControl::Impl {
   }
 
   bool CheckStanding() const {
-    double z_sum = 0.0;
-    for (const auto& leg_B : status_.state.legs_B) {
-      if (!leg_B.stance) { return false; }
-
-      const auto leg_R = status_.state.robot.pose_mm_RB * leg_B;
-
-      if (leg_R.velocity_mm_s.norm() > config_.stand_up.tolerance_mm_s) {
+    for (const auto& leg : status_.state.stand_up.legs) {
+      if ((leg.pose_mm_R - leg.target_mm_R).norm() >
+          config_.stand_up.tolerance_mm) {
         return false;
       }
-
-      const Sophus::SE3d pose_mm_RB = status_.state.robot.pose_mm_RB;
-
-      z_sum += (pose_mm_RB * leg_B.position_mm).z();
     }
 
-    const double average_z_height_mm = z_sum / status_.state.legs_B.size();
-    if (std::abs(average_z_height_mm - current_command_.stand_up_height_mm) >
-        config_.stand_up.tolerance_mm) {
-      return false;
-    }
-
-    // Everything checks out!
     return true;
   }
 
@@ -691,7 +725,8 @@ class QuadrupedControl::Impl {
 
       QuadrupedState::StandUp::Leg sleg;
       sleg.leg = leg.leg;
-      sleg.pose_mm_R = pose_mm_R.pose_mm +
+      sleg.pose_mm_R = pose_mm_R.pose_mm;
+      sleg.target_mm_R = pose_mm_R.pose_mm +
           base::Point3D(0, 0, current_command_.stand_up_height_mm);
       status_.state.stand_up.legs.push_back(sleg);
     }
@@ -702,7 +737,34 @@ class QuadrupedControl::Impl {
       leg.stance = true;
     }
 
-    Fault("implement me");
+    std::vector<QC::Leg> legs_R;
+
+    for (auto& leg : status_.state.stand_up.legs) {
+      const base::Point3D delta = leg.target_mm_R - leg.pose_mm_R;
+      const double distance =
+          std::min(delta.norm(),
+                   timestamps_.delta_s * config_.stand_up.velocity_mm_s);
+      if (distance != 0.0) {
+        leg.pose_mm_R += distance * (delta / delta.norm());
+      }
+
+      QC::Leg leg_cmd_R;
+      leg_cmd_R.leg_id = leg.leg;
+      leg_cmd_R.power = true;
+      leg_cmd_R.position_mm = leg.pose_mm_R;
+      leg_cmd_R.velocity_mm_s = base::Point3D(0, 0, config_.stand_up.velocity_mm_s);
+
+      const double force_scale =
+          std::max(0.0, config_.stand_up.force_scale_window_mm - delta.norm()) /
+          config_.stand_up.force_scale_window_mm;
+
+      leg_cmd_R.force_N = base::Point3D(
+          0, 0, force_scale * config_.mass_kg * kGravity / legs_.size());
+
+      legs_R.push_back(leg_cmd_R);
+    }
+
+    ControlLegs_R(std::move(legs_R));
   }
 
   void ControlLegs_R(std::vector<QC::Leg> legs_R) {
@@ -715,7 +777,7 @@ class QuadrupedControl::Impl {
       legs_B.push_back(pose_mm_BR * leg_R);
     }
 
-    ControlLegs_B(legs_B);
+    ControlLegs_B(std::move(legs_B));
   }
 
   void ControlLegs_B(std::vector<QC::Leg> legs_B) {
@@ -933,6 +995,9 @@ class QuadrupedControl::Impl {
   bool outstanding_ = false;
 
   struct Timestamps {
+    boost::posix_time::ptime last_cycle_start;
+    double delta_s = 0.0;
+
     boost::posix_time::ptime cycle_start;
     boost::posix_time::ptime status_done;
     boost::posix_time::ptime control_done;

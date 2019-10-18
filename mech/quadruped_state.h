@@ -87,6 +87,9 @@ struct QuadrupedState {
     base::Point3D position_mm;
     base::Point3D velocity_mm_s;
     base::Point3D force_N;
+
+    // TODO(jpieper): Maybe have this be something more complicated,
+    // like "lifting off", "setting down", "in flight" or "stance".
     bool stance = false;
 
     std::vector<Link> links;
@@ -147,11 +150,13 @@ struct QuadrupedState {
     struct Leg {
       int leg = 0;
       base::Point3D pose_mm_R;
+      base::Point3D target_mm_R;
 
       template <typename Archive>
       void Serialize(Archive* a) {
         a->Visit(MJ_NVP(leg));
         a->Visit(MJ_NVP(pose_mm_R));
+        a->Visit(MJ_NVP(target_mm_R));
       }
     };
 

@@ -75,6 +75,8 @@ class QuadrupedDebug::Impl {
       if (!ParseStand(&qcommand, tokenizer.remaining())) {
         return;
       }
+    } else if (cmd == "zero") {
+      qcommand.mode = QM::kZeroVelocity;
     } else {
       Write("unknown command");
       return;

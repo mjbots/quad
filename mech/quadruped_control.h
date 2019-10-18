@@ -65,6 +65,7 @@ class QuadrupedControl : boost::noncopyable {
     double time_control_s;
     double time_command_s;
     double time_cycle_s;
+    double time_delta_s;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -77,6 +78,7 @@ class QuadrupedControl : boost::noncopyable {
       a->Visit(MJ_NVP(time_control_s));
       a->Visit(MJ_NVP(time_command_s));
       a->Visit(MJ_NVP(time_cycle_s));
+      a->Visit(MJ_NVP(time_delta_s));
     }
   };
 
