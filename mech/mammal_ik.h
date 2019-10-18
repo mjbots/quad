@@ -67,7 +67,7 @@ class MammalIk : public IkSolver {
 
   MammalIk(const Config& config);
 
-  Effector Forward(const JointAngles& angles) const override;
+  Effector Forward_G(const JointAngles& angles) const override;
 
   InverseResult Inverse(const Effector&,
                         const std::optional<JointAngles>&) const override;

@@ -127,14 +127,14 @@ struct QuadrupedCommand {
   std::vector<Leg> legs_B;
 
   // Only valid for kStandUp mode
-  Sophus::SE3d stand_up_pose_mm_SR;
+  double stand_up_height_mm = 0.0;
 
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_ENUM(mode, ModeMapper));
     a->Visit(MJ_NVP(joints));
     a->Visit(MJ_NVP(legs_B));
-    a->Visit(MJ_NVP(stand_up_pose_mm_SR));
+    a->Visit(MJ_NVP(stand_up_height_mm));
   }
 };
 

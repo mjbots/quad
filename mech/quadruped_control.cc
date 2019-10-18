@@ -90,21 +90,23 @@ struct Config {
   struct StandUp {
     MammalJoint pose;
     double velocity_dps = 30.0;
+    double velocity_mm_s = 100.0;
     double max_preposition_torque_Nm = 3.0;
     double timeout_s = 4.0;
     double tolerance_deg = 1.0;
     double tolerance_mm = 10;
-    double velocity_mm_s = 100.0;
+    double tolerance_mm_s = 10;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(pose));
       a->Visit(MJ_NVP(velocity_dps));
+      a->Visit(MJ_NVP(velocity_mm_s));
       a->Visit(MJ_NVP(max_preposition_torque_Nm));
       a->Visit(MJ_NVP(timeout_s));
       a->Visit(MJ_NVP(tolerance_deg));
       a->Visit(MJ_NVP(tolerance_mm));
-      a->Visit(MJ_NVP(velocity_mm_s));
+      a->Visit(MJ_NVP(tolerance_mm_s));
     }
   };
 
@@ -386,14 +388,13 @@ class QuadrupedControl::Impl {
 
     for (const auto& leg : legs_) {
       QuadrupedState::Leg out_leg_B;
-      const auto effector = leg.ik.Forward(joint_angles);
+      const auto effector_G = leg.ik.Forward_G(joint_angles);
+      const auto effector_B = leg.pose_mm_BG * effector_G;
 
       out_leg_B.leg = leg.leg;
-      out_leg_B.position_mm = leg.pose_mm_BG * effector.pose_mm_G;
-      out_leg_B.velocity_mm_s =
-          leg.pose_mm_BG.so3() * effector.velocity_mm_s_G;
-      out_leg_B.force_N =
-          leg.pose_mm_BG.so3() * effector.force_N_G;
+      out_leg_B.position_mm = effector_B.pose_mm;
+      out_leg_B.velocity_mm_s = effector_B.velocity_mm_s;
+      out_leg_B.force_N = effector_B.force_N;
 
       out_leg_B.links.push_back(get_link(leg.config.ik.shoulder.id));
       out_leg_B.links.push_back(get_link(leg.config.ik.femur.id));
@@ -401,6 +402,10 @@ class QuadrupedControl::Impl {
 
       status_.state.legs_B.push_back(std::move(out_leg_B));
     }
+
+    // Now update the robot values.
+
+    // pose_mm_RB isn't sensed, but is just a commanded value.
   }
 
   void RunControl() {
@@ -523,6 +528,9 @@ class QuadrupedControl::Impl {
   }
 
   void DoControl_StandUp() {
+    // While we are standing up, the RB transform is always nil.
+    status_.state.robot.pose_mm_RB = Sophus::SE3d();
+
     using M = QuadrupedState::StandUp::Mode;
     // See if we can advance to the next state.
 
@@ -537,14 +545,14 @@ class QuadrupedControl::Impl {
       case M::kPrepositioning: {
         const bool done = CheckPrepositioning();
         if (done) {
+          DoControl_StandUp_StartStanding();
           status_.state.stand_up.mode = M::kStanding;
         }
         break;
       }
       case M::kStanding: {
-        const base::Point3D error = status_.state.robot.pose_mm_SR.translation() -
-            current_command_.stand_up_pose_mm_SR.translation();
-        if (error.norm() < config_.stand_up.tolerance_mm) {
+        const bool done = CheckStanding();
+        if (done) {
           status_.state.stand_up.mode = M::kDone;
         }
         break;
@@ -568,6 +576,32 @@ class QuadrupedControl::Impl {
         break;
       }
     };
+  }
+
+  bool CheckStanding() const {
+    double z_sum = 0.0;
+    for (const auto& leg_B : status_.state.legs_B) {
+      if (!leg_B.stance) { return false; }
+
+      const auto leg_R = status_.state.robot.pose_mm_RB * leg_B;
+
+      if (leg_R.velocity_mm_s.norm() > config_.stand_up.tolerance_mm_s) {
+        return false;
+      }
+
+      const Sophus::SE3d pose_mm_RB = status_.state.robot.pose_mm_RB;
+
+      z_sum += (pose_mm_RB * leg_B.position_mm).z();
+    }
+
+    const double average_z_height_mm = z_sum / status_.state.legs_B.size();
+    if (std::abs(average_z_height_mm - current_command_.stand_up_height_mm) >
+        config_.stand_up.tolerance_mm) {
+      return false;
+    }
+
+    // Everything checks out!
+    return true;
   }
 
   bool CheckPrepositioning() const {
@@ -625,8 +659,50 @@ class QuadrupedControl::Impl {
     ControlJoints(joints);
   }
 
+  void DoControl_StandUp_StartStanding() {
+    status_.state.stand_up.legs = {};
+
+    // This is called right before we begin the "standing" phase.  It
+    // figures out what target leg position we want for each leg.
+    for (const auto& leg : legs_) {
+      IkSolver::JointAngles joints;
+
+      auto make_joint = [&](int id, double angle_deg) {
+        IkSolver::Joint joint;
+        joint.id = id;
+        joint.angle_deg = angle_deg;
+        return joint;
+      };
+
+      joints.push_back(
+          make_joint(leg.config.ik.shoulder.id,
+                     config_.stand_up.pose.shoulder_deg));
+      joints.push_back(
+          make_joint(leg.config.ik.femur.id,
+                     config_.stand_up.pose.femur_deg));
+      joints.push_back(
+          make_joint(leg.config.ik.tibia.id,
+                     config_.stand_up.pose.tibia_deg));
+
+      const auto pose_mm_G = leg.ik.Forward_G(joints);
+      const auto pose_mm_R = status_.state.robot.pose_mm_RB *
+          (leg.config.pose_mm_BG * pose_mm_G);
+
+
+      QuadrupedState::StandUp::Leg sleg;
+      sleg.leg = leg.leg;
+      sleg.pose_mm_R = pose_mm_R.pose_mm +
+          base::Point3D(0, 0, current_command_.stand_up_height_mm);
+      status_.state.stand_up.legs.push_back(sleg);
+    }
+  }
+
   void DoControl_StandUp_Standing() {
-    Fault("not implemented");
+    for (auto& leg : status_.state.legs_B) {
+      leg.stance = true;
+    }
+
+    Fault("implement me");
   }
 
   void ControlLegs_R(std::vector<QC::Leg> legs_R) {
@@ -683,12 +759,15 @@ class QuadrupedControl::Impl {
       } else {
         const Sophus::SE3d pose_mm_GB = qleg.pose_mm_BG.inverse();
 
-        IkSolver::Effector effector;
-        effector.pose_mm_G = pose_mm_GB * leg_B.position_mm;
-        effector.velocity_mm_s_G = pose_mm_GB.so3() * leg_B.velocity_mm_s;
-        effector.force_N_G = pose_mm_GB.so3() * leg_B.force_N;
+        IkSolver::Effector effector_B;
 
-        const auto result = qleg.ik.Inverse(effector, current_joints);
+        effector_B.pose_mm = leg_B.position_mm;
+        effector_B.velocity_mm_s = leg_B.velocity_mm_s;
+        effector_B.force_N = leg_B.force_N;
+
+        const auto effector_G = pose_mm_GB * effector_B;
+
+        const auto result = qleg.ik.Inverse(effector_G, current_joints);
 
         if (!result) {
           // Hmmm, for now, we'll just command all zero velocity, but

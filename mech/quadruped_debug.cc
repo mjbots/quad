@@ -86,8 +86,7 @@ class QuadrupedDebug::Impl {
 
   bool ParseStand(QuadrupedCommand* qcommand, std::string_view remaining) {
     qcommand->mode = QM::kStandUp;
-    qcommand->stand_up_pose_mm_SR = Sophus::SE3d(
-        Sophus::SO3d(), ParseVector(remaining));
+    qcommand->stand_up_height_mm = std::stod(std::string(remaining));
 
     return true;
   }

@@ -19,6 +19,7 @@
 #include "mjlib/base/visitor.h"
 
 #include "base/point3d.h"
+#include "base/sophus.h"
 
 namespace mjmech {
 namespace mech {
@@ -71,9 +72,11 @@ class IkSolver : boost::noncopyable {
 
   // End effector positions are in the leg (G) frame.
   struct Effector {
-    base::Point3D pose_mm_G;
-    base::Point3D velocity_mm_s_G;
-    base::Point3D force_N_G;
+    base::Point3D pose_mm;
+    base::Point3D velocity_mm_s;
+    base::Point3D force_N;
+
+    friend Effector operator*(const Sophus::SE3d&, const Effector&);
   };
 
   virtual ~IkSolver() {}
@@ -82,11 +85,20 @@ class IkSolver : boost::noncopyable {
   /// individual joints required torque to achieve the given force
   /// request.
   virtual InverseResult Inverse(
-      const Effector&,
+      const Effector& effector_G,
       const std::optional<JointAngles>& current) const = 0;
 
-  virtual Effector Forward(const JointAngles&) const = 0;
+  virtual Effector Forward_G(const JointAngles&) const = 0;
 };
+
+inline IkSolver::Effector operator*(const Sophus::SE3d& lhs_AB,
+                                    const IkSolver::Effector& rhs_B) {
+  auto result_A = rhs_B;
+  result_A.pose_mm = lhs_AB * rhs_B.pose_mm;
+  result_A.velocity_mm_s = lhs_AB.so3() * rhs_B.velocity_mm_s;
+  result_A.force_N = lhs_AB.so3() * rhs_B.force_N;
+  return result_A;
+}
 
 }
 }

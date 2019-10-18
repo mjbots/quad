@@ -100,22 +100,22 @@ struct QuadrupedState {
       a->Visit(MJ_NVP(stance));
       a->Visit(MJ_NVP(links));
     }
+
+    friend Leg operator*(const Sophus::SE3d&, const Leg& rhs);
   };
 
   std::vector<Leg> legs_B;
 
   // And finally, the robot level.
   struct Robot {
-    Sophus::SE3d pose_mm_LS;
-    Sophus::SE3d pose_mm_SR;
+    Sophus::SE3d pose_mm_LR;
     Sophus::SE3d pose_mm_RB;
     base::Point3D v_mm_s_LB;  // velocity
     base::Point3D w_LB;  // angular rate
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(pose_mm_LS));
-      a->Visit(MJ_NVP(pose_mm_SR));
+      a->Visit(MJ_NVP(pose_mm_LR));
       a->Visit(MJ_NVP(pose_mm_RB));
       a->Visit(MJ_NVP(v_mm_s_LB));
       a->Visit(MJ_NVP(w_LB));
@@ -144,9 +144,23 @@ struct QuadrupedState {
 
     Mode mode = kPrepositioning;
 
+    struct Leg {
+      int leg = 0;
+      base::Point3D pose_mm_R;
+
+      template <typename Archive>
+      void Serialize(Archive* a) {
+        a->Visit(MJ_NVP(leg));
+        a->Visit(MJ_NVP(pose_mm_R));
+      }
+    };
+
+    std::vector<Leg> legs;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_ENUM(mode, ModeMapper));
+      a->Visit(MJ_NVP(legs));
     }
   };
 
@@ -161,6 +175,15 @@ struct QuadrupedState {
     a->Visit(MJ_NVP(stand_up));
   }
 };
+
+inline QuadrupedState::Leg operator*(const Sophus::SE3d& pose_AB,
+                                     const QuadrupedState::Leg& rhs_B) {
+  auto result_A = rhs_B;
+  result_A.position_mm = pose_AB * rhs_B.position_mm;
+  result_A.velocity_mm_s = pose_AB.so3() * rhs_B.velocity_mm_s;
+  result_A.force_N = pose_AB.so3() * rhs_B.force_N;
+  return result_A;
+}
 
 }
 }

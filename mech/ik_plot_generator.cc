@@ -143,10 +143,10 @@ int main(int argc, char** argv) {
   for (auto x : xvals) {
     for (auto y : yvals) {
       if (use_new) {
-        IkSolver::Effector input;
-        input.pose_mm_G = { x, y, 160 };
-        input.force_N_G = { 0, 0, 10.0 };
-        const auto result = ik_new.Inverse(input, {});
+        IkSolver::Effector input_G;
+        input_G.pose_mm = { x, y, 160 };
+        input_G.force_N = { 0, 0, 10.0 };
+        const auto result = ik_new.Inverse(input_G, {});
 
         BOOST_ASSERT(!!result);
 

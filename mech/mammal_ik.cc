@@ -94,7 +94,7 @@ MammalIk::MammalIk(const Config& config) : config_(config) {
   }
 }
 
-IkSolver::Effector MammalIk::Forward(const JointAngles& angles) const {
+IkSolver::Effector MammalIk::Forward_G(const JointAngles& angles) const {
   auto get_id = [&](int id) {
     for (const auto& joint : angles) {
       if (joint.id == id) { return joint; }
@@ -118,9 +118,9 @@ IkSolver::Effector MammalIk::Forward(const JointAngles& angles) const {
   skel_->computeForwardKinematics();
   skel_->computeForwardDynamics();
 
-  Effector result;
-  result.pose_mm_G = foot_body_->getCOM() * 1000;
-  result.velocity_mm_s_G = foot_body_->getCOMLinearVelocity() * 1000;
+  Effector result_G;
+  result_G.pose_mm = foot_body_->getCOM() * 1000;
+  result_G.velocity_mm_s = foot_body_->getCOMLinearVelocity() * 1000;
 
   // No torque acceleration.
   Eigen::Vector3d no_torque_accel =
@@ -137,15 +137,15 @@ IkSolver::Effector MammalIk::Forward(const JointAngles& angles) const {
   Eigen::Vector3d torque_accel =
       foot_body_->getCOMLinearAcceleration();
 
-  result.force_N_G = (torque_accel - no_torque_accel) * 1e6;
+  result_G.force_N = (torque_accel - no_torque_accel) * 1e6;
 
-  return result;
+  return result_G;
 }
 
 IkSolver::InverseResult MammalIk::Inverse(
-    const Effector& effector,
+    const Effector& effector_G,
     const std::optional<JointAngles>& current) const {
-  const auto& point = effector.pose_mm_G;
+  const auto& point = effector_G.pose_mm;
   const double r = config_.shoulder.pose_mm.y();
 
   // Find the angle of the shoulder joint.  This will be the tangent
@@ -310,7 +310,7 @@ IkSolver::InverseResult MammalIk::Inverse(
 
   // This is a tiny 3x3 matrix, so we'll just invert it directly.
   const Eigen::Vector3d joint_dps =
-      linear_jacobian.inverse() * (effector.velocity_mm_s_G * 0.001);
+      linear_jacobian.inverse() * (effector_G.velocity_mm_s * 0.001);
 
   // Assemble our result with everything but torque.
   JointAngles result;
@@ -376,7 +376,7 @@ IkSolver::InverseResult MammalIk::Inverse(
   // for the force we want.  This is just a 3x3, so directly
   // calculating the inverse should be fine.
   const Eigen::Vector3d joint_torque =
-      (acceleration_force_jacobian.inverse() * effector.force_N_G) * 1e-6;
+      (acceleration_force_jacobian.inverse() * effector_G.force_N) * 1e-6;
 
   // Now stick our torques into our result vector.
   for (auto& rj : result) {
