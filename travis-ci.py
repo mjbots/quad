@@ -20,7 +20,7 @@ CMDS = [
     "./tools/bazel build @ffmpeg//...",
     "./tools/bazel build @opencv//...",
     "./tools/bazel build @dart//...",
-    "./tools/bazel build @gstreamer//... @gst-libav//...",
+    "./tools/bazel build @gstreamer//... @gst-libav//... @gst-plugins-bad//... @gst-plugins-base//... @gst-plugins-ugly//...",
     "./tools/bazel test //...",
 ]
 
