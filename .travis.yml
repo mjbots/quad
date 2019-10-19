@@ -15,6 +15,8 @@ jobs:
       script: ./travis-ci.py 2
     - stage: build3
       script: ./travis-ci.py 3
+    - stage: build4
+      script: ./travis-ci.py 4
     - stage: build5
       script: ./travis-ci.py 5
 dist: bionic
