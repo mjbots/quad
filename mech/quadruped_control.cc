@@ -318,7 +318,8 @@ class QuadrupedControl::Impl {
     UpdateStatus();
 
     // Now run our control loop and generate our command.
-    control_log_ = {};
+    std::swap(control_log_, old_control_log_);
+    *control_log_ = {};
     RunControl();
 
     timestamps_.control_done = Now();
@@ -834,12 +835,12 @@ class QuadrupedControl::Impl {
   }
 
   void ControlLegs_R(std::vector<QC::Leg> legs_R) {
-    control_log_.legs_R = std::move(legs_R);
+    control_log_->legs_R = std::move(legs_R);
 
     const Sophus::SE3d pose_mm_BR = status_.state.robot.pose_mm_RB.inverse();
 
     std::vector<QC::Leg> legs_B;
-    for (const auto& leg_R : control_log_.legs_R) {
+    for (const auto& leg_R : control_log_->legs_R) {
       legs_B.push_back(pose_mm_BR * leg_R);
     }
 
@@ -847,7 +848,7 @@ class QuadrupedControl::Impl {
   }
 
   void ControlLegs_B(std::vector<QC::Leg> legs_B) {
-    control_log_.legs_B = std::move(legs_B);
+    control_log_->legs_B = std::move(legs_B);
 
     std::vector<QC::Joint> out_joints;
 
@@ -864,7 +865,7 @@ class QuadrupedControl::Impl {
       return result;
     }();
 
-    for (const auto& leg_B : control_log_.legs_B) {
+    for (const auto& leg_B : control_log_->legs_B) {
       const auto& qleg = GetLeg(leg_B.leg_id);
 
       auto add_joints = [&](auto base) {
@@ -929,17 +930,17 @@ class QuadrupedControl::Impl {
   }
 
   void ControlJoints(std::vector<QC::Joint> joints) {
-    control_log_.joints = joints;
+    control_log_->joints = joints;
 
     EmitControl();
   }
 
   void EmitControl() {
-    control_log_.timestamp = Now();
-    control_signal_(&control_log_);
+    control_log_->timestamp = Now();
+    control_signal_(control_log_);
 
     client_command_ = {};
-    for (const auto& joint : control_log_.joints) {
+    for (const auto& joint : control_log_->joints) {
       client_command_.requests.push_back({});
       auto& request = client_command_.requests.back();
       request.id = joint.id;
@@ -1045,7 +1046,10 @@ class QuadrupedControl::Impl {
 
   QuadrupedControl::Status status_;
   QC current_command_;
-  ControlLog control_log_;
+
+  std::array<ControlLog, 2> control_logs_;
+  ControlLog* control_log_ = &control_logs_[0];
+  ControlLog* old_control_log_ = &control_logs_[1];
 
   mjlib::io::RepeatingTimer timer_;
   using Client = MultiplexClient::Client;
