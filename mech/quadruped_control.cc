@@ -116,12 +116,17 @@ struct Config {
 
   StandUp stand_up;
 
+  double stand_height_mm = 150.0;
+  double rb_filter_constant = 0.1;
+
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(joints));
     a->Visit(MJ_NVP(legs));
     a->Visit(MJ_NVP(mass_kg));
     a->Visit(MJ_NVP(stand_up));
+    a->Visit(MJ_NVP(stand_height_mm));
+    a->Visit(MJ_NVP(rb_filter_constant));
   }
 };
 
@@ -131,11 +136,43 @@ struct Leg {
   Sophus::SE3d pose_mm_BG;
   MammalIk ik;
 
-  Leg(const Config::Leg& config_in)
+  base::Point3D stand_up_R;
+  base::Point3D idle_R;
+
+  Leg(const Config::Leg& config_in,
+      const Config::StandUp& stand_up,
+      double stand_height_mm)
       : leg(config_in.leg),
         config(config_in),
         pose_mm_BG(config_in.pose_mm_BG),
-        ik(config_in.ik) {}
+        ik(config_in.ik) {
+    IkSolver::JointAngles joints;
+
+    auto make_joint = [&](int id, double angle_deg) {
+      IkSolver::Joint joint;
+      joint.id = id;
+      joint.angle_deg = angle_deg;
+      return joint;
+    };
+
+    joints.push_back(
+        make_joint(config.ik.shoulder.id,
+                   stand_up.pose.shoulder_deg));
+    joints.push_back(
+        make_joint(config.ik.femur.id,
+                   stand_up.pose.femur_deg));
+    joints.push_back(
+        make_joint(config.ik.tibia.id,
+                   stand_up.pose.tibia_deg));
+
+    const auto pose_mm_G = ik.Forward_G(joints);
+    // The idle and standup poses assume a null RB transform
+    const Sophus::SE3d pose_mm_RB;
+    const auto pose_mm_R = pose_mm_RB * (config.pose_mm_BG * pose_mm_G);
+
+    stand_up_R = pose_mm_R.pose_mm;
+    idle_R = pose_mm_R.pose_mm + base::Point3D(0, 0, stand_height_mm);
+  }
 };
 
 struct CommandLog {
@@ -223,7 +260,7 @@ class QuadrupedControl::Impl {
 
   void Configure() {
     for (const auto& leg : config_.legs) {
-      legs_.emplace_back(leg);
+      legs_.emplace_back(leg, config_.stand_up, config_.stand_height_mm);
     }
   }
 
@@ -486,6 +523,10 @@ class QuadrupedControl::Impl {
         DoControl_StandUp();
         break;
       }
+      case QM::kRest: {
+        DoControl_Rest();
+        break;
+      }
       case QM::kNumModes: {
         mjlib::base::AssertNotReached();
       }
@@ -521,6 +562,24 @@ class QuadrupedControl::Impl {
         // Since we're just switching to this mode, start from
         // scratch.
         status_.state.stand_up = {};
+        break;
+      }
+      case QM::kRest: {
+        // This can only be done from standing up.  If we're stopped,
+        // then we should just go ahead and stand up first.
+        if (status_.mode == QM::kStopped) {
+          status_.mode = QM::kStandUp;
+        } else if (status_.mode == QM::kStandUp &&
+                   status_.state.stand_up.mode ==
+                   QuadrupedState::StandUp::Mode::kDone) {
+          status_.mode = current_command_.mode;
+        }
+
+        // TODO(jpieper): When we have a moving mode, we should be
+        // able to enter the Rest state as long as we are moving
+        // slowly enough and all four legs are on the ground, although
+        // perhaps we will require a zero-velocity step cycle to get
+        // the legs into the regular idle position.
         break;
       }
     }
@@ -699,35 +758,10 @@ class QuadrupedControl::Impl {
     // This is called right before we begin the "standing" phase.  It
     // figures out what target leg position we want for each leg.
     for (const auto& leg : legs_) {
-      IkSolver::JointAngles joints;
-
-      auto make_joint = [&](int id, double angle_deg) {
-        IkSolver::Joint joint;
-        joint.id = id;
-        joint.angle_deg = angle_deg;
-        return joint;
-      };
-
-      joints.push_back(
-          make_joint(leg.config.ik.shoulder.id,
-                     config_.stand_up.pose.shoulder_deg));
-      joints.push_back(
-          make_joint(leg.config.ik.femur.id,
-                     config_.stand_up.pose.femur_deg));
-      joints.push_back(
-          make_joint(leg.config.ik.tibia.id,
-                     config_.stand_up.pose.tibia_deg));
-
-      const auto pose_mm_G = leg.ik.Forward_G(joints);
-      const auto pose_mm_R = status_.state.robot.pose_mm_RB *
-          (leg.config.pose_mm_BG * pose_mm_G);
-
-
       QuadrupedState::StandUp::Leg sleg;
       sleg.leg = leg.leg;
-      sleg.pose_mm_R = pose_mm_R.pose_mm;
-      sleg.target_mm_R = pose_mm_R.pose_mm +
-          base::Point3D(0, 0, current_command_.stand_up_height_mm);
+      sleg.pose_mm_R = leg.stand_up_R;
+      sleg.target_mm_R = leg.idle_R;
       status_.state.stand_up.legs.push_back(sleg);
     }
   }
@@ -765,6 +799,38 @@ class QuadrupedControl::Impl {
     }
 
     ControlLegs_R(std::move(legs_R));
+  }
+
+  void DoControl_Rest() {
+    UpdateCommandedRB();
+
+    std::vector<QC::Leg> legs_R;
+
+    for (const auto& leg : legs_) {
+      QC::Leg leg_R;
+      leg_R.leg_id = leg.leg;
+      leg_R.power = true;
+      leg_R.position_mm = leg.idle_R;
+      leg_R.force_N = base::Point3D(
+          0, 0, kGravity * config_.mass_kg / legs_.size());
+      legs_R.push_back(leg_R);
+    }
+
+    ControlLegs_R(std::move(legs_R));
+  }
+
+  void UpdateCommandedRB() {
+    // Smoothly filter in any commanded RB transform.
+    const base::Point3D translation =
+        current_command_.pose_mm_RB.translation() -
+        status_.state.robot.pose_mm_RB.translation();
+    status_.state.robot.pose_mm_RB.translation() +=
+        config_.rb_filter_constant * translation;
+    status_.state.robot.pose_mm_RB.so3() =
+        Sophus::SO3d(
+            status_.state.robot.pose_mm_RB.so3().unit_quaternion().slerp(
+                config_.rb_filter_constant,
+                current_command_.pose_mm_RB.so3().unit_quaternion()));
   }
 
   void ControlLegs_R(std::vector<QC::Leg> legs_R) {

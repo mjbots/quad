@@ -71,12 +71,16 @@ class QuadrupedDebug::Impl {
       if (!ParseLeg(&qcommand, tokenizer.remaining())) {
         return;
       }
+    } else if (cmd == "zero") {
+      qcommand.mode = QM::kZeroVelocity;
     } else if (cmd == "stand") {
       if (!ParseStand(&qcommand, tokenizer.remaining())) {
         return;
       }
-    } else if (cmd == "zero") {
-      qcommand.mode = QM::kZeroVelocity;
+    } else if (cmd == "rest") {
+      if (!ParseRest(&qcommand, tokenizer.remaining())) {
+        return;
+      }
     } else {
       Write("unknown command");
       return;
@@ -86,9 +90,44 @@ class QuadrupedDebug::Impl {
     control_->Command(qcommand);
   }
 
+  bool ParseRest(QuadrupedCommand* qcommand, std::string_view remaining) {
+    qcommand->mode = QM::kRest;
+
+    mjlib::base::Tokenizer tokenizer(remaining, " ");
+
+    while (true) {
+      const auto token = std::string(tokenizer.next());
+      if (token.size() < 1) { return true; }
+
+      if (ParseRBCommand(qcommand, token)) {
+      } else {
+        Write("rest parse error:" + token);
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  bool ParseRBCommand(QuadrupedCommand* qcommand, const std::string& token) {
+    if (token[0] == 'r') {
+      qcommand->pose_mm_RB.translation() = ParseVector(token.substr(1));
+      return true;
+    }
+    if (token[0] == 'R') {
+      auto rpy = ParseVector(token.substr(1));
+      qcommand->pose_mm_RB.so3() = Sophus::SO3d(
+          Eigen::AngleAxisd(base::Radians(rpy[0]), Eigen::Vector3d::UnitX()) *
+          Eigen::AngleAxisd(base::Radians(rpy[1]), Eigen::Vector3d::UnitY()) *
+          Eigen::AngleAxisd(base::Radians(rpy[2]), Eigen::Vector3d::UnitZ()));
+      return true;
+    }
+
+    return false;
+  }
+
   bool ParseStand(QuadrupedCommand* qcommand, std::string_view remaining) {
     qcommand->mode = QM::kStandUp;
-    qcommand->stand_up_height_mm = std::stod(std::string(remaining));
 
     return true;
   }

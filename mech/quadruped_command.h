@@ -53,6 +53,11 @@ struct QuadrupedCommand {
     // (S) pose.
     kStandUp = 5,
 
+    // This is a simple mode that just lets the body to robot frame be
+    // altered with no other leg movements.  It latches whatever foot
+    // positions happen to be.  It can be entered from kStandUp:kDone.
+    kRest = 6,
+
     kNumModes,
   };
 
@@ -63,6 +68,8 @@ struct QuadrupedCommand {
         { kZeroVelocity, "zero_velocity" },
         { kJoint, "joint" },
         { kLeg, "leg" },
+        { kStandUp, "stand_up" },
+        { kRest, "rest" },
       }};
   }
 
@@ -126,15 +133,15 @@ struct QuadrupedCommand {
   // Only valid for kLeg mode.
   std::vector<Leg> legs_B;
 
-  // Only valid for kStandUp mode
-  double stand_up_height_mm = 0.0;
+  // Valid for kRest, and...
+  Sophus::SE3d pose_mm_RB;
 
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_ENUM(mode, ModeMapper));
     a->Visit(MJ_NVP(joints));
     a->Visit(MJ_NVP(legs_B));
-    a->Visit(MJ_NVP(stand_up_height_mm));
+    a->Visit(MJ_NVP(pose_mm_RB));
   }
 };
 
