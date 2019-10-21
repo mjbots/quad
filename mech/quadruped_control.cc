@@ -93,7 +93,7 @@ struct Config {
   struct Bounds {
     double min_z_B = 0.0;
     double max_z_B = 300.0;
-    double max_acceleration_mm_s2 = 10000;
+    double max_acceleration_mm_s2 = 50000;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -146,7 +146,7 @@ struct Config {
   StandUp stand_up;
 
   struct Rest {
-    double velocity_mm_s = 20.0;
+    double velocity_mm_s = 100.0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -161,25 +161,29 @@ struct Config {
   double rb_filter_constant = 0.1;
 
   struct Jump {
-    double lower_velocity_mm_s = 50.0;
+    double lower_velocity_mm_s = 100.0;
     double retract_velocity_mm_s = 1000.0;
-    double land_threshold_mm_s = 30.0;
+    double land_threshold_mm_s = 100.0;
+    double land_threshold_s = 0.02;
     double land_kp = 0.05;
     double land_kd = 0.1;
     double lower_height_mm = 100.0;
     double upper_height_mm = 220.0;
-    double retract_height_mm = 160.0;
+    double retract_height_mm = 190.0;
+    double landing_force_scale = 1.0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(lower_velocity_mm_s));
       a->Visit(MJ_NVP(retract_velocity_mm_s));
       a->Visit(MJ_NVP(land_threshold_mm_s));
+      a->Visit(MJ_NVP(land_threshold_s));
       a->Visit(MJ_NVP(land_kp));
       a->Visit(MJ_NVP(land_kd));
       a->Visit(MJ_NVP(lower_height_mm));
       a->Visit(MJ_NVP(upper_height_mm));
       a->Visit(MJ_NVP(retract_height_mm));
+      a->Visit(MJ_NVP(landing_force_scale));
     }
   };
 
@@ -988,7 +992,7 @@ class QuadrupedControl::Impl {
             &legs_R,
             status_.state.jump.velocity_mm_s,
             config_.jump.upper_height_mm,
-            config_.mass_kg * status_.state.jump.acceleration_mm_s2 * 0.01);
+            config_.mass_kg * status_.state.jump.acceleration_mm_s2 * 0.001);
         if (done) {
           status_.state.jump.mode = JM::kRetracting;
           status_.state.jump.velocity_mm_s = 0.0;
@@ -1041,8 +1045,16 @@ class QuadrupedControl::Impl {
             [](const auto& leg_B) {
               return leg_B.force_N.z();
             }) * status_.state.legs_B.size();
-        if (average_velocity_mm_s < -config_.jump.land_threshold_mm_s ||
-            (total_force_z_N > (0.5 * kGravity * config_.mass_kg))) {
+        if (status_.state.jump.falling.is_not_a_date_time() ||
+            (average_velocity_mm_s >= -config_.jump.land_threshold_mm_s &&
+             total_force_z_N < (0.75 * kGravity * config_.mass_kg))) {
+          status_.state.jump.falling = Now();
+        }
+        const double moving_duration_s =
+            base::ConvertDurationToSeconds(Now() -
+                                           status_.state.jump.falling);
+
+        if (moving_duration_s > config_.jump.land_threshold_s) {
           status_.state.jump.velocity_mm_s = average_velocity_mm_s;
           // Pick an acceleration that will ensure we reach stopped
           // before hitting our lower height.
@@ -1069,6 +1081,13 @@ class QuadrupedControl::Impl {
           }
 
           status_.state.jump.mode = JM::kLanding;
+          for (auto& leg_R : legs_R) {
+            const auto& pose_mm_RB = status_.state.robot.pose_mm_RB;
+            auto desired_B = pose_mm_RB.inverse() * leg_R.position_mm;
+            desired_B.z() = average_height_mm;
+
+            leg_R.position_mm = pose_mm_RB * desired_B;
+          }
         }
         break;
       }
@@ -1098,7 +1117,8 @@ class QuadrupedControl::Impl {
               &legs_R,
               status_.state.jump.velocity_mm_s,
               config_.jump.upper_height_mm,
-              config_.mass_kg * status_.state.jump.acceleration_mm_s2 * 0.01);
+              (config_.jump.landing_force_scale * config_.mass_kg *
+               status_.state.jump.acceleration_mm_s2 * 0.001));
         }
         break;
       }

@@ -173,12 +173,12 @@ struct QuadrupedState {
 
   struct Jump {
     enum Mode {
-      kLowering,
-      kPushing,
-      kRetracting,
-      kFalling,
-      kLanding,
-      kDone,
+      kLowering = 0,
+      kPushing = 1,
+      kRetracting = 2,
+      kFalling = 3,
+      kLanding = 4,
+      kDone = 5,
     };
 
     static inline std::map<Mode, const char*> ModeMapper() {
@@ -195,12 +195,14 @@ struct QuadrupedState {
     Mode mode = kLowering;
     double velocity_mm_s = 0.0;
     double acceleration_mm_s2 = 0.0;
+    boost::posix_time::ptime falling;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_ENUM(mode, ModeMapper));
       a->Visit(MJ_NVP(velocity_mm_s));
       a->Visit(MJ_NVP(acceleration_mm_s2));
+      a->Visit(MJ_NVP(falling));
     }
   };
 
