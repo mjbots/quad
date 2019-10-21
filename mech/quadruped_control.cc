@@ -691,6 +691,7 @@ class QuadrupedControl::Impl {
                     status_.state.stand_up.mode ==
                     QuadrupedState::StandUp::Mode::kDone)) {
           status_.mode = current_command_.mode;
+          status_.state.jump.command = current_command_.jump.value();
         }
 
         break;
@@ -966,6 +967,8 @@ class QuadrupedControl::Impl {
   void DoControl_Jump() {
     UpdateCommandedRB();
 
+    auto& js = status_.state.jump;
+
     auto legs_R = old_control_log_->legs_R;
 
     using JM = QuadrupedState::Jump::Mode;
@@ -981,22 +984,22 @@ class QuadrupedControl::Impl {
           status_.state.jump.mode = JM::kPushing;
           status_.state.jump.velocity_mm_s = 0.0;
           status_.state.jump.acceleration_mm_s2 =
-              current_command_.jump->acceleration_mm_s2;
+              js.command.acceleration_mm_s2;
         }
         break;
       }
       case JM::kPushing: {
         status_.state.jump.velocity_mm_s +=
-            current_command_.jump->acceleration_mm_s2 * timestamps_.delta_s;
+            js.command.acceleration_mm_s2 * timestamps_.delta_s;
         const bool done = MoveLegsZ(
             &legs_R,
-            status_.state.jump.velocity_mm_s,
+            js.velocity_mm_s,
             config_.jump.upper_height_mm,
-            config_.mass_kg * status_.state.jump.acceleration_mm_s2 * 0.001);
+            config_.mass_kg * js.acceleration_mm_s2 * 0.001);
         if (done) {
-          status_.state.jump.mode = JM::kRetracting;
-          status_.state.jump.velocity_mm_s = 0.0;
-          status_.state.jump.acceleration_mm_s2 = 0.0;
+          js.mode = JM::kRetracting;
+          js.velocity_mm_s = 0.0;
+          js.acceleration_mm_s2 = 0.0;
         }
         break;
       }
@@ -1013,8 +1016,9 @@ class QuadrupedControl::Impl {
               return leg_B.velocity_mm_s.z();
             });
         if (done &&
-            std::abs(average_velocity_mm_s) < config_.jump.land_threshold_mm_s) {
-          status_.state.jump.mode = JM::kFalling;
+            std::abs(average_velocity_mm_s) <
+            config_.jump.land_threshold_mm_s) {
+          js.mode = JM::kFalling;
         }
         break;
       }
@@ -1045,17 +1049,17 @@ class QuadrupedControl::Impl {
             [](const auto& leg_B) {
               return leg_B.force_N.z();
             }) * status_.state.legs_B.size();
-        if (status_.state.jump.falling.is_not_a_date_time() ||
+        if (js.falling.is_not_a_date_time() ||
             (average_velocity_mm_s >= -config_.jump.land_threshold_mm_s &&
              total_force_z_N < (0.75 * kGravity * config_.mass_kg))) {
-          status_.state.jump.falling = Now();
+          js.falling = Now();
         }
         const double moving_duration_s =
             base::ConvertDurationToSeconds(Now() -
-                                           status_.state.jump.falling);
+                                           js.falling);
 
         if (moving_duration_s > config_.jump.land_threshold_s) {
-          status_.state.jump.velocity_mm_s = average_velocity_mm_s;
+          js.velocity_mm_s = average_velocity_mm_s;
           // Pick an acceleration that will ensure we reach stopped
           // before hitting our lower height.
           const double average_height_mm = Average(
@@ -1069,18 +1073,18 @@ class QuadrupedControl::Impl {
           if (error_mm < 0.0) {
             // Whoops, we're already below our allowed limit.  Pick a
             // safe maximum acceleration and hope for the best.
-            status_.state.jump.acceleration_mm_s2 =
+            js.acceleration_mm_s2 =
                 config_.bounds.max_acceleration_mm_s2;
           } else {
-            status_.state.jump.acceleration_mm_s2 =
+            js.acceleration_mm_s2 =
                 std::max(
-                    current_command_.jump->acceleration_mm_s2,
+                    js.command.acceleration_mm_s2,
                     std::min(
                         config_.bounds.max_acceleration_mm_s2,
                         0.5 * std::pow(average_velocity_mm_s, 2) / error_mm));
           }
 
-          status_.state.jump.mode = JM::kLanding;
+          js.mode = JM::kLanding;
           for (auto& leg_R : legs_R) {
             const auto& pose_mm_RB = status_.state.robot.pose_mm_RB;
             auto desired_B = pose_mm_RB.inverse() * leg_R.position_mm;
@@ -1099,26 +1103,30 @@ class QuadrupedControl::Impl {
         }
 
         // Work to zero our velocity.
-        status_.state.jump.velocity_mm_s =
+        js.velocity_mm_s =
             std::min(
                 0.0,
-                status_.state.jump.velocity_mm_s +
-                status_.state.jump.acceleration_mm_s2 * timestamps_.delta_s);
-        if (status_.state.jump.velocity_mm_s == 0.0) {
+                js.velocity_mm_s +
+                js.acceleration_mm_s2 * timestamps_.delta_s);
+        if (js.velocity_mm_s == 0.0) {
           // We are either done, or going to start jumping again.
-          if (current_command_.jump->repeat &&
+          if (js.command.repeat &&
               current_command_.mode == QM::kJump) {
-            status_.state.jump.mode = JM::kPushing;
+            js.mode = JM::kPushing;
           } else {
-            status_.state.jump.mode = JM::kDone;
+            js.mode = JM::kDone;
+
+            // Switch our top level command back to rest to make life
+            // more convenient.
+            current_command_.mode = QM::kRest;
           }
         } else {
           MoveLegsZ(
               &legs_R,
-              status_.state.jump.velocity_mm_s,
+              js.velocity_mm_s,
               config_.jump.upper_height_mm,
               (config_.jump.landing_force_scale * config_.mass_kg *
-               status_.state.jump.acceleration_mm_s2 * 0.001));
+               js.acceleration_mm_s2 * 0.001));
         }
         break;
       }

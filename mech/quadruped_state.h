@@ -197,12 +197,15 @@ struct QuadrupedState {
     double acceleration_mm_s2 = 0.0;
     boost::posix_time::ptime falling;
 
+    QuadrupedCommand::Jump command;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_ENUM(mode, ModeMapper));
       a->Visit(MJ_NVP(velocity_mm_s));
       a->Visit(MJ_NVP(acceleration_mm_s2));
       a->Visit(MJ_NVP(falling));
+      a->Visit(MJ_NVP(command));
     }
   };
 
