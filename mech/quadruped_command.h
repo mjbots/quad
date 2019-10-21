@@ -58,6 +58,9 @@ struct QuadrupedCommand {
     // positions happen to be.  It can be entered from kStandUp:kDone.
     kRest = 6,
 
+    // Jump one or more times.
+    kJump = 7,
+
     kNumModes,
   };
 
@@ -136,12 +139,27 @@ struct QuadrupedCommand {
   // Valid for kRest, and...
   Sophus::SE3d pose_mm_RB;
 
+  // Only valid for kJump
+  struct Jump {
+    double acceleration_mm_s2 = 0;
+    bool repeat = false;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(acceleration_mm_s2));
+      a->Visit(MJ_NVP(repeat));
+    }
+  };
+
+  std::optional<Jump> jump;
+
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_ENUM(mode, ModeMapper));
     a->Visit(MJ_NVP(joints));
     a->Visit(MJ_NVP(legs_B));
     a->Visit(MJ_NVP(pose_mm_RB));
+    a->Visit(MJ_NVP(jump));
   }
 };
 

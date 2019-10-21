@@ -81,6 +81,10 @@ class QuadrupedDebug::Impl {
       if (!ParseRest(&qcommand, tokenizer.remaining())) {
         return;
       }
+    } else if (cmd == "jump") {
+      if (!ParseJump(&qcommand, tokenizer.remaining())) {
+        return;
+      }
     } else {
       Write("unknown command");
       return;
@@ -88,6 +92,30 @@ class QuadrupedDebug::Impl {
 
     Write("OK");
     control_->Command(qcommand);
+  }
+
+  bool ParseJump(QuadrupedCommand* qcommand, std::string_view remaining) {
+    qcommand->mode = QM::kJump;
+    qcommand->jump = QuadrupedCommand::Jump();
+
+    mjlib::base::Tokenizer tokenizer(remaining, " ");
+
+    while (true) {
+      const auto token = std::string(tokenizer.next());
+      if (token.size() < 1) { return true; }
+
+      if (ParseRBCommand(qcommand, token)) {
+      } else if (token[0] == 'a') {
+        qcommand->jump->acceleration_mm_s2 = std::stod(token.substr(1));
+      } else if (token[0] == '+') {
+        qcommand->jump->repeat = true;
+      } else {
+        Write("jump parse error: " + token);
+        return false;
+      }
+    }
+
+    return true;
   }
 
   bool ParseRest(QuadrupedCommand* qcommand, std::string_view remaining) {
@@ -101,7 +129,7 @@ class QuadrupedDebug::Impl {
 
       if (ParseRBCommand(qcommand, token)) {
       } else {
-        Write("rest parse error:" + token);
+        Write("rest parse error: " + token);
         return false;
       }
     }
@@ -164,7 +192,7 @@ class QuadrupedDebug::Impl {
       } else if (token[0] == 'd' && current_leg) {
         current_leg->kd_scale = ParseVector(token.substr(1));
       } else {
-        Write("leg parse error:" + token);
+        Write("leg parse error: " + token);
         return false;
       }
     }
@@ -216,7 +244,7 @@ class QuadrupedDebug::Impl {
       } else if (token[0] == 's' && current_joint) {
         current_joint->stop_angle_deg = std::stod(token.substr(1));
       } else {
-        Write("joint parse error:" + token);
+        Write("joint parse error: " + token);
         return false;
       }
     }

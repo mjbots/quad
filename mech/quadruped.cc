@@ -41,7 +41,7 @@ class Quadruped::Impl {
     debug_stream_.tcp_server_port = 4556;
 
     mjlib::base::ProgramOptionsArchive(&options_).Accept(&p_);
-    mjlib::base::ProgramOptionsArchive(&options_, "debug").Accept(&debug_stream_);
+    mjlib::base::ProgramOptionsArchive(&options_, "debug.").Accept(&debug_stream_);
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {

@@ -24,6 +24,7 @@
 #include "mjlib/io/now.h"
 #include "mjlib/io/repeating_timer.h"
 
+#include "base/common.h"
 #include "base/logging.h"
 #include "base/sophus.h"
 
@@ -38,6 +39,19 @@ namespace mech {
 namespace {
 using QC = QuadrupedCommand;
 using QM = QC::Mode;
+
+template <typename Iter, typename Functor>
+auto Average(Iter begin, Iter end, Functor f) -> decltype(f(*begin)) {
+  using T = decltype(f(*begin));
+
+  T sum = {};
+  T count = {};
+  for (Iter it = begin; it != end; ++it) {
+    count++;
+    sum += f(*it);
+  }
+  return sum / count;
+}
 
 constexpr double kGravity = 9.81;
 
@@ -75,6 +89,21 @@ struct Config {
   };
 
   std::vector<Leg> legs;
+
+  struct Bounds {
+    double min_z_B = 0.0;
+    double max_z_B = 300.0;
+    double max_acceleration_mm_s2 = 10000;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(min_z_B));
+      a->Visit(MJ_NVP(max_z_B));
+      a->Visit(MJ_NVP(max_acceleration_mm_s2));
+    }
+  };
+
+  Bounds bounds;
 
   double mass_kg = 10.0;
 
@@ -116,17 +145,57 @@ struct Config {
 
   StandUp stand_up;
 
-  double stand_height_mm = 150.0;
+  struct Rest {
+    double velocity_mm_s = 20.0;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(velocity_mm_s));
+    }
+  };
+
+  Rest rest;
+
+  double stand_height_mm = 200.0;
+  // TODO: Switch this to be in terms of time constant.
   double rb_filter_constant = 0.1;
+
+  struct Jump {
+    double lower_velocity_mm_s = 50.0;
+    double retract_velocity_mm_s = 1000.0;
+    double land_threshold_mm_s = 30.0;
+    double land_kp = 0.05;
+    double land_kd = 0.1;
+    double lower_height_mm = 100.0;
+    double upper_height_mm = 220.0;
+    double retract_height_mm = 160.0;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(lower_velocity_mm_s));
+      a->Visit(MJ_NVP(retract_velocity_mm_s));
+      a->Visit(MJ_NVP(land_threshold_mm_s));
+      a->Visit(MJ_NVP(land_kp));
+      a->Visit(MJ_NVP(land_kd));
+      a->Visit(MJ_NVP(lower_height_mm));
+      a->Visit(MJ_NVP(upper_height_mm));
+      a->Visit(MJ_NVP(retract_height_mm));
+    }
+  };
+
+  Jump jump;
 
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(joints));
     a->Visit(MJ_NVP(legs));
+    a->Visit(MJ_NVP(bounds));
     a->Visit(MJ_NVP(mass_kg));
     a->Visit(MJ_NVP(stand_up));
+    a->Visit(MJ_NVP(rest));
     a->Visit(MJ_NVP(stand_height_mm));
     a->Visit(MJ_NVP(rb_filter_constant));
+    a->Visit(MJ_NVP(jump));
   }
 };
 
@@ -171,7 +240,9 @@ struct Leg {
     const auto pose_mm_R = pose_mm_RB * (config.pose_mm_BG * pose_mm_G);
 
     stand_up_R = pose_mm_R.pose_mm;
-    idle_R = pose_mm_R.pose_mm + base::Point3D(0, 0, stand_height_mm);
+    idle_R = base::Point3D(pose_mm_R.pose_mm.x(),
+                           pose_mm_R.pose_mm.y(),
+                           stand_height_mm);
   }
 };
 
@@ -205,6 +276,7 @@ struct ControlLog {
     a->Visit(MJ_NVP(legs_R));
   }
 };
+
 }
 
 class QuadrupedControl::Impl {
@@ -436,6 +508,22 @@ class QuadrupedControl::Impl {
                 return lhs.id < rhs.id;
               });
 
+    if (status_.mode != QM::kFault) {
+      std::string fault;
+
+      for (const auto& joint : status_.state.joints) {
+        if (joint.fault) {
+          if (!fault.empty()) {
+            fault += ", ";
+          }
+          fault += fmt::format("servo {} fault: {}", joint.id, joint.fault);
+        }
+      }
+      if (!fault.empty()) {
+        Fault(fault);
+      }
+    }
+
     IkSolver::JointAngles joint_angles;
     for (const auto& joint : status_.state.joints) {
       IkSolver::Joint ik_joint;
@@ -528,6 +616,10 @@ class QuadrupedControl::Impl {
         DoControl_Rest();
         break;
       }
+      case QM::kJump: {
+        DoControl_Jump();
+        break;
+      }
       case QM::kNumModes: {
         mjlib::base::AssertNotReached();
       }
@@ -574,6 +666,10 @@ class QuadrupedControl::Impl {
                    status_.state.stand_up.mode ==
                    QuadrupedState::StandUp::Mode::kDone) {
           status_.mode = current_command_.mode;
+        } else if (status_.mode == QM::kJump &&
+                   status_.state.jump.mode ==
+                   QuadrupedState::Jump::Mode::kDone) {
+          status_.mode = current_command_.mode;
         }
 
         // TODO(jpieper): When we have a moving mode, we should be
@@ -583,14 +679,46 @@ class QuadrupedControl::Impl {
         // the legs into the regular idle position.
         break;
       }
+      case QM::kJump: {
+        if (status_.mode == QM::kStopped) {
+          status_.mode = QM::kStandUp;
+        } else if (status_.mode == QM::kRest ||
+                   (status_.mode == QM::kStandUp &&
+                    status_.state.stand_up.mode ==
+                    QuadrupedState::StandUp::Mode::kDone)) {
+          status_.mode = current_command_.mode;
+        }
+
+        break;
+      }
     }
 
     if (status_.mode != old_mode) {
+      switch (old_mode) {
+        case QM::kStandUp: {
+          status_.state.stand_up = {};
+          break;
+        }
+        case QM::kJump: {
+          status_.state.jump = {};
+          break;
+        }
+        case QM::kStopped:
+        case QM::kFault:
+        case QM::kZeroVelocity:
+        case QM::kJoint:
+        case QM::kLeg:
+        case QM::kNumModes:
+        case QM::kRest: {
+          break;
+        }
+      }
       status_.mode_start = Now();
     }
   }
 
   void DoControl_Stopped() {
+    status_.fault = "";
     std::vector<QC::Joint> out_joints;
     for (const auto& joint : config_.joints) {
       QC::Joint out_joint;
@@ -606,6 +734,8 @@ class QuadrupedControl::Impl {
     status_.mode = QM::kFault;
     status_.fault = message;
     status_.mode_start = Now();
+
+    log_.warn("Fault: " + std::string(message));
 
     DoControl_Fault();
   }
@@ -807,14 +937,175 @@ class QuadrupedControl::Impl {
 
     std::vector<QC::Leg> legs_R;
 
-    for (const auto& leg : legs_) {
-      QC::Leg leg_R;
-      leg_R.leg_id = leg.leg;
-      leg_R.power = true;
-      leg_R.position_mm = leg.idle_R;
-      leg_R.force_N = base::Point3D(
-          0, 0, kGravity * config_.mass_kg / legs_.size());
-      legs_R.push_back(leg_R);
+    if (!old_control_log_->legs_R.empty()) {
+      legs_R = old_control_log_->legs_R;
+      MoveLegsZ(
+          &legs_R,
+          config_.rest.velocity_mm_s,
+          config_.stand_height_mm,
+          0.0);
+    } else {
+      for (const auto& leg : legs_) {
+        QC::Leg leg_R;
+        leg_R.leg_id = leg.leg;
+        leg_R.power = true;
+        leg_R.position_mm = leg.idle_R;
+        leg_R.force_N = base::Point3D(
+            0, 0, kGravity * config_.mass_kg / legs_.size());
+        legs_R.push_back(leg_R);
+      }
+    }
+
+    ControlLegs_R(std::move(legs_R));
+  }
+
+  void DoControl_Jump() {
+    UpdateCommandedRB();
+
+    auto legs_R = old_control_log_->legs_R;
+
+    using JM = QuadrupedState::Jump::Mode;
+    switch (status_.state.jump.mode) {
+      case JM::kLowering: {
+        // Lower all legs until they reach the lower_height.
+        const bool done = MoveLegsZ(
+            &legs_R,
+            config_.jump.lower_velocity_mm_s,
+            config_.jump.lower_height_mm,
+            0);
+        if (done) {
+          status_.state.jump.mode = JM::kPushing;
+          status_.state.jump.velocity_mm_s = 0.0;
+          status_.state.jump.acceleration_mm_s2 =
+              current_command_.jump->acceleration_mm_s2;
+        }
+        break;
+      }
+      case JM::kPushing: {
+        status_.state.jump.velocity_mm_s +=
+            current_command_.jump->acceleration_mm_s2 * timestamps_.delta_s;
+        const bool done = MoveLegsZ(
+            &legs_R,
+            status_.state.jump.velocity_mm_s,
+            config_.jump.upper_height_mm,
+            config_.mass_kg * status_.state.jump.acceleration_mm_s2 * 0.01);
+        if (done) {
+          status_.state.jump.mode = JM::kRetracting;
+          status_.state.jump.velocity_mm_s = 0.0;
+          status_.state.jump.acceleration_mm_s2 = 0.0;
+        }
+        break;
+      }
+      case JM::kRetracting: {
+        const bool done = MoveLegsZ(
+            &legs_R,
+            config_.jump.retract_velocity_mm_s,
+            config_.jump.retract_height_mm,
+            -config_.mass_kg * kGravity);  // in flight
+        const double average_velocity_mm_s = Average(
+            status_.state.legs_B.begin(),
+            status_.state.legs_B.end(),
+            [](const auto& leg_B) {
+              return leg_B.velocity_mm_s.z();
+            });
+        if (done &&
+            std::abs(average_velocity_mm_s) < config_.jump.land_threshold_mm_s) {
+          status_.state.jump.mode = JM::kFalling;
+        }
+        break;
+      }
+      case JM::kFalling: {
+        // Set our gains to be much lower while falling.
+        for (auto& leg_R : legs_R) {
+          leg_R.kp_scale = base::Point3D(config_.jump.land_kp,
+                                         config_.jump.land_kp,
+                                         config_.jump.land_kp);
+          leg_R.kd_scale = base::Point3D(config_.jump.land_kd,
+                                         config_.jump.land_kd,
+                                         config_.jump.land_kd);
+        }
+
+        // Wait for our average velocity of all legs to exceed our
+        // threshold, which indicates we have landed.
+        const double average_velocity_mm_s = Average(
+            status_.state.legs_B.begin(),
+            status_.state.legs_B.end(),
+            [](const auto& leg_B) {
+              return leg_B.velocity_mm_s.z();
+            });
+        // Also, if we're already applying more than half of our total
+        // weight, that must mean we have landed also.
+        const double total_force_z_N = Average(
+            status_.state.legs_B.begin(),
+            status_.state.legs_B.end(),
+            [](const auto& leg_B) {
+              return leg_B.force_N.z();
+            }) * status_.state.legs_B.size();
+        if (average_velocity_mm_s < -config_.jump.land_threshold_mm_s ||
+            (total_force_z_N > (0.5 * kGravity * config_.mass_kg))) {
+          status_.state.jump.velocity_mm_s = average_velocity_mm_s;
+          // Pick an acceleration that will ensure we reach stopped
+          // before hitting our lower height.
+          const double average_height_mm = Average(
+              status_.state.legs_B.begin(),
+              status_.state.legs_B.end(),
+              [](const auto& leg_B) {
+                return leg_B.position_mm.z();
+              });
+          const double error_mm =
+              average_height_mm - config_.jump.lower_height_mm;
+          if (error_mm < 0.0) {
+            // Whoops, we're already below our allowed limit.  Pick a
+            // safe maximum acceleration and hope for the best.
+            status_.state.jump.acceleration_mm_s2 =
+                config_.bounds.max_acceleration_mm_s2;
+          } else {
+            status_.state.jump.acceleration_mm_s2 =
+                std::max(
+                    current_command_.jump->acceleration_mm_s2,
+                    std::min(
+                        config_.bounds.max_acceleration_mm_s2,
+                        0.5 * std::pow(average_velocity_mm_s, 2) / error_mm));
+          }
+
+          status_.state.jump.mode = JM::kLanding;
+        }
+        break;
+      }
+      case JM::kLanding: {
+        // Turn our gains back up.
+        for (auto& leg_R : legs_R) {
+          leg_R.kp_scale = {};
+          leg_R.kd_scale = {};
+        }
+
+        // Work to zero our velocity.
+        status_.state.jump.velocity_mm_s =
+            std::min(
+                0.0,
+                status_.state.jump.velocity_mm_s +
+                status_.state.jump.acceleration_mm_s2 * timestamps_.delta_s);
+        if (status_.state.jump.velocity_mm_s == 0.0) {
+          // We are either done, or going to start jumping again.
+          if (current_command_.jump->repeat &&
+              current_command_.mode == QM::kJump) {
+            status_.state.jump.mode = JM::kPushing;
+          } else {
+            status_.state.jump.mode = JM::kDone;
+          }
+        } else {
+          MoveLegsZ(
+              &legs_R,
+              status_.state.jump.velocity_mm_s,
+              config_.jump.upper_height_mm,
+              config_.mass_kg * status_.state.jump.acceleration_mm_s2 * 0.01);
+        }
+        break;
+      }
+      case JM::kDone: {
+        DoControl_Rest();
+        return;
+      }
     }
 
     ControlLegs_R(std::move(legs_R));
@@ -836,6 +1127,11 @@ class QuadrupedControl::Impl {
 
   void ControlLegs_R(std::vector<QC::Leg> legs_R) {
     control_log_->legs_R = std::move(legs_R);
+    std::sort(control_log_->legs_R.begin(),
+              control_log_->legs_R.end(),
+              [](const auto& lhs, const auto& rhs) {
+                return lhs.leg_id < rhs.leg_id;
+              });
 
     const Sophus::SE3d pose_mm_BR = status_.state.robot.pose_mm_RB.inverse();
 
@@ -849,6 +1145,18 @@ class QuadrupedControl::Impl {
 
   void ControlLegs_B(std::vector<QC::Leg> legs_B) {
     control_log_->legs_B = std::move(legs_B);
+    std::sort(control_log_->legs_B.begin(),
+              control_log_->legs_B.end(),
+              [](const auto& lhs, const auto& rhs) {
+                return lhs.leg_id < rhs.leg_id;
+              });
+
+    // Apply Z bounds.
+    for (auto& leg_B : control_log_->legs_B) {
+      leg_B.position_mm.z() = std::max(
+          config_.bounds.min_z_B,
+          std::min(config_.bounds.max_z_B, leg_B.position_mm.z()));
+    }
 
     std::vector<QC::Joint> out_joints;
 
@@ -931,6 +1239,11 @@ class QuadrupedControl::Impl {
 
   void ControlJoints(std::vector<QC::Joint> joints) {
     control_log_->joints = joints;
+    std::sort(control_log_->joints.begin(),
+              control_log_->joints.end(),
+              [](const auto& lhs, const auto& rhs) {
+                return lhs.id < rhs.id;
+              });
 
     EmitControl();
   }
@@ -944,6 +1257,14 @@ class QuadrupedControl::Impl {
       client_command_.requests.push_back({});
       auto& request = client_command_.requests.back();
       request.id = joint.id;
+
+      constexpr double kInf = std::numeric_limits<double>::infinity();
+      std::optional<double> max_torque_Nm =
+          (parameters_.max_torque_Nm >= 0.0 || !!joint.max_torque_Nm) ?
+          std::min(parameters_.max_torque_Nm < 0.0 ?
+                   kInf : parameters_.max_torque_Nm,
+                   joint.max_torque_Nm.value_or(kInf)) :
+          std::optional<double>();
 
       const auto mode = [&]() {
         if (joint.power == false) {
@@ -968,7 +1289,7 @@ class QuadrupedControl::Impl {
         if (joint.torque_Nm != 0.0) { values.resize(3); }
         if (joint.kp_scale) { values.resize(4); }
         if (joint.kd_scale) { values.resize(5); }
-        if (joint.max_torque_Nm) { values.resize(6); }
+        if (max_torque_Nm) { values.resize(6); }
         if (joint.stop_angle_deg) { values.resize(7); }
 
         for (size_t i = 0; i < values.size(); i++) {
@@ -1000,8 +1321,7 @@ class QuadrupedControl::Impl {
             }
             case 5: {
               values[i] = moteus::WriteTorque(
-                  joint.max_torque_Nm.value_or(
-                      std::numeric_limits<double>::infinity()),
+                  max_torque_Nm.value_or(kInf),
                   moteus::kInt16);
               break;
             }
@@ -1033,6 +1353,48 @@ class QuadrupedControl::Impl {
       if (leg.leg == id) { return leg; }
     }
     mjlib::base::AssertNotReached();
+  }
+
+  bool MoveLegsZ(
+      std::vector<QC::Leg>* legs_R,
+      double desired_velocity_mm_s,
+      double desired_height_mm,
+      double extra_z_N) const {
+    const double current_height_mm = Average(
+        legs_R->begin(),
+        legs_R->end(),
+        [](auto& leg_R) { return leg_R.position_mm.z(); });
+
+    const double error_mm = desired_height_mm - current_height_mm;
+    const double max_velocity_mm_s =
+        config_.bounds.max_acceleration_mm_s2 *
+        std::sqrt(2 * std::abs(error_mm) /
+                  config_.bounds.max_acceleration_mm_s2);
+
+    const double velocity_mm_s =
+        std::min(desired_velocity_mm_s, max_velocity_mm_s);
+
+    const double sign = base::GetSign(error_mm);
+    const double delta_mm = sign * velocity_mm_s * timestamps_.delta_s;
+
+    const double new_sign =
+        base::GetSign(desired_height_mm - (current_height_mm + delta_mm));
+    const double limited_delta_mm =
+        (sign == 0.0 || new_sign * sign < 0.0) ?
+        std::max(-std::abs(error_mm),
+                 std::min(std::abs(error_mm), delta_mm)) :
+        delta_mm;
+
+    const double new_height = current_height_mm + limited_delta_mm;
+
+    for (auto& leg_R : *legs_R) {
+      leg_R.position_mm.z() = new_height;
+      leg_R.velocity_mm_s = base::Point3D(0, 0, sign * velocity_mm_s);
+      leg_R.force_N = base::Point3D(
+          0, 0, (config_.mass_kg * kGravity + extra_z_N) / legs_.size());
+    }
+
+    return sign == 0.0;
   }
 
   boost::asio::executor executor_;

@@ -43,11 +43,13 @@ class QuadrupedControl : boost::noncopyable {
 
   struct Parameters {
     double period_s = 0.01;
+    double max_torque_Nm = -1.0;
     std::string config;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(period_s));
+      a->Visit(MJ_NVP(max_torque_Nm));
       a->Visit(MJ_NVP(config));
     }
   };

@@ -171,6 +171,41 @@ struct QuadrupedState {
 
   StandUp stand_up;
 
+  struct Jump {
+    enum Mode {
+      kLowering,
+      kPushing,
+      kRetracting,
+      kFalling,
+      kLanding,
+      kDone,
+    };
+
+    static inline std::map<Mode, const char*> ModeMapper() {
+      return {
+        { kLowering, "lowering" },
+        { kPushing, "pushing" },
+        { kRetracting, "retracting" },
+        { kFalling, "falling" },
+        { kLanding, "landing" },
+        { kDone, "done" },
+      };
+    }
+
+    Mode mode = kLowering;
+    double velocity_mm_s = 0.0;
+    double acceleration_mm_s2 = 0.0;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_ENUM(mode, ModeMapper));
+      a->Visit(MJ_NVP(velocity_mm_s));
+      a->Visit(MJ_NVP(acceleration_mm_s2));
+    }
+  };
+
+  Jump jump;
+
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(joints));
@@ -178,6 +213,7 @@ struct QuadrupedState {
     a->Visit(MJ_NVP(robot));
 
     a->Visit(MJ_NVP(stand_up));
+    a->Visit(MJ_NVP(jump));
   }
 };
 
