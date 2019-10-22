@@ -16,7 +16,7 @@
 
 #include <memory>
 
-#include <boost/asio/io_context.hpp>
+#include <boost/asio/executor.hpp>
 #include <boost/program_options.hpp>
 
 #include "mech/quadruped_control.h"
@@ -27,7 +27,7 @@ namespace mech {
 /// Exposes an embedded web server with a command and control UI.
 class WebControl {
  public:
-  WebControl(boost::asio::io_context&, QuadrupedControl* control);
+  WebControl(const boost::asio::executor&, QuadrupedControl* control);
   ~WebControl();
 
   struct Parameters {

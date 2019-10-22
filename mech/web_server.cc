@@ -12,21 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mech/web_control.h"
-
-#include "mjlib/base/program_options_archive.h"
+#include "mech/web_server.h"
 
 namespace mjmech {
 namespace mech {
 
-class WebControl::Impl {
+class WebServer::Impl {
  public:
-  Impl(const boost::asio::executor& executor,
-       QuadrupedControl* quadruped_control)
+  Impl(const boost::asio::executor& executor, const Options& options)
       : executor_(executor),
-        quadruped_control_(quadruped_control) {
-    mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
-  }
+        options_(options) {}
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
     boost::asio::post(
@@ -35,23 +30,17 @@ class WebControl::Impl {
   }
 
   boost::asio::executor executor_;
-  QuadrupedControl* const quadruped_control_;
-  Parameters parameters_;
-  boost::program_options::options_description options_;
+  const Options options_;
 };
 
-WebControl::WebControl(const boost::asio::executor& executor,
-                       QuadrupedControl* quadruped_control)
-    : impl_(std::make_unique<Impl>(executor, quadruped_control)) {}
+WebServer::WebServer(const boost::asio::executor& executor,
+                     const Options& options)
+    : impl_(std::make_unique<Impl>(executor, options)) {}
 
-WebControl::~WebControl() {}
+WebServer::~WebServer() {}
 
-void WebControl::AsyncStart(mjlib::io::ErrorCallback callback) {
+void WebServer::AsyncStart(mjlib::io::ErrorCallback callback) {
   impl_->AsyncStart(callback);
-}
-
-boost::program_options::options_description* WebControl::options() {
-  return &impl_->options_;
 }
 
 }

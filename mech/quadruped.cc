@@ -32,7 +32,7 @@ class Quadruped::Impl {
     m_.multiplex_client = std::make_unique<MultiplexClient>(executor_);
     m_.quadruped_control = std::make_unique<QuadrupedControl>(context);
     m_.web_control = std::make_unique<WebControl>(
-        context.context, m_.quadruped_control.get());
+        context.executor, m_.quadruped_control.get());
 
     m_.multiplex_client->RequestClient([this](const auto& ec, auto* client) {
         mjlib::base::FailIf(ec);
