@@ -136,7 +136,7 @@ struct QuadrupedCommand {
   // Only valid for kLeg mode.
   std::vector<Leg> legs_B;
 
-  // Valid for kRest, and...
+  // Valid for kRest, kJump, and...
   Sophus::SE3d pose_mm_RB;
 
   // Only valid for kJump

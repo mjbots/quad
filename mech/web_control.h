@@ -16,52 +16,31 @@
 
 #include <memory>
 
-#include <boost/noncopyable.hpp>
+#include <boost/asio/io_context.hpp>
 #include <boost/program_options.hpp>
 
-#include "base/component_archives.h"
-#include "base/context.h"
-
-#include "mech/multiplex_client.h"
 #include "mech/quadruped_control.h"
-#include "mech/web_control.h"
 
 namespace mjmech {
 namespace mech {
 
-class Quadruped : boost::noncopyable {
+/// Exposes an embedded web server with a command and control UI.
+class WebControl {
  public:
-  Quadruped(base::Context& context);
-  ~Quadruped();
-
-  void AsyncStart(mjlib::io::ErrorCallback);
-
-  struct Members {
-    std::unique_ptr<MultiplexClient> multiplex_client;
-    std::unique_ptr<QuadrupedControl> quadruped_control;
-    std::unique_ptr<WebControl> web_control;
-
-    template <typename Archive>
-    void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(multiplex_client));
-      a->Visit(MJ_NVP(quadruped_control));
-      a->Visit(MJ_NVP(web_control));
-    }
-  };
+  WebControl(boost::asio::io_context&, QuadrupedControl* control);
+  ~WebControl();
 
   struct Parameters {
-    base::ComponentParameters<Members> children;
+    int port = 4778;
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      children.Serialize(a);
+      a->Visit(MJ_NVP(port));
     }
-
-    Parameters(Members* m) : children(m) {}
   };
 
-  Parameters* parameters();
   boost::program_options::options_description* options();
+  void AsyncStart(mjlib::io::ErrorCallback);
 
  private:
   class Impl;

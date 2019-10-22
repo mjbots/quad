@@ -43,6 +43,7 @@ cc_library(
         "target_tracker.cc",
         "turret.cc",
         "video_display.cc",
+        "web_control.cc",
     ],
     hdrs = glob(["*.h"]),
     deps = [

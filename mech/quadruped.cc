@@ -31,6 +31,8 @@ class Quadruped::Impl {
         factory_(context.factory.get()) {
     m_.multiplex_client = std::make_unique<MultiplexClient>(executor_);
     m_.quadruped_control = std::make_unique<QuadrupedControl>(context);
+    m_.web_control = std::make_unique<WebControl>(
+        context.context, m_.quadruped_control.get());
 
     m_.multiplex_client->RequestClient([this](const auto& ec, auto* client) {
         mjlib::base::FailIf(ec);
@@ -41,7 +43,8 @@ class Quadruped::Impl {
     debug_stream_.tcp_server_port = 4556;
 
     mjlib::base::ProgramOptionsArchive(&options_).Accept(&p_);
-    mjlib::base::ProgramOptionsArchive(&options_, "debug.").Accept(&debug_stream_);
+    mjlib::base::ProgramOptionsArchive(&options_, "debug.")
+        .Accept(&debug_stream_);
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
@@ -56,7 +59,8 @@ class Quadruped::Impl {
         debug_stream_,
         std::bind(&Impl::HandleDebugStream, this, pl::_1, pl::_2));
 
-    boost::asio::post(executor_, std::bind(callback, mjlib::base::error_code()));
+    boost::asio::post(executor_, std::bind(callback,
+                                           mjlib::base::error_code()));
   }
 
   void HandleDebugStream(const mjlib::base::error_code& ec,
