@@ -1,9 +1,25 @@
 'use strict';
 
 (function () {
+  var websocket = null;
+
+  var handleEvent = function(e) {
+    console.log("got websocket event:" + e.data)
+  };
+
+  var openWebsocket = function() {
+    var loc = window.location;
+    websocket = new WebSocket("ws://" + loc.host + "/control");
+
+    websocket.addEventListener('message', handleEvent);
+    websocket.addEventListener('close', openWebsocket);
+  };
+
   window.addEventListener('load', function (e) {
     var root = document.getElementById('app');
     root.innerHTML = "I have started!";
+
+    openWebsocket()
   });
 
   function step(timestamp) {
@@ -24,7 +40,10 @@
       for (var i = 0; i < buttons.length; i++) {
         bts[i] = buttons[i].pressed;
       }
-      root.innerHTML = `JS ax=${axs} bt=${bts}`;
+      var text = `JS ax=${axs} bt=${bts}`;
+      root.innerHTML = text;
+
+      websocket.send(text);
       return;
     }
 

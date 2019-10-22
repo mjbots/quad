@@ -77,10 +77,11 @@ std::string_view GetMimeType(std::string_view path) {
 class WebsocketSession
     : public std::enable_shared_from_this<WebsocketSession> {
  public:
-  explicit WebsocketSession(tcp::socket socket)
+  explicit WebsocketSession(beast::tcp_stream socket)
       : websocket_(std::move(socket)) {}
 
-  void Start() {
+  template <typename Body>
+  void Start(http::request<Body> request) {
     websocket_.set_option(
         websocket::stream_base::timeout::suggested(
             beast::role_type::server));
@@ -91,14 +92,7 @@ class WebsocketSession
                            std::string("test_v1 ws-js-async"));
             }));
 
-    websocket_.async_accept(
-        std::bind(&WebsocketSession::OnAccept, shared_from_this(),
-                  pl::_1));
-  }
-
-  void OnAccept(beast::error_code ec) {
-    mjlib::base::FailIf(ec);
-
+    websocket_.accept(request);
     StartRead();
   }
 
@@ -110,17 +104,49 @@ class WebsocketSession
   }
 
   void HandleRead(beast::error_code ec) {
+    if (ec == boost::beast::error::timeout ||
+        ec == boost::asio::error::broken_pipe ||
+        ec == boost::asio::error::not_connected) {
+      Close();
+      return;
+    }
     mjlib::base::FailIf(ec);
 
     // Print out what we got somehow.
-    std::cout << "got message\n";
+    std::cout << "got message: " <<
+        beast::make_printable(buffer_.data()) << "\n";
+    buffer_.clear();
+
+    message_ = fmt::format("{}", count_++);
+
+    websocket_.async_write(
+        boost::asio::buffer(message_),
+        std::bind(&WebsocketSession::HandleWrite, shared_from_this(),
+                  pl::_1));
+  }
+
+  void HandleWrite(beast::error_code ec) {
+    mjlib::base::FailIf(ec);
 
     StartRead();
+  }
+
+  void Close() {
+    websocket_.async_close(
+        websocket::close_code::normal,
+        std::bind(&WebsocketSession::HandleClose, shared_from_this(),
+                  pl::_1));
+  }
+
+  void HandleClose(beast::error_code) {
   }
 
  private:
   websocket::stream<beast::tcp_stream> websocket_;
   beast::flat_buffer buffer_;
+
+  std::string message_;
+  uint32_t count_ = 0;
 };
 
 class Session : public std::enable_shared_from_this<Session> {
@@ -205,6 +231,15 @@ class Session : public std::enable_shared_from_this<Session> {
 
     if (request.target() == "/control") {
       // This is only valid for websocket requests.
+      if (!websocket::is_upgrade(request)) {
+        return send(bad_request("Only valid for websocket"));
+      }
+
+      std::cout << "got a websocket request\n";
+
+      // Pass this off to our websocket handler.
+      std::make_shared<WebsocketSession>(
+          std::move(stream_))->Start(std::move(request));
 
       return;
     }
