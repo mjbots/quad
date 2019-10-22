@@ -18,7 +18,7 @@ jobs:
     - stage: build4
       script: ./travis-ci.py 4
     - stage: build5
-      script: ./travis-ci.py 5
+      script: ./travis-ci.py 5 && rm -rf $HOME/.cache/bazel
 dist: bionic
 language: cpp
 cache:
