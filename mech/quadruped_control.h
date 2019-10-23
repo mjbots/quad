@@ -63,11 +63,11 @@ class QuadrupedControl : boost::noncopyable {
 
     QuadrupedState state;
 
-    double time_status_s;
-    double time_control_s;
-    double time_command_s;
-    double time_cycle_s;
-    double time_delta_s;
+    double time_status_s = 0.0;
+    double time_control_s = 0.0;
+    double time_command_s = 0.0;
+    double time_cycle_s = 0.0;
+    double time_delta_s = 0.0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
