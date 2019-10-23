@@ -60,7 +60,13 @@ class WebServer {
     /// the given handler will be invoked.  These websockets are given
     /// an executor that runs in a background thread, and may only
     /// execute in that thread.
-    std::map<std::string, WebsocketHandler> websocket_handlers;
+    struct Websocket {
+      std::string endpoint;
+
+      WebsocketHandler handler;
+    };
+
+    std::vector<Websocket> websocket_handlers;
   };
 
   WebServer(const boost::asio::executor&, const Options&);

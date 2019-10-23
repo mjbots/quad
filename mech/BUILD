@@ -17,7 +17,7 @@
 package(default_visibility = ["//visibility:public"])
 
 load("//base:module_main.bzl", "module_main")
-load("@bazel_tools//tools/build_defs/pkg:pkg.bzl", "pkg_tar")
+load("@rules_pkg//:pkg.bzl", "pkg_tar")
 
 cc_library(
     name = "mech",
@@ -32,6 +32,7 @@ cc_library(
         "mcast_video_link.cc",
         "mech_warfare.cc",
         "mech_warfare_command.cc",
+        "mime_type.cc",
         "moteus_servo.cc",
         "multiplex_client.cc",
         "quadruped.cc",
@@ -74,6 +75,10 @@ cc_library(
         "//conditions:default" : [],
         "//:raspberrypi" : ["-DCOM_GITHUB_MJBOTS_RASPBERRYPI"],
     }),
+    data = [
+        "web_control_assets/index.html",
+        "web_control_assets/js/app.js",
+    ],
 )
 
 cc_test(
@@ -242,5 +247,7 @@ pkg_tar(
         "//utils:performance_governor.sh": "performance_governor.sh",
         "//utils:rezero.sh": "rezero.sh",
         "//utils:update_pid.sh": "update_pid.sh",
+        "web_control_assets/index.html" : "web_control_assets/index.html",
+        "web_control_assets/js/app.js" : "web_control_assets/js/app.js",
     },
 )
