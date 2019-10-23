@@ -8,6 +8,11 @@ test --define CLANG=true
 build:pi --copt -g0
 test:pi --copt -g0
 
+# Sadly, Eigen/C++ still hasn't figured out how to reliably get
+# alignment correct.  Lets just disable it for now.
+build --copt -DEIGEN_DONT_ALIGN_STATICALLY
+test --copt -DEIGEN_DONT_ALIGN_STATICALLY
+
 build:pi --cpu=armeabihf
 test:pi --cpu=armeabihf
 
