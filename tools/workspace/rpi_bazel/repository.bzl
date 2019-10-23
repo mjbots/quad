@@ -20,6 +20,6 @@ def rpi_bazel_repository(name):
     github_archive(
         name = name,
         repo = "mjbots/rpi_bazel",
-        commit = "e072d67df75592d1852643ff9e1925978964999e",
-        sha256 = "cd6d771d37b0b52112b651c0e3113898689d4fe8212e2bb842b9cefb46d01fbd",
+        commit = "4fbc5146c263c51c560efc55e1355c77a5e6de52",
+        sha256 = "1caf578911a77984b3046710962093ac390d30f9218ca56115e2771a19e85114",
     )
