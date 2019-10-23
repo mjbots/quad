@@ -354,6 +354,7 @@ class QuadrupedControl::Impl {
   }
 
   void HandleTimer(const mjlib::base::error_code& ec) {
+    if (ec == boost::asio::error::operation_aborted) { return; }
     mjlib::base::FailIf(ec);
 
     if (!client_) { return; }
