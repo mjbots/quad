@@ -1,10 +1,29 @@
+<!-- Copyright 2019 Josh Pieper, jjp@pobox.com -->
+<!-- Licensed under the Apache License, Version 2.0.  See LICENSE -->
+
 <html>
   <head>
     <meta charset="UTF-8"/>
     <title>mjmech quad A0 control</title>
+    <link rel="stylesheet" href="styles.css"/>
   </head>
   <body>
-    <div id="app">
+    <div id="requested_command">
+      <form>
+        <select id="mode_selector" multiple>
+          <option value="stopped">stop</option>
+          <option value="zero_velocity">zero</option>
+          <option value="rest">rest</option>
+          <option value="jump">jump</option>
+        </select>
+      </form>
+      <p>Active: <span id="active_flag" /></p>
+    </div>
+    <div id="current_command">
+    </div>
+    <div id="robot_state">
+    </div>
+    <div id="current_joystick">
     </div>
 
     <script src="js/app.js"></script>

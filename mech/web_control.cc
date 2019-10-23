@@ -20,8 +20,11 @@
 #include <boost/filesystem.hpp>
 
 #include "mjlib/base/fail.h"
+#include "mjlib/base/json5_read_archive.h"
+#include "mjlib/base/json5_write_archive.h"
 #include "mjlib/base/program_options_archive.h"
 
+#include "base/logging.h"
 #include "mech/web_server.h"
 
 namespace fs = boost::filesystem;
@@ -50,7 +53,16 @@ std::string FindAssetPath() {
   // Hmmph, we couldn't find it.
   mjlib::base::Fail("Could not locate WebControl assets: " + start.native());
 }
-}
+
+struct WebCommand {
+  std::optional<QuadrupedCommand> command;
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(MJ_NVP(command));
+  }
+};
+}  // namespace
 
 class WebControl::Impl {
  public:
@@ -120,16 +132,41 @@ class WebControl::Impl {
       if (MaybeClose(ec)) { return; }
       mjlib::base::FailIf(ec);
 
-      // Print out what we got somehow.
-      std::cout << "got message: " <<
-          beast::make_printable(buffer_.data()) << "\n";
+      std::string message(static_cast<const char*>(buffer_.data().data()),
+                          buffer_.size());
       buffer_.clear();
+      std::istringstream istr(message);
 
-      // When we send this command to the controller, we need to do it
-      // through the parent's executor.  Similarly when we query state
-      // to send the reply.
+      try {
+        const auto command =
+            mjlib::base::Json5ReadArchive::Read<WebCommand>(istr);
 
-      message_ = fmt::format("{}", count_++);
+        boost::asio::post(
+            parent_->executor_,
+            [self = shared_from_this(), command]() {
+              if (command.command) {
+                self->parent_->quadruped_control_->Command(*command.command);
+              }
+              const auto status = self->parent_->quadruped_control_->status();
+
+              boost::asio::post(
+                  self->executor_,
+                  std::bind(&WebsocketServer::WriteReply, self, status));
+            });
+      } catch (mjlib::base::system_error& se) {
+        if (se.code() == mjlib::base::error::kJsonParse) {
+          // This we will just log, and then continue on.
+          log_.warn(fmt::format("Error reading JSON: {}\n{}", se.what(),
+                                message));
+          StartRead();
+          return;
+        }
+        throw;
+      }
+    }
+
+    void WriteReply(const QuadrupedControl::Status& status) {
+      message_ = mjlib::base::Json5WriteArchive::Write(status);
 
       stream_.async_write(
           boost::asio::buffer(message_),
@@ -156,6 +193,8 @@ class WebControl::Impl {
     Impl* const parent_;
     WebServer::WebsocketStream stream_;
     boost::asio::executor executor_;
+
+    base::LogRef log_ = base::GetLogInstance("WebControl");
 
     beast::flat_buffer buffer_;
     std::string message_;
