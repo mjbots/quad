@@ -204,20 +204,6 @@ cc_binary(
     ],
 )
 
-cc_binary(
-    name = "websocket_joystick_test",
-    srcs = ["websocket_joystick_test.cc"],
-    deps = [
-        "@boost",
-        "@boost//:program_options",
-        "@boost//:system",
-        "@fmt",
-        "@mjlib//mjlib/base:error_code",
-        "@mjlib//mjlib/base:fail",
-        "@org_llvm_libcxx//:libcxx",
-    ],
-)
-
 pkg_tar(
     name = "deploy",
     extension = "tar",
