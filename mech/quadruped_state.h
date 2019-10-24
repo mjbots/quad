@@ -88,10 +88,6 @@ struct QuadrupedState {
     base::Point3D velocity_mm_s;
     base::Point3D force_N;
 
-    // TODO(jpieper): Maybe have this be something more complicated,
-    // like "lifting off", "setting down", "in flight" or "stance".
-    bool stance = false;
-
     std::vector<Link> links;
 
     template <typename Archive>
@@ -100,7 +96,6 @@ struct QuadrupedState {
       a->Visit(MJ_NVP(position_mm));
       a->Visit(MJ_NVP(velocity_mm_s));
       a->Visit(MJ_NVP(force_N));
-      a->Visit(MJ_NVP(stance));
       a->Visit(MJ_NVP(links));
     }
 
@@ -113,6 +108,10 @@ struct QuadrupedState {
   struct Robot {
     Sophus::SE3d pose_mm_LR;
     Sophus::SE3d pose_mm_RB;
+
+    base::Point3D desired_v_mm_s_R;
+    base::Point3D desired_w_LR;
+
     base::Point3D v_mm_s_LB;  // velocity
     base::Point3D w_LB;  // angular rate
 
@@ -120,6 +119,10 @@ struct QuadrupedState {
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(pose_mm_LR));
       a->Visit(MJ_NVP(pose_mm_RB));
+
+      a->Visit(MJ_NVP(desired_v_mm_s_R));
+      a->Visit(MJ_NVP(desired_w_LR));
+
       a->Visit(MJ_NVP(v_mm_s_LB));
       a->Visit(MJ_NVP(w_LB));
     }

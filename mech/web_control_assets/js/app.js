@@ -42,6 +42,10 @@
   var RB_MAX_ROLL = 0.35;
   var RB_MAX_PITCH = 0.35;
 
+  var VEL_MAX_X = 100.0;
+  var VEL_MAX_Y = 100.0;
+  var RATE_MAX_Z = 0.1;
+
   var handleEvent = function(e) {
     var state = document.getElementById('robot_state');
     state.innerHTML = "Status: " + e.data;
@@ -165,9 +169,20 @@
         // Otherwise, we switch to zero.
         mode_selector.value = "zero_velocity";
       }
+    } else if (pressed[BUTTON_SELECT]) {
+      // If we aren't in jump, switch to that.  If we are, then just
+      // switch to rest.
+      if (old_value != "jump") {
+        mode_selector.value = "jump";
+      } else {
+        mode_selector.value = "rest";
+      }
     }
 
     var pose_mm_RB = null;
+
+    var v_mm_s_R = null;
+    var w_LR = null;
 
     if (down[BUTTON_SHOULDER_LB]) {
       // This means the joystick axes are used to change the RB
@@ -185,12 +200,18 @@
         translation : [ pose_mm_RB_x, pose_mm_RB_y, 0.0 ],
         so3 : quaternionJs(pose_mm_RB_so3),
       };
+    } else if (gp) {
+      v_mm_s_R = [ -gp.axes[1] * VEL_MAX_X, gp.axes[0] * VEL_MAX_Y, 0.0 ];
+      w_LR = [ 0, 0, gp.axes[2] * RATE_MAX_Z ];
     }
 
     var value = mode_selector.value;
 
     var cmd = {};
-    if (value == "stopped" || value == "zero_velocity" || value == "rest") {
+    if (value == "stopped" ||
+        value == "zero_velocity" ||
+        value == "rest" ||
+        value == "jump") {
       // We always send this command out.
       var command = {
         "mode" : value,
@@ -198,8 +219,22 @@
       cmd['command'] = command;
     }
 
-    if ('command' in cmd && pose_mm_RB) {
-      cmd['command']['pose_mm_RB'] = pose_mm_RB;
+    if ('command' in cmd) {
+      if (pose_mm_RB) {
+        cmd['command']['pose_mm_RB'] = pose_mm_RB;
+      }
+      if (v_mm_s_R) {
+        cmd['command']['v_mm_s_R'] = v_mm_s_R;
+      }
+      if (w_LR) {
+        cmd['command']['w_LR'] = w_LR;
+      }
+      if (value == 'jump') {
+        cmd['command']['jump'] = {
+          "acceleration_mm_s2" : 2000.0,
+          "repeat" : true,
+        };
+      }
     }
 
     return JSON.stringify(cmd);

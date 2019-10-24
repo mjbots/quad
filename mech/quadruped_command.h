@@ -73,6 +73,7 @@ struct QuadrupedCommand {
         { kLeg, "leg" },
         { kStandUp, "stand_up" },
         { kRest, "rest" },
+        { kJump, "jump" },
       }};
   }
 
@@ -112,6 +113,7 @@ struct QuadrupedCommand {
     int leg_id = 0;
     bool power = false;
     bool zero_velocity = false;
+    bool stance = true;
     base::Point3D position_mm;
     base::Point3D velocity_mm_s;
     base::Point3D force_N;
@@ -123,6 +125,7 @@ struct QuadrupedCommand {
       a->Visit(MJ_NVP(leg_id));
       a->Visit(MJ_NVP(power));
       a->Visit(MJ_NVP(zero_velocity));
+      a->Visit(MJ_NVP(stance));
       a->Visit(MJ_NVP(position_mm));
       a->Visit(MJ_NVP(velocity_mm_s));
       a->Visit(MJ_NVP(force_N));
@@ -135,9 +138,6 @@ struct QuadrupedCommand {
 
   // Only valid for kLeg mode.
   std::vector<Leg> legs_B;
-
-  // Valid for kRest, kJump, and...
-  Sophus::SE3d pose_mm_RB;
 
   // Only valid for kJump
   struct Jump {
@@ -153,13 +153,28 @@ struct QuadrupedCommand {
 
   std::optional<Jump> jump;
 
+  /////////////////////////////////////////////
+  // Things which are common to multiple modes.
+
+  // Valid for kRest, kJump, and...
+  Sophus::SE3d pose_mm_RB;
+
+  // Valid for kJump, etc..
+  //
+  // These control the movement of the robot through the L frame,
+  // i.e. the world.
+  base::Point3D v_mm_s_R;  // Only the X and Y velocities are used
+  base::Point3D w_LR;  // Only the Z axis rate is used
+
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_ENUM(mode, ModeMapper));
     a->Visit(MJ_NVP(joints));
     a->Visit(MJ_NVP(legs_B));
-    a->Visit(MJ_NVP(pose_mm_RB));
     a->Visit(MJ_NVP(jump));
+    a->Visit(MJ_NVP(pose_mm_RB));
+    a->Visit(MJ_NVP(v_mm_s_R));
+    a->Visit(MJ_NVP(w_LR));
   }
 };
 
