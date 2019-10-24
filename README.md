@@ -6,7 +6,7 @@ interfaces, and utilities for developing and operating them.
 
 * GitHub https://github.com/mjbots/mjmech
 * Most files are free hardware and software: Apache 2.0 License
-* travis-ci [![Build Status](https://travis-ci.org/mjbots/mjmech.svg?branch=master)](https://travis-ci.org/mjbots/mjmech)
+* buildkite [![Build status](https://badge.buildkite.com/0689c3a0d219ec219be55d6a233ecba2a01c8bb165c1a49a68.svg?branch=master)](https://buildkite.com/mjbots/mjmech)
 
 Directory structure
 -------------------
