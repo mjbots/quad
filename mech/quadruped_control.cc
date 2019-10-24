@@ -1299,7 +1299,7 @@ class QuadrupedControl::Impl {
         if (joint.power == false) {
           return moteus::Mode::kStopped;
         } else if (joint.zero_velocity) {
-          return moteus::Mode::kPositionTimeout;
+          return moteus::Mode::kZeroVelocity;
         } else {
           return moteus::Mode::kPosition;
         }

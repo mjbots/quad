@@ -70,6 +70,7 @@ enum class Mode {
     kCurrent = 8,
     kPosition = 9,
     kPositionTimeout = 10,
+    kZeroVelocity = 11,
 };
 
 using Value = mjlib::multiplex::Format::Value;
