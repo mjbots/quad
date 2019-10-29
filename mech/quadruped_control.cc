@@ -125,7 +125,7 @@ struct Config {
     double velocity_dps = 30.0;
     double velocity_mm_s = 100.0;
     double max_preposition_torque_Nm = 3.0;
-    double timeout_s = 8.0;
+    double timeout_s = 10.0;
     double tolerance_deg = 1.0;
     double tolerance_mm = 1;
     double force_scale_window_mm = 100;
