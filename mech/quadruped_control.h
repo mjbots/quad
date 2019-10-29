@@ -63,6 +63,7 @@ class QuadrupedControl : boost::noncopyable {
 
     QuadrupedState state;
 
+    int missing_replies = 0;
     double time_status_s = 0.0;
     double time_control_s = 0.0;
     double time_command_s = 0.0;
@@ -76,6 +77,7 @@ class QuadrupedControl : boost::noncopyable {
       a->Visit(MJ_NVP(mode_start));
       a->Visit(MJ_NVP(fault));
       a->Visit(MJ_NVP(state));
+      a->Visit(MJ_NVP(missing_replies));
       a->Visit(MJ_NVP(time_status_s));
       a->Visit(MJ_NVP(time_control_s));
       a->Visit(MJ_NVP(time_command_s));

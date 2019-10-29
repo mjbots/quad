@@ -382,10 +382,9 @@ class QuadrupedControl::Impl {
     timestamps_.status_done = Now();
 
     // If we don't have all 12 servos, then skip this cycle.
-    if (status_reply_.replies.size() != 12) {
-      log_.warn(fmt::format("missing replies, sz={}",
-                            status_reply_.replies.size()));
+    status_.missing_replies = 12 - status_reply_.replies.size();
 
+    if (status_reply_.replies.size() != 12) {
       if (status_.state.joints.size() != 12) {
         // We have to get at least one full set before we can start
         // updating.
