@@ -234,6 +234,7 @@ pkg_tar(
         "//utils:performance_governor.sh": "performance_governor.sh",
         "//utils:rezero.sh": "rezero.sh",
         "//utils:update_pid.sh": "update_pid.sh",
+        "//utils:update_voltage.sh": "update_voltage.sh",
         "web_control_assets/index.html" : "web_control_assets/index.html",
         "web_control_assets/styles.css" : "web_control_assets/styles.css",
         "web_control_assets/js/app.js" : "web_control_assets/js/app.js",
