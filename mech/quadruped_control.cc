@@ -673,6 +673,7 @@ class QuadrupedControl::Impl {
         if (status_.mode == QM::kStopped ||
             status_.mode == QM::kZeroVelocity) {
           status_.mode = QM::kStandUp;
+          status_.state.stand_up = {};
         } else if (status_.mode == QM::kStandUp &&
                    status_.state.stand_up.mode ==
                    QuadrupedState::StandUp::Mode::kDone) {
@@ -694,6 +695,7 @@ class QuadrupedControl::Impl {
         if (status_.mode == QM::kStopped ||
             status_.mode == QM::kZeroVelocity) {
           status_.mode = QM::kStandUp;
+          status_.state.stand_up = {};
         } else if (status_.mode == QM::kRest ||
                    (status_.mode == QM::kStandUp &&
                     status_.state.stand_up.mode ==
@@ -1067,6 +1069,7 @@ class QuadrupedControl::Impl {
             std::abs(average_velocity_mm_s) <
             config_.jump.land_threshold_mm_s) {
           js.mode = JM::kFalling;
+          js.falling = Now();
         }
         break;
       }
