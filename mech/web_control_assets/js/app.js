@@ -42,9 +42,9 @@
   var RB_MAX_ROLL = 0.35;
   var RB_MAX_PITCH = 0.35;
 
-  var VEL_MAX_X = 100.0;
-  var VEL_MAX_Y = 100.0;
-  var RATE_MAX_Z = 0.1;
+  var VEL_MAX_X = 200.0;
+  var VEL_MAX_Y = 200.0;
+  var RATE_MAX_Z = 1.0;
 
   var handleEvent = function(e) {
     var state = document.getElementById('robot_state');

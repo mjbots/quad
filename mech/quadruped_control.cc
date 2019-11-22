@@ -159,7 +159,7 @@ struct Config {
   double stand_height_mm = 200.0;
   double rb_filter_constant_Hz = 2.0;
   double lr_acceleration_mm_s2 = 1000.0;
-  double lr_alpha_rad_s2 = 0.1;
+  double lr_alpha_rad_s2 = 0.5;
 
   struct Jump {
     double lower_velocity_mm_s = 100.0;
@@ -1258,25 +1258,15 @@ class QuadrupedControl::Impl {
     const auto& desired_w_LR = status_.state.robot.desired_w_LR;
     const auto& desired_v_mm_s_R = status_.state.robot.desired_v_mm_s_R;
 
-    const base::Point3D delta_mm_s = [&]() -> base::Point3D {
-      if (desired_w_LR.z() == 0.0) {
-        return desired_v_mm_s_R;
-      } else {
-        const double w = desired_w_LR.z();
-        const auto& v_mm_s = desired_v_mm_s_R;
-        return base::Point3D(
-            ((std::cos(dt * w) - 1) * v_mm_s.y() +
-             std::sin(dt * w) * v_mm_s.x()) / w,
-            ((std::cos(dt * w) - 1) * v_mm_s.x() +
-             std::sin(dt * w) * v_mm_s.y()) / w,
-            0.0);
-      }
-    }();
+    const auto& v_mm_s = desired_v_mm_s_R;
+
+    // For now, we'll just do the dumb zeroth order integration.
+
     const Sophus::SE3d pose_T2_T1(
         Sophus::SO3d(
             Eigen::AngleAxisd(-dt * desired_w_LR.z(), Eigen::Vector3d::UnitZ())
             .toRotationMatrix()),
-        -delta_mm_s * dt);
+        -v_mm_s * dt);
 
     for (auto& leg_R : *legs_R) {
       if (!leg_R.stance) { continue; }
@@ -1287,7 +1277,7 @@ class QuadrupedControl::Impl {
       // the X and Y, since the LR frame movement is the only thing
       // that should be happening for a leg in stance configuration.
       leg_R.velocity_mm_s.head<2>() =
-          -delta_mm_s.head<2>() - desired_w_LR.cross(leg_R.position_mm).head<2>();
+          -v_mm_s.head<2>() - desired_w_LR.cross(leg_R.position_mm).head<2>();
     }
   }
 
@@ -1525,7 +1515,9 @@ class QuadrupedControl::Impl {
       std::vector<QC::Leg>* legs_R,
       double desired_velocity_mm_s,
       const std::vector<std::pair<int, base::Point3D>>& command_pose_mm_R,
-      double extra_z_N) const {
+      double extra_z_N,
+      base::Point3D velocity_mask = base::Point3D(1., 1., 1),
+      base::Point3D velocity_inverse_mask = base::Point3D(0., 0., 0.)) const {
 
     bool done = true;
 
@@ -1561,7 +1553,9 @@ class QuadrupedControl::Impl {
               error_norm_mm,
               velocity_mm_s * timestamps_.delta_s);
       leg_R.position_mm += error_mm.normalized() * delta_mm;
-      leg_R.velocity_mm_s = error_mm.normalized() * velocity_mm_s;
+      leg_R.velocity_mm_s =
+          velocity_inverse_mask.asDiagonal() * leg_R.velocity_mm_s  +
+          velocity_mask.asDiagonal() * error_mm.normalized() * velocity_mm_s;
 
       const double gravity_N =
           leg_R.stance ?
@@ -1593,7 +1587,9 @@ class QuadrupedControl::Impl {
         legs_R,
         desired_velocity_mm_s,
         desired_poses_mm_R,
-        extra_z_N);
+        extra_z_N,
+        base::Point3D(0, 0, 1),
+        base::Point3D(1, 1, 0));
   }
 
   boost::asio::executor executor_;
