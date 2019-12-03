@@ -30,3 +30,10 @@ The following should work on Ubuntu 18.04
 ```
 ./install-packages
 ```
+
+Building
+--------
+
+```
+tools/bazel test //...
+```
