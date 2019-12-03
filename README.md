@@ -16,7 +16,7 @@ Directory structure
 * **python/** - Python bindings for various C++ classes.
 * **legtool/** - A python application for experimenting with static
   walking gaits.
-* **tools/** - Utilities for development and data analysis.
+* **utils/** - Utilities for development and data analysis.
 * **video-ui/** - Client application for FPV and real-time control.
 * **configs/** - Configuration files for different robots and applications.
 * **hw/** - Hardware design files along with firmware.
