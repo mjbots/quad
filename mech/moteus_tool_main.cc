@@ -14,17 +14,25 @@
 
 #include "moteus/tool/moteus_tool.h"
 
+#include "mjlib/base/fail.h"
+
+#include "mjlib/multiplex/stream_asio_client_builder.h"
+
 #include "mech/rpi3_threaded_client.h"
 
 namespace {
-class Rpi3Client : public moteus::tool::ClientBase {
+class Rpi3Client : public mjlib::multiplex::AsioClient {
  public:
-  Rpi3Client(boost::asio::executor executor)
-      : client_(executor, []() {
-          mjmech::mech::Rpi3ThreadedClient::Options options;
-          options.query_timeout_s = 0.001;
-          return options;
-        }()) {}
+  struct Options : mjmech::mech::Rpi3ThreadedClient::Options {
+    Options() {
+      query_timeout_s = 0.001;
+    }
+  };
+
+  Rpi3Client(const boost::asio::executor& executor,
+             const Options& options)
+      : client_(executor, options) {}
+  ~Rpi3Client() override {}
 
   mjlib::io::SharedStream MakeTunnel(
       uint8_t id,
@@ -37,25 +45,33 @@ class Rpi3Client : public moteus::tool::ClientBase {
       }());
   }
 
+  void AsyncStart(mjlib::io::ErrorCallback cbk) {
+    cbk(mjlib::base::error_code());
+  }
+
+  void AsyncRegister(uint8_t id, const mjlib::multiplex::RegisterRequest&,
+                     RegisterHandler) override {
+    mjlib::base::AssertNotReached();
+  }
+
+  /// If only commands (and no queries are sent), multiple devices may
+  /// be addressed in a single operation.
+  void AsyncRegisterMultiple(const std::vector<IdRequest>&,
+                             mjlib::io::ErrorCallback) override {
+    mjlib::base::AssertNotReached();
+  }
+
  private:
   mjmech::mech::Rpi3ThreadedClient client_;
-};
-
-class Rpi3Creator : public moteus::tool::ClientMaker {
- public:
-  void AddToProgramOptions(
-      boost::program_options::options_description*) override {}
-
-  void AsyncCreate(boost::asio::executor executor,
-                   std::unique_ptr<moteus::tool::ClientBase>* client,
-                   mjlib::io::ErrorCallback callback) override {
-    *client = std::make_unique<Rpi3Client>(executor);
-    callback(mjlib::base::error_code());
-  }
 };
 }
 
 int main(int argc, char** argv) {
-  Rpi3Creator creator;
-  return moteus::tool::moteus_tool_main(argc, argv, &creator);
+  boost::asio::io_context context;
+  mjlib::io::Selector<mjlib::multiplex::AsioClient> selector{
+    context.get_executor(), "client_type"};
+  selector.Register<mjlib::multiplex::StreamAsioClientBuilder>("stream");
+  selector.Register<Rpi3Client>("rpi3");
+  selector.set_default("rpi3");
+  return moteus::tool::moteus_tool_main(context, argc, argv, &selector);
 }

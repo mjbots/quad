@@ -49,6 +49,14 @@ class Rpi3ThreadedClient {
     // If true, then print to stdout a hex dump of all received
     // packets which fail with a checksum error.
     bool debug_checksum_errors = false;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(baud_rate));
+      a->Visit(MJ_NVP(query_timeout_s));
+      a->Visit(MJ_NVP(cpu_affinity));
+      a->Visit(MJ_NVP(debug_checksum_errors));
+    }
   };
 
   Rpi3ThreadedClient(const boost::asio::executor&, const Options&);
