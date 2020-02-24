@@ -42,11 +42,13 @@ class MWCommand : boost::noncopyable {
   void AsyncStart(mjlib::io::ErrorCallback handler) {
     std::shared_ptr<base::ErrorHandlerJoiner> joiner =
         std::make_shared<base::ErrorHandlerJoiner>(
-            [=](mjlib::base::error_code ec) {
+            [this, handler=std::move(handler)](mjlib::base::error_code ec) mutable {
               if (!ec) {
                 boost::asio::post(
                     executor_,
-                    [=]() {MaybeSendOnce(); });
+                    [this]() {
+                      MaybeSendOnce();
+                    });
               }
               handler(ec);
             });

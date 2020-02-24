@@ -62,7 +62,7 @@ class VideoDisplay::Impl : boost::noncopyable {
 
     boost::asio::post(
         parent_executor_,
-        std::bind(handler, mjlib::base::error_code()));
+        std::bind(std::move(handler), mjlib::base::error_code()));
   }
 
   void HandleGstReady(GstMainLoopRef& loop_ref) {
@@ -373,7 +373,7 @@ VideoDisplay::VideoDisplay(const boost::asio::executor& executor, bool)
 VideoDisplay::~VideoDisplay() {}
 
 void VideoDisplay::AsyncStart(mjlib::io::ErrorCallback handler) {
-  impl_->AsyncStart(handler);
+  impl_->AsyncStart(std::move(handler));
 }
 
 void VideoDisplay::HandleGstReady(GstMainLoopRef& loop_ref) {

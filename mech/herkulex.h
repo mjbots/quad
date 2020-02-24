@@ -231,9 +231,9 @@ class HerkuleXProtocol : public HerkuleXBase {
   void AsyncStart(Handler handler) {
     factory_.AsyncCreate(
         stream_parameters_,
-        std::bind(&HerkuleXProtocol::HandleStart, this, handler,
-                  std::placeholders::_1,
-                  std::placeholders::_2));
+        [this, handler=std::move(handler)](const auto& _1, const auto& _2) mutable {
+          this->HandleStart(std::move(handler), _1, _2);
+        });
   }
 
   template <typename Handler>
@@ -243,7 +243,7 @@ class HerkuleXProtocol : public HerkuleXBase {
                   this,
                   packet,
                   std::placeholders::_1),
-        handler);
+        std::move(handler));
   }
 
   /// Receive a single packet, or raise a TimeoutError if no packet is
@@ -252,34 +252,38 @@ class HerkuleXProtocol : public HerkuleXBase {
   void ReceivePacket(Handler handler) {
     base::SignalResult::Wait(
         executor_, &read_signal_,
-        parameters_.packet_timeout_s, handler);
+        parameters_.packet_timeout_s, std::move(handler));
   }
 
   template <typename Handler>
   void SendReceivePacket(const Packet& to_send, Handler handler) {
-    typedef std::function<void (const boost::system::error_code& ec,
-                                const Packet& packet)> PacketHandler;
+    typedef fu2::unique_function<void (const boost::system::error_code& ec,
+                                       const Packet& packet)> PacketHandler;
     sequencer_.Invoke(
-        [=](PacketHandler packet_handler) {
-          RawSendPacket(
+        [this, handler=std::move(handler), to_send](
+            PacketHandler packet_handler) mutable {
+          this->RawSendPacket(
               to_send,
-              [=](mjlib::base::error_code ec) {
+              [this, packet_handler=std::move(packet_handler)](
+                  mjlib::base::error_code ec) mutable {
                 if (ec) {
                   packet_handler(ec, Packet());
                   return;
                 }
 
                 base::SignalResult::Wait(
-                    executor_, &read_signal_,
-                    parameters_.packet_timeout_s, packet_handler);
+                    this->executor_,
+                    &this->read_signal_,
+                    this->parameters_.packet_timeout_s,
+                    std::move(packet_handler));
               });
         },
-        handler);
+        std::move(handler));
   }
 
   template <typename Handler>
   void Post(Handler handler) {
-    boost::asio::post(executor_, handler);
+    boost::asio::post(executor_, std::move(handler));
   }
 
  private:
@@ -287,7 +291,7 @@ class HerkuleXProtocol : public HerkuleXBase {
     if (!stream_) {
       boost::asio::post(
           executor_,
-          std::bind(handler, mjlib::base::error_code()));
+          std::bind(std::move(handler), mjlib::base::error_code()));
       return;
     }
 
@@ -312,7 +316,8 @@ class HerkuleXProtocol : public HerkuleXBase {
     boost::asio::async_write(
         *stream_,
         boost::asio::buffer(buffer_, 7 + packet.data.size()),
-        [handler](const boost::system::error_code& ec, size_t) mutable {
+        [handler=std::move(handler)](const boost::system::error_code& ec,
+                                     size_t) mutable {
           handler(ec);
         });
   }
@@ -323,7 +328,7 @@ class HerkuleXProtocol : public HerkuleXBase {
     if (ec) {
       boost::asio::post(
           executor_,
-          std::bind(handler, ec));
+          std::bind(std::move(handler), ec));
       return;
     }
 
@@ -334,7 +339,7 @@ class HerkuleXProtocol : public HerkuleXBase {
 
     boost::asio::post(
         executor_,
-        std::bind(handler, mjlib::base::error_code()));
+        std::bind(std::move(handler), mjlib::base::error_code()));
   }
 
   void ReadLoop1() {
@@ -491,10 +496,10 @@ class HerkuleX : public HerkuleXProtocol {
     to_send.data = std::string(reinterpret_cast<const char*>(buf), 2);
 
     this->SendReceivePacket(
-        to_send, std::bind(&HerkuleX::MemReadHandler, this,
-                           std::placeholders::_1,
-                           std::placeholders::_2,
-                           reg, length, to_send, handler));
+        to_send, [this, reg, length, to_send, handler=std::move(handler)](
+            const auto& _1, const auto& _2) mutable {
+          this->MemReadHandler(_1, _2, reg, length, to_send, std::move(handler));
+        });
   }
 
   void MemReadHandler(mjlib::base::error_code ec,
@@ -502,12 +507,12 @@ class HerkuleX : public HerkuleXProtocol {
                       uint8_t reg,
                       uint8_t length,
                       Base::Packet to_send,
-                      std::function<void (mjlib::base::error_code,
-                                          MemReadResponse)> handler) {
+                      fu2::unique_function<void (mjlib::base::error_code,
+                                                 MemReadResponse)> handler) {
     auto post_error = [&](mjlib::base::error_code ec) {
       ec.Append(fmt::format("when reading servo 0x{:02x}",
                             static_cast<int>(to_send.servo)));
-      this->Post(std::bind(handler, ec, MemReadResponse()));
+      this->Post(std::bind(std::move(handler), ec, MemReadResponse()));
     };
 
     if (ec) {
@@ -569,8 +574,8 @@ class HerkuleX : public HerkuleXProtocol {
     handler(mjlib::base::error_code(), response);
   }
 
-  typedef std::function<void (const boost::system::error_code&,
-                              Base::StatusResponse)> StatusHandler;
+  typedef fu2::unique_function<void (const boost::system::error_code&,
+                                     Base::StatusResponse)> StatusHandler;
 
   template <typename Handler>
   void Status(uint8_t servo, Handler handler) {
@@ -579,10 +584,11 @@ class HerkuleX : public HerkuleXProtocol {
     to_send.command = Command::STAT;
 
     this->SendReceivePacket(
-        to_send, std::bind(&HerkuleX::HandleStatusResponse, this,
-                           std::placeholders::_1,
-                           std::placeholders::_2,
-                           to_send, StatusHandler(handler)));
+        to_send,
+        [this, to_send, handler=std::move(handler)](
+            const auto& _1, const auto& _2) mutable {
+          this->HandleStatusResponse(_1, _2, to_send, std::move(handler));
+        });
   }
 
   void HandleStatusResponse(
@@ -591,7 +597,7 @@ class HerkuleX : public HerkuleXProtocol {
       Base::Packet to_send,
       StatusHandler handler) {
     auto post_error = [&](mjlib::base::error_code ec) {
-      this->Post(std::bind(handler, ec, Base::StatusResponse()));
+      this->Post(std::bind(std::move(handler), ec, Base::StatusResponse()));
     };
 
     if (ec) {
@@ -637,7 +643,7 @@ class HerkuleX : public HerkuleXProtocol {
     to_send.servo = servo;
     to_send.command = Command::REBOOT;
 
-    this->SendPacket(to_send, mjlib::io::ErrorCallback(handler));
+    this->SendPacket(to_send, mjlib::io::ErrorCallback(std::move(handler)));
   }
 
   template <typename Handler>
@@ -657,7 +663,7 @@ class HerkuleX : public HerkuleXProtocol {
 
     to_send.data = ostr.str();
 
-    this->SendPacket(to_send, mjlib::io::ErrorCallback(handler));
+    this->SendPacket(to_send, mjlib::io::ErrorCallback(std::move(handler)));
   }
 
   template <typename T, typename Handler>
@@ -673,27 +679,28 @@ class HerkuleX : public HerkuleXProtocol {
     }
 
     MemWrite(command, servo, field.position, ostr.str(),
-             mjlib::io::ErrorCallback(handler));
+             mjlib::io::ErrorCallback(std::move(handler)));
   }
 
   template <typename T, typename Handler>
   void RamWrite(uint8_t servo, T field, int value, Handler handler) {
-    MemWriteValue(Command::RAM_WRITE, servo, field, value, handler);
+    MemWriteValue(Command::RAM_WRITE, servo, field, value, std::move(handler));
   }
 
   template <typename T, typename Handler>
   void EepWrite(uint8_t servo, T field, int value, Handler handler) {
-    MemWriteValue(Command::EEP_WRITE, servo, field, value, handler);
+    MemWriteValue(Command::EEP_WRITE, servo, field, value, std::move(handler));
   }
 
-  typedef std::function<void (mjlib::base::error_code, int)> IntHandler;
+  typedef fu2::unique_function<void (mjlib::base::error_code, int)> IntHandler;
 
   template <typename T, typename Handler>
   void MemReadValue(uint8_t command, uint8_t servo, T field,
                     Handler handler) {
     MemRead(
         command, servo, field.position, field.length,
-        [field, handler](mjlib::base::error_code ec, MemReadResponse response) mutable {
+        [field, handler=std::move(handler)](mjlib::base::error_code ec,
+                                            MemReadResponse response) mutable {
           if (ec) {
             handler(ec, 0);
             return;
@@ -712,12 +719,12 @@ class HerkuleX : public HerkuleXProtocol {
 
   template <typename T, typename Handler>
   void RamRead(uint8_t servo, T field, Handler handler) {
-    MemReadValue(Command::RAM_READ, servo, field, handler);
+    MemReadValue(Command::RAM_READ, servo, field, std::move(handler));
   }
 
   template <typename T, typename Handler>
   void EepRead(uint8_t servo, T field, Handler handler) {
-    MemReadValue(Command::EEP_READ, servo, field, handler);
+    MemReadValue(Command::EEP_READ, servo, field, std::move(handler));
   }
 
   template <typename Targets, typename Handler>
@@ -745,7 +752,7 @@ class HerkuleX : public HerkuleXProtocol {
     to_send.data = data.str();
     to_send.command = Command::S_JOG;
 
-    this->SendPacket(to_send, mjlib::io::ErrorCallback(handler));
+    this->SendPacket(to_send, mjlib::io::ErrorCallback(std::move(handler)));
   }
 
   static mjlib::base::error_code MakeSynchronizationError(const std::string& message) {

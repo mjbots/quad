@@ -118,7 +118,7 @@ class WebServer::Impl {
 
     boost::asio::post(
         executor_,
-        std::bind(callback, mjlib::base::error_code()));
+        std::bind(std::move(callback), mjlib::base::error_code()));
   }
 
   void ChildRun() {
@@ -346,7 +346,7 @@ WebServer::WebServer(const boost::asio::executor& executor,
 WebServer::~WebServer() {}
 
 void WebServer::AsyncStart(mjlib::io::ErrorCallback callback) {
-  impl_->AsyncStart(callback);
+  impl_->AsyncStart(std::move(callback));
 }
 
 }

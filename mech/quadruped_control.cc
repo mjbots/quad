@@ -324,7 +324,7 @@ class QuadrupedControl::Impl {
 
     boost::asio::post(
         executor_,
-        std::bind(callback, mjlib::base::error_code()));
+        std::bind(std::move(callback), mjlib::base::error_code()));
   }
 
   void Command(const QC& command) {
@@ -346,8 +346,8 @@ class QuadrupedControl::Impl {
   void PopulateStatusRequest() {
     status_request_ = {};
     for (const auto& joint : config_.joints) {
-      status_request_.requests.push_back({});
-      auto& current = status_request_.requests.back();
+      status_request_.push_back({});
+      auto& current = status_request_.back();
       current.id = joint.id;
 
       // Read mode, position, velocity, and torque.
@@ -372,8 +372,8 @@ class QuadrupedControl::Impl {
     outstanding_ = true;
 
     status_reply_ = {};
-    client_->AsyncRegister(&status_request_, &status_reply_,
-                           std::bind(&Impl::HandleStatus, this, pl::_1));
+    client_->AsyncRegisterMultiple(status_request_, &status_reply_,
+                                   std::bind(&Impl::HandleStatus, this, pl::_1));
   }
 
   void HandleStatus(const mjlib::base::error_code& ec) {
@@ -403,10 +403,10 @@ class QuadrupedControl::Impl {
 
     timestamps_.control_done = Now();
 
-    if (!client_command_.requests.empty()) {
+    if (!client_command_.empty()) {
       client_command_reply_ = {};
-      client_->AsyncRegister(&client_command_, &client_command_reply_,
-                             std::bind(&Impl::HandleCommand, this, pl::_1));
+      client_->AsyncRegisterMultiple(client_command_, &client_command_reply_,
+                                     std::bind(&Impl::HandleCommand, this, pl::_1));
     } else {
       HandleCommand({});
     }
@@ -1410,8 +1410,8 @@ class QuadrupedControl::Impl {
 
     client_command_ = {};
     for (const auto& joint : control_log_->joints) {
-      client_command_.requests.push_back({});
-      auto& request = client_command_.requests.back();
+      client_command_.push_back({});
+      auto& request = client_command_.back();
       request.id = joint.id;
 
       constexpr double kInf = std::numeric_limits<double>::infinity();
@@ -1613,10 +1613,11 @@ class QuadrupedControl::Impl {
 
   Client* client_ = nullptr;
 
-  Client::Request status_request_;
+  using Request = std::vector<Client::IdRequest>;
+  Request status_request_;
   Client::Reply status_reply_;
 
-  Client::Request client_command_;
+  Request client_command_;
   Client::Reply client_command_reply_;
 
   bool outstanding_ = false;
@@ -1644,7 +1645,7 @@ QuadrupedControl::QuadrupedControl(base::Context& context)
 QuadrupedControl::~QuadrupedControl() {}
 
 void QuadrupedControl::AsyncStart(mjlib::io::ErrorCallback callback) {
-  impl_->AsyncStart(callback);
+  impl_->AsyncStart(std::move(callback));
 }
 
 void QuadrupedControl::SetClient(MultiplexClient::Client* client) {

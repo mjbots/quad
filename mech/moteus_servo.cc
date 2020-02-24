@@ -178,7 +178,7 @@ class MoteusServo::Impl {
   void AsyncStart(mjlib::io::ErrorCallback handler) {
     boost::asio::post(
         executor_,
-        std::bind(handler, mjlib::base::error_code()));
+        std::bind(std::move(handler), mjlib::base::error_code()));
   }
 
   void SetPose(const std::vector<Joint>& joints,
@@ -195,7 +195,7 @@ class MoteusServo::Impl {
       command_signal_(&command);
     }
 
-    ReallySetPose(joints, handler);
+    ReallySetPose(joints, std::move(handler));
   }
 
   void ReallySetPose(const std::vector<Joint>& joints,
@@ -205,15 +205,15 @@ class MoteusServo::Impl {
       log_.debug("skipping SetPose because we are backed up");
       boost::asio::post(
           executor_,
-          std::bind(handler, boost::asio::error::operation_aborted));
+          std::bind(std::move(handler), boost::asio::error::operation_aborted));
       return;
     }
 
-    request_.requests.clear();
+    requests_.clear();
 
     for (const auto& joint : joints) {
-      request_.requests.push_back({});
-      auto& request_pair = request_.requests.back();
+      requests_.push_back({});
+      auto& request_pair = requests_.back();
       request_pair.id = joint.address;
       auto& request = request_pair.request;
 
@@ -243,10 +243,13 @@ class MoteusServo::Impl {
     }
 
     outstanding_ = true;
-    mp_client_->AsyncRegister(
-        &request_,
+
+    mp_client_->AsyncRegisterMultiple(
+        requests_,
         nullptr,
-        std::bind(&Impl::HandleSetPose, this, pl::_1, handler));
+        [this, handler=std::move(handler)](const auto& ec) mutable {
+          this->HandleSetPose(ec, std::move(handler));
+        });
   }
 
   void HandleSetPose(const mjlib::base::error_code& ec,
@@ -262,9 +265,9 @@ class MoteusServo::Impl {
                    mjlib::io::ErrorCallback handler) {
     if (!mp_client_) { return; }
 
-    request_.requests.resize(ids.size());
+    requests_.resize(ids.size());
     for (size_t i = 0; i < ids.size(); i++) {
-      auto& request_pair = request_.requests[i];
+      auto& request_pair = requests_[i];
       request_pair.id = ids[i];
 
       const auto value = [&]() {
@@ -279,10 +282,10 @@ class MoteusServo::Impl {
           moteus::kMode, static_cast<int8_t>(value));
     };
 
-    mp_client_->AsyncRegister(
-        &request_,
+    mp_client_->AsyncRegisterMultiple(
+        requests_,
         nullptr,
-        handler);
+        std::move(handler));
   }
 
   void GetStatus(const std::vector<int>& ids,
@@ -290,10 +293,10 @@ class MoteusServo::Impl {
                  StatusHandler handler) {
 
     read_reply_.replies.clear();
-    read_request_.requests.resize(ids.size());
+    read_requests_.resize(ids.size());
 
     for (size_t i =0; i < ids.size(); i++) {
-      auto& request_pair = read_request_.requests[i];
+      auto& request_pair = read_requests_[i];
       request_pair.id = ids[i];
       auto& request = request_pair.request;
       request = {};
@@ -317,10 +320,10 @@ class MoteusServo::Impl {
       request.ReadSingle(moteus::kFault, kInt32);
     }
 
-    mp_client_->AsyncRegister(
-        &read_request_,
+    mp_client_->AsyncRegisterMultiple(
+        read_requests_,
         &read_reply_,
-        std::bind(&Impl::HandleStatus, this, pl::_1, handler));
+        std::bind(&Impl::HandleStatus, this, pl::_1, std::move(handler)));
   }
 
   void HandleStatus(const mjlib::base::error_code& ec,
@@ -329,7 +332,7 @@ class MoteusServo::Impl {
       log_.debug(fmt::format("reply with error: {}", ec.message()));
       boost::asio::post(
           executor_,
-          std::bind(handler, ec, std::vector<JointStatus>()));
+          std::bind(std::move(handler), ec, std::vector<JointStatus>()));
       return;
     }
 
@@ -347,7 +350,7 @@ class MoteusServo::Impl {
 
     boost::asio::post(
         executor_,
-        std::bind(handler, ec, result));
+        std::bind(std::move(handler), ec, result));
   }
 
   void Update(PowerState power_state,
@@ -371,10 +374,10 @@ class MoteusServo::Impl {
       }
     };
 
-    request_.requests.resize(command->size());
+    requests_.resize(command->size());
     for (size_t i = 0; i < command->size(); i++) {
       const auto& joint = (*command)[i];
-      auto& request_pair = request_.requests[i];
+      auto& request_pair = requests_[i];
       request_pair.id = joint.address;
       auto& request = request_pair.request;
       request = {};
@@ -389,10 +392,12 @@ class MoteusServo::Impl {
 
     reply_.replies.clear();
 
-    mp_client_->AsyncRegister(
-        &request_,
+    mp_client_->AsyncRegisterMultiple(
+        requests_,
         &reply_,
-        std::bind(&Impl::HandleUpdate, this, pl::_1, output, callback));
+        [this, callback=std::move(callback), output](const auto& ec) mutable {
+          this->HandleUpdate(ec, output, std::move(callback));
+        });
   }
 
   void ReadJoint(const mp::RegisterReply& reply,
@@ -445,7 +450,7 @@ class MoteusServo::Impl {
     if (ec) {
       boost::asio::post(
           executor_,
-          std::bind(callback, ec));
+          std::bind(std::move(callback), ec));
       return;
     }
 
@@ -459,7 +464,7 @@ class MoteusServo::Impl {
 
     boost::asio::post(
         executor_,
-        std::bind(callback, ec));
+        std::bind(std::move(callback), ec));
   }
 
   void PopulateQuery(const StatusOptions& status_options,
@@ -571,10 +576,10 @@ class MoteusServo::Impl {
 
   bool outstanding_ = false;
   using Client = MultiplexClient::Client;
-  Client::Request request_;
+  std::vector<Client::IdRequest> requests_;
   Client::Reply reply_;
 
-  Client::Request read_request_;
+  std::vector<Client::IdRequest> read_requests_;
   Client::Reply read_reply_;
 
   Client* mp_client_ = nullptr;
@@ -595,7 +600,7 @@ boost::program_options::options_description* MoteusServo::options() {
 }
 
 void MoteusServo::AsyncStart(mjlib::io::ErrorCallback handler) {
-  impl_->AsyncStart(handler);
+  impl_->AsyncStart(std::move(handler));
 }
 
 void MoteusServo::SetClient(MultiplexClient::Client* client) {
@@ -604,7 +609,7 @@ void MoteusServo::SetClient(MultiplexClient::Client* client) {
 
 void MoteusServo::SetPose(const std::vector<Joint>& joints,
                           mjlib::io::ErrorCallback handler) {
-  impl_->SetPose(joints, handler);
+  impl_->SetPose(joints, std::move(handler));
 }
 
 void MoteusServo::EnablePower(PowerState power_state,
@@ -612,20 +617,20 @@ void MoteusServo::EnablePower(PowerState power_state,
                               mjlib::io::ErrorCallback handler) {
   auto ids_copy = ids;
   if (ids_copy.empty()) { ids_copy.push_back(moteus::Ids::kBroadcastId); }
-  impl_->EnablePower(power_state, ids_copy, handler);
+  impl_->EnablePower(power_state, ids_copy, std::move(handler));
 }
 
 void MoteusServo::GetStatus(const std::vector<int>& ids,
                             const StatusOptions& status_options,
                             StatusHandler handler) {
-  impl_->GetStatus(ids, status_options, handler);
+  impl_->GetStatus(ids, status_options, std::move(handler));
 }
 
 void MoteusServo::ClearErrors(const std::vector<int>&,
                               mjlib::io::ErrorCallback callback) {
   boost::asio::post(
       impl_->executor_,
-      std::bind(callback, mjlib::base::error_code()));
+      std::bind(std::move(callback), mjlib::base::error_code()));
 }
 
 void MoteusServo::Update(PowerState power_state,
@@ -633,7 +638,7 @@ void MoteusServo::Update(PowerState power_state,
                          const std::vector<Joint>* command,
                          std::vector<JointStatus>* output,
                          mjlib::io::ErrorCallback callback) {
-  impl_->Update(power_state, status_options, command, output, callback);
+  impl_->Update(power_state, status_options, command, output, std::move(callback));
 }
 
 }

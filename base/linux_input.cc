@@ -158,12 +158,13 @@ LinuxInput::Features LinuxInput::features(int ev_type) const {
 void LinuxInput::AsyncRead(Event* event, mjlib::io::ErrorCallback handler) {
   impl_->stream_.async_read_some(
       boost::asio::buffer(&impl_->input_event_, sizeof(impl_->input_event_)),
-      [event, handler, this](mjlib::base::error_code ec, std::size_t size) {
+      [event, handler=std::move(handler), this] (
+          mjlib::base::error_code ec, std::size_t size) mutable {
         if (ec) {
           ec.Append("reading input event");
           boost::asio::post(
               impl_->executor_,
-              std::bind(handler, ec));
+              std::bind(std::move(handler), ec));
           return;
         }
 
@@ -171,7 +172,7 @@ void LinuxInput::AsyncRead(Event* event, mjlib::io::ErrorCallback handler) {
           boost::asio::post(
               impl_->executor_,
               std::bind(
-                  handler,
+                  std::move(handler),
                   mjlib::base::error_code::einval("short read for input event")));
           return;
         }
@@ -190,7 +191,7 @@ void LinuxInput::AsyncRead(Event* event, mjlib::io::ErrorCallback handler) {
 
         boost::asio::post(
             impl_->executor_,
-            std::bind(handler, mjlib::base::error_code()));
+            std::bind(std::move(handler), mjlib::base::error_code()));
       });
 }
 

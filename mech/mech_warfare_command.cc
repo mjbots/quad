@@ -244,7 +244,7 @@ class Commander::Impl {
 
     boost::asio::post(
         executor_,
-        std::bind(handler, mjlib::base::error_code()));
+        std::bind(std::move(handler), mjlib::base::error_code()));
   }
 
   void SendMechMessage(const MechMessage& message) {
@@ -618,7 +618,7 @@ Commander::Commander(const boost::asio::executor& executor)
 Commander::~Commander() {};
 
 void Commander::AsyncStart(mjlib::io::ErrorCallback handler) {
-  impl_->AsyncStart(handler);
+  impl_->AsyncStart(std::move(handler));
 }
 
 void Commander::SendMechMessage(const MechMessage& msg) {

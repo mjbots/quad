@@ -92,10 +92,10 @@ class GstMainLoop::Impl :
     parameters_ = parent_->parameters_;
 
     std::lock_guard<std::mutex> guard(thread_mutex_);
-    child_ = std::thread(std::bind(&Impl::Run, shared_from_this(), handler));
+    child_ = std::thread(std::bind(&Impl::Run, shared_from_this()));
     boost::asio::post(
         executor_,
-        std::bind(handler, mjlib::base::error_code()));
+        std::bind(std::move(handler), mjlib::base::error_code()));
   }
 
   void WaitForQuit() {
@@ -174,7 +174,7 @@ class GstMainLoop::Impl :
   }
 
  private:
-  void Run(mjlib::io::ErrorCallback) {
+  void Run() {
     {
       std::lock_guard<std::mutex> guard(thread_mutex_);
       child_id_ = child_.get_id();
@@ -360,7 +360,7 @@ void GstMainLoop::SignalReady() {
 }
 
 void GstMainLoop::AsyncStart(mjlib::io::ErrorCallback handler) {
-  impl_->AsyncStart(handler);
+  impl_->AsyncStart(std::move(handler));
 }
 
 

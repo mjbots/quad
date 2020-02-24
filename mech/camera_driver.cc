@@ -337,7 +337,7 @@ class CameraDriver::Impl : boost::noncopyable {
                                     i_preset, kMaxPresets);
       boost::asio::post(
           parent_executor_,
-          std::bind(handler, mjlib::base::error_code::einval(msg)));
+          std::bind(std::move(handler), mjlib::base::error_code::einval(msg)));
       return;
     }
     const Preset& preset = kPresets[i_preset];
@@ -354,7 +354,7 @@ class CameraDriver::Impl : boost::noncopyable {
 
     boost::asio::post(
         parent_executor_,
-        std::bind(handler, mjlib::base::error_code()));
+        std::bind(std::move(handler), mjlib::base::error_code()));
   }
 
   void AddFrameConsumer(std::weak_ptr<CameraFrameConsumer> c) {
@@ -707,7 +707,7 @@ void CameraDriver::AddFrameConsumer(std::weak_ptr<CameraFrameConsumer> c) {
 }
 
 void CameraDriver::AsyncStart(mjlib::io::ErrorCallback handler) {
-  impl_->AsyncStart(handler);
+  impl_->AsyncStart(std::move(handler));
 }
 
 void CameraDriver::HandleGstReady(GstMainLoopRef& loop_ref) {

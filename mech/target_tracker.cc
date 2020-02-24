@@ -50,7 +50,7 @@ class TargetTracker::Impl : public CameraFrameConsumer {
 
     boost::asio::post(
         executor_,
-        std::bind(handler, mjlib::base::error_code()));
+        std::bind(std::move(handler), mjlib::base::error_code()));
   }
 
   // The CameraFrameConsumer interface.
@@ -192,7 +192,7 @@ TargetTracker::TargetTracker(base::Context& context)
 TargetTracker::~TargetTracker() {}
 
 void TargetTracker::AsyncStart(mjlib::io::ErrorCallback handler) {
-  impl_->AsyncStart(handler);
+  impl_->AsyncStart(std::move(handler));
 }
 
 std::weak_ptr<CameraFrameConsumer> TargetTracker::get_frame_consumer() {

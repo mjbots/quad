@@ -243,7 +243,7 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
 
     boost::asio::post(
         executor_,
-        std::bind(handler, mjlib::base::error_code()));
+        std::bind(std::move(handler), mjlib::base::error_code()));
   }
 
   void HandleVideoPacket(uint8_t* data, int video_len, bool key_frame) {
@@ -519,7 +519,7 @@ McastVideoLinkTransmitter::McastVideoLinkTransmitter(base::Context& context)
 McastVideoLinkTransmitter::~McastVideoLinkTransmitter() {}
 
 void McastVideoLinkTransmitter::AsyncStart(mjlib::io::ErrorCallback handler) {
-  impl_->AsyncStart(handler);
+  impl_->AsyncStart(std::move(handler));
 }
 
 std::weak_ptr<CameraFrameConsumer
@@ -717,7 +717,7 @@ class McastVideoLinkReceiver::Impl : boost::noncopyable {
 
     boost::asio::post(
         executor_,
-        std::bind(handler, mjlib::base::error_code()));
+        std::bind(std::move(handler), mjlib::base::error_code()));
   }
 
   DataPacketSignal* packet_signal() { return &packet_signal_; }
@@ -853,7 +853,7 @@ McastVideoLinkReceiver::McastVideoLinkReceiver(base::Context& context)
 McastVideoLinkReceiver::~McastVideoLinkReceiver() {}
 
 void McastVideoLinkReceiver::AsyncStart(mjlib::io::ErrorCallback handler) {
-  impl_->AsyncStart(handler);
+  impl_->AsyncStart(std::move(handler));
 }
 
 void McastVideoLinkReceiver::SendControlCommand(const std::string& command) {

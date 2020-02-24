@@ -44,8 +44,11 @@ class SignalResult : boost::noncopyable {
       mjlib::io::DeadlineTimer timer;
       bool active = true;
       boost::signals2::connection connection;
+      Handler handler;
 
-      Context(const boost::asio::executor& executor) : timer(executor) {}
+      Context(const boost::asio::executor& executor, Handler handler_in)
+          : timer(executor),
+            handler(std::move(handler_in)) {}
     };
 
     // TODO jpieper: It would be nice to implement this in a way that
@@ -56,27 +59,25 @@ class SignalResult : boost::noncopyable {
     // along with its stack by the time the canceled timer callback is
     // invoked, this is the only way I can think of to ensure it
     // doesn't access anything it shouldn't.
-    std::shared_ptr<Context> context(new Context(executor));
+    std::shared_ptr<Context> context(new Context(executor, std::move(handler)));
 
     context->timer.expires_from_now(ConvertSecondsToDuration(timeout_s));
     context->timer.async_wait(
-        [handler, context](
-            boost::system::error_code ec) mutable -> void {
+        [context](boost::system::error_code ec) mutable -> void {
         if (ec == boost::asio::error::operation_aborted) { return; }
         if (!context->active) { return; }
         context->active = false;
         context->connection.disconnect();
         T result{};
-        handler(boost::asio::error::operation_aborted, result);
+        context->handler(boost::asio::error::operation_aborted, result);
       });
 
     context->connection =
-        signal->connect([handler, context](
-                            const T* value) mutable -> void {
+        signal->connect([context](const T* value) mutable -> void {
             if (!context->active) { return; }
             context->active = false;
             context->connection.disconnect();
-            handler(boost::system::error_code(), *value);
+            context->handler(boost::system::error_code(), *value);
           });
   }
 };

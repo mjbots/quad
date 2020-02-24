@@ -48,9 +48,9 @@ class Quadruped::Impl {
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
-    p_.children.Start([this, callback](auto ec) {
+    p_.children.Start([this, callback=std::move(callback)](auto ec) mutable {
         mjlib::base::FailIf(ec);
-        this->StartDebug(callback);
+        this->StartDebug(std::move(callback));
       });
   }
 
@@ -59,7 +59,7 @@ class Quadruped::Impl {
         debug_stream_,
         std::bind(&Impl::HandleDebugStream, this, pl::_1, pl::_2));
 
-    boost::asio::post(executor_, std::bind(callback,
+    boost::asio::post(executor_, std::bind(std::move(callback),
                                            mjlib::base::error_code()));
   }
 
@@ -91,7 +91,7 @@ Quadruped::Quadruped(base::Context& context)
 Quadruped::~Quadruped() {}
 
 void Quadruped::AsyncStart(mjlib::io::ErrorCallback callback) {
-  impl_->AsyncStart(callback);
+  impl_->AsyncStart(std::move(callback));
 }
 
 Quadruped::Parameters* Quadruped::parameters() {

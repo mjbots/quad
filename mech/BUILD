@@ -60,7 +60,9 @@ cc_library(
         "@gst-libav//:plugins",
         "@gst-rtsp-server//:rtsp-server",
         "@mjlib//mjlib/io:exclusive_command",
-        "@mjlib//mjlib/multiplex:threaded_client",
+        "@mjlib//mjlib/multiplex:asio_client",
+        "@mjlib//mjlib/multiplex:frame",
+        "@mjlib//mjlib/multiplex:register",
         "@opencv//:core",
         "@opencv//:aruco",
         "@opencv//:imgcodecs",
@@ -100,12 +102,6 @@ cc_test(
 cc_binary(
     name = "herkulex_tool",
     srcs = ["herkulex_tool.cc"],
-    deps = [":mech"],
-)
-
-cc_binary(
-    name = "servo_latency_test",
-    srcs = ["servo_latency_test.cc"],
     deps = [":mech"],
 )
 
@@ -217,7 +213,6 @@ pkg_tar(
         ":moteus_tool",
         ":multiplex_tool",
         ":quadruped",
-        ":servo_latency_test",
         ":video_sender_app",
     ],
     files = {

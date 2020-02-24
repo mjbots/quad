@@ -57,16 +57,16 @@ class MultiplexClient::Impl {
 
     boost::asio::post(
         executor_,
-        std::bind(handler, mjlib::base::error_code()));
+        std::bind(std::move(handler), mjlib::base::error_code()));
   }
 
   void ProcessRequests() {
     BOOST_ASSERT(client_);
 
-    for (auto callback : callbacks_) {
+    for (auto& callback : callbacks_) {
       boost::asio::post(
           executor_,
-          [client=client_.get(), callback]() {
+          [client=client_.get(), callback=std::move(callback)]() mutable {
             callback({}, client);
           });
     }
@@ -101,7 +101,7 @@ boost::program_options::options_description* MultiplexClient::options() {
 }
 
 void MultiplexClient::AsyncStart(mjlib::io::ErrorCallback callback) {
-  impl_->AsyncStart(callback);
+  impl_->AsyncStart(std::move(callback));
 }
 
 void MultiplexClient::RequestClient(ClientCallback callback) {
@@ -109,9 +109,9 @@ void MultiplexClient::RequestClient(ClientCallback callback) {
     boost::asio::post(
         impl_->executor_,
         std::bind(
-            callback, mjlib::base::error_code(), impl_->client_.get()));
+            std::move(callback), mjlib::base::error_code(), impl_->client_.get()));
   } else {
-    impl_->callbacks_.push_back(callback);
+    impl_->callbacks_.push_back(std::move(callback));
   }
 }
 }

@@ -63,23 +63,23 @@ class ServoSelector : public ServoInterface {
 
   void SetPose(const std::vector<Joint>& data,
                mjlib::io::ErrorCallback handler) override {
-    selected_->SetPose(data, handler);
+    selected_->SetPose(data, std::move(handler));
   }
 
   void EnablePower(PowerState power_state, const std::vector<int>& ids,
                    mjlib::io::ErrorCallback handler) override {
-    selected_->EnablePower(power_state, ids, handler);
+    selected_->EnablePower(power_state, ids, std::move(handler));
   }
 
   void GetStatus(const std::vector<int>& ids,
                  const StatusOptions& status_options,
                  StatusHandler handler) override {
-    selected_->GetStatus(ids, status_options, handler);
+    selected_->GetStatus(ids, status_options, std::move(handler));
   }
 
   void ClearErrors(const std::vector<int>& ids,
                    mjlib::io::ErrorCallback callback) override {
-    selected_->ClearErrors(ids, callback);
+    selected_->ClearErrors(ids, std::move(callback));
   }
 
   void Update(
@@ -89,7 +89,7 @@ class ServoSelector : public ServoInterface {
       std::vector<JointStatus>* result,
       mjlib::io::ErrorCallback callback) override {
     selected_->Update(power_state, status_options, command,
-                      result, callback);
+                      result, std::move(callback));
   }
 
  private:

@@ -88,7 +88,7 @@ class WebControl::Impl {
     std::cout << "Starting web server\n";
     web_server_ = std::make_unique<WebServer>(executor_, server_options);
 
-    web_server_->AsyncStart(callback);
+    web_server_->AsyncStart(std::move(callback));
   }
 
   void HandleControlWebsocket(WebServer::WebsocketStream stream) {
@@ -216,7 +216,7 @@ WebControl::WebControl(const boost::asio::executor& executor,
 WebControl::~WebControl() {}
 
 void WebControl::AsyncStart(mjlib::io::ErrorCallback callback) {
-  impl_->AsyncStart(callback);
+  impl_->AsyncStart(std::move(callback));
 }
 
 boost::program_options::options_description* WebControl::options() {

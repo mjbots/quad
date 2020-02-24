@@ -36,6 +36,7 @@
 #include <fmt/format.h>
 
 #include "mjlib/base/buffer_stream.h"
+#include "mjlib/base/fail.h"
 #include "mjlib/base/system_error.h"
 #include "mjlib/io/deadline_timer.h"
 #include "mjlib/multiplex/frame.h"
@@ -91,14 +92,47 @@ class Rpi3ThreadedClient::Impl {
     startup_promise_.set_value(true);
   }
 
-  void AsyncRegister(const Request* request,
-                     Reply* reply,
+  void AsyncStart(mjlib::io::ErrorCallback callback) {
+    boost::asio::post(
+        executor_,
+        std::bind(std::move(callback), mjlib::base::error_code()));
+  }
+
+  void AsyncRegister(const IdRequest& request,
+                     SingleReply* reply,
                      mjlib::io::ErrorCallback callback) {
+    AssertParent();
+    single_request_ = { request };
+    single_reply_ = {};
+
+    auto continuation =
+        [this, reply, callback=std::move(callback)](const auto& ec) mutable {
+      mjlib::base::FailIf(ec);
+
+      BOOST_ASSERT(single_reply_.replies.size() == 1);
+      *reply = single_reply_.replies.front();
+
+      callback(ec);
+    };
+
+    boost::asio::post(
+        child_context_,
+        [this, continuation=std::move(continuation)]() mutable {
+          this->ThreadAsyncRegister(&single_request_, &single_reply_,
+                                    std::move(continuation));
+        });
+  }
+
+  void AsyncRegisterMultiple(
+      const std::vector<IdRequest>& request,
+      Reply* reply,
+      mjlib::io::ErrorCallback callback) {
     AssertParent();
     boost::asio::post(
         child_context_,
-        std::bind(&Impl::ThreadAsyncRegister,
-                  this, request, reply, callback));
+        [this, callback=std::move(callback), &request, reply]() mutable {
+          this->ThreadAsyncRegister(&request, reply, std::move(callback));
+        });
   }
 
   Stats stats() const {
@@ -127,20 +161,24 @@ class Rpi3ThreadedClient::Impl {
                          mjlib::io::ReadHandler handler) override {
       boost::asio::post(
           parent_->child_context_,
-          [self=shared_from_this(), buffers, handler]() {
+          [self=shared_from_this(), buffers,
+           handler=std::move(handler)]() mutable {
             const auto bytes_read =
                 self->parent_->ThreadTunnelPoll(
                     self->id_, self->channel_, buffers);
             if (bytes_read > 0) {
               boost::asio::post(
-                  self->parent_->executor_, [self, handler, bytes_read]() {
+                  self->parent_->executor_,
+                  [self, handler=std::move(handler), bytes_read]() mutable {
                     handler(mjlib::base::error_code(), bytes_read);
                   });
             } else {
               self->timer_.expires_from_now(self->options_.poll_rate);
               self->timer_.async_wait(
-                  std::bind(&Tunnel::HandlePoll, self, pl::_1,
-                            buffers, handler));
+                  [self, handler=std::move(handler), buffers](
+                      const auto& ec) mutable {
+                    self->HandlePoll(ec, buffers, std::move(handler));
+                  });
             }
           });
     }
@@ -149,9 +187,9 @@ class Rpi3ThreadedClient::Impl {
                           mjlib::io::WriteHandler handler) override {
       boost::asio::post(
           parent_->child_context_,
-          [self=shared_from_this(), buffers, handler]() {
+          [self=shared_from_this(), buffers, handler=std::move(handler)]() mutable {
             self->parent_->ThreadTunnelWrite(
-                self->id_, self->channel_, buffers, handler);
+                self->id_, self->channel_, buffers, std::move(handler));
           });
     }
 
@@ -172,7 +210,7 @@ class Rpi3ThreadedClient::Impl {
         return;
       }
 
-      async_read_some(buffers, handler);
+      async_read_some(buffers, std::move(handler));
     }
 
     Impl* const parent_;
@@ -357,22 +395,22 @@ class Rpi3ThreadedClient::Impl {
 
     boost::asio::post(
         executor_,
-        std::bind(callback, mjlib::base::error_code(), size));
+        std::bind(std::move(callback), mjlib::base::error_code(), size));
   }
 
-  void ThreadAsyncRegister(const Request* requests,
+  void ThreadAsyncRegister(const std::vector<IdRequest>* requests,
                            Reply* reply,
                            mjlib::io::ErrorCallback callback) {
     AssertThread();
 
-    MJ_ASSERT(!requests->requests.empty());
+    MJ_ASSERT(!requests->empty());
 
     FrameItem* prev_frame = nullptr;
     FrameItem* this_frame = &frame_item1_;
     FrameItem* next_frame = &frame_item2_;
 
     auto encode_frame = [&](FrameItem* frame_item,
-                            const SingleRequest& next_request) {
+                            const IdRequest& next_request) {
       // Now we encode the next frame.
       frame_item->frame.source_id = 0;
       frame_item->frame.dest_id = next_request.id;
@@ -384,16 +422,16 @@ class Rpi3ThreadedClient::Impl {
       frame_item->size = stream.offset();
     };
 
-    encode_frame(this_frame, requests->requests.front());
+    encode_frame(this_frame, requests->front());
 
     // We stick all the processing work we can right after sending a
     // request.  That way it overlaps with the time it takes for the
     // device to respond.
-    for (size_t i = 0; i < requests->requests.size(); i++) {
+    for (size_t i = 0; i < requests->size(); i++) {
       serial_->write({this_frame->encoded, this_frame->size});
 
-      if (i + 1 < requests->requests.size()) {
-        encode_frame(next_frame, requests->requests[i + 1]);
+      if (i + 1 < requests->size()) {
+        encode_frame(next_frame, (*requests)[i + 1]);
       }
 
       // Now we would parse the prior frame.
@@ -428,7 +466,7 @@ class Rpi3ThreadedClient::Impl {
     // Now we can report success.
     boost::asio::post(
         executor_,
-        std::bind(callback, mjlib::base::error_code()));
+        std::bind(std::move(callback), mjlib::base::error_code()));
   }
 
   void ParseFrame(const FrameItem* frame_item, Reply* reply) {
@@ -639,6 +677,9 @@ class Rpi3ThreadedClient::Impl {
   std::atomic<uint64_t> serial_errors_{0};
   std::atomic<uint64_t> extra_found_{0};
 
+  std::vector<IdRequest> single_request_;
+  Reply single_reply_;
+
   // Only accessed from the child thread.
   boost::asio::io_context child_context_;
   std::optional<Rpi3RawUart> serial_;
@@ -652,15 +693,26 @@ class Rpi3ThreadedClient::Impl {
 };
 
 Rpi3ThreadedClient::Rpi3ThreadedClient(const boost::asio::executor& executor,
-                                         const Options& options)
+                                       const Options& options)
     : impl_(std::make_unique<Impl>(executor, options)) {}
 
 Rpi3ThreadedClient::~Rpi3ThreadedClient() {}
 
-void Rpi3ThreadedClient::AsyncRegister(const Request* request,
-                                       Reply* reply,
+void Rpi3ThreadedClient::AsyncStart(mjlib::io::ErrorCallback callback) {
+  impl_->AsyncStart(std::move(callback));
+}
+
+void Rpi3ThreadedClient::AsyncRegister(const IdRequest& request,
+                                       SingleReply* reply,
                                        mjlib::io::ErrorCallback callback) {
-  impl_->AsyncRegister(request, reply, callback);
+  impl_->AsyncRegister(request, reply, std::move(callback));
+}
+
+void Rpi3ThreadedClient::AsyncRegisterMultiple(
+    const std::vector<IdRequest>& request,
+    Reply* reply,
+    mjlib::io::ErrorCallback callback) {
+  impl_->AsyncRegisterMultiple(request, reply, std::move(callback));
 }
 
 Rpi3ThreadedClient::Stats Rpi3ThreadedClient::stats() const {

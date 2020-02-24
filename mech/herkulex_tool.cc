@@ -126,37 +126,42 @@ void MemReadCommand(CommandContext& ctx, mjlib::io::ErrorCallback handler,
                     Servo::Command command) {
   HC::Register reg = ParseRegister(ctx.args);
 
+  fu2::unique_function<void (const mjlib::base::error_code&,
+                             const HerkuleXBase::MemReadResponse&)> cmd =
+      [handler=std::move(handler), ctx, reg](
+          const auto& ec, const auto response) mutable {
+    FailIf(ec);
+
+    std::cout << fmt::format("Servo {}: Address {}: ",
+                             static_cast<int>(ctx.options.address),
+                             static_cast<int>(reg.position));
+    for (char c: response.register_data) {
+      std::cout << fmt::format(" {:02X}", static_cast<int>(c));
+    }
+    if (response.register_data.size() > 1) {
+      int value = 0;
+      for (size_t i = 0; i < response.register_data.size(); i++) {
+        value |= (static_cast<uint8_t>(
+                      response.register_data[i]) << (i * reg.bit_align));
+      }
+
+      if (reg.sign) {
+        const int most_positive = 1 << (reg.bit_align * reg.length - 1);
+        if (value >= most_positive) {
+          value = value - (1 << (reg.bit_align * reg.length));
+        }
+      }
+
+      std::cout << fmt::format(" ({})", value);
+    }
+    std::cout << "\n";
+    handler(ec);
+  };
+
   ctx.servo.MemRead(
       command, ctx.options.address,
       reg.position, reg.length,
-      [handler, ctx, reg](const auto& ec, const auto response) {
-        FailIf(ec);
-
-        std::cout << fmt::format("Servo {}: Address {}: ",
-                                 static_cast<int>(ctx.options.address),
-                                 static_cast<int>(reg.position));
-        for (char c: response.register_data) {
-          std::cout << fmt::format(" {:02X}", static_cast<int>(c));
-        }
-        if (response.register_data.size() > 1) {
-          int value = 0;
-          for (size_t i = 0; i < response.register_data.size(); i++) {
-            value |= (static_cast<uint8_t>(
-                          response.register_data[i]) << (i * reg.bit_align));
-          }
-
-          if (reg.sign) {
-            const int most_positive = 1 << (reg.bit_align * reg.length - 1);
-            if (value >= most_positive) {
-              value = value - (1 << (reg.bit_align * reg.length));
-            }
-          }
-
-          std::cout << fmt::format(" ({})", value);
-        }
-        std::cout << "\n";
-        handler(ec);
-      });
+      std::move(cmd));
 }
 
 void MemWriteCommand(CommandContext& ctx, mjlib::io::ErrorCallback handler,
@@ -177,14 +182,14 @@ void MemWriteCommand(CommandContext& ctx, mjlib::io::ErrorCallback handler,
   }
 
   ctx.servo.MemWrite(command, ctx.options.address,
-                     reg.position, ostr.str(), handler);
+                     reg.position, ostr.str(), std::move(handler));
 }
 
 class EnumerateCommand : public std::enable_shared_from_this<EnumerateCommand> {
  public:
   EnumerateCommand(CommandContext& context, mjlib::io::ErrorCallback handler)
       : context_(context),
-        handler_(handler) {}
+        handler_(std::move(handler)) {}
 
   void Start() {
     if (next_address_ == 254) {
@@ -227,18 +232,20 @@ const std::map<std::string, Command> g_commands = {
         auto timer = std::make_shared<mjlib::io::DeadlineTimer>(ctx.executor);
         double delay_s = std::stod(ctx.args);
         timer->expires_from_now(ConvertSecondsToDuration(delay_s));
-        timer->async_wait([timer, handler](const mjlib::base::error_code& ec) {
+        timer->async_wait([timer, handler=std::move(handler)](
+                              const mjlib::base::error_code& ec) mutable {
             handler(ec);
           });
       } } },
   { "reboot", { kNoArgs, [](CommandContext& ctx, mjlib::io::ErrorCallback handler) {
-        ctx.servo.Reboot(ctx.options.address, handler);
+        ctx.servo.Reboot(ctx.options.address, std::move(handler));
       } } },
   { "status", { kNoArgs, [](CommandContext& ctx, mjlib::io::ErrorCallback handler) {
         ctx.servo.Status(
             ctx.options.address,
-            [handler, address=ctx.options.address](
-                const mjlib::base::error_code& ec, Servo::StatusResponse response) {
+            [handler=std::move(handler), address=ctx.options.address](
+                const mjlib::base::error_code& ec,
+                Servo::StatusResponse response) mutable {
               std::cout << fmt::format("Servo {}: (0x{:02x} 0x{:02x})\n",
                                        static_cast<int>(address),
                                        static_cast<int>(response.reg48),
@@ -249,8 +256,8 @@ const std::map<std::string, Command> g_commands = {
   { "voltage", { kNoArgs, [](CommandContext& ctx, mjlib::io::ErrorCallback handler) {
         ctx.servo.RamRead(
             ctx.options.address, HC().voltage(),
-            [handler, address=ctx.options.address](
-                const mjlib::base::error_code& ec, int value) {
+            [handler=std::move(handler), address=ctx.options.address](
+                const mjlib::base::error_code& ec, int value) mutable {
               std::cout << fmt::format(
                   "Servo {}: {}\n",
                   static_cast<int>(address),
@@ -279,15 +286,15 @@ const std::map<std::string, Command> g_commands = {
         }
 
         ctx.servo.MemWrite(ctx.servo.RAM_WRITE, ctx.options.address,
-                           reg.position, ostr.str(), handler);
+                           reg.position, ostr.str(), std::move(handler));
       } } },
   { "set_address", { kArg, [](CommandContext& ctx, mjlib::io::ErrorCallback handler) {
         int new_address = std::stoi(ctx.args, 0, 0);
         ctx.servo.EepWrite(ctx.options.address, HC::id(),
-                           new_address, handler);
+                           new_address, std::move(handler));
       } } },
   { "enumerate", { kNoArgs, [](CommandContext& ctx, mjlib::io::ErrorCallback handler) {
-        auto command = std::make_shared<EnumerateCommand>(ctx, handler);
+        auto command = std::make_shared<EnumerateCommand>(ctx, std::move(handler));
         command->Start();
       } } },
   { "set_pose", { kArg, [](CommandContext& ctx, mjlib::io::ErrorCallback handler) {
@@ -303,7 +310,7 @@ const std::map<std::string, Command> g_commands = {
                   std::stod(fields.at(1))});
         }
 
-        ctx.servo_interface.SetPose(joints, handler);
+        ctx.servo_interface.SetPose(joints, std::move(handler));
       } } },
   { "list_registers", { kNoArgs, [](CommandContext&, mjlib::io::ErrorCallback handler) {
         HC constants;
@@ -441,7 +448,7 @@ class StdioHandler : public std::enable_shared_from_this<StdioHandler> {
  public:
   StdioHandler(CommandContext& context, mjlib::io::ErrorCallback handler)
       : context_(context),
-        final_handler_(handler) {}
+        final_handler_(std::move(handler)) {}
 
   void Start() {
     boost::asio::async_read_until(
@@ -504,7 +511,7 @@ class StdioHandler : public std::enable_shared_from_this<StdioHandler> {
 };
 
 void DoStdio(CommandContext& ctx, mjlib::io::ErrorCallback handler) {
-  auto stdio = std::make_shared<StdioHandler>(ctx, handler);
+  auto stdio = std::make_shared<StdioHandler>(ctx, std::move(handler));
   stdio->Start();
 }
 }

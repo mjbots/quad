@@ -70,7 +70,7 @@ class HerkuleXServoInterface : public ServoInterface {
           MapAddress(joint.address),
               HerkuleXBase::AngleToCount(get_angle(joint)), 0});
     }
-    servo_->SJog(targets, parameters_.pose_time_s, handler);
+    servo_->SJog(targets, parameters_.pose_time_s, std::move(handler));
   }
 
   virtual void EnablePower(PowerState power_state,
@@ -88,7 +88,7 @@ class HerkuleXServoInterface : public ServoInterface {
     std::vector<int> ids(ids_in);
     if (ids.empty()) { ids.push_back(Servo::BROADCAST); }
 
-    HandlePowerAck(mjlib::base::error_code(), ids, value, handler);
+    HandlePowerAck(mjlib::base::error_code(), ids, value, std::move(handler));
   }
 
   void HandlePowerAck(mjlib::base::error_code ec,
@@ -106,10 +106,11 @@ class HerkuleXServoInterface : public ServoInterface {
     int to_send = new_ids.back();
     new_ids.pop_back();
 
-    servo_->RamWrite(to_send, HC::torque_control(), value,
-                     std::bind(&HerkuleXServoInterface::HandlePowerAck, this,
-                               std::placeholders::_1,
-                               new_ids, value, handler));
+    servo_->RamWrite(
+        to_send, HC::torque_control(), value,
+        [this, new_ids, value, handler=std::move(handler)](const auto& _1) mutable {
+          this->HandlePowerAck(_1, new_ids, value, std::move(handler));
+        });
   }
 
   static std::string FormatIDs(const std::vector<int>& ids) {

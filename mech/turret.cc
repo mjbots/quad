@@ -132,8 +132,8 @@ class Turret::Impl : boost::noncopyable {
     poll_count_++;
 
     if (parameters_.use_moteus_turret) {
-      read_request_.requests.resize(1);
-      auto& request_pair = read_request_.requests.front();
+      read_request_.resize(1);
+      auto& request_pair = read_request_.front();
       request_pair.id = parameters_.gimbal_address;
       auto& request = request_pair.request;
       request = {};
@@ -142,8 +142,8 @@ class Turret::Impl : boost::noncopyable {
 
       read_reply_.replies.clear();
 
-      mp_client_->AsyncRegister(
-          &read_request_,
+      mp_client_->AsyncRegisterMultiple(
+          read_request_,
           &read_reply_,
           std::bind(&Impl::HandleMoteusCurrent, this, pl::_1));
     } else {
@@ -512,14 +512,14 @@ class Turret::Impl : boost::noncopyable {
   void SendRegister(const mp::RegisterRequest& request_in) {
     outstanding_requests_.push_back({});
     auto& request = outstanding_requests_.back();
-    request.requests.resize(1);
-    request.requests[0].id = parameters_.gimbal_address;
-    request.requests[0].request = request_in;
+    request.resize(1);
+    request[0].id = parameters_.gimbal_address;
+    request[0].request = request_in;
 
     auto it = --outstanding_requests_.end();
 
-    mp_client_->AsyncRegister(
-        &*it,
+    mp_client_->AsyncRegisterMultiple(
+        *it,
         nullptr,
         [this, it](const mjlib::base::error_code& ec) {
           if (CheckTemporaryError(ec)) { return; }
@@ -547,9 +547,10 @@ class Turret::Impl : boost::noncopyable {
 
   Data data_;
 
-  Client::Request read_request_;
+  using Request = std::vector<Client::IdRequest>;
+  Request read_request_;
   Client::Reply read_reply_;
-  std::list<Client::Request> outstanding_requests_;
+  std::list<Request> outstanding_requests_;
 };
 
 Turret::Turret(const boost::asio::executor& executor,
@@ -564,7 +565,7 @@ void Turret::AsyncStart(mjlib::io::ErrorCallback handler) {
 
   boost::asio::post(
       impl_->executor_,
-      std::bind(handler, mjlib::base::error_code()));
+      std::bind(std::move(handler), mjlib::base::error_code()));
 }
 
 void Turret::SetMultiplexClient(MultiplexClient::Client* client) {

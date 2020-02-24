@@ -91,12 +91,13 @@ class JumpTest::Impl {
     mjlib::io::AsyncSequence(executor_)
         .Add([this](auto callback) {
             std::cout << "starting children\n";
-            param_->children.Start(callback);
+            param_->children.Start(std::move(callback));
           })
         .Add([this](auto callback) {
             std::cout << "starting mplex\n";
             parent_->m_.multiplex_client->RequestClient(
-                [this, callback](const auto& ec, auto* client) {
+                [this, callback=std::move(callback)](
+                    const auto& ec, auto* client) mutable {
                   std::cout << "got mplex\n";
                   if (ec) {
                     callback(ec);
@@ -116,7 +117,8 @@ class JumpTest::Impl {
             std::cout << "starting stdin\n";
             factory_->AsyncCreate(
                 stdin_options_,
-                [this, callback](const auto& ec, auto stream) {
+                [this, callback=std::move(callback)](
+                    const auto& ec, auto stream) mutable {
                   if (ec) {
                     callback(ec);
                     return;
@@ -127,7 +129,7 @@ class JumpTest::Impl {
                   callback(ec);
                 });
           })
-        .Start(callback);
+        .Start(std::move(callback));
   }
 
   void StartTimer() {
@@ -472,7 +474,7 @@ JumpTest::JumpTest(base::Context& context)
 JumpTest::~JumpTest() {}
 
 void JumpTest::AsyncStart(mjlib::io::ErrorCallback handler) {
-  impl_->AsyncStart(handler);
+  impl_->AsyncStart(std::move(handler));
 }
 
 boost::program_options::options_description* JumpTest::options() {

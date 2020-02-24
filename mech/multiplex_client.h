@@ -45,7 +45,8 @@ class MultiplexClient {
   void AsyncStart(mjlib::io::ErrorCallback);
 
   using Client = Rpi3ThreadedClient;
-  using ClientCallback = std::function<void (const mjlib::base::error_code&, Client*)>;
+  using ClientCallback = fu2::unique_function<
+    void (const mjlib::base::error_code&, Client*)>;
   void RequestClient(ClientCallback);
 
  private:

@@ -119,12 +119,12 @@ class MechWarfare::Impl : boost::noncopyable {
     } catch (mjlib::base::system_error& se) {
       boost::asio::post(
           executor_,
-          std::bind(handler, se.code()));
+          std::bind(std::move(handler), se.code()));
       return;
     }
 
     parent_->parameters_.children.Start(
-        [this, handler](auto ec) {
+        [this, handler=std::move(handler)](auto ec) mutable {
           mjlib::base::FailIf(ec);
           timer_.start(
               mjlib::base::ConvertSecondsToDuration(
@@ -132,7 +132,7 @@ class MechWarfare::Impl : boost::noncopyable {
               std::bind(&Impl::HandleTimer, this, pl::_1));
           boost::asio::post(
               executor_,
-              std::bind(handler, ec));
+              std::bind(std::move(handler), ec));
         });
   }
 
@@ -846,7 +846,7 @@ MechWarfare::MechWarfare(base::Context& context)
 MechWarfare::~MechWarfare() {}
 
 void MechWarfare::AsyncStart(mjlib::io::ErrorCallback handler) {
-  impl_->AsyncStart(handler);
+  impl_->AsyncStart(std::move(handler));
 }
 
 boost::program_options::options_description* MechWarfare::options() {

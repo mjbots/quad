@@ -31,7 +31,7 @@ class ErrorHandlerJoiner
     : public std::enable_shared_from_this<ErrorHandlerJoiner> {
  public:
   ErrorHandlerJoiner(mjlib::io::ErrorCallback handler)
-      : handler_(handler),
+      : handler_(std::move(handler)),
         log_(GetUniqueLogInstance("joiner")) {
   }
 

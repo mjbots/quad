@@ -63,7 +63,7 @@ class VideoControllerApp : boost::noncopyable {
   }
 
   void AsyncStart(mjlib::io::ErrorCallback handler) {
-    parameters_.children.Start(handler);
+    parameters_.children.Start(std::move(handler));
   }
 
   struct Members {

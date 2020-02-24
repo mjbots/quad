@@ -1,4 +1,4 @@
-// Copyright 2019 Josh Pieper, jjp@pobox.com.
+// Copyright 2019-2020 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@
 #include "mjlib/base/visitor.h"
 #include "mjlib/io/async_types.h"
 #include "mjlib/io/async_stream.h"
+#include "mjlib/multiplex/asio_client.h"
 #include "mjlib/multiplex/register.h"
 
 namespace mjmech {
@@ -35,7 +36,7 @@ namespace mech {
 /// This allows for less overall latency than the asio approach,
 /// especially when multiple back to back queries are made such as
 /// when commanding multiple devices.
-class Rpi3ThreadedClient {
+class Rpi3ThreadedClient : public mjlib::multiplex::AsioClient {
  public:
   struct Options {
     int baud_rate = 3000000;
@@ -62,27 +63,16 @@ class Rpi3ThreadedClient {
   Rpi3ThreadedClient(const boost::asio::executor&, const Options&);
   ~Rpi3ThreadedClient();
 
-  struct SingleRequest {
-    uint8_t id = 0;
-    mjlib::multiplex::RegisterRequest request;
-  };
-
-  struct Request {
-    std::vector<SingleRequest> requests;
-  };
-
-  struct SingleReply {
-    uint8_t id = 0;
-    mjlib::multiplex::RegisterReply reply;
-  };
-
-  struct Reply {
-    std::vector<SingleReply> replies;
-  };
+  void AsyncStart(mjlib::io::ErrorCallback);
 
   /// Request a request be made to one or more servos (and optionally
   /// have a reply sent back).
-  void AsyncRegister(const Request*, Reply*, mjlib::io::ErrorCallback);
+  void AsyncRegister(const IdRequest&, SingleReply*,
+                     mjlib::io::ErrorCallback) override;
+
+  void AsyncRegisterMultiple(const std::vector<IdRequest>&,
+                             Reply*,
+                             mjlib::io::ErrorCallback) override;
 
   struct Stats {
     uint64_t checksum_errors = 0;
@@ -102,18 +92,10 @@ class Rpi3ThreadedClient {
   };
   Stats stats() const;
 
-  struct TunnelOptions {
-    // Poll this often for data to be received.
-    boost::posix_time::time_duration poll_rate =
-        boost::posix_time::milliseconds(10);
-
-    TunnelOptions() {}
-  };
-
   mjlib::io::SharedStream MakeTunnel(
       uint8_t id,
       uint32_t channel,
-      const TunnelOptions& options);
+      const TunnelOptions& options) override;
 
  private:
   class Impl;

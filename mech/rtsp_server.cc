@@ -67,7 +67,7 @@ class RtspServer::Impl : boost::noncopyable {
 
     boost::asio::post(
         executor_,
-        std::bind(handler, mjlib::base::error_code()));
+        std::bind(std::move(handler), mjlib::base::error_code()));
   }
 
   void HandleGstReady(GstMainLoopRef& ref) {
@@ -472,7 +472,7 @@ std::weak_ptr<CameraFrameConsumer> RtspServer::get_frame_consumer() {
 }
 
 void RtspServer::AsyncStart(mjlib::io::ErrorCallback handler) {
-  impl_->AsyncStart(handler);
+  impl_->AsyncStart(std::move(handler));
 }
 
 }

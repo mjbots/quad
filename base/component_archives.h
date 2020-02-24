@@ -51,7 +51,7 @@ struct StartArchive {
   StartArchive(std::map<std::string, bool>& enabled,
                mjlib::io::ErrorCallback handler)
       : enabled(enabled),
-        joiner(std::make_shared<ErrorHandlerJoiner>(handler)) {}
+        joiner(std::make_shared<ErrorHandlerJoiner>(std::move(handler))) {}
 
   template <typename T>
   StartArchive& Accept(T* value) {
@@ -99,7 +99,7 @@ struct ComponentParameters {
   }
 
   void Start(mjlib::io::ErrorCallback handler) {
-    StartArchive(enabled, handler).Accept(members_);
+    StartArchive(enabled, std::move(handler)).Accept(members_);
   }
 
   Members* const members_;
