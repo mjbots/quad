@@ -92,7 +92,7 @@ int ParseNybble(char c) {
 
 char ParseHexByte(const std::string& hex_byte) {
   BOOST_ASSERT(hex_byte.size() == 2);
-  return ParseNybble(hex_byte[0]) << 8 | ParseNybble(hex_byte[1]);
+  return (ParseNybble(hex_byte[0]) << 4) | ParseNybble(hex_byte[1]);
 }
 
 std::string ReadHex(const std::string& line) {
