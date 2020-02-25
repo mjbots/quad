@@ -27,10 +27,21 @@ class Rpi3HatSpidev : public mjlib::multiplex::AsioClient {
     std::string spidev1 = "/dev/spidev0.0";
     std::string spidev2 = "/dev/spidev0.1";
 
+    // If set to a non-negative number, bind the time sensitive thread
+    // to the given CPU.
+    int cpu_affinity = -1;
+
+    double query_timeout_s = 0.0003;
+
+    int spi_speed_hz = 20000000;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(spidev1));
       a->Visit(MJ_NVP(spidev2));
+      a->Visit(MJ_NVP(cpu_affinity));
+      a->Visit(MJ_NVP(query_timeout_s));
+      a->Visit(MJ_NVP(spi_speed_hz));
     }
   };
 

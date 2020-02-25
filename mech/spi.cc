@@ -30,60 +30,11 @@
 #include "mjlib/base/string_span.h"
 #include "mjlib/base/system_error.h"
 
+#include "mech/spidev.h"
+
 namespace po = boost::program_options;
 
 namespace {
-class SPI {
- public:
-  SPI(const std::string& filename, int speed_hz) {
-    fd_ = ::open(filename.c_str(), O_RDWR);
-    mjlib::base::system_error::throw_if(fd_ < 0, "opening: " + filename);
-
-    xfer_[0].cs_change = 0;
-    xfer_[0].delay_usecs = 0;
-    xfer_[0].speed_hz = speed_hz;
-    xfer_[0].bits_per_word = 8;
-    xfer_[1].cs_change = 0;
-    xfer_[1].delay_usecs = 0;
-    xfer_[1].speed_hz = speed_hz;
-    xfer_[1].bits_per_word = 8;
- }
-
-  ~SPI() {
-    if (fd_ >= 0) {
-      ::close(fd_);
-    }
-  }
-
-  void Write(int address, std::string_view data) {
-    buf_[0] = (address & 0xff00) >> 8;
-    buf_[1] = address & 0xff;
-    BOOST_ASSERT(data.size() + 2 < sizeof(buf_));
-    std::memcpy(&buf_[2], data.data(), data.size());
-    xfer_[0].len = 2 + data.size();
-    xfer_[0].tx_buf = reinterpret_cast<uint64_t>(buf_);
-
-    const int status = ::ioctl(fd_, SPI_IOC_MESSAGE(1), xfer_);
-    mjlib::base::system_error::throw_if(status < 0, "writing to SPI");
-  }
-
-  void Read(int address, mjlib::base::string_span data) {
-    buf_[0] = (address & 0xff00) >> 8;
-    buf_[1] = address & 0xff;
-    xfer_[0].tx_buf = reinterpret_cast<uint64_t>(buf_);
-    xfer_[0].len = 2;
-    xfer_[1].rx_buf = reinterpret_cast<uint64_t>(data.data());
-    xfer_[1].len = data.size();
-
-    const int status = ::ioctl(fd_, SPI_IOC_MESSAGE(2), xfer_);
-    mjlib::base::system_error::throw_if(status < 0, "reading from SPI");
-  }
-
-  int fd_ = -1;
-  struct spi_ioc_transfer xfer_[2] = {};
-  uint8_t buf_[1024] = {};
-};
-
 int ParseNybble(char c) {
   if (c >= '0' && c <= '9') { return c - '0'; }
   if (c >= 'a' && c <= 'f') { return (c - 'a') + 10; }
@@ -112,7 +63,7 @@ std::string FormatHex(const std::string_view data) {
   return result;
 }
 
-void RunConsole(SPI* spi) {
+void RunInteractive(mjmech::mech::SpiDev* spi) {
   while (std::cin) {
     std::string line;
     std::getline(std::cin, line);
@@ -174,10 +125,10 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  SPI spi(spi_device, speed_hz);
+  mjmech::mech::SpiDev spi(spi_device, speed_hz);
 
   if (interactive) {
-    RunConsole(&spi);
+    RunInteractive(&spi);
   } else if (!write_hex.empty()) {
     spi.Write(address, ReadHex(write_hex));
   } else if (read_bytes != 0) {

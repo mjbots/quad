@@ -206,6 +206,7 @@ cc_binary(
     name = "spi",
     srcs = ["spi.cc"],
     deps = [
+        ":mech",
         "@boost//:program_options",
         "@fmt",
         "@mjlib//mjlib/base:string_span",
