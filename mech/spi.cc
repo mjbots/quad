@@ -24,6 +24,7 @@
 
 #include <fmt/format.h>
 
+#include <boost/algorithm/string.hpp>
 #include <boost/program_options.hpp>
 
 #include "mjlib/base/string_span.h"
@@ -110,6 +111,38 @@ std::string FormatHex(const std::string_view data) {
   }
   return result;
 }
+
+void RunConsole(SPI* spi) {
+  while (std::cin) {
+    std::string line;
+    std::getline(std::cin, line);
+    boost::trim(line);
+    if (line.empty()) { continue; }
+
+    std::vector<std::string> fields;
+    boost::split(fields, line, boost::is_any_of(" "));
+    if (fields.size() < 3) {
+      std::cerr << "not enough fields\n";
+      continue;
+    }
+
+    const auto cmd = fields[0];
+    if (cmd == "r") {
+      const auto address = std::stoi(fields[1]);
+      const auto size = std::stoi(fields[2]);
+      std::vector<char> readbuf;
+      readbuf.resize(size);
+      spi->Read(address, mjlib::base::string_span(&readbuf[0], readbuf.size()));
+      std::cout << FormatHex(std::string_view(&readbuf[0], readbuf.size())) << "\n";
+    } else if (cmd == "w") {
+      const auto address = std::stoi(fields[1]);
+      const auto data = ReadHex(fields[2]);
+      spi->Write(address, data);
+    } else {
+      std::cerr << "unknown command\n";
+    }
+  }
+}
 }
 
 int main(int argc, char** argv) {
@@ -118,6 +151,7 @@ int main(int argc, char** argv) {
   int address = 1;
   std::string write_hex;
   size_t read_bytes = 0;
+  bool interactive = false;
 
   po::options_description desc("Allowable options");
 
@@ -128,6 +162,7 @@ int main(int argc, char** argv) {
       ("speed,s", po::value(&speed_hz), "speed in Hz")
       ("write,w", po::value(&write_hex), "data to write in hex")
       ("read,r", po::value(&read_bytes), "bytes to read")
+      ("interactive,i", po::bool_switch(&interactive), "")
       ;
 
   po::variables_map vm;
@@ -141,7 +176,9 @@ int main(int argc, char** argv) {
 
   SPI spi(spi_device, speed_hz);
 
-  if (!write_hex.empty()) {
+  if (interactive) {
+    RunConsole(&spi);
+  } else if (!write_hex.empty()) {
     spi.Write(address, ReadHex(write_hex));
   } else if (read_bytes != 0) {
     std::vector<char> readbuf;
