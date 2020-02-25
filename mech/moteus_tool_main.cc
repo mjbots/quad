@@ -17,6 +17,7 @@
 #include "mjlib/io/selector.h"
 #include "mjlib/multiplex/asio_client.h"
 
+#include "mech/rpi3_hat_spidev.h"
 #include "mech/rpi3_threaded_client.h"
 
 int main(int argc, char** argv) {
@@ -24,6 +25,7 @@ int main(int argc, char** argv) {
   mjlib::io::Selector<mjlib::multiplex::AsioClient> client_selector{
     context.get_executor(), "client_type"};
   client_selector.Register<mjmech::mech::Rpi3ThreadedClient>("rpi3");
+  client_selector.Register<mjmech::mech::Rpi3HatSpidev>("spidev");
   client_selector.set_default("rpi3");
   return moteus::tool::moteus_tool_main(context, argc, argv, &client_selector);
 }

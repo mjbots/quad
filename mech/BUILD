@@ -38,6 +38,7 @@ cc_library(
         "quadruped.cc",
         "quadruped_control.cc",
         "quadruped_debug.cc",
+        "rpi3_hat_spidev.cc",
         "rpi3_raw_uart.cc",
         "rpi3_threaded_client.cc",
         "rtsp_server.cc",
