@@ -201,6 +201,18 @@ cc_binary(
     ],
 )
 
+cc_binary(
+    name = "spi",
+    srcs = ["spi.cc"],
+    deps = [
+        "@boost//:program_options",
+        "@fmt",
+        "@mjlib//mjlib/base:string_span",
+        "@mjlib//mjlib/base:system_error",
+        "@org_llvm_libcxx//:libcxx",
+    ],
+)
+
 pkg_tar(
     name = "deploy",
     extension = "tar",
@@ -213,6 +225,7 @@ pkg_tar(
         ":moteus_tool",
         ":multiplex_tool",
         ":quadruped",
+        ":spi",
         ":video_sender_app",
     ],
     files = {
