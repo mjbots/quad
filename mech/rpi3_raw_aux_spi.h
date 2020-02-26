@@ -42,9 +42,9 @@ class Rpi3RawAuxSpi {
   Rpi3RawAuxSpi(const Rpi3RawAuxSpi&) = delete;
   Rpi3RawAuxSpi& operator=(const Rpi3RawAuxSpi&) = delete;
 
-  void Write(int address, std::string_view data);
+  void Write(int cs, int address, std::string_view data);
 
-  void Read(int address, mjlib::base::string_span data);
+  void Read(int cs, int address, mjlib::base::string_span data);
 
  private:
   // This is the memory layout of the SPI peripheral.

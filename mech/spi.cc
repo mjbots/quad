@@ -57,6 +57,49 @@ std::string FormatHex(const std::string_view data) {
   return result;
 }
 
+class SpiBase {
+ public:
+  virtual ~SpiBase() {}
+  virtual void Write(int, std::string_view) = 0;
+  virtual void Read(int, mjlib::base::string_span) = 0;
+};
+
+class SpiDevWrapper : public SpiBase {
+ public:
+  SpiDevWrapper(const std::string& filename, int speed_hz)
+      : spi_(filename, speed_hz) {}
+  ~SpiDevWrapper() override {}
+
+  void Write(int address, std::string_view data) override {
+    spi_.Write(address, data);
+  }
+
+  void Read(int address, mjlib::base::string_span data) override {
+    spi_.Read(address, data);
+  }
+
+  mjmech::mech::SpiDev spi_;
+};
+
+class RawAuxSpiWrapper : public SpiBase {
+ public:
+  RawAuxSpiWrapper(const mjmech::mech::Rpi3RawAuxSpi::Options& options, int cs)
+      : spi_(options), cs_(cs) {}
+  ~RawAuxSpiWrapper() override {}
+
+  void Write(int address, std::string_view data) override {
+    spi_.Write(cs_, address, data);
+  }
+
+  void Read(int address, mjlib::base::string_span data) override {
+    spi_.Read(cs_, address, data);
+  }
+
+ private:
+  mjmech::mech::Rpi3RawAuxSpi spi_;
+  const int cs_;
+};
+
 template <typename Spi>
 void RunInteractive(Spi* spi) {
   while (std::cin) {
@@ -93,6 +136,8 @@ void RunInteractive(Spi* spi) {
 
 int main(int argc, char** argv) {
   std::string spi_device = "/dev/spidev0.0";
+  std::string mode = "spidev";
+  int cs = 0;
   int speed_hz = 20000000;
   int address = 1;
   std::string write_hex;
@@ -105,6 +150,8 @@ int main(int argc, char** argv) {
   desc.add_options()
       ("help,h", "display usage message")
       ("device,d", po::value(&spi_device), "SPI device")
+      ("mode", po::value(&mode), "spidev/raw")
+      ("cs", po::value(&cs), "CS line to use")
       ("address,a", po::value(&address), "16 bit address")
       ("speed,s", po::value(&speed_hz), "speed in Hz")
       ("write,w", po::value(&write_hex), "data to write in hex")
@@ -122,38 +169,43 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-#if 0
-  mjmech::mech::SpiDev spi(spi_device, speed_hz);
-#else
-  mjmech::mech::Rpi3RawAuxSpi spi([&]() {
-      mjmech::mech::Rpi3RawAuxSpi::Options options;
-      options.speed_hz = speed_hz;
-      return options;
-    }());
-#endif
+  std::unique_ptr<SpiBase> spi;
+  if (mode == "spidev") {
+    spi = std::make_unique<SpiDevWrapper>(spi_device, speed_hz);
+  } else if (mode == "raw") {
+    spi = std::make_unique<RawAuxSpiWrapper>([&]() {
+        mjmech::mech::Rpi3RawAuxSpi::Options options;
+        options.speed_hz = speed_hz;
+        return options;
+      }(),
+      cs);
+  } else {
+    std::cerr << "Unknown mode\n";
+    return 1;
+  }
 
   if (performance) {
-    spi.Write(18, std::string_view("\x01\x00\x00\x80\x01\x03\x42\x01\x30", 9));
+    spi->Write(18, std::string_view("\x01\x00\x00\x80\x01\x03\x42\x01\x30", 9));
     for (int i = 0; i < 30; i++) {
       char buf[6] = {};
-      spi.Read(16, buf);
+      spi->Read(16, buf);
       if (buf[0] != 0) {
         std::vector<char> readbuf;
         readbuf.resize(buf[0]);
-        spi.Read(17, mjlib::base::string_span(&readbuf[0], readbuf.size()));
+        spi->Read(17, mjlib::base::string_span(&readbuf[0], readbuf.size()));
         std::cout << FormatHex({&readbuf[0], readbuf.size()}) << "\n";
         return 0;
       }
     }
     std::cout << "timeout\n";
   } else if (interactive) {
-    RunInteractive(&spi);
+    RunInteractive(spi.get());
   } else if (!write_hex.empty()) {
-    spi.Write(address, ReadHex(write_hex));
+    spi->Write(address, ReadHex(write_hex));
   } else if (read_bytes != 0) {
     std::vector<char> readbuf;
     readbuf.resize(read_bytes);
-    spi.Read(address, mjlib::base::string_span(&readbuf[0], readbuf.size()));
+    spi->Read(address, mjlib::base::string_span(&readbuf[0], readbuf.size()));
     std::cout << FormatHex(std::string_view(&readbuf[0], readbuf.size())) << "\n";
   } else {
     std::cerr << "No command specified\n";

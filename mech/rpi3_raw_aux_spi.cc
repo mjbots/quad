@@ -43,6 +43,11 @@ constexpr uint32_t AUX_BASE           = 0x00215000;
 constexpr uint32_t kSpi1CS0 = 18;
 constexpr uint32_t kSpi1CS1 = 17;
 constexpr uint32_t kSpi1CS2 = 16;
+constexpr uint32_t kSpi1CS[] = {
+  kSpi1CS0,
+  kSpi1CS1,
+  kSpi1CS2,
+};
 
 constexpr int AUXSPI_STAT_TX_FULL = 1 << 10;
 constexpr int AUXSPI_STAT_TX_EMPTY = 1 << 9;
@@ -170,9 +175,9 @@ Rpi3RawAuxSpi::Rpi3RawAuxSpi(const Options& options) {
 
 Rpi3RawAuxSpi::~Rpi3RawAuxSpi() {}
 
-void Rpi3RawAuxSpi::Write(int address, std::string_view data) {
+void Rpi3RawAuxSpi::Write(int cs, int address, std::string_view data) {
   BusyWaitUs(options_.cs_hold_us);
-  Gpio::ActiveLow cs(gpio_.get(), kSpi1CS0);
+  Gpio::ActiveLow cs_holder(gpio_.get(), kSpi1CS[cs]);
   BusyWaitUs(options_.cs_hold_us);
 
   const uint32_t value = 0
@@ -218,9 +223,9 @@ void Rpi3RawAuxSpi::Write(int address, std::string_view data) {
   while (spi_->stat & AUXSPI_STAT_BUSY);
 }
 
-void Rpi3RawAuxSpi::Read(int address, mjlib::base::string_span data) {
+void Rpi3RawAuxSpi::Read(int cs, int address, mjlib::base::string_span data) {
   BusyWaitUs(options_.cs_hold_us);
-  Gpio::ActiveLow cs(gpio_.get(), kSpi1CS0);
+  Gpio::ActiveLow cs_holder(gpio_.get(), kSpi1CS[cs]);
   BusyWaitUs(options_.cs_hold_us);
 
   const uint32_t value = 0
