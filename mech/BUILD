@@ -179,6 +179,7 @@ cc_binary(
     name = "multiplex_tool",
     srcs = ["multiplex_tool_main.cc"],
     deps = [
+        ":mech",
         "@mjlib//mjlib/multiplex:libmultiplex_tool",
         "@org_llvm_libcxx//:libcxx",
     ],
