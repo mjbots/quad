@@ -12,13 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <fcntl.h>
-#include <unistd.h>
-#include <sys/ioctl.h>
-#include <sys/types.h>
-#include <linux/types.h>
-#include <linux/spi/spidev.h>
-
 #include <cstdint>
 #include <iostream>
 
@@ -30,6 +23,7 @@
 #include "mjlib/base/string_span.h"
 #include "mjlib/base/system_error.h"
 
+#include "mech/rpi3_raw_aux_spi.h"
 #include "mech/spidev.h"
 
 namespace po = boost::program_options;
@@ -63,7 +57,8 @@ std::string FormatHex(const std::string_view data) {
   return result;
 }
 
-void RunInteractive(mjmech::mech::SpiDev* spi) {
+template <typename Spi>
+void RunInteractive(Spi* spi) {
   while (std::cin) {
     std::string line;
     std::getline(std::cin, line);
@@ -102,6 +97,7 @@ int main(int argc, char** argv) {
   int address = 1;
   std::string write_hex;
   size_t read_bytes = 0;
+  bool performance = false;
   bool interactive = false;
 
   po::options_description desc("Allowable options");
@@ -113,6 +109,7 @@ int main(int argc, char** argv) {
       ("speed,s", po::value(&speed_hz), "speed in Hz")
       ("write,w", po::value(&write_hex), "data to write in hex")
       ("read,r", po::value(&read_bytes), "bytes to read")
+      ("performance,p", po::bool_switch(&performance), "")
       ("interactive,i", po::bool_switch(&interactive), "")
       ;
 
@@ -125,9 +122,31 @@ int main(int argc, char** argv) {
     return 0;
   }
 
+#if 0
   mjmech::mech::SpiDev spi(spi_device, speed_hz);
+#else
+  mjmech::mech::Rpi3RawAuxSpi spi([&]() {
+      mjmech::mech::Rpi3RawAuxSpi::Options options;
+      options.speed_hz = speed_hz;
+      return options;
+    }());
+#endif
 
-  if (interactive) {
+  if (performance) {
+    spi.Write(18, std::string_view("\x01\x00\x00\x80\x01\x03\x42\x01\x30", 9));
+    for (int i = 0; i < 30; i++) {
+      char buf[6] = {};
+      spi.Read(16, buf);
+      if (buf[0] != 0) {
+        std::vector<char> readbuf;
+        readbuf.resize(buf[0]);
+        spi.Read(17, mjlib::base::string_span(&readbuf[0], readbuf.size()));
+        std::cout << FormatHex({&readbuf[0], readbuf.size()}) << "\n";
+        return 0;
+      }
+    }
+    std::cout << "timeout\n";
+  } else if (interactive) {
     RunInteractive(&spi);
   } else if (!write_hex.empty()) {
     spi.Write(address, ReadHex(write_hex));
