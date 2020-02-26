@@ -43,6 +43,13 @@ namespace mech {
 
 namespace {
 auto u32 = [](auto v) { return static_cast<uint32_t>(v); };
+auto i64 = [](auto v) { return static_cast<int64_t>(v); };
+
+int64_t GetNow() {
+  struct timespec ts = {};
+  ::clock_gettime(CLOCK_MONOTONIC, &ts);
+  return i64(ts.tv_sec) * 1000000000ll + i64(ts.tv_nsec);
+}
 
 void ThrowIf(bool value, std::string_view message = "") {
   if (value) {
@@ -85,14 +92,39 @@ class Rpi3HatRawSpi::Impl {
   void AsyncRegister(const IdRequest& request,
                      SingleReply* reply,
                      mjlib::io::ErrorCallback callback) {
-    mjlib::base::AssertNotReached();
+    AssertParent();
+    single_request_ = { request };
+    single_reply_ = {};
+
+    auto continuation =
+        [this, reply, callback=std::move(callback)](const auto& ec) mutable {
+      mjlib::base::FailIf(ec);
+
+      BOOST_ASSERT(single_reply_.replies.size() == 1);
+      *reply = single_reply_.replies.front();
+
+      callback(ec);
+    };
+
+    boost::asio::post(
+        child_context_,
+        [this, continuation=std::move(continuation)]() mutable {
+          this->ThreadAsyncRegister(&single_request_, &single_reply_,
+                                    std::move(continuation));
+        });
   }
 
   void AsyncRegisterMultiple(
       const std::vector<IdRequest>& request,
       Reply* reply,
-      mjlib::io::ErrorCallback) {
-    mjlib::base::AssertNotReached();
+      mjlib::io::ErrorCallback callback) {
+    AssertParent();
+
+    boost::asio::post(
+        child_context_,
+        [this, callback=std::move(callback), &request, reply]() mutable {
+          this->ThreadAsyncRegister(&request, reply, std::move(callback));
+        });
   }
 
   class Tunnel : public mjlib::io::AsyncStream,
@@ -208,11 +240,13 @@ class Rpi3HatRawSpi::Impl {
                           mjlib::io::MutableBufferSequence buffers) {
     AssertThread();
 
+    const int cs = (id <= 6) ? 0 : 1;
+
     // Before we ask for more, make sure there isn't anything stale
     // lying around.
     {
       FrameItem item;
-      ReadFrame(&item, true);
+      ReadFrame(cs, &item, true);
       if (item.size) {
         return ParseTunnelPoll(&item, channel, buffers);
       }
@@ -231,7 +265,7 @@ class Rpi3HatRawSpi::Impl {
 
     {
       FrameItem item;
-      ReadFrame(&item);
+      ReadFrame(cs, &item);
 
       return ParseTunnelPoll(&item, channel, buffers);
     }
@@ -322,15 +356,7 @@ class Rpi3HatRawSpi::Impl {
         std::bind(std::move(callback), mjlib::base::error_code(), size));
   }
 
-  void ReadFrame(FrameItem* frame_item, bool one_try = false) {
-    const auto i64 = [](auto v) { return static_cast<int64_t>(v); };
-
-    auto GetNow = [&]() {
-      struct timespec ts = {};
-      ::clock_gettime(CLOCK_MONOTONIC, &ts);
-      return i64(ts.tv_sec) * 1000000000ll + i64(ts.tv_nsec);
-    };
-
+  void ReadFrame(int cs, FrameItem* frame_item, bool one_try = false) {
     const int64_t now = GetNow();
     const int64_t timeout = now + options_.query_timeout_s * 1000000000ll;
 
@@ -348,7 +374,7 @@ class Rpi3HatRawSpi::Impl {
       }
 
       uint8_t packet_sizes[1] = {};
-      spi_->Read(0, 16, mjlib::base::string_span(
+      spi_->Read(cs, 16, mjlib::base::string_span(
                      reinterpret_cast<char*>(packet_sizes),
                      sizeof(packet_sizes)));
 
@@ -360,7 +386,7 @@ class Rpi3HatRawSpi::Impl {
       }
 
       spi_->Read(
-          0, 17, mjlib::base::string_span(&frame_item->encoded[0], packet_sizes[0]));
+          cs, 17, mjlib::base::string_span(&frame_item->encoded[0], packet_sizes[0]));
       frame_item->size = packet_sizes[0];
 
       if (frame_item->encoded[0] == 0) {
@@ -376,20 +402,111 @@ class Rpi3HatRawSpi::Impl {
     }
   }
 
+  void ParseFrame(const FrameItem* frame_item, Reply* reply) {
+    AssertThread();
+
+    mjlib::base::BufferReadStream buffer_stream(
+        {frame_item->encoded, frame_item->size});
+    mjlib::multiplex::ReadStream<
+      mjlib::base::BufferReadStream> stream{buffer_stream};
+
+    stream.Read<uint8_t>();  // ignore which can bus it came in on
+    stream.Read<uint16_t>();  // the top 16 bits of the CAN ID are ignored
+    const auto maybe_source = stream.Read<uint8_t>();
+    const auto maybe_dest = stream.Read<uint8_t>();
+    const auto packet_size = stream.Read<uint8_t>();
+
+    if (!maybe_source || !maybe_dest || !packet_size) {
+      malformed_++;
+      return;
+    }
+
+    SingleReply this_reply;
+    this_reply.id = *maybe_source;
+
+    mjlib::base::BufferReadStream payload_stream{
+      {buffer_stream.position(), *packet_size}};
+    this_reply.reply = mjlib::multiplex::ParseRegisterReply(payload_stream);
+
+    reply->replies.push_back(std::move(this_reply));
+  }
+
+  void ThreadAsyncRegister(const std::vector<IdRequest>* requests,
+                           Reply* reply,
+                           mjlib::io::ErrorCallback callback) {
+    int bus_replies[2] = {0, 0};
+
+    // Send out all our packets, then after read any replies.
+    for (size_t i = 0; i < requests->size(); i++) {
+      const auto& request = (*requests)[i];
+
+      const int bus =
+          WriteCanFrame(
+              0,
+              request.id,
+              request.request.request_reply() ? kRequestReply : kNoReply,
+              request.request.buffer());
+      if (request.request.request_reply()) { bus_replies[bus]++; }
+    }
+
+    const auto timeout = GetNow() + options_.query_timeout_s * 1000000000ll;
+
+    FrameItem frame_item;
+
+    // Now wait for the proper number of replies from each bus or
+    // until our timeout.
+    while (bus_replies[0] != 0 || bus_replies[1] != 0) {
+      if (GetNow() > timeout) {
+        timeouts_++;
+        break;
+      }
+
+      for (int bus = 0; bus < 2; bus++) {
+        if (bus_replies[bus] == 0) { continue; }
+
+        char queue_sizes[6] = {};
+        spi_->Read(bus, 16, queue_sizes);
+
+        // We're going to read everything, even if it is more than we
+        // wanted.
+        for (const int size : queue_sizes) {
+          if (size == 0) { continue; }
+
+          spi_->Read(bus, 17, mjlib::base::string_span(
+                         &frame_item.encoded[0], size));
+          frame_item.size = size;
+
+          if (bus_replies[bus] > 0) { bus_replies[bus]--; }
+
+          ParseFrame(&frame_item, reply);
+        }
+      }
+    }
+
+    boost::asio::post(
+        executor_,
+        std::bind(std::move(callback), mjlib::base::error_code()));
+  }
+
   enum ReplyType {
     kNoReply,
     kRequestReply,
   };
 
-  void WriteCanFrame(uint8_t source_id, uint8_t dest_id,
-                     ReplyType reply_type, std::string_view data) {
+  int WriteCanFrame(uint8_t source_id, uint8_t dest_id,
+                    ReplyType reply_type, std::string_view data) {
+    const int cs = (dest_id <= 6) ? 0 : 1;
+    const int bus = (((dest_id - 1) % 6) < 3) ? 1 : 2;
+
     char buf[70] = {};
-    buf[0] = 1;  // TODO: Select CAN bus.
+    buf[0] = bus;
     buf[3] = source_id | (reply_type == kRequestReply) ? 0x80 : 00;
     buf[4] = dest_id;
     buf[5] = data.size();
     std::memcpy(&buf[6], data.data(), data.size());
-    spi_->Write(0, 18, std::string_view(buf, 6 + data.size()));
+    spi_->Write(cs, 18, std::string_view(buf, 6 + data.size()));
+
+    return cs;
   }
 
   void AssertThread() {
@@ -401,6 +518,7 @@ class Rpi3HatRawSpi::Impl {
   }
 
   boost::asio::executor executor_;
+  boost::asio::executor_work_guard<boost::asio::executor> guard_{executor_};
   const Options options_;
 
   std::thread thread_;
@@ -411,6 +529,9 @@ class Rpi3HatRawSpi::Impl {
 
   std::atomic<uint64_t> timeouts_{0};
   std::atomic<uint64_t> malformed_{0};
+
+  std::vector<IdRequest> single_request_;
+  Reply single_reply_;
 
   // Only accessed from the child thread.
   boost::asio::io_context child_context_;

@@ -28,9 +28,9 @@ class Rpi3HatRawSpi : public mjlib::multiplex::AsioClient {
     // to the given CPU.
     int cpu_affinity = -1;
 
-    double query_timeout_s = 0.0003;
+    double query_timeout_s = 0.002;
 
-    int spi_speed_hz = 20000000;
+    int spi_speed_hz = 10000000;
 
     template <typename Archive>
     void Serialize(Archive* a) {
