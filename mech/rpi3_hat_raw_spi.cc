@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mech/rpi3_hat_spidev.h"
+#include "mech/rpi3_hat_raw_spi.h"
 
 #include <sched.h>
 #include <linux/serial.h>
@@ -24,19 +24,19 @@
 #include <termios.h>
 #include <unistd.h>
 
-#include <boost/asio/io_context.hpp>
-#include <boost/asio/post.hpp>
-
 #include <future>
 #include <optional>
 #include <sstream>
 #include <thread>
 
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/post.hpp>
+
 #include "mjlib/base/fail.h"
 #include "mjlib/io/deadline_timer.h"
 #include "mjlib/multiplex/frame.h"
 
-#include "mech/spidev.h"
+#include "mech/rpi3_raw_aux_spi.h"
 
 namespace mjmech {
 namespace mech {
@@ -57,7 +57,7 @@ struct FrameItem {
 };
 }
 
-class Rpi3HatSpidev::Impl {
+class Rpi3HatRawSpi::Impl {
  public:
   Impl(const boost::asio::executor& executor,
        const Options& options)
@@ -194,7 +194,11 @@ class Rpi3HatSpidev::Impl {
     // TODO: Set realtime priority and lock memory.
 
     // Open devices.
-    spi_ = std::make_unique<SpiDev>(options_.spidev1, options_.spi_speed_hz);
+    spi_ = std::make_unique<Rpi3RawAuxSpi>([&]() {
+        Rpi3RawAuxSpi::Options options;
+        options.speed_hz = options_.spi_speed_hz;
+        return options;
+      }());
 
     boost::asio::io_context::work work(child_context_);
     child_context_.run();
@@ -203,6 +207,16 @@ class Rpi3HatSpidev::Impl {
   size_t ThreadTunnelPoll(uint8_t id, uint32_t channel,
                           mjlib::io::MutableBufferSequence buffers) {
     AssertThread();
+
+    // Before we ask for more, make sure there isn't anything stale
+    // lying around.
+    {
+      FrameItem item;
+      ReadFrame(&item, true);
+      if (item.size) {
+        return ParseTunnelPoll(&item, channel, buffers);
+      }
+    }
 
     mjlib::base::FastOStringStream stream;
     mjlib::multiplex::WriteStream writer{stream};
@@ -215,10 +229,12 @@ class Rpi3HatSpidev::Impl {
 
     WriteCanFrame(0, id, kRequestReply, stream.str());
 
-    FrameItem item;
-    ReadFrame(&item);
+    {
+      FrameItem item;
+      ReadFrame(&item);
 
-    return ParseTunnelPoll(&item, channel, buffers);
+      return ParseTunnelPoll(&item, channel, buffers);
+    }
   }
 
   size_t ParseTunnelPoll(const FrameItem* item,
@@ -306,7 +322,7 @@ class Rpi3HatSpidev::Impl {
         std::bind(std::move(callback), mjlib::base::error_code(), size));
   }
 
-  void ReadFrame(FrameItem* frame_item) {
+  void ReadFrame(FrameItem* frame_item, bool one_try = false) {
     const auto i64 = [](auto v) { return static_cast<int64_t>(v); };
 
     auto GetNow = [&]() {
@@ -331,16 +347,28 @@ class Rpi3HatSpidev::Impl {
         return;
       }
 
-      char packet_sizes[1] = {};
-      spi_->Read(16, mjlib::base::string_span(packet_sizes));
+      uint8_t packet_sizes[1] = {};
+      spi_->Read(0, 16, mjlib::base::string_span(
+                     reinterpret_cast<char*>(packet_sizes),
+                     sizeof(packet_sizes)));
 
       if (packet_sizes[0] == 0) {
+        if (one_try) {
+          return;
+        }
         continue;
       }
 
       spi_->Read(
-          17, mjlib::base::string_span(&frame_item->encoded[0], packet_sizes[0]));
+          0, 17, mjlib::base::string_span(&frame_item->encoded[0], packet_sizes[0]));
+      frame_item->size = packet_sizes[0];
+
       if (frame_item->encoded[0] == 0) {
+        // If necessary, you can uncomment this for debugging so that
+        // the problematic frame will remain on a scope.
+
+        // std::cout << "Received BAD frame\n";
+        // std::exit(0);
         continue;
       }
 
@@ -361,7 +389,7 @@ class Rpi3HatSpidev::Impl {
     buf[4] = dest_id;
     buf[5] = data.size();
     std::memcpy(&buf[6], data.data(), data.size());
-    spi_->Write(18, std::string_view(buf, 6 + data.size()));
+    spi_->Write(0, 18, std::string_view(buf, 6 + data.size()));
   }
 
   void AssertThread() {
@@ -386,33 +414,33 @@ class Rpi3HatSpidev::Impl {
 
   // Only accessed from the child thread.
   boost::asio::io_context child_context_;
-  std::unique_ptr<SpiDev> spi_;
+  std::unique_ptr<Rpi3RawAuxSpi> spi_;
 };
 
-Rpi3HatSpidev::Rpi3HatSpidev(const boost::asio::executor& executor,
+Rpi3HatRawSpi::Rpi3HatRawSpi(const boost::asio::executor& executor,
                              const Options& options)
     : impl_(std::make_unique<Impl>(executor, options)) {}
 
-Rpi3HatSpidev::~Rpi3HatSpidev() {}
+Rpi3HatRawSpi::~Rpi3HatRawSpi() {}
 
-void Rpi3HatSpidev::AsyncStart(mjlib::io::ErrorCallback callback) {
+void Rpi3HatRawSpi::AsyncStart(mjlib::io::ErrorCallback callback) {
   impl_->AsyncStart(std::move(callback));
 }
 
-void Rpi3HatSpidev::AsyncRegister(const IdRequest& request,
+void Rpi3HatRawSpi::AsyncRegister(const IdRequest& request,
                                   SingleReply* reply,
                                   mjlib::io::ErrorCallback callback) {
   impl_->AsyncRegister(request, reply, std::move(callback));
 }
 
-void Rpi3HatSpidev::AsyncRegisterMultiple(
+void Rpi3HatRawSpi::AsyncRegisterMultiple(
     const std::vector<IdRequest>& request,
     Reply* reply,
     mjlib::io::ErrorCallback callback) {
   impl_->AsyncRegisterMultiple(request, reply, std::move(callback));
 }
 
-mjlib::io::SharedStream Rpi3HatSpidev::MakeTunnel(
+mjlib::io::SharedStream Rpi3HatRawSpi::MakeTunnel(
     uint8_t id,
     uint32_t channel,
     const TunnelOptions& options) {

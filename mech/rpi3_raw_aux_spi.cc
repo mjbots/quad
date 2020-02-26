@@ -256,7 +256,11 @@ void Rpi3RawAuxSpi::Read(int cs, int address, mjlib::base::string_span data) {
   std::size_t remaining_write = remaining_read;
   char* ptr = data.data();
   while (remaining_read) {
-    if (remaining_write && (spi_->stat & AUXSPI_STAT_TX_FULL) == 0) {
+    // Make sure we don't write more than we have read spots remaining
+    // so that we can never overflow the RX fifo.
+    const bool can_write = (remaining_read - remaining_write) < 3;
+    if (can_write &&
+        remaining_write && (spi_->stat & AUXSPI_STAT_TX_FULL) == 0) {
       const uint32_t data = 0
           | (0 << 29) // CS
           | (8 << 24) // data width

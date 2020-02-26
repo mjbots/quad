@@ -21,12 +21,9 @@
 namespace mjmech {
 namespace mech {
 
-class Rpi3HatSpidev : public mjlib::multiplex::AsioClient {
+class Rpi3HatRawSpi : public mjlib::multiplex::AsioClient {
  public:
   struct Options {
-    std::string spidev1 = "/dev/spidev0.0";
-    std::string spidev2 = "/dev/spidev0.1";
-
     // If set to a non-negative number, bind the time sensitive thread
     // to the given CPU.
     int cpu_affinity = -1;
@@ -37,16 +34,14 @@ class Rpi3HatSpidev : public mjlib::multiplex::AsioClient {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(spidev1));
-      a->Visit(MJ_NVP(spidev2));
       a->Visit(MJ_NVP(cpu_affinity));
       a->Visit(MJ_NVP(query_timeout_s));
       a->Visit(MJ_NVP(spi_speed_hz));
     }
   };
 
-  Rpi3HatSpidev(const boost::asio::executor&, const Options&);
-  ~Rpi3HatSpidev();
+  Rpi3HatRawSpi(const boost::asio::executor&, const Options&);
+  ~Rpi3HatRawSpi();
 
   void AsyncStart(mjlib::io::ErrorCallback);
 

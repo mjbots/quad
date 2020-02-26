@@ -31,7 +31,7 @@ class Rpi3RawAuxSpi {
   struct Options {
     int speed_hz = 10000000;
     int cs_hold_us = 4;
-    int address_hold_us = 4;
+    int address_hold_us = 8;
 
     Options() {}
   };
