@@ -16,12 +16,11 @@ mach=$(uname -m)
 cd $(dirname $(dirname $(readlink -f $0)))
 
 if [[ "$mach" == "armv7l" ]]; then
-    CONFIG="-c configs/moteus.ini"
+    CONFIG="-c configs/quadruped.ini"
     set -x
     cd /home/pi/mech/
     ./performance_governor.sh
-    export LD_LIBRARY_PATH=.
-    ./mech_warfare -t camera_driver.stats $CONFIG "$@"
+    sudo LD_LIBRARY_PATH=. chrt 99 ./quadruped $CONFIG
 elif [[ "$mach" == "x86_64" ]]; then
     set -x
     ssh pi@192.168.16.47 mech/start-robot.sh "$@"
