@@ -28,7 +28,7 @@ class MultiplexClient {
   ~MultiplexClient();
 
   struct Parameters {
-    int spi_speed_hz = 15000000;
+    int spi_speed_hz = 10000000;
     int cpu_affinity = 3;
 
     template <typename Archive>
