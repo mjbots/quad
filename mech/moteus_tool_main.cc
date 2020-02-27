@@ -26,6 +26,6 @@ int main(int argc, char** argv) {
     context.get_executor(), "client_type"};
   client_selector.Register<mjmech::mech::Rpi3ThreadedClient>("rpi3");
   client_selector.Register<mjmech::mech::Rpi3HatRawSpi>("spi");
-  client_selector.set_default("rpi3");
+  client_selector.set_default("spi");
   return moteus::tool::moteus_tool_main(context, argc, argv, &client_selector);
 }
