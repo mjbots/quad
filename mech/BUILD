@@ -242,6 +242,7 @@ pkg_tar(
         "//configs:jump_test.ini": "configs/jump_test.ini",
         "//configs:quadruped.ini": "configs/quadruped.ini",
         "//configs:quada0.cfg": "configs/quada0.cfg",
+        "//configs:quada1.cfg": "configs/quada1.cfg",
         "//utils:start-robot.sh": "start-robot.sh",
         "//utils:performance_governor.sh": "performance_governor.sh",
         "//utils:rezero.sh": "rezero.sh",
