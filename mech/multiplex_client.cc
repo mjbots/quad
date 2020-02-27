@@ -49,9 +49,9 @@ class MultiplexClient::Impl {
 
   void AsyncStart(mjlib::io::ErrorCallback handler) {
     Client::Options options;
-    options.baud_rate = parameters_.serial_baud;
-    options.query_timeout_s = 0.0004;
+    options.query_timeout_s = 0.002;
     options.cpu_affinity = parameters_.cpu_affinity;
+    options.spi_speed_hz = parameters_.spi_speed_hz;
     client_ = std::make_unique<Client>(executor_, options);
     ProcessRequests();
 

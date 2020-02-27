@@ -59,6 +59,13 @@ class Rpi3HatRawSpi : public mjlib::multiplex::AsioClient {
       uint32_t channel,
       const TunnelOptions& options) override;
 
+  struct Stats {
+    template <typename Archive>
+    void Serialize(Archive* a) {
+    }
+  };
+  Stats stats() const;
+
  private:
   class Impl;
   std::unique_ptr<Impl> impl_;

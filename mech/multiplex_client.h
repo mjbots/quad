@@ -17,7 +17,7 @@
 #include <boost/program_options.hpp>
 
 #include "mjlib/base/visitor.h"
-#include "mech/rpi3_threaded_client.h"
+#include "mech/rpi3_hat_raw_spi.h"
 
 namespace mjmech {
 namespace mech {
@@ -28,14 +28,12 @@ class MultiplexClient {
   ~MultiplexClient();
 
   struct Parameters {
-    std::string serial_port;
-    int serial_baud = 3000000;
+    int spi_speed_hz = 15000000;
     int cpu_affinity = 3;
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(serial_port));
-      a->Visit(MJ_NVP(serial_baud));
+      a->Visit(MJ_NVP(spi_speed_hz));
       a->Visit(MJ_NVP(cpu_affinity));
     }
   };
@@ -44,7 +42,7 @@ class MultiplexClient {
   boost::program_options::options_description* options();
   void AsyncStart(mjlib::io::ErrorCallback);
 
-  using Client = Rpi3ThreadedClient;
+  using Client = Rpi3HatRawSpi;
   using ClientCallback = fu2::unique_function<
     void (const mjlib::base::error_code&, Client*)>;
   void RequestClient(ClientCallback);

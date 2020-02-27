@@ -568,5 +568,9 @@ mjlib::io::SharedStream Rpi3HatRawSpi::MakeTunnel(
   return impl_->MakeTunnel(id, channel, options);
 }
 
+Rpi3HatRawSpi::Stats Rpi3HatRawSpi::stats() const {
+  return Stats();
+}
+
 }
 }
