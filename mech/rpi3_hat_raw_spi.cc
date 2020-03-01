@@ -45,6 +45,26 @@ namespace {
 auto u32 = [](auto v) { return static_cast<uint32_t>(v); };
 auto i64 = [](auto v) { return static_cast<int64_t>(v); };
 
+static size_t RoundUpDlc(size_t value) {
+  if (value == 0) { return 0; }
+  if (value == 1) { return 1; }
+  if (value == 2) { return 2; }
+  if (value == 3) { return 3; }
+  if (value == 4) { return 4; }
+  if (value == 5) { return 5; }
+  if (value == 6) { return 6; }
+  if (value == 7) { return 7; }
+  if (value == 8) { return 8; }
+  if (value <= 12) { return 12; }
+  if (value <= 16) { return 16; }
+  if (value <= 20) { return 20; }
+  if (value <= 24) { return 24; }
+  if (value <= 32) { return 32; }
+  if (value <= 48) { return 48; }
+  if (value <= 64) { return 64; }
+  return 0;
+}
+
 int64_t GetNow() {
   struct timespec ts = {};
   ::clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -498,13 +518,18 @@ class Rpi3HatRawSpi::Impl {
     const int cs = (dest_id <= 6) ? 0 : 1;
     const int bus = (((dest_id - 1) % 6) < 3) ? 1 : 2;
 
+    auto size = RoundUpDlc(data.size());
+
     char buf[70] = {};
     buf[0] = bus;
     buf[3] = source_id | (reply_type == kRequestReply) ? 0x80 : 00;
     buf[4] = dest_id;
-    buf[5] = data.size();
+    buf[5] = size;
     std::memcpy(&buf[6], data.data(), data.size());
-    spi_->Write(cs, 18, std::string_view(buf, 6 + data.size()));
+    for (std::size_t i = 6 + data.size(); i < 6 + size; i++) {
+      buf[i] = 0x50;
+    }
+    spi_->Write(cs, 18, std::string_view(buf, 6 + size));
 
     return cs;
   }
