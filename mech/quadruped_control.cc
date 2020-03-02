@@ -157,6 +157,10 @@ struct Config {
   Rest rest;
 
   double stand_height_mm = 200.0;
+
+  double idle_x_mm = 230.0;
+  double idle_y_mm = 140.0;
+
   double rb_filter_constant_Hz = 2.0;
   double lr_acceleration_mm_s2 = 1000.0;
   double lr_alpha_rad_s2 = 0.5;
@@ -192,13 +196,13 @@ struct Config {
 
   struct Walk {
     // The length of a single cycle.
-    double cycle_time_s = 1.0;
+    double cycle_time_s = 0.8;
 
     double lift_height_mm = 30.0;
 
     // The length of time allocated for a leg to step forward,
     // measured in fraction of a phase.
-    double step_phase = 0.35;
+    double step_phase = 0.25;
 
     // Use a different kp gain when lowering, to hopefully cushion our
     // landing.
@@ -257,6 +261,8 @@ struct Config {
     a->Visit(MJ_NVP(stand_up));
     a->Visit(MJ_NVP(rest));
     a->Visit(MJ_NVP(stand_height_mm));
+    a->Visit(MJ_NVP(idle_x_mm));
+    a->Visit(MJ_NVP(idle_y_mm));
     a->Visit(MJ_NVP(rb_filter_constant_Hz));
     a->Visit(MJ_NVP(lr_acceleration_mm_s2));
     a->Visit(MJ_NVP(lr_alpha_rad_s2));
@@ -276,7 +282,9 @@ struct Leg {
 
   Leg(const Config::Leg& config_in,
       const Config::StandUp& stand_up,
-      double stand_height_mm)
+      double stand_height_mm,
+      double idle_x_mm,
+      double idle_y_mm)
       : leg(config_in.leg),
         config(config_in),
         pose_mm_BG(config_in.pose_mm_BG),
@@ -306,9 +314,11 @@ struct Leg {
     const auto pose_mm_R = pose_mm_RB * (config.pose_mm_BG * pose_mm_G);
 
     stand_up_R = pose_mm_R.pose_mm;
-    idle_R = base::Point3D(pose_mm_R.pose_mm.x(),
-                           pose_mm_R.pose_mm.y(),
-                           stand_height_mm);
+    base::Point3D tf = config.pose_mm_BG.translation();
+    idle_R = base::Point3D(
+        idle_x_mm * ((tf.x() > 0.0) ? 1.0 : -1.0),
+        idle_y_mm * ((tf.y() > 0.0) ? 1.0 : -1.0),
+        stand_height_mm);
   }
 };
 
@@ -398,7 +408,8 @@ class QuadrupedControl::Impl {
 
   void Configure() {
     for (const auto& leg : config_.legs) {
-      legs_.emplace_back(leg, config_.stand_up, config_.stand_height_mm);
+      legs_.emplace_back(leg, config_.stand_up, config_.stand_height_mm,
+                         config_.idle_x_mm, config_.idle_y_mm);
     }
   }
 
@@ -978,7 +989,8 @@ class QuadrupedControl::Impl {
       QuadrupedState::StandUp::Leg sleg;
       sleg.leg = leg.leg;
       sleg.pose_mm_R = leg.stand_up_R;
-      sleg.target_mm_R = leg.idle_R;
+      sleg.target_mm_R = sleg.pose_mm_R;
+      sleg.target_mm_R.z() = config_.stand_height_mm;
       status_.state.stand_up.legs.push_back(sleg);
     }
   }
@@ -1032,6 +1044,7 @@ class QuadrupedControl::Impl {
         QC::Leg leg_R;
         leg_R.leg_id = leg.leg;
         leg_R.power = true;
+        // TODO: This is unlikely to be a good idea.
         leg_R.position_mm = leg.idle_R;
         legs_R.push_back(leg_R);
       }
