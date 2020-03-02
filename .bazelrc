@@ -4,10 +4,6 @@ test --crosstool_top=@rpi_bazel//tools/cc_toolchain:toolchain
 build --define CLANG=true
 test --define CLANG=true
 
-# Debugging information makes the distributable 10x the size.
-build:pi --copt -g0
-test:pi --copt -g0
-
 # Sadly, Eigen/C++ still hasn't figured out how to reliably get
 # alignment correct.  Lets just disable it for now.
 build --copt -DEIGEN_DONT_ALIGN_STATICALLY

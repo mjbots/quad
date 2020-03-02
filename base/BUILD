@@ -70,6 +70,9 @@ cc_library(
     defines = [
         "BOOST_ASIO_ENABLE_OLD_SERVICES",
     ],
+    features = [
+        "dbg",
+    ],
 )
 
 cc_test(

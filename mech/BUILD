@@ -84,6 +84,9 @@ cc_library(
         "web_control_assets/styles.css",
         "web_control_assets/js/app.js",
     ],
+    features = [
+        "dbg",
+    ],
 )
 
 cc_test(
