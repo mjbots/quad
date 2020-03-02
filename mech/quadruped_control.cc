@@ -1337,6 +1337,9 @@ class QuadrupedControl::Impl {
     const auto lower_end = 1.0 - config_.walk.step.load_time;
     const auto lower_time_s = step_time_s * config_.walk.step.lower_time;
 
+    const auto swing_targets_R = GetSwingTarget_R(
+        (1.0 - config_.walk.step_phase) * config_.walk.cycle_time_s);
+
     // Move our legs that are in step.
     for (int step_leg_id : step_legs) {
       const auto sp = step_phase.value();
@@ -1370,7 +1373,12 @@ class QuadrupedControl::Impl {
         // it exactly at the end of our travel time.
         ws.moving_target_remaining_s =
             move_time_s - (sp - lift_end) * step_time_s;
-        auto target_R = GetLeg(step_leg_id).idle_R;
+        auto target_R = [&]() {
+          for (const auto& pair : swing_targets_R) {
+            if (pair.first == step_leg_id) { return pair.second; }
+          }
+          mjlib::base::AssertNotReached();
+        }();
 
         // We are moving to our end point at the lift height.
         target_R.z() =
@@ -1487,6 +1495,35 @@ class QuadrupedControl::Impl {
     // We only allow a z value.
     status_.state.robot.desired_w_LR.x() =
         status_.state.robot.desired_w_LR.y() = 0.0;
+  }
+
+  /// Return a good target location for each leg during the swing
+  /// phase.  We just aim to spend half the time reaching the idle
+  /// position and half the time going past it.
+  ///
+  /// @p stance_time_s is how long we expect the leg to be in contact
+  /// with the ground.
+  std::vector<std::pair<int, base::Point3D>>
+  GetSwingTarget_R(double stance_time_s) {
+
+    const auto& desired_w_LR = status_.state.robot.desired_w_LR;
+    const auto& desired_v_mm_s_R = status_.state.robot.desired_v_mm_s_R;
+    const double dt = 0.5 * stance_time_s;
+    const auto& v_mm_s = desired_v_mm_s_R;
+
+    const Sophus::SE3d pose_T2_T1(
+        Sophus::SO3d(
+            Eigen::AngleAxisd(dt * desired_w_LR.z(), Eigen::Vector3d::UnitZ())
+            .toRotationMatrix()),
+        v_mm_s * dt);
+
+    std::vector<std::pair<int, base::Point3D>> result;
+
+    for (const auto& leg : legs_) {
+      base::Point3D position_mm_R = pose_T2_T1 * leg.idle_R;
+      result.push_back(std::make_pair(leg.leg, position_mm_R));
+    }
+    return result;
   }
 
   void MoveLegsForLR(std::vector<QC::Leg>* legs_R) {
