@@ -110,7 +110,7 @@ struct Config {
   struct MammalJoint {
     double shoulder_deg = 0.0;
     double femur_deg = 125.0;
-    double tibia_deg = -135.0;
+    double tibia_deg = -133.0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -122,8 +122,8 @@ struct Config {
 
   struct StandUp {
     MammalJoint pose;
-    double velocity_dps = 30.0;
-    double velocity_mm_s = 100.0;
+    double velocity_dps = 60.0;
+    double velocity_mm_s = 150.0;
     double max_preposition_torque_Nm = 3.0;
     double timeout_s = 10.0;
     double tolerance_deg = 1.0;
@@ -190,6 +190,57 @@ struct Config {
 
   Jump jump;
 
+  struct Walk {
+    // The length of a single cycle.
+    double cycle_time_s = 1.0;
+
+    double lift_height_mm = 30.0;
+
+    // The length of time allocated for a leg to step forward,
+    // measured in fraction of a phase.
+    double step_phase = 0.25;
+
+    // The elements of this structure are all measured in fraction of
+    // a step.
+    struct Step {
+      // The length of time spent taking weight off the leg before
+      // lifting it.
+      double release_time = 0.02;
+
+      // The length of time spent lifting the leg to the step height.
+      double lift_time = 0.02;
+
+      // The length of time spent lowering the leg to the walk height.
+      double lower_time = 0.05;
+
+      // The length of time spent putting weight back on the leg.
+      // Measured in fraction of a step.  Note: This time can start
+      // sooner or later than scheduled due to when the leg actually
+      // makes contact with the ground.
+      double load_time = 0.03;
+
+      template <typename Archive>
+      void Serialize(Archive* a) {
+        a->Visit(MJ_NVP(release_time));
+        a->Visit(MJ_NVP(lift_time));
+        a->Visit(MJ_NVP(lower_time));
+        a->Visit(MJ_NVP(load_time));
+      }
+    };
+
+    Step step;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(cycle_time_s));
+      a->Visit(MJ_NVP(lift_height_mm));
+      a->Visit(MJ_NVP(step_phase));
+      a->Visit(MJ_NVP(step));
+    }
+  };
+
+  Walk walk;
+
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(joints));
@@ -203,6 +254,7 @@ struct Config {
     a->Visit(MJ_NVP(lr_acceleration_mm_s2));
     a->Visit(MJ_NVP(lr_alpha_rad_s2));
     a->Visit(MJ_NVP(jump));
+    a->Visit(MJ_NVP(walk));
   }
 };
 
@@ -627,6 +679,10 @@ class QuadrupedControl::Impl {
         DoControl_Jump();
         break;
       }
+      case QM::kWalk: {
+        DoControl_Walk();
+        break;
+      }
       case QM::kNumModes: {
         mjlib::base::AssertNotReached();
       }
@@ -682,16 +738,17 @@ class QuadrupedControl::Impl {
                    status_.state.jump.mode ==
                    QuadrupedState::Jump::Mode::kDone) {
           status_.mode = current_command_.mode;
+        } else if (status_.mode == QM::kWalk) {
+          // TODO(jpieper): Force a zero step and wait for all the
+          // legs to be on the ground.
+
+          status_.mode = current_command_.mode;
         }
 
-        // TODO(jpieper): When we have a moving mode, we should be
-        // able to enter the Rest state as long as we are moving
-        // slowly enough and all four legs are on the ground, although
-        // perhaps we will require a zero-velocity step cycle to get
-        // the legs into the regular idle position.
         break;
       }
-      case QM::kJump: {
+      case QM::kJump:
+      case QM::kWalk: {
         if (status_.mode == QM::kStopped ||
             status_.mode == QM::kZeroVelocity) {
           status_.mode = QM::kStandUp;
@@ -701,7 +758,9 @@ class QuadrupedControl::Impl {
                     status_.state.stand_up.mode ==
                     QuadrupedState::StandUp::Mode::kDone)) {
           status_.mode = current_command_.mode;
-          status_.state.jump.command = current_command_.jump.value();
+
+          status_.state.jump.command = current_command_.jump.value_or(
+              QuadrupedCommand::Jump());
         }
 
         break;
@@ -716,6 +775,10 @@ class QuadrupedControl::Impl {
         }
         case QM::kJump: {
           status_.state.jump = {};
+          break;
+        }
+        case QM::kWalk: {
+          status_.state.walk = {};
           break;
         }
         case QM::kStopped:
@@ -1200,6 +1263,11 @@ class QuadrupedControl::Impl {
       }
     }
 
+    ControlLegs_R(std::move(legs_R));
+  }
+
+  void DoControl_Walk() {
+    auto legs_R = old_control_log_->legs_R;
     ControlLegs_R(std::move(legs_R));
   }
 

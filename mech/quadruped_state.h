@@ -214,6 +214,17 @@ struct QuadrupedState {
 
   Jump jump;
 
+  struct Walk {
+    double phase = 0.0;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(phase));
+    }
+  };
+
+  Walk walk;
+
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(joints));
@@ -222,6 +233,7 @@ struct QuadrupedState {
 
     a->Visit(MJ_NVP(stand_up));
     a->Visit(MJ_NVP(jump));
+    a->Visit(MJ_NVP(walk));
   }
 };
 

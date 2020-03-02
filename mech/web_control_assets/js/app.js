@@ -211,7 +211,8 @@
     if (value == "stopped" ||
         value == "zero_velocity" ||
         value == "rest" ||
-        value == "jump") {
+        value == "jump" ||
+        value == "walk") {
       // We always send this command out.
       var command = {
         "mode" : value,

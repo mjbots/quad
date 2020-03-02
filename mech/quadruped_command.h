@@ -61,6 +61,9 @@ struct QuadrupedCommand {
     // Jump one or more times.
     kJump = 7,
 
+    // Walk
+    kWalk = 8,
+
     kNumModes,
   };
 
@@ -74,6 +77,7 @@ struct QuadrupedCommand {
         { kStandUp, "stand_up" },
         { kRest, "rest" },
         { kJump, "jump" },
+        { kWalk, "walk" },
       }};
   }
 
@@ -139,7 +143,7 @@ struct QuadrupedCommand {
   // Only valid for kLeg mode.
   std::vector<Leg> legs_B;
 
-  // Only valid for kJump
+  // Only valid for kJump.  These are latched at the start of a jump.
   struct Jump {
     double acceleration_mm_s2 = 0;
     bool repeat = false;
@@ -153,13 +157,21 @@ struct QuadrupedCommand {
 
   std::optional<Jump> jump;
 
+  struct Walk {
+    template <typename Archive>
+    void Serialize(Archive* a) {
+    }
+  };
+
+  std::optional<Walk> walk;
+
   /////////////////////////////////////////////
   // Things which are common to multiple modes.
 
-  // Valid for kRest, kJump, and...
+  // Valid for kRest, kJump, kWalk, and...
   Sophus::SE3d pose_mm_RB;
 
-  // Valid for kJump, etc..
+  // Valid for kJump, kWalk, etc..
   //
   // These control the movement of the robot through the L frame,
   // i.e. the world.
@@ -172,6 +184,7 @@ struct QuadrupedCommand {
     a->Visit(MJ_NVP(joints));
     a->Visit(MJ_NVP(legs_B));
     a->Visit(MJ_NVP(jump));
+    a->Visit(MJ_NVP(walk));
     a->Visit(MJ_NVP(pose_mm_RB));
     a->Visit(MJ_NVP(v_mm_s_R));
     a->Visit(MJ_NVP(w_LR));
