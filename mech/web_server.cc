@@ -113,6 +113,15 @@ class WebServer::Impl {
       : executor_(executor),
         options_(options) {}
 
+  ~Impl() {
+    boost::asio::post(
+        child_context_.get_executor(),
+        [this]() {
+          child_context_.stop();
+        });
+    child_thread_.join();
+  }
+
   void AsyncStart(mjlib::io::ErrorCallback callback) {
     child_thread_ = std::thread(std::bind(&Impl::ChildRun, this));
 
