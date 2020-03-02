@@ -198,26 +198,31 @@ struct Config {
 
     // The length of time allocated for a leg to step forward,
     // measured in fraction of a phase.
-    double step_phase = 0.25;
+    double step_phase = 0.35;
+
+    // Use a different kp gain when lowering, to hopefully cushion our
+    // landing.
+    double lower_kp = 0.05;
+    double lower_kd = 0.1;
 
     // The elements of this structure are all measured in fraction of
     // a step.
     struct Step {
       // The length of time spent taking weight off the leg before
       // lifting it.
-      double release_time = 0.02;
+      double release_time = 0.05;
 
       // The length of time spent lifting the leg to the step height.
-      double lift_time = 0.02;
+      double lift_time = 0.10;
 
       // The length of time spent lowering the leg to the walk height.
-      double lower_time = 0.05;
+      double lower_time = 0.25;
 
       // The length of time spent putting weight back on the leg.
       // Measured in fraction of a step.  Note: This time can start
       // sooner or later than scheduled due to when the leg actually
       // makes contact with the ground.
-      double load_time = 0.03;
+      double load_time = 0.05;
 
       template <typename Archive>
       void Serialize(Archive* a) {
@@ -235,6 +240,8 @@ struct Config {
       a->Visit(MJ_NVP(cycle_time_s));
       a->Visit(MJ_NVP(lift_height_mm));
       a->Visit(MJ_NVP(step_phase));
+      a->Visit(MJ_NVP(lower_kp));
+      a->Visit(MJ_NVP(lower_kd));
       a->Visit(MJ_NVP(step));
     }
   };
@@ -1015,22 +1022,22 @@ class QuadrupedControl::Impl {
 
     if (!old_control_log_->legs_R.empty()) {
       legs_R = old_control_log_->legs_R;
-      MoveLegsZ(
+      MoveLegsFixedSpeedZ(
+          all_leg_ids_,
           &legs_R,
           config_.rest.velocity_mm_s,
-          config_.stand_height_mm,
-          0.0);
+          config_.stand_height_mm);
     } else {
       for (const auto& leg : legs_) {
         QC::Leg leg_R;
         leg_R.leg_id = leg.leg;
         leg_R.power = true;
         leg_R.position_mm = leg.idle_R;
-        leg_R.force_N = base::Point3D(
-            0, 0, kGravity * config_.mass_kg / legs_.size());
         legs_R.push_back(leg_R);
       }
     }
+
+    UpdateLegsStanceForce(&legs_R, 0.0);
 
     ControlLegs_R(std::move(legs_R));
   }
@@ -1063,6 +1070,7 @@ class QuadrupedControl::Impl {
       UpdateCommandedLR();
     }
 
+    double extra_z_N = 0.0;
     auto& js = status_.state.jump;
 
     auto legs_R = old_control_log_->legs_R;
@@ -1073,11 +1081,11 @@ class QuadrupedControl::Impl {
         MoveLegsForLR(&legs_R);
 
         // Lower all legs until they reach the lower_height.
-        const bool done = MoveLegsZ(
+        const bool done = MoveLegsFixedSpeedZ(
+            all_leg_ids_,
             &legs_R,
             config_.jump.lower_velocity_mm_s,
-            config_.jump.lower_height_mm,
-            0);
+            config_.jump.lower_height_mm);
         if (done) {
           status_.state.jump.mode = JM::kPushing;
           status_.state.jump.velocity_mm_s = 0.0;
@@ -1091,17 +1099,18 @@ class QuadrupedControl::Impl {
 
         status_.state.jump.velocity_mm_s +=
             js.command.acceleration_mm_s2 * timestamps_.delta_s;
-        const bool done = MoveLegsZ(
+        const bool done = MoveLegsFixedSpeedZ(
+            all_leg_ids_,
             &legs_R,
             js.velocity_mm_s,
-            config_.jump.upper_height_mm,
-            config_.mass_kg * js.acceleration_mm_s2 * 0.001);
+            config_.jump.upper_height_mm);
+        extra_z_N = config_.mass_kg * js.acceleration_mm_s2 * 0.001;
         if (done) {
           js.mode = JM::kRetracting;
           js.velocity_mm_s = 0.0;
           js.acceleration_mm_s2 = 0.0;
           for (auto& leg_R : legs_R) {
-            leg_R.stance = false;
+            leg_R.stance = 0.0;
           }
         }
         break;
@@ -1110,7 +1119,9 @@ class QuadrupedControl::Impl {
         // We need to get our legs back into a lateral position
         // suitable for the landing phase.
 
-        const bool done = MoveLegs(
+        // TODO: This could be updated to reach at a given time (with
+        // a configurable time), instead of a fixed speed.
+        const bool done = MoveLegsFixedSpeed(
             &legs_R,
             config_.jump.retract_velocity_mm_s,
             [&]() {
@@ -1119,8 +1130,7 @@ class QuadrupedControl::Impl {
                 result.push_back(std::make_pair(leg.leg, leg.idle_R));
               }
               return result;
-            }(),
-            0.0);
+            }());
 
         const double average_velocity_mm_s = Average(
             status_.state.legs_B.begin(),
@@ -1132,6 +1142,9 @@ class QuadrupedControl::Impl {
             std::abs(average_velocity_mm_s) <
             config_.jump.land_threshold_mm_s) {
           js.mode = JM::kFalling;
+          for (auto& leg_R : legs_R) {
+            leg_R.landing = true;
+          }
           js.falling = Now();
         }
         break;
@@ -1145,12 +1158,10 @@ class QuadrupedControl::Impl {
 
         // Set our gains to be much lower while falling.
         for (auto& leg_R : legs_R) {
-          leg_R.kp_scale = base::Point3D(config_.jump.land_kp,
-                                         config_.jump.land_kp,
-                                         config_.jump.land_kp);
-          leg_R.kd_scale = base::Point3D(config_.jump.land_kd,
-                                         config_.jump.land_kd,
-                                         config_.jump.land_kd);
+          const auto kp = config_.jump.land_kp;
+          leg_R.kp_scale = base::Point3D(kp, kp, kp);
+          const auto kd = config_.jump.land_kd;
+          leg_R.kd_scale = base::Point3D(kd, kd, kd);
         }
 
         // Wait for our average velocity of all legs to exceed our
@@ -1211,7 +1222,8 @@ class QuadrupedControl::Impl {
             desired_B.z() = average_height_mm;
 
             leg_R.position_mm = pose_mm_RB * desired_B;
-            leg_R.stance = true;
+            leg_R.stance = 1.0;
+            leg_R.landing = false;
           }
         }
         break;
@@ -1248,12 +1260,13 @@ class QuadrupedControl::Impl {
             current_command_.mode = QM::kRest;
           }
         } else {
-          MoveLegsZ(
+          MoveLegsFixedSpeedZ(
+              all_leg_ids_,
               &legs_R,
               js.velocity_mm_s,
-              config_.jump.upper_height_mm,
-              (config_.jump.landing_force_scale * config_.mass_kg *
-               js.acceleration_mm_s2 * 0.001));
+              config_.jump.upper_height_mm);
+          extra_z_N = (config_.jump.landing_force_scale * config_.mass_kg *
+                       js.acceleration_mm_s2 * 0.001);
         }
         break;
       }
@@ -1263,11 +1276,166 @@ class QuadrupedControl::Impl {
       }
     }
 
+    UpdateLegsStanceForce(&legs_R, extra_z_N);
+
     ControlLegs_R(std::move(legs_R));
   }
 
   void DoControl_Walk() {
+    // We always have some legs on the ground, so can nominally always
+    // accelerate.
+    UpdateCommandedLR();
+
     auto legs_R = old_control_log_->legs_R;
+
+    // Update our phase.
+    auto& ws = status_.state.walk;
+    auto& phase = ws.phase;
+    phase = std::fmod(
+        phase + timestamps_.delta_s / config_.walk.cycle_time_s, 1.0);
+
+    // For now, we are hard-coding 2 leg movement.
+
+    // Check to see if we are in a step or not.
+    const auto step_phase = [&]() -> std::optional<double> {
+      if (phase > 0.0 && phase < config_.walk.step_phase) {
+        return phase / config_.walk.step_phase;
+      } else if (phase > 0.5 && phase < (0.5 + config_.walk.step_phase)) {
+        return (phase - 0.5) / config_.walk.step_phase;
+      }
+      return {};
+    }();
+
+    const auto [ground_legs, step_legs] = [&]()
+        -> std::pair<std::vector<int>, std::vector<int>> {
+      if (!step_phase) { return {{0, 1, 2, 3}, {}}; }
+      if (phase < 0.5) { return {{0, 3}, {1, 2}};}
+      return {{1, 2}, {0, 3}};
+    }();
+
+    // All ground legs should be at the correct height and in stance.
+    for (int ground_leg : ground_legs) {
+      auto& leg_R = GetLeg_R(&legs_R, ground_leg);
+      leg_R.stance = 1.0;
+    }
+
+    std::vector<std::pair<int, base::Point3D>> moving_legs_R;
+    ws.moving_target_remaining_s = 0.0;
+
+    // Accumulate our various control times.
+    const auto step_time_s =
+        config_.walk.cycle_time_s * config_.walk.step_phase;
+
+    const auto start = 0.0;
+    const auto release_end = start + config_.walk.step.release_time;
+    const auto lift_end = release_end + config_.walk.step.lift_time;
+    const auto lift_time_s = step_time_s * config_.walk.step.lift_time;
+    const auto move_end =
+        1.0 - (config_.walk.step.lower_time + config_.walk.step.load_time);
+    const auto move_time = move_end - lift_end;
+    const auto move_time_s = step_time_s * move_time;
+    const auto lower_end = 1.0 - config_.walk.step.load_time;
+    const auto lower_time_s = step_time_s * config_.walk.step.lower_time;
+
+    // Move our legs that are in step.
+    for (int step_leg_id : step_legs) {
+      const auto sp = step_phase.value();
+
+      auto& leg_R = GetLeg_R(&legs_R, step_leg_id);
+
+      if (sp < release_end) {
+        // Here, we are still in stance, but decreasing it.
+        leg_R.stance = 1.0 - sp / config_.walk.step.release_time;
+        leg_R.landing = false;
+      } else if (sp < lift_end) {
+        // We are lifting.
+        const double lift_fraction =
+            (sp - release_end) / config_.walk.step.lift_time;
+        leg_R.stance = 0.0;
+
+        // We mark ourselves as landing so that we will keep
+        // stationary w.r.t. the ground.
+        leg_R.landing = true;
+
+        // For now, we follow an infinite jerk lift profile.
+        leg_R.position_mm.z() =
+            config_.stand_height_mm -
+            lift_fraction * config_.walk.lift_height_mm;
+        leg_R.velocity_mm_s =
+            base::Point3D(0, 0, -config_.walk.lift_height_mm / lift_time_s);
+        leg_R.force_N = base::Point3D(0, 0, 0);
+      } else if (sp < move_end) {
+        // Move to the target position (for now the idle position),
+        // with an infinite acceleration profile attempting to reach
+        // it exactly at the end of our travel time.
+        ws.moving_target_remaining_s =
+            move_time_s - (sp - lift_end) * step_time_s;
+        auto target_R = GetLeg(step_leg_id).idle_R;
+
+        // We are moving to our end point at the lift height.
+        target_R.z() =
+            config_.stand_height_mm - config_.walk.lift_height_mm;
+
+        moving_legs_R.push_back(std::make_pair(step_leg_id, target_R));
+
+        leg_R.stance = 0.0;
+        leg_R.landing = false;
+      } else if (sp < lower_end) {
+        leg_R.stance = 0.0;
+        leg_R.landing = true;
+        const auto kp = config_.walk.lower_kp;
+        leg_R.kp_scale = base::Point3D(kp, kp, kp);
+        const auto kd = config_.walk.lower_kd;
+        leg_R.kd_scale = base::Point3D(kd, kd, kd);
+
+        MoveLegsFixedSpeedZ(
+            {step_leg_id}, &legs_R,
+            config_.walk.lift_height_mm / lower_time_s,
+            config_.stand_height_mm);
+      } else {
+        const double load_fraction =
+            (sp - lower_end) / config_.walk.step.load_time;
+        leg_R.landing = false;
+        leg_R.stance = std::max(0.001, load_fraction);
+        leg_R.velocity_mm_s.z() = 0.0;
+
+        const auto kp =
+            (1.0 - config_.walk.lower_kp) * load_fraction + config_.walk.lower_kp;
+        leg_R.kp_scale = base::Point3D(kp, kp, kp);
+        const auto kd =
+            (1.0 - config_.walk.lower_kd) * load_fraction + config_.walk.lower_kd;
+        leg_R.kd_scale = base::Point3D(kd, kd, kd);
+      }
+    }
+
+    // Reset the kp_scale of anything on the ground.
+    for (int step_leg_id : ground_legs) {
+      auto& leg_R = GetLeg_R(&legs_R, step_leg_id);
+      leg_R.kp_scale = {};
+      leg_R.kd_scale = {};
+    }
+
+    // Advance the legs which are landing or on the ground.
+    MoveLegsForLR(&legs_R);
+
+    // Update all the legs that are in flight.
+    if (!moving_legs_R.empty()) {
+      MoveLegsTargetTime(
+          &legs_R,
+          ws.moving_target_remaining_s,
+          moving_legs_R);
+    }
+
+    // Update the other legs.
+    MoveLegsFixedSpeedZ(
+        ground_legs, &legs_R,
+        // we should already be basically at the right height,
+        // so this velocity isn't that meaningful.
+        config_.rest.velocity_mm_s,
+        config_.stand_height_mm);
+
+    UpdateLegsStanceForce(&legs_R, 0.0);
+
     ControlLegs_R(std::move(legs_R));
   }
 
@@ -1337,7 +1505,7 @@ class QuadrupedControl::Impl {
         -v_mm_s * dt);
 
     for (auto& leg_R : *legs_R) {
-      if (!leg_R.stance) { continue; }
+      if (leg_R.stance == 0.0 && !leg_R.landing) { continue; }
 
       leg_R.position_mm = pose_T2_T1 * leg_R.position_mm;
 
@@ -1572,35 +1740,85 @@ class QuadrupedControl::Impl {
     return mjlib::io::Now(executor_.context());
   }
 
+  template <typename T>
+  static QC::Leg& GetLeg_R(T* legs_R, int id) {
+    for (auto& leg_R : *legs_R) {
+      if (leg_R.leg_id == id) { return leg_R; }
+    }
+    mjlib::base::AssertNotReached();
+  }
+
   const Leg& GetLeg(int id) const {
-    for (const auto& leg : legs_) {
+    for (auto& leg : legs_) {
       if (leg.leg == id) { return leg; }
     }
     mjlib::base::AssertNotReached();
   }
 
-  bool MoveLegs(
+  void MoveLegsTargetTime(
+      std::vector<QC::Leg>* legs_R,
+      double remaining_s,
+      const std::vector<std::pair<int, base::Point3D>>& command_pose_mm_R) const {
+    for (const auto& pair : command_pose_mm_R) {
+      auto& leg_R = GetLeg_R(legs_R, pair.first);
+
+      // This only makes sense for things that are not on the ground.
+      MJ_ASSERT(leg_R.stance == 0.0);
+
+      const base::Point3D error_mm = pair.second - leg_R.position_mm;
+      const double error_norm_mm = error_mm.norm();
+      const double velocity_mm_s = error_norm_mm / remaining_s;
+      // For now, we'll do this as just an infinite acceleration
+      // profile.
+
+      const double delta_mm =
+          std::min(
+              error_norm_mm,
+              velocity_mm_s * timestamps_.delta_s);
+      leg_R.position_mm += error_mm.normalized() * delta_mm;
+      leg_R.velocity_mm_s =
+          error_mm.normalized() * velocity_mm_s;
+      // Since we are not in stance.
+      leg_R.force_N = base::Point3D(0, 0, 0);
+    }
+  }
+
+  void UpdateLegsStanceForce(
+      std::vector<QC::Leg>* legs_R,
+      double extra_z_N) {
+    const double stance_legs = [&]() {
+      double result = 0.0;
+      for (const auto& leg_R : *legs_R) {
+        result += leg_R.stance;
+      }
+      return result;
+    }();
+
+    for (auto& leg_R : *legs_R) {
+      const double gravity_N =
+          leg_R.stance ?
+          config_.mass_kg * kGravity :
+          0.0;
+      const double force_z_N =
+          stance_legs == 0.0 ?
+          0.0 :
+          leg_R.stance * gravity_N / stance_legs + extra_z_N;
+      leg_R.force_N = base::Point3D(0, 0, force_z_N);
+    }
+  }
+
+  bool MoveLegsFixedSpeed(
       std::vector<QC::Leg>* legs_R,
       double desired_velocity_mm_s,
       const std::vector<std::pair<int, base::Point3D>>& command_pose_mm_R,
-      double extra_z_N,
       base::Point3D velocity_mask = base::Point3D(1., 1., 1),
       base::Point3D velocity_inverse_mask = base::Point3D(0., 0., 0.)) const {
 
     bool done = true;
 
-    const int stance_legs =
-        std::count_if(legs_R->begin(), legs_R->end(),
-                      [](auto& leg_R) { return leg_R.stance; });
-
     // We do each leg independently.
     for (const auto& pair : command_pose_mm_R) {
-      auto& leg_R = [&]() -> QC::Leg& {
-        for (auto& leg_R : *legs_R) {
-          if (leg_R.leg_id == pair.first) { return leg_R; }
-        }
-        mjlib::base::AssertNotReached();
-      }();
+      auto& leg_R = GetLeg_R(legs_R, pair.first);
 
       const base::Point3D error_mm = pair.second - leg_R.position_mm;
       const double error_norm_mm = error_mm.norm();
@@ -1625,37 +1843,29 @@ class QuadrupedControl::Impl {
           velocity_inverse_mask.asDiagonal() * leg_R.velocity_mm_s  +
           velocity_mask.asDiagonal() * error_mm.normalized() * velocity_mm_s;
 
-      const double gravity_N =
-          leg_R.stance ?
-          config_.mass_kg * kGravity :
-          0.0;
-      const double force_z_N =
-          stance_legs == 0 ?
-          0.0 :
-          (gravity_N + extra_z_N) / stance_legs;
-      leg_R.force_N = base::Point3D(0, 0, force_z_N);
     }
 
     return done;
   }
 
-  bool MoveLegsZ(
+  bool MoveLegsFixedSpeedZ(
+      const std::vector<int>& leg_ids,
       std::vector<QC::Leg>* legs_R,
       double desired_velocity_mm_s,
-      double desired_height_mm,
-      double extra_z_N) const {
+      double desired_height_mm) const {
     std::vector<std::pair<int, base::Point3D>> desired_poses_mm_R;
-    for (const auto& leg : *legs_R) {
-      base::Point3D pose_mm_R = leg.position_mm;
+
+    for (int id : leg_ids) {
+      const auto& leg_R = GetLeg_R(legs_R, id);
+      base::Point3D pose_mm_R = leg_R.position_mm;
       pose_mm_R.z() = desired_height_mm;
-      desired_poses_mm_R.push_back(std::make_pair(leg.leg_id, pose_mm_R));
+      desired_poses_mm_R.push_back(std::make_pair(leg_R.leg_id, pose_mm_R));
     }
 
-    return MoveLegs(
+    return MoveLegsFixedSpeed(
         legs_R,
         desired_velocity_mm_s,
         desired_poses_mm_R,
-        extra_z_N,
         base::Point3D(0, 0, 1),
         base::Point3D(1, 1, 0));
   }
@@ -1705,6 +1915,8 @@ class QuadrupedControl::Impl {
   boost::signals2::signal<void (const ControlLog*)> control_signal_;
 
   std::vector<moteus::Value> values_cache_;
+
+  std::vector<int> all_leg_ids_{0, 1, 2, 3};
 };
 
 QuadrupedControl::QuadrupedControl(base::Context& context)

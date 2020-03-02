@@ -216,10 +216,12 @@ struct QuadrupedState {
 
   struct Walk {
     double phase = 0.0;
+    double moving_target_remaining_s = 0.0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(phase));
+      a->Visit(MJ_NVP(moving_target_remaining_s));
     }
   };
 
