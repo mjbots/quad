@@ -20,7 +20,7 @@ if [[ "$mach" == "armv7l" ]]; then
     set -x
     cd /home/pi/mech/
     ./performance_governor.sh
-    sudo LD_LIBRARY_PATH=. chrt 99 ./quadruped $CONFIG
+    sudo LD_LIBRARY_PATH=. chrt 99 ./quadruped $CONFIG "$@"
 elif [[ "$mach" == "x86_64" ]]; then
     set -x
     ssh pi@192.168.16.47 mech/start-robot.sh "$@"
