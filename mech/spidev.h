@@ -21,6 +21,11 @@
 #include <linux/types.h>
 #include <linux/spi/spidev.h>
 
+#include <string_view>
+
+#include "mjlib/base/string_span.h"
+#include "mjlib/base/system_error.h"
+
 namespace mjmech {
 namespace mech {
 
@@ -31,11 +36,11 @@ class SpiDev {
     mjlib::base::system_error::throw_if(fd_ < 0, "opening: " + filename);
 
     xfer_[0].cs_change = 0;
-    xfer_[0].delay_usecs = 0;
+    xfer_[0].delay_usecs = 4;
     xfer_[0].speed_hz = speed_hz;
     xfer_[0].bits_per_word = 8;
     xfer_[1].cs_change = 0;
-    xfer_[1].delay_usecs = 0;
+    xfer_[1].delay_usecs = 4;
     xfer_[1].speed_hz = speed_hz;
     xfer_[1].bits_per_word = 8;
   }
