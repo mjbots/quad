@@ -44,6 +44,7 @@ cc_library(
         "rpi3_threaded_client.cc",
         "rtsp_server.cc",
         "target_tracker.cc",
+        "trajectory.cc",
         "turret.cc",
         "video_display.cc",
         "web_control.cc",
@@ -90,12 +91,13 @@ cc_library(
 )
 
 cc_test(
-    name = "mech_test",
+    name = "test",
     srcs = ["test/" + x for x in [
         "herkulex_test.cc",
         "leg_ik_test.cc",
         "mammal_ik_test.cc",
         "ripple_test.cc",
+        "trajectory_test.cc",
         "test_main.cc",
     ]],
     deps = [

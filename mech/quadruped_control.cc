@@ -1,4 +1,4 @@
-// Copyright 2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2019-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,6 +30,7 @@
 
 #include "mech/mammal_ik.h"
 #include "mech/moteus.h"
+#include "mech/trajectory.h"
 
 namespace pl = std::placeholders;
 
@@ -93,7 +94,7 @@ struct Config {
   struct Bounds {
     double min_z_B = 0.0;
     double max_z_B = 300.0;
-    double max_acceleration_mm_s2 = 50000;
+    double max_acceleration_mm_s2 = 100000;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -196,18 +197,18 @@ struct Config {
 
   struct Walk {
     // The length of a single cycle.
-    double cycle_time_s = 0.8;
+    double cycle_time_s = 0.75;
 
-    double lift_height_mm = 30.0;
+    double lift_height_mm = 25.0;
 
     // The length of time allocated for a leg to step forward,
     // measured in fraction of a phase.
-    double step_phase = 0.25;
+    double step_phase = 0.30;
 
     // Use a different kp gain when lowering, to hopefully cushion our
     // landing.
     double lower_kp = 0.05;
-    double lower_kd = 0.1;
+    double lower_kd = 0.4;
 
     // The elements of this structure are all measured in fraction of
     // a step.
@@ -217,10 +218,10 @@ struct Config {
       double release_time = 0.05;
 
       // The length of time spent lifting the leg to the step height.
-      double lift_time = 0.10;
+      double lift_time = 0.20;
 
       // The length of time spent lowering the leg to the walk height.
-      double lower_time = 0.25;
+      double lower_time = 0.35;
 
       // The length of time spent putting weight back on the leg.
       // Measured in fraction of a step.  Note: This time can start
@@ -1365,21 +1366,42 @@ class QuadrupedControl::Impl {
         leg_R.landing = false;
       } else if (sp < lift_end) {
         // We are lifting.
-        const double lift_fraction =
-            (sp - release_end) / config_.walk.step.lift_time;
         leg_R.stance = 0.0;
 
         // We mark ourselves as landing so that we will keep
         // stationary w.r.t. the ground.
         leg_R.landing = true;
 
-        // For now, we follow an infinite jerk lift profile.
-        leg_R.position_mm.z() =
-            config_.stand_height_mm -
-            lift_fraction * config_.walk.lift_height_mm;
-        leg_R.velocity_mm_s =
-            base::Point3D(0, 0, -config_.walk.lift_height_mm / lift_time_s);
         leg_R.force_N = base::Point3D(0, 0, 0);
+
+        // Use MoveLegsFixedSpeedZ to get a controlled deceleration
+        // profile.
+        const double speed = -0.5 * (
+            std::sqrt(
+                std::pow(config_.bounds.max_acceleration_mm_s2, 2.0) *
+                std::pow(lift_time_s, 2.0) -
+                4 * config_.bounds.max_acceleration_mm_s2 * config_.walk.lift_height_mm) -
+            config_.bounds.max_acceleration_mm_s2 * lift_time_s);
+
+        // If the speed isn't finite, then we cannot lift this far in
+        // the time allotted. :(  Instead, lift as far as we can.
+        if (!std::isfinite(speed)) {
+          const double achievable_lift_height_mm =
+              std::pow(0.5 * lift_time_s, 2) *
+              config_.bounds.max_acceleration_mm_s2;
+          MJ_ASSERT(achievable_lift_height_mm <= config_.walk.lift_height_mm);
+          MoveLegsFixedSpeedZ(
+              {step_leg_id},
+              &legs_R,
+              .5 * lift_time_s * config_.bounds.max_acceleration_mm_s2,
+              config_.stand_height_mm - achievable_lift_height_mm);
+        } else {
+          MoveLegsFixedSpeedZ(
+              {step_leg_id},
+              &legs_R,
+              speed,
+              config_.stand_height_mm - config_.walk.lift_height_mm);
+        }
       } else if (sp < move_end) {
         // Move to the target position (for now the idle position),
         // with an infinite acceleration profile attempting to reach
@@ -1409,9 +1431,11 @@ class QuadrupedControl::Impl {
         const auto kd = config_.walk.lower_kd;
         leg_R.kd_scale = base::Point3D(kd, kd, kd);
 
+        // TODO: Use the speed calculation from above instead of a fudge.
+        constexpr double kSpeedFudge = 2.0;
         MoveLegsFixedSpeedZ(
             {step_leg_id}, &legs_R,
-            config_.walk.lift_height_mm / lower_time_s,
+            kSpeedFudge * config_.walk.lift_height_mm / lower_time_s,
             config_.stand_height_mm);
       } else {
         const double load_fraction =
@@ -1817,7 +1841,9 @@ class QuadrupedControl::Impl {
 
       const base::Point3D error_mm = pair.second - leg_R.position_mm;
       const double error_norm_mm = error_mm.norm();
-      const double velocity_mm_s = error_norm_mm / remaining_s;
+      const double velocity_mm_s = error_norm_mm /
+          std::max(timestamps_.delta_s, remaining_s);
+
       // For now, we'll do this as just an infinite acceleration
       // profile.
 
@@ -1870,29 +1896,20 @@ class QuadrupedControl::Impl {
     for (const auto& pair : command_pose_mm_R) {
       auto& leg_R = GetLeg_R(legs_R, pair.first);
 
-      const base::Point3D error_mm = pair.second - leg_R.position_mm;
-      const double error_norm_mm = error_mm.norm();
-      if (error_norm_mm > 1.0) {
-        // If any leg has distance left to move, then we're not done.
-        done = false;
-      }
-      const double max_velocity_mm_s =
-          config_.bounds.max_acceleration_mm_s2 *
-          std::sqrt(2 * error_norm_mm /
-                    config_.bounds.max_acceleration_mm_s2);
+      TrajectoryState initial{leg_R.position_mm, leg_R.velocity_mm_s};
+      const auto result = CalculateAccelerationLimitedTrajectory(
+          initial, pair.second, desired_velocity_mm_s,
+          config_.bounds.max_acceleration_mm_s2,
+          timestamps_.delta_s);
 
-      const double velocity_mm_s =
-          std::min(desired_velocity_mm_s, max_velocity_mm_s);
-
-      const double delta_mm =
-          std::min(
-              error_norm_mm,
-              velocity_mm_s * timestamps_.delta_s);
-      leg_R.position_mm += error_mm.normalized() * delta_mm;
+      leg_R.position_mm = result.pose_l;
       leg_R.velocity_mm_s =
           velocity_inverse_mask.asDiagonal() * leg_R.velocity_mm_s  +
-          velocity_mask.asDiagonal() * error_mm.normalized() * velocity_mm_s;
+          velocity_mask.asDiagonal() * result.velocity_l_s;
 
+      if ((leg_R.position_mm - pair.second).norm() > 1.0) {
+        done = false;
+      }
     }
 
     return done;
