@@ -222,12 +222,26 @@ cc_binary(
     ],
 )
 
+cc_binary(
+    name = "bmi088_test",
+    srcs = ["bmi088_test.cc"],
+    deps = [
+        ":mech",
+        "@boost//:program_options",
+        "@fmt",
+        "@mjlib//mjlib/base:string_span",
+        "@mjlib//mjlib/base:system_error",
+        "@org_llvm_libcxx//:libcxx",
+    ],
+)
+
 pkg_tar(
     name = "deploy",
     extension = "tar",
     include_runfiles = True,
     package_dir = "mech",
     srcs = [
+        ":bmi088_test",
         ":herkulex_tool",
         ":jump_test",
         ":mech_warfare",
