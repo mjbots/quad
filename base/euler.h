@@ -36,5 +36,13 @@ struct Euler {
   }
 };
 
+inline Euler operator*(const Euler& lhs, double s) {
+  return Euler{lhs.roll * s, lhs.pitch * s, lhs.yaw * s};
+}
+
+inline Euler operator*(double s, const Euler& lhs) {
+  return Euler{lhs.roll * s, lhs.pitch * s, lhs.yaw * s};
+}
+
 }
 }
