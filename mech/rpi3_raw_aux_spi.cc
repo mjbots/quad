@@ -38,7 +38,6 @@ void BusyWaitUs(int64_t us) {
 }
 
 constexpr uint32_t RASPI_23_PERI_BASE = 0x3F000000;
-constexpr uint32_t GPIO_BASE          = 0x00200000;
 constexpr uint32_t AUX_BASE           = 0x00215000;
 constexpr uint32_t kSpi1CS0 = 18;
 constexpr uint32_t kSpi1CS1 = 17;
@@ -55,61 +54,6 @@ constexpr int AUXSPI_STAT_RX_EMPTY = 1 << 7;
 constexpr int AUXSPI_STAT_BUSY = 1 << 6;
 }
 
-class Rpi3RawAuxSpi::Gpio {
- public:
-  // static constexpr uint32_t INPUT = 0;
-  static constexpr uint32_t OUTPUT = 1;
-  static constexpr uint32_t ALT_0 = 4;
-  // static constexpr uint32_t ALT_1 = 5;
-  // static constexpr uint32_t ALT_2 = 6;
-  // static constexpr uint32_t ALT_3 = 7;
-  static constexpr uint32_t ALT_4 = 3;
-  // static constexpr uint32_t ALT_5 = 2;
-
-  Gpio(int dev_mem_fd)
-      : mmap_(dev_mem_fd, 4096, RASPI_23_PERI_BASE + GPIO_BASE),
-        gpio_(reinterpret_cast<volatile uint32_t*>(mmap_.ptr())) {}
-
-  void SetGpioMode(uint32_t gpio, uint32_t function) {
-    uint32_t reg_offset = gpio / 10;
-    uint32_t bit = (gpio % 10) * 3;
-    const auto value = gpio_[reg_offset];
-    gpio_[reg_offset] = (value & ~(0x7 << bit)) | ((function & 0x7) << bit);
-  }
-
-  void SetGpioOutput(uint32_t gpio, bool value) {
-    if (value) {
-      const uint32_t reg_offset = gpio / 32 + 7;
-      gpio_[reg_offset] = 1 << (gpio % 32);
-    } else {
-      const uint32_t reg_offset = gpio / 32 + 10;
-      gpio_[reg_offset] = 1 << (gpio % 32);
-    }
-  }
-
-  volatile uint32_t& operator[](int index) { return gpio_[index]; }
-  const volatile uint32_t& operator[](int index) const { return gpio_[index]; }
-
-  class ActiveLow {
-   public:
-    ActiveLow(Gpio* parent, uint32_t gpio) : parent_(parent), gpio_(gpio) {
-      parent_->SetGpioOutput(gpio_, false);
-    }
-
-    ~ActiveLow() {
-      parent_->SetGpioOutput(gpio_, true);
-    }
-
-   private:
-    Gpio* const parent_;
-    const uint32_t gpio_;
-  };
-
- private:
-  base::SystemMmap mmap_;
-  volatile uint32_t* const gpio_;
-};
-
 Rpi3RawAuxSpi::Rpi3RawAuxSpi(const Options& options) {
   fd_ = ::open("/dev/mem", O_RDWR | O_SYNC);
   mjlib::base::system_error::throw_if(
@@ -121,18 +65,18 @@ Rpi3RawAuxSpi::Rpi3RawAuxSpi(const Options& options) {
   spi_ = reinterpret_cast<volatile Bcm2835AuxSpi*>(
       static_cast<char*>(spi_mmap_.ptr()) + 0x80);
 
-  gpio_ = std::make_unique<Gpio>(fd_);
+  gpio_ = std::make_unique<Rpi3Gpio>(fd_);
 
   gpio_->SetGpioOutput(kSpi1CS0, true);
   gpio_->SetGpioOutput(kSpi1CS1, true);
   gpio_->SetGpioOutput(kSpi1CS2, true);
 
-  gpio_->SetGpioMode(kSpi1CS0, Gpio::OUTPUT); // We'll do CS in SW
-  gpio_->SetGpioMode(kSpi1CS1, Gpio::OUTPUT);
-  gpio_->SetGpioMode(kSpi1CS2, Gpio::OUTPUT);
-  gpio_->SetGpioMode(19, Gpio::ALT_4);
-  gpio_->SetGpioMode(20, Gpio::ALT_4);
-  gpio_->SetGpioMode(21, Gpio::ALT_4);
+  gpio_->SetGpioMode(kSpi1CS0, Rpi3Gpio::OUTPUT); // We'll do CS in SW
+  gpio_->SetGpioMode(kSpi1CS1, Rpi3Gpio::OUTPUT);
+  gpio_->SetGpioMode(kSpi1CS2, Rpi3Gpio::OUTPUT);
+  gpio_->SetGpioMode(19, Rpi3Gpio::ALT_4);
+  gpio_->SetGpioMode(20, Rpi3Gpio::ALT_4);
+  gpio_->SetGpioMode(21, Rpi3Gpio::ALT_4);
 
   // Start by disabling it to try and get to a known good state.
   *auxenb_ &= ~0x02;
@@ -177,7 +121,7 @@ Rpi3RawAuxSpi::~Rpi3RawAuxSpi() {}
 
 void Rpi3RawAuxSpi::Write(int cs, int address, std::string_view data) {
   BusyWaitUs(options_.cs_hold_us);
-  Gpio::ActiveLow cs_holder(gpio_.get(), kSpi1CS[cs]);
+  Rpi3Gpio::ActiveLow cs_holder(gpio_.get(), kSpi1CS[cs]);
   BusyWaitUs(options_.cs_hold_us);
 
   const uint32_t value = 0
@@ -225,7 +169,7 @@ void Rpi3RawAuxSpi::Write(int cs, int address, std::string_view data) {
 
 void Rpi3RawAuxSpi::Read(int cs, int address, mjlib::base::string_span data) {
   BusyWaitUs(options_.cs_hold_us);
-  Gpio::ActiveLow cs_holder(gpio_.get(), kSpi1CS[cs]);
+  Rpi3Gpio::ActiveLow cs_holder(gpio_.get(), kSpi1CS[cs]);
   BusyWaitUs(options_.cs_hold_us);
 
   const uint32_t value = 0

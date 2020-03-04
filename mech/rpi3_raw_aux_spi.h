@@ -19,6 +19,8 @@
 #include "base/system_fd.h"
 #include "base/system_mmap.h"
 
+#include "mech/rpi3_gpio.h"
+
 namespace mjmech {
 namespace mech {
 
@@ -67,8 +69,7 @@ class Rpi3RawAuxSpi {
   volatile uint32_t* auxenb_ = nullptr;
   volatile Bcm2835AuxSpi* spi_ = nullptr;
 
-  class Gpio;
-  std::unique_ptr<Gpio> gpio_;
+  std::unique_ptr<Rpi3Gpio> gpio_;
 };
 
 }
