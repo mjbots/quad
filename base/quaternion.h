@@ -52,12 +52,13 @@ class Quaternion {
     return Quaternion(w_, -x_, -y_, -z_);
   }
 
+  double norm() const {
+    return std::sqrt(w_ * w_ + x_ * x_ + y_ * y_ + z_ * z_);
+  }
+
   Quaternion normalized() const {
-    double norm = std::sqrt(w_ * w_ + x_ * x_ + y_ * y_ + z_ * z_);
-    return Quaternion(w_ / norm,
-                      x_ / norm,
-                      y_ / norm,
-                      z_ / norm);
+    const double n = norm();
+    return Quaternion(w_ / n, x_ / n, y_ / n, z_ / n);
   }
 
   Eigen::Matrix<double, 3, 3> matrix() const {
