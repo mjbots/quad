@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma once
+
 #include "mjlib/base/visitor.h"
 
 #include "base/euler.h"
@@ -27,6 +29,7 @@ struct AttitudeData {
   base::Quaternion attitude;
   base::Point3D rate_dps;
   base::Euler euler_deg;
+  base::Point3D accel_mps2;
 
   base::Point3D bias_dps;
   base::Quaternion attitude_uncertainty;
@@ -38,6 +41,7 @@ struct AttitudeData {
     a->Visit(MJ_NVP(attitude));
     a->Visit(MJ_NVP(rate_dps));
     a->Visit(MJ_NVP(euler_deg));
+    a->Visit(MJ_NVP(accel_mps2));
     a->Visit(MJ_NVP(bias_dps));
     a->Visit(MJ_NVP(attitude_uncertainty));
     a->Visit(MJ_NVP(bias_uncertainty_dps));

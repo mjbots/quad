@@ -28,8 +28,10 @@
 #include "base/logging.h"
 #include "base/sophus.h"
 
+#include "mech/attitude_data.h"
 #include "mech/mammal_ik.h"
 #include "mech/moteus.h"
+#include "mech/rpi3_hat_imu.h"
 #include "mech/trajectory.h"
 
 namespace pl = std::placeholders;
@@ -364,11 +366,22 @@ class QuadrupedControl::Impl {
     context.telemetry_registry->Register("qc_status", &status_signal_);
     context.telemetry_registry->Register("qc_command", &command_signal_);
     context.telemetry_registry->Register("qc_control", &control_signal_);
+    context.telemetry_registry->Register("imu", &imu_signal_);
 
     mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
+    if (parameters_.enable_imu) {
+      imu_ = std::make_unique<Rpi3HatImu>(executor_, [&]() {
+          Rpi3HatImu::Options options;
+          options.device = parameters_.imu_device;
+          options.speed = parameters_.imu_speed;
+          options.cpu_affinity = parameters_.imu_cpu_affinity;
+          return options;
+        }());
+    }
+
     // Load our configuration.
     std::ifstream inf(parameters_.config);
     mjlib::base::system_error::throw_if(
@@ -443,14 +456,28 @@ class QuadrupedControl::Impl {
     outstanding_ = true;
 
     status_reply_ = {};
+
+    // Ask for the IMU and the servo data simultaneously.
+    outstanding_status_requests_ = 1;
     client_->AsyncRegisterMultiple(status_request_, &status_reply_,
                                    std::bind(&Impl::HandleStatus, this, pl::_1));
+    if (imu_) {
+      imu_->ReadImu(&imu_data_, std::bind(&Impl::HandleStatus, this, pl::_1));
+      outstanding_status_requests_++;
+    }
   }
 
   void HandleStatus(const mjlib::base::error_code& ec) {
     mjlib::base::FailIf(ec);
 
+    outstanding_status_requests_--;
+    if (outstanding_status_requests_ > 0) { return; }
+
     timestamps_.status_done = Now();
+
+    if (!!imu_) {
+      imu_signal_(&imu_data_);
+    }
 
     // If we don't have all 12 servos, then skip this cycle.
     status_.missing_replies = 12 - status_reply_.replies.size();
@@ -1977,9 +2004,14 @@ class QuadrupedControl::Impl {
     boost::posix_time::ptime command_done;
   } timestamps_;
 
+  int outstanding_status_requests_ = 0;
+  std::unique_ptr<Rpi3HatImu> imu_;
+  AttitudeData imu_data_;
+
   boost::signals2::signal<void (const Status*)> status_signal_;
   boost::signals2::signal<void (const CommandLog*)> command_signal_;
   boost::signals2::signal<void (const ControlLog*)> control_signal_;
+  boost::signals2::signal<void (const AttitudeData*)> imu_signal_;
 
   std::vector<moteus::Value> values_cache_;
 

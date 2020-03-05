@@ -22,7 +22,7 @@
 
 #include "mech/attitude_data.h"
 #include "mech/imu_data.h"
-#include "mech/spidev.h"
+#include "mech/rpi3_raw_spi.h"
 
 namespace po = boost::program_options;
 
@@ -31,6 +31,7 @@ namespace mech {
 
 int do_main(int argc, char** argv) {
   std::string spi_device = "/dev/spidev0.0";
+  int cs_pin = 8;
   int speed = 10000000;
   std::string log_file = "";
 
@@ -52,7 +53,11 @@ int do_main(int argc, char** argv) {
     return 0;
   }
 
-  mech::SpiDev spi{spi_device, speed};
+  mech::Rpi3RawSpi spi([&]() {
+      mech::Rpi3RawSpi::Options options;
+      options.speed_hz = speed;
+      return options;
+    }());
 
   base::TelemetryLog log;
   base::TelemetryLogRegistrar registrar{&log};
@@ -88,6 +93,9 @@ int do_main(int argc, char** argv) {
     float x_dps = 0;
     float y_dps = 0;
     float z_dps = 0;
+    float a_x_mps2 = 0;
+    float a_y_mps2 = 0;
+    float a_z_mps2 = 0;
     float bias_x_dps = 0;
     float bias_y_dps = 0;
     float bias_z_dps = 0;
@@ -106,61 +114,70 @@ int do_main(int argc, char** argv) {
 
   while (true) {
     bmi088_data = {};
-    spi.Read(33, mjlib::base::string_span(
+    spi.Read(0, 33, mjlib::base::string_span(
                  reinterpret_cast<char*>(&bmi088_data), sizeof(bmi088_data)));
-    if (bmi088_data.present & 0x01) {
-      spi.Read(34, mjlib::base::string_span(
-                   reinterpret_cast<char*>(&attitude), sizeof(attitude)));
-
-      const auto now = boost::posix_time::microsec_clock::universal_time();
-      imu_data.timestamp = now;
-      imu_data.rate_dps = { bmi088_data.gx_dps,
-                            bmi088_data.gy_dps,
-                            bmi088_data.gz_dps };
-      imu_data.accel_mps2 = { bmi088_data.ax_m_s2,
-                              bmi088_data.ay_m_s2,
-                              bmi088_data.az_m_s2 };
-      imu_signal(&imu_data);
-
-      att_data.timestamp = now;
-      att_data.attitude = {attitude.w, attitude.x, attitude.y, attitude.z};
-      att_data.rate_dps = {attitude.x_dps, attitude.y_dps, attitude.z_dps};
-      att_data.euler_deg = (180.0 / M_PI) * att_data.attitude.euler_rad();
-
-      att_data.bias_dps = {attitude.bias_x_dps, attitude.bias_y_dps, attitude.bias_z_dps};
-      att_data.attitude_uncertainty = {
-        attitude.uncertainty_w,
-        attitude.uncertainty_x,
-        attitude.uncertainty_y,
-        attitude.uncertainty_z,
-      };
-      att_data.bias_uncertainty_dps = {
-        attitude.uncertainty_bias_x_dps,
-        attitude.uncertainty_bias_y_dps,
-        attitude.uncertainty_bias_z_dps,
-      };
-
-      att_signal(&att_data);
-
-      if (last_update.is_not_a_date_time() ||
-          mjlib::base::ConvertDurationToSeconds(now - last_update) > 0.1) {
-        std::cout << fmt::format(
-            "y={:5.1f} p={:5.1f} r={:5.1f}  dps=({:5.1f},{:5.1f},{:5.1f}) "
-            "a=({:4.1f},{:4.1f},{:4.1f})  \r",
-            att_data.euler_deg.yaw,
-            att_data.euler_deg.pitch,
-            att_data.euler_deg.roll,
-            att_data.rate_dps.x(),
-            att_data.rate_dps.y(),
-            att_data.rate_dps.z(),
-            imu_data.accel_mps2.x(),
-            imu_data.accel_mps2.y(),
-            imu_data.accel_mps2.z());
-        std::cout.flush();
-      }
+    if ((bmi088_data.present & 0x01) == 0) {
+      ::usleep(50);
+      continue;
     }
-    ::usleep(50);
+
+    spi.Read(0, 34, mjlib::base::string_span(
+                 reinterpret_cast<char*>(&attitude), sizeof(attitude)));
+
+    const auto now = boost::posix_time::microsec_clock::universal_time();
+    imu_data.timestamp = now;
+    imu_data.rate_dps = { bmi088_data.gx_dps,
+                          bmi088_data.gy_dps,
+                          bmi088_data.gz_dps };
+    imu_data.accel_mps2 = { bmi088_data.ax_m_s2,
+                            bmi088_data.ay_m_s2,
+                            bmi088_data.az_m_s2 };
+    imu_signal(&imu_data);
+
+    att_data.timestamp = now;
+    att_data.attitude = {attitude.w, attitude.x, attitude.y, attitude.z};
+    att_data.rate_dps = {attitude.x_dps, attitude.y_dps, attitude.z_dps};
+    att_data.euler_deg = (180.0 / M_PI) * att_data.attitude.euler_rad();
+    att_data.accel_mps2 = { attitude.a_x_mps2, attitude.a_y_mps2, attitude.a_z_mps2 };
+
+    att_data.bias_dps = {attitude.bias_x_dps, attitude.bias_y_dps, attitude.bias_z_dps};
+    att_data.attitude_uncertainty = {
+      attitude.uncertainty_w,
+      attitude.uncertainty_x,
+      attitude.uncertainty_y,
+      attitude.uncertainty_z,
+    };
+    att_data.bias_uncertainty_dps = {
+      attitude.uncertainty_bias_x_dps,
+      attitude.uncertainty_bias_y_dps,
+      attitude.uncertainty_bias_z_dps,
+    };
+
+    att_signal(&att_data);
+
+    if (last_update.is_not_a_date_time() ||
+        mjlib::base::ConvertDurationToSeconds(now - last_update) > 0.1) {
+      std::cout << fmt::format(
+          "y={:5.1f} p={:5.1f} r={:5.1f}  dps=({:5.1f},{:5.1f},{:5.1f}) "
+          "a=({:4.1f},{:4.1f},{:4.1f})  \r",
+          att_data.euler_deg.yaw,
+          att_data.euler_deg.pitch,
+          att_data.euler_deg.roll,
+          att_data.rate_dps.x(),
+          att_data.rate_dps.y(),
+          att_data.rate_dps.z(),
+          imu_data.accel_mps2.x(),
+          imu_data.accel_mps2.y(),
+          imu_data.accel_mps2.z());
+      std::cout.flush();
+    }
+
+    if (std::abs(att_data.attitude.norm() - 1.0) > 1.0) {
+      std::cout << "\n\nBAD DATA\n\n";
+    }
   }
+
+  ::usleep(50);
 }
 
 }
