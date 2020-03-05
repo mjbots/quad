@@ -66,7 +66,7 @@ class QuadrupedControl : boost::noncopyable {
   struct Status {
     boost::posix_time::ptime timestamp;
 
-    QuadrupedCommand::Mode mode = QuadrupedCommand::Mode::kStopped;
+    QuadrupedCommand::Mode mode = QuadrupedCommand::Mode::kConfiguring;
     boost::posix_time::ptime mode_start;
     std::string fault;
 

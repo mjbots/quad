@@ -26,49 +26,54 @@ namespace mech {
 
 struct QuadrupedCommand {
   enum Mode {
+    // This is a transient state that should not be commanded.  The
+    // quadruped uses it to perform initialization functions.
+    kConfiguring = 0,
+
     // In this mode, all servos are powered off.
-    kStopped = 0,
+    kStopped = 1,
 
     // In this mode, all servos are set to zero velocity.  It is a
     // latched state.  The only valid transition from this state is to
     // kStopped.
-    kFault = 1,
+    kFault = 2,
 
     // In this mode, all servos are set to zero velocity.  This is the
     // safest thing that can be done with no knowledge of the current
     // robot state.
-    kZeroVelocity = 2,
+    kZeroVelocity = 3,
 
     // In this mode, each joint is commanded individually with a
     // position, velocity, and torque.
-    kJoint = 3,
+    kJoint = 4,
 
     // In this mode, each leg is commanded individually with a
     // position, velocity, and force.
-    kLeg = 4,
+    kLeg = 5,
 
     // This mode can be entered only from the kStopped or
     // kZeroVelocity state.  It positions the legs in an appropriate
     // location, then stands the robot up to the given surface frame
     // (S) pose.
-    kStandUp = 5,
+    kStandUp = 6,
 
     // This is a simple mode that just lets the body to robot frame be
     // altered with no other leg movements.  It latches whatever foot
     // positions happen to be.  It can be entered from kStandUp:kDone.
-    kRest = 6,
+    kRest = 7,
 
     // Jump one or more times.
-    kJump = 7,
+    kJump = 8,
 
     // Walk
-    kWalk = 8,
+    kWalk = 9,
 
     kNumModes,
   };
 
   static std::map<Mode, const char*> ModeMapper() {
     return { {
+        { kConfiguring, "configuring" },
         { kStopped, "stopped" },
         { kFault, "fault" },
         { kZeroVelocity, "zero_velocity" },

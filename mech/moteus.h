@@ -1,4 +1,4 @@
-// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +19,10 @@ namespace mjmech {
 namespace mech {
 namespace moteus {
 
+enum {
+  kCurrentRegisterMapVersion = 2,
+};
+
 enum Ids : uint8_t {
   kBroadcastId = 0x7f,
 };
@@ -30,6 +34,7 @@ enum Register : uint32_t {
   kTorque = 0x003,
   kQCurrent = 0x004,
   kDCurrent = 0x005,
+  kRezeroState = 0x00c,
   kVoltage = 0x00d,
   kTemperature = 0x00e,
   kFault = 0x00f,
@@ -56,6 +61,12 @@ enum Register : uint32_t {
   kCommandPositionMaxCurrent = 0x025,
   kCommandStopPosition = 0x026,
   kCommandTimeout = 0x027,
+
+  kRegisterMapVersion = 0x102,
+  kSerialNumber = 0x120,
+  kSerialNumber1 = 0x120,
+  kSerialNumber2 = 0x121,
+  kSerialNumber3 = 0x122,
 };
 
 enum class Mode {

@@ -58,6 +58,33 @@ auto Average(Iter begin, Iter end, Functor f) -> decltype(f(*begin)) {
 
 constexpr double kGravity = 9.81;
 
+struct ReportedServoConfig {
+  boost::posix_time::ptime timestamp;
+
+  struct Servo {
+    int id = 0;
+    int rezero_state = 0;
+    int register_map_version = -1;
+    std::array<uint8_t, 12> serial_number = {};
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(id));
+      a->Visit(MJ_NVP(rezero_state));
+      a->Visit(MJ_NVP(register_map_version));
+      a->Visit(MJ_NVP(serial_number));
+    }
+  };
+
+  std::vector<Servo> servos;
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(MJ_NVP(timestamp));
+    a->Visit(MJ_NVP(servos));
+  }
+};
+
 // This represents the JSON used to configure the geometry of the
 // robot.
 struct Config {
@@ -367,6 +394,7 @@ class QuadrupedControl::Impl {
     context.telemetry_registry->Register("qc_command", &command_signal_);
     context.telemetry_registry->Register("qc_control", &control_signal_);
     context.telemetry_registry->Register("imu", &imu_signal_);
+    context.telemetry_registry->Register("servo_config", &servo_config_signal_);
 
     mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
   }
@@ -438,6 +466,19 @@ class QuadrupedControl::Impl {
       current.request.ReadMultiple(moteus::Register::kMode, 4, 1);
       current.request.ReadMultiple(moteus::Register::kVoltage, 3, 0);
     }
+
+    config_status_request_ = {};
+    for (const auto& joint : config_.joints) {
+      config_status_request_.push_back({});
+      auto& current = config_status_request_.back();
+      current.id = joint.id;
+
+      // While configuring, we request a few more things.
+      current.request.ReadMultiple(moteus::Register::kMode, 4, 1);
+      current.request.ReadMultiple(moteus::Register::kRezeroState, 4, 0);
+      current.request.ReadMultiple(moteus::Register::kRegisterMapVersion, 1, 2);
+      current.request.ReadMultiple(moteus::Register::kSerialNumber, 3, 2);
+    }
   }
 
   void HandleTimer(const mjlib::base::error_code& ec) {
@@ -459,7 +500,13 @@ class QuadrupedControl::Impl {
 
     // Ask for the IMU and the servo data simultaneously.
     outstanding_status_requests_ = 1;
-    client_->AsyncRegisterMultiple(status_request_, &status_reply_,
+    auto* request = [&]() {
+      if (status_.mode == QM::kConfiguring) {
+        return &config_status_request_;
+      }
+      return &status_request_;
+    }();
+    client_->AsyncRegisterMultiple(*request, &status_reply_,
                                    std::bind(&Impl::HandleStatus, this, pl::_1));
     if (imu_) {
       imu_->ReadImu(&imu_data_, std::bind(&Impl::HandleStatus, this, pl::_1));
@@ -545,6 +592,11 @@ class QuadrupedControl::Impl {
   void UpdateStatus() {
     std::vector<QuadrupedState::Link> links;
 
+    if (status_.mode == QM::kConfiguring) {
+      // Try to update our config structure.
+      UpdateConfiguringStatus();
+    }
+
     auto find_or_make_joint = [&](int id) -> QuadrupedState::Joint& {
       for (auto& joint : status_.state.joints) {
         if (joint.id == id) { return joint; }
@@ -612,6 +664,9 @@ class QuadrupedControl::Impl {
               [](const auto& lhs, const auto& rhs) {
                 return lhs.id < rhs.id;
               });
+
+    // We should only be here if we have something for all our joints.
+    MJ_ASSERT(status_.state.joints.size() == 12);
 
     if (status_.mode != QM::kFault) {
       std::string fault;
@@ -687,12 +742,71 @@ class QuadrupedControl::Impl {
     // pose_mm_RB isn't sensed, but is just a commanded value.
   }
 
+  void UpdateConfiguringStatus() {
+    auto& reported = reported_servo_config_;
+
+    auto find_or_make_servo = [&](int id) -> ReportedServoConfig::Servo& {
+      for (auto& servo : reported.servos) {
+        if (servo.id == id) { return servo; }
+      }
+      reported.servos.push_back({});
+      auto& result = reported.servos.back();
+      result.id = id;
+      return result;
+    };
+
+    for (const auto& reply : status_reply_.replies) {
+      auto& out_servo = find_or_make_servo(reply.id);
+
+      for (const auto& pair : reply.reply) {
+        const auto* maybe_value = std::get_if<moteus::Value>(&pair.second);
+        if (!maybe_value) { continue; }
+        const auto& value = *maybe_value;
+        switch (static_cast<moteus::Register>(pair.first)) {
+          case moteus::kRezeroState: {
+            out_servo.rezero_state = moteus::ReadInt(value);
+            break;
+          }
+          case moteus::kRegisterMapVersion: {
+            out_servo.register_map_version = moteus::ReadInt(value);
+            break;
+          }
+          case moteus::kSerialNumber1: {
+            const auto sn = static_cast<uint32_t>(moteus::ReadInt(value));
+            std::memcpy(&out_servo.serial_number[0], &sn, sizeof(sn));
+            break;
+          }
+          case moteus::kSerialNumber2: {
+            const auto sn = static_cast<uint32_t>(moteus::ReadInt(value));
+            std::memcpy(&out_servo.serial_number[4], &sn, sizeof(sn));
+            break;
+          }
+          case moteus::kSerialNumber3: {
+            const auto sn = static_cast<uint32_t>(moteus::ReadInt(value));
+            std::memcpy(&out_servo.serial_number[8], &sn, sizeof(sn));
+            break;
+          }
+          default: {
+            break;
+          }
+        }
+      }
+    }
+
+    reported.timestamp = Now();
+    servo_config_signal_(&reported);
+  }
+
   void RunControl() {
     if (current_command_.mode != status_.mode) {
       MaybeChangeMode();
     }
 
     switch (status_.mode) {
+      case QM::kConfiguring: {
+        DoControl_Configuring();
+        break;
+      }
       case QM::kStopped: {
         DoControl_Stopped();
         break;
@@ -737,7 +851,15 @@ class QuadrupedControl::Impl {
 
   void MaybeChangeMode() {
     const auto old_mode = status_.mode;
+    if (status_.mode == QM::kConfiguring) {
+      // We can only leave this mode after we have heard from all the
+      // servos, they are all rezeroed, and have an appropriate
+      // register map version.
+      if (!IsConfiguringDone()) { return; }
+    }
+
     switch (current_command_.mode) {
+      case QM::kConfiguring:
       case QM::kNumModes:
       case QM::kFault: {
         mjlib::base::AssertNotReached();
@@ -814,6 +936,8 @@ class QuadrupedControl::Impl {
     }
 
     if (status_.mode != old_mode) {
+      log_.warn(fmt::format("Changed mode from {} to {}",
+                            old_mode, status_.mode));
       switch (old_mode) {
         case QM::kStandUp: {
           status_.state.stand_up = {};
@@ -827,6 +951,7 @@ class QuadrupedControl::Impl {
           status_.state.walk = {};
           break;
         }
+        case QM::kConfiguring:
         case QM::kStopped:
         case QM::kFault:
         case QM::kZeroVelocity:
@@ -841,8 +966,42 @@ class QuadrupedControl::Impl {
     }
   }
 
+  bool IsConfiguringDone() {
+    // We must have heard from all 12 servos.
+    if (reported_servo_config_.servos.size() != 12) {
+      status_.fault = "missing servos";
+      return false;
+    }
+
+    // All of them must have been rezerod and have the current
+    // register map.
+    for (const auto& servo : reported_servo_config_.servos) {
+      if (servo.rezero_state == 0) {
+        status_.fault = fmt::format("servo {} not rezerod", servo.id);
+        return false;
+      }
+      if (servo.register_map_version != moteus::kCurrentRegisterMapVersion) {
+        status_.fault = fmt::format("servo {} has incorrect register version {}",
+                                    servo.id, servo.register_map_version);
+        return false;
+      }
+    }
+    status_.fault = "";
+    return true;
+  }
+
+  void DoControl_Configuring() {
+    log_.warn("Configuring!");
+    EmitStop();
+  }
+
   void DoControl_Stopped() {
     status_.fault = "";
+
+    EmitStop();
+  }
+
+  void EmitStop() {
     std::vector<QC::Joint> out_joints;
     for (const auto& joint : config_.joints) {
       QC::Joint out_joint;
@@ -1975,6 +2134,7 @@ class QuadrupedControl::Impl {
 
   QuadrupedControl::Status status_;
   QC current_command_;
+  ReportedServoConfig reported_servo_config_;
 
   std::array<ControlLog, 2> control_logs_;
   ControlLog* control_log_ = &control_logs_[0];
@@ -1987,6 +2147,7 @@ class QuadrupedControl::Impl {
 
   using Request = std::vector<Client::IdRequest>;
   Request status_request_;
+  Request config_status_request_;
   Client::Reply status_reply_;
 
   Request client_command_;
@@ -2012,6 +2173,8 @@ class QuadrupedControl::Impl {
   boost::signals2::signal<void (const CommandLog*)> command_signal_;
   boost::signals2::signal<void (const ControlLog*)> control_signal_;
   boost::signals2::signal<void (const AttitudeData*)> imu_signal_;
+  boost::signals2::signal<
+    void (const ReportedServoConfig*)> servo_config_signal_;
 
   std::vector<moteus::Value> values_cache_;
 
