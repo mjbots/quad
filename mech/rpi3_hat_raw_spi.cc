@@ -515,12 +515,15 @@ class Rpi3HatRawSpi::Impl {
 
   int WriteCanFrame(uint8_t source_id, uint8_t dest_id,
                     ReplyType reply_type, std::string_view data) {
+    MJ_ASSERT(data.size() <= 64);
+
     const int cs = (dest_id <= 6) ? 0 : 1;
     const int bus = (((dest_id - 1) % 6) < 3) ? 1 : 2;
 
     auto size = RoundUpDlc(data.size());
 
     char buf[70] = {};
+    MJ_ASSERT((6 + size) < sizeof(buf));
     buf[0] = bus;
     buf[3] = source_id | (reply_type == kRequestReply) ? 0x80 : 00;
     buf[4] = dest_id;
