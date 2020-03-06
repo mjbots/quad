@@ -137,21 +137,11 @@ struct Config {
 
   double mass_kg = 10.0;
 
-  struct MammalJoint {
-    double shoulder_deg = 0.0;
-    double femur_deg = 125.0;
-    double tibia_deg = -133.0;
-
-    template <typename Archive>
-    void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(shoulder_deg));
-      a->Visit(MJ_NVP(femur_deg));
-      a->Visit(MJ_NVP(tibia_deg));
-    }
-  };
-
   struct StandUp {
-    MammalJoint pose;
+    // This pose is referenced to the leg in the front right and the
+    // x/y positions should all be positive.  All other positions will
+    // be symmetric about the x/y axes.
+    base::Point3D pose_mm_R = {151, 219, 49};
     double velocity_dps = 60.0;
     double velocity_mm_s = 150.0;
     double max_preposition_torque_Nm = 3.0;
@@ -162,7 +152,7 @@ struct Config {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(pose));
+      a->Visit(MJ_NVP(pose_mm_R));
       a->Visit(MJ_NVP(velocity_dps));
       a->Visit(MJ_NVP(velocity_mm_s));
       a->Visit(MJ_NVP(max_preposition_torque_Nm));
@@ -186,9 +176,9 @@ struct Config {
 
   Rest rest;
 
-  double stand_height_mm = 200.0;
+  double stand_height_mm = 210.0;
 
-  double idle_x_mm = 230.0;
+  double idle_x_mm = 190.0;
   double idle_y_mm = 140.0;
 
   double rb_filter_constant_Hz = 2.0;
@@ -301,6 +291,12 @@ struct Config {
   }
 };
 
+struct MammalJoint {
+  double shoulder_deg = 0.0;
+  double femur_deg = 0.0;
+  double tibia_deg = 0.0;
+};
+
 struct Leg {
   int leg = 0;
   Config::Leg config;
@@ -309,6 +305,7 @@ struct Leg {
 
   base::Point3D stand_up_R;
   base::Point3D idle_R;
+  MammalJoint resolved_stand_up_joints;
 
   Leg(const Config::Leg& config_in,
       const Config::StandUp& stand_up,
@@ -319,31 +316,34 @@ struct Leg {
         config(config_in),
         pose_mm_BG(config_in.pose_mm_BG),
         ik(config_in.ik) {
-    IkSolver::JointAngles joints;
-
-    auto make_joint = [&](int id, double angle_deg) {
-      IkSolver::Joint joint;
-      joint.id = id;
-      joint.angle_deg = angle_deg;
-      return joint;
-    };
-
-    joints.push_back(
-        make_joint(config.ik.shoulder.id,
-                   stand_up.pose.shoulder_deg));
-    joints.push_back(
-        make_joint(config.ik.femur.id,
-                   stand_up.pose.femur_deg));
-    joints.push_back(
-        make_joint(config.ik.tibia.id,
-                   stand_up.pose.tibia_deg));
-
-    const auto pose_mm_G = ik.Forward_G(joints);
     // The idle and standup poses assume a null RB transform
     const Sophus::SE3d pose_mm_RB;
-    const auto pose_mm_R = pose_mm_RB * (config.pose_mm_BG * pose_mm_G);
+    const auto pose_mm_RG = pose_mm_RB * config.pose_mm_BG;
 
-    stand_up_R = pose_mm_R.pose_mm;
+    const base::Point3D pose_mm_R = [&]() {
+      auto result = stand_up.pose_mm_R;
+      if (config.pose_mm_BG.translation().x() < 0.0) { result.x() *= -1; }
+      if (config.pose_mm_BG.translation().y() < 0.0) { result.y() *= -1; }
+      return result;
+    }();
+
+    const base::Point3D pose_mm_G = pose_mm_RG.inverse() * pose_mm_R;
+
+    IkSolver::Effector effector_G;
+    effector_G.pose_mm = pose_mm_G;
+    const auto resolved = ik.Inverse(effector_G, {});
+    auto get_resolved = [&](int id) {
+      MJ_ASSERT(!!resolved);
+      for (const auto& joint_angle : *resolved) {
+        if (joint_angle.id == id) { return joint_angle.angle_deg; }
+      }
+      mjlib::base::AssertNotReached();
+    };
+    resolved_stand_up_joints.shoulder_deg = get_resolved(config.ik.shoulder.id);
+    resolved_stand_up_joints.femur_deg = get_resolved(config.ik.femur.id);
+    resolved_stand_up_joints.tibia_deg = get_resolved(config.ik.tibia.id);
+
+    stand_up_R = pose_mm_R;
     base::Point3D tf = config.pose_mm_BG.translation();
     idle_R = base::Point3D(
         idle_x_mm * ((tf.x() > 0.0) ? 1.0 : -1.0),
@@ -1132,13 +1132,16 @@ class QuadrupedControl::Impl {
         return true;
       };
 
-      if (!check(leg.config.ik.shoulder.id, config_.stand_up.pose.shoulder_deg)) {
+      if (!check(leg.config.ik.shoulder.id,
+                 leg.resolved_stand_up_joints.shoulder_deg)) {
         return false;
       }
-      if (!check(leg.config.ik.femur.id, config_.stand_up.pose.femur_deg)) {
+      if (!check(leg.config.ik.femur.id,
+                 leg.resolved_stand_up_joints.femur_deg)) {
         return false;
       }
-      if (!check(leg.config.ik.tibia.id, config_.stand_up.pose.tibia_deg)) {
+      if (!check(leg.config.ik.tibia.id,
+                 leg.resolved_stand_up_joints.tibia_deg)) {
         return false;
       }
     }
@@ -1160,9 +1163,12 @@ class QuadrupedControl::Impl {
         joints.push_back(joint);
       };
 
-      add_joint(leg.config.ik.shoulder.id, config_.stand_up.pose.shoulder_deg);
-      add_joint(leg.config.ik.femur.id, config_.stand_up.pose.femur_deg);
-      add_joint(leg.config.ik.tibia.id, config_.stand_up.pose.tibia_deg);
+      add_joint(leg.config.ik.shoulder.id,
+                leg.resolved_stand_up_joints.shoulder_deg);
+      add_joint(leg.config.ik.femur.id,
+                leg.resolved_stand_up_joints.femur_deg);
+      add_joint(leg.config.ik.tibia.id,
+                leg.resolved_stand_up_joints.tibia_deg);
     }
     ControlJoints(joints);
   }
@@ -1221,6 +1227,15 @@ class QuadrupedControl::Impl {
 
     if (!old_control_log_->legs_R.empty()) {
       legs_R = old_control_log_->legs_R;
+
+      // Ensure all gains are back to their default and that
+      // everything is marked as in stance.
+      for (auto& leg_R : legs_R) {
+        leg_R.kp_scale = {};
+        leg_R.kd_scale = {};
+        leg_R.stance = 1.0;
+        leg_R.landing = false;
+      }
       MoveLegsFixedSpeedZ(
           all_leg_ids_,
           &legs_R,
