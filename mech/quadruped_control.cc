@@ -56,6 +56,22 @@ auto Average(Iter begin, Iter end, Functor f) -> decltype(f(*begin)) {
   return sum / count;
 }
 
+template <typename Iter, typename Functor>
+auto Max(Iter begin, Iter end, Functor f) -> decltype(f(*begin)) {
+  using T = decltype(f(*begin));
+
+  MJ_ASSERT(begin != end);
+
+  T current = f(*begin);
+  Iter it = begin;
+  ++it;
+  for (; it != end; ++it) {
+    const auto value = f(*it);
+    if (value > current) { current = value; }
+  }
+  return current;
+}
+
 constexpr double kGravity = 9.81;
 
 struct ReportedServoConfig {
@@ -1381,14 +1397,17 @@ class QuadrupedControl::Impl {
 
         // Wait for our average velocity of all legs to exceed our
         // threshold, which indicates we have landed.
+        auto get_vel = [](const auto& leg_B) { return leg_B.velocity_mm_s.z(); };
+        const double max_velocity_mm_s = Max(
+            status_.state.legs_B.begin(),
+            status_.state.legs_B.end(),
+            get_vel);
         const double average_velocity_mm_s = Average(
             status_.state.legs_B.begin(),
             status_.state.legs_B.end(),
-            [](const auto& leg_B) {
-              return leg_B.velocity_mm_s.z();
-            });
-        // Also, if we're already applying more than half of our total
-        // weight, that must mean we have landed also.
+            get_vel);
+        // Also, if we're already applying more than a fraction of our
+        // total weight, that must mean we have landed also.
         const double total_force_z_N = Average(
             status_.state.legs_B.begin(),
             status_.state.legs_B.end(),
@@ -1396,7 +1415,7 @@ class QuadrupedControl::Impl {
               return leg_B.force_N.z();
             }) * status_.state.legs_B.size();
         if (js.falling.is_not_a_date_time() ||
-            (average_velocity_mm_s >= -config_.jump.land_threshold_mm_s &&
+            (max_velocity_mm_s >= -config_.jump.land_threshold_mm_s &&
              total_force_z_N < (0.75 * kGravity * config_.mass_kg))) {
           js.falling = Now();
         }
