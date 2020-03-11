@@ -32,7 +32,6 @@ cc_library(
     hdrs = glob([
         "*.h",
         "gsl/*.h",
-        "meta/*.hpp",
     ]),
     deps = [
         "@boost",
