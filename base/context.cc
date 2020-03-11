@@ -1,4 +1,4 @@
-// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,11 @@ namespace mjmech {
 namespace base {
 
 Context::Context()
-    : telemetry_log(std::make_unique<TelemetryLog>()),
+    : telemetry_log(std::make_unique<mjlib::telemetry::FileWriter>([]() {
+          mjlib::telemetry::FileWriter::Options options;
+          options.blocking = false;
+          return options;
+        }())),
       remote_debug(std::make_unique<TelemetryRemoteDebugServer>(executor)),
       telemetry_registry(std::make_unique<TelemetryRegistry>(
                              telemetry_log.get(), remote_debug.get())),

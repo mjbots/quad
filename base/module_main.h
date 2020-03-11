@@ -1,4 +1,4 @@
-// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -89,8 +89,6 @@ int safe_main(int argc, char**argv) {
   }
 
   if (!log_file.empty()) {
-    context.telemetry_log->SetRealtime(!debug);
-
     // Make sure that the log file has a date and timestamp somewhere
     // in the name.
     namespace fs = boost::filesystem;

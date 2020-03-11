@@ -1,4 +1,4 @@
-// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@
 #include <boost/test/auto_unit_test.hpp>
 
 #include "mjlib/base/visitor.h"
-#include "mjlib/telemetry/telemetry_archive.h"
 
 using namespace mjmech::base;
 
@@ -33,20 +32,4 @@ struct TestData {
 }
 
 BOOST_AUTO_TEST_CASE(TelemetryBasicTest) {
-  // TelemetryRegistry<TestRegistrar> registry;
-  // auto callable = registry.Register<TestData>("data1");
-
-  // // Our name should appear in the registrar's list of names.
-  // TestRegistrar* registrar = registry.registrar<TestRegistrar>();
-
-  // BOOST_REQUIRE_EQUAL(registrar->names_.size(), 1u);
-  // BOOST_CHECK_EQUAL(registrar->names_[0], "data1");
-  // BOOST_CHECK_EQUAL(registrar->data_.size(), 0u);
-
-  // TestData data;
-  // callable(&data);
-
-  // // Now some data should appear.
-  // BOOST_REQUIRE_EQUAL(registrar->names_.size(), 1u);
-  // BOOST_CHECK_EQUAL(registrar->data_.size(), 1u);
 }

@@ -1,4 +1,4 @@
-// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,9 +16,9 @@
 
 #include <boost/signals2/signal.hpp>
 
-#include "mjlib/telemetry/telemetry_archive.h"
+#include "mjlib/telemetry/binary_write_archive.h"
+#include "mjlib/telemetry/file_writer.h"
 
-#include "telemetry_log.h"
 
 namespace mjmech {
 namespace base {
@@ -33,34 +33,33 @@ namespace base {
 /// are written to the log and at what rate.
 class TelemetryLogRegistrar {
  public:
-  TelemetryLogRegistrar(TelemetryLog* telemetry_log)
+  TelemetryLogRegistrar(mjlib::telemetry::FileWriter* telemetry_log)
     : telemetry_log_(telemetry_log) {}
 
   template <typename T>
   void Register(const std::string& name,
                 boost::signals2::signal<void (const T*)>* signal) {
-    uint32_t identifier = telemetry_log_->AllocateIdentifier(name);
+    const auto identifier = telemetry_log_->AllocateIdentifier(name);
     telemetry_log_->WriteSchema(
-        identifier, 0, name,
-        mjlib::telemetry::TelemetryWriteArchive<T>::schema());
+        identifier,
+        mjlib::telemetry::BinarySchemaArchive::template schema<T>());
     signal->connect(std::bind(&TelemetryLogRegistrar::HandleData<T>,
                               this, identifier,
                               std::placeholders::_1));
   }
 
   template <typename T>
-  void HandleData(uint32_t identifier, const T* data) {
+  void HandleData(mjlib::telemetry::FileWriter::Identifier identifier,
+                  const T* data) {
     // If the log isn't open, don't even bother serializing things.
     if (!telemetry_log_->IsOpen()) { return; }
 
-    std::unique_ptr<TelemetryLog::OStream> buffer =
-        telemetry_log_->GetBuffer();
-    mjlib::telemetry::TelemetryWriteArchive<T>::Serialize(data, *buffer);
-    telemetry_log_->WriteData(identifier, TelemetryLog::kNoWriteFlags,
-                              std::move(buffer));
+    auto buffer = telemetry_log_->GetBuffer();
+    mjlib::telemetry::BinaryWriteArchive(*buffer).Accept(data);
+    telemetry_log_->WriteData({}, identifier, std::move(buffer));
   }
 
-  TelemetryLog* const telemetry_log_;
+  mjlib::telemetry::FileWriter* const telemetry_log_;
 };
 }
 }

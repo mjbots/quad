@@ -1,5 +1,5 @@
+// Copyright 2019-2020 Josh Pieper, jjp@pobox.com.
 // Copyright 2015-2016 Mikhail Afanasyev.  All rights reserved.
-// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@
 #include "mjlib/base/fast_stream.h"
 #include "mjlib/base/program_options_archive.h"
 #include "mjlib/base/system_error.h"
-#include "mjlib/telemetry/telemetry_archive.h"
+#include "mjlib/telemetry/binary_read_archive.h"
 
 #include "base/component_archives.h"
 #include "base/logging.h"
@@ -140,8 +140,7 @@ class VideoControllerApp : boost::noncopyable {
 
       MechTelemetry telemetry;
       try {
-        mjlib::telemetry::TelemetrySimpleReadArchive<MechTelemetry>::Deserialize(
-            &telemetry, istr);
+        mjlib::telemetry::BinaryReadArchive(istr).Accept(&telemetry);
       } catch (mjlib::base::system_error& se) {
         log_.warn("invalid telemetry: " + se.code().message());
         return;

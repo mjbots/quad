@@ -17,6 +17,7 @@
 #include <boost/program_options.hpp>
 
 #include "mjlib/base/time_conversions.h"
+#include "mjlib/telemetry/file_writer.h"
 
 #include "base/telemetry_log_registrar.h"
 
@@ -31,7 +32,6 @@ namespace mech {
 
 int do_main(int argc, char** argv) {
   std::string spi_device = "/dev/spidev0.0";
-  int cs_pin = 8;
   int speed = 10000000;
   std::string log_file = "";
 
@@ -53,13 +53,11 @@ int do_main(int argc, char** argv) {
     return 0;
   }
 
-  mech::Rpi3RawSpi spi([&]() {
-      mech::Rpi3RawSpi::Options options;
-      options.speed_hz = speed;
+  mjlib::telemetry::FileWriter log{[]() {
+      mjlib::telemetry::FileWriter::Options options;
+      options.blocking = false;
       return options;
-    }());
-
-  base::TelemetryLog log;
+    }()};
   base::TelemetryLogRegistrar registrar{&log};
 
   boost::signals2::signal<void(const ImuData*)> imu_signal;
@@ -70,8 +68,13 @@ int do_main(int argc, char** argv) {
   registrar.Register("imu", &imu_signal);
   registrar.Register("attitude", &att_signal);
 
-  log.SetRealtime(true);
   if (!log_file.empty()) { log.Open(log_file); }
+
+  mech::Rpi3RawSpi spi([&]() {
+      mech::Rpi3RawSpi::Options options;
+      options.speed_hz = speed;
+      return options;
+    }());
 
   struct Bmi088Data {
     uint16_t present = 0;
@@ -178,6 +181,7 @@ int do_main(int argc, char** argv) {
   }
 
   ::usleep(50);
+  return 0;
 }
 
 }

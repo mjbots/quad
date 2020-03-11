@@ -1,6 +1,6 @@
 # -*- python -*-
 
-# Copyright 2018-2019 Josh Pieper, jjp@pobox.com.
+# Copyright 2018-2020 Josh Pieper, jjp@pobox.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -64,10 +64,10 @@ cc_library(
         "@gst-plugins-ugly//:plugins",
         "@gst-libav//:plugins",
         "@gst-rtsp-server//:rtsp-server",
-        "@mjlib//mjlib/io:exclusive_command",
-        "@mjlib//mjlib/multiplex:asio_client",
-        "@mjlib//mjlib/multiplex:frame",
-        "@mjlib//mjlib/multiplex:register",
+        "@com_github_mjbots_mjlib//mjlib/io:exclusive_command",
+        "@com_github_mjbots_mjlib//mjlib/multiplex:asio_client",
+        "@com_github_mjbots_mjlib//mjlib/multiplex:frame",
+        "@com_github_mjbots_mjlib//mjlib/multiplex:register",
         "@opencv//:core",
         "@opencv//:aruco",
         "@opencv//:imgcodecs",
@@ -187,7 +187,7 @@ cc_binary(
     srcs = ["multiplex_tool_main.cc"],
     deps = [
         ":mech",
-        "@mjlib//mjlib/multiplex:libmultiplex_tool",
+        "@com_github_mjbots_mjlib//mjlib/multiplex:libmultiplex_tool",
         "@org_llvm_libcxx//:libcxx",
     ],
 )
@@ -218,8 +218,8 @@ cc_binary(
         ":mech",
         "@boost//:program_options",
         "@fmt",
-        "@mjlib//mjlib/base:string_span",
-        "@mjlib//mjlib/base:system_error",
+        "@com_github_mjbots_mjlib//mjlib/base:string_span",
+        "@com_github_mjbots_mjlib//mjlib/base:system_error",
         "@org_llvm_libcxx//:libcxx",
     ],
 )
@@ -231,8 +231,8 @@ cc_binary(
         ":mech",
         "@boost//:program_options",
         "@fmt",
-        "@mjlib//mjlib/base:string_span",
-        "@mjlib//mjlib/base:system_error",
+        "@com_github_mjbots_mjlib//mjlib/base:string_span",
+        "@com_github_mjbots_mjlib//mjlib/base:system_error",
         "@org_llvm_libcxx//:libcxx",
     ],
 )

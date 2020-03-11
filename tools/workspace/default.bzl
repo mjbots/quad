@@ -1,6 +1,6 @@
 # -*- python -*-
 
-# Copyright 2018-2019 Josh Pieper, jjp@pobox.com.
+# Copyright 2018-2020 Josh Pieper, jjp@pobox.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -32,7 +32,7 @@ def add_default_repositories(excludes = []):
     if "i2c-tools" not in excludes:
         i2c_tools_repository(name = "i2c-tools")
     if "mjlib" not in excludes:
-        mjlib_repository(name = "mjlib")
+        mjlib_repository(name = "com_github_mjbots_mjlib")
     if "moteus" not in excludes:
         moteus_repository(name = "moteus")
     if "raspberrypi-firmware" not in excludes:

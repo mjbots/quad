@@ -1,4 +1,4 @@
-// Copyright 2015 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@
 
 #include <boost/signals2/signal.hpp>
 
+#include "mjlib/telemetry/file_writer.h"
+
 #include "base/telemetry_log_registrar.h"
 #include "base/telemetry_remote_debug_registrar.h"
 
@@ -26,7 +28,7 @@ namespace base {
 /// Maintain a local publish-subscribe model used for data objects.
 class TelemetryRegistry : boost::noncopyable {
  public:
-  TelemetryRegistry(TelemetryLog* log,
+  TelemetryRegistry(mjlib::telemetry::FileWriter* log,
                     TelemetryRemoteDebugServer* debug)
       : log_(log), debug_(debug) {}
 

@@ -1,4 +1,4 @@
-// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ class ServoInterface : boost::noncopyable {
   virtual ~ServoInterface() {}
 
   struct Joint {
-    int address = 0;
+    int32_t address = 0;
 
     /// The position to aim to be at *right now*.  !finite means start
     /// from wherever we happen to be.

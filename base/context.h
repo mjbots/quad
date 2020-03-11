@@ -1,4 +1,4 @@
-// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,11 +21,11 @@
 
 #include "mjlib/io/realtime_executor.h"
 #include "mjlib/io/stream_factory.h"
+#include "mjlib/telemetry/file_writer.h"
 
 namespace mjmech {
 namespace base {
 
-class TelemetryLog;
 class TelemetryRemoteDebugServer;
 class TelemetryRegistry;
 
@@ -36,7 +36,7 @@ struct Context : boost::noncopyable {
   boost::asio::io_context context;
   mjlib::io::RealtimeExecutor rt_executor{context.get_executor()};
   boost::asio::executor executor{rt_executor};
-  std::unique_ptr<TelemetryLog> telemetry_log;
+  std::unique_ptr<mjlib::telemetry::FileWriter> telemetry_log;
   std::unique_ptr<TelemetryRemoteDebugServer> remote_debug;
   std::unique_ptr<TelemetryRegistry> telemetry_registry;
   std::unique_ptr<mjlib::io::StreamFactory> factory;

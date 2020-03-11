@@ -1,5 +1,5 @@
+// Copyright 2019-2020 Josh Pieper, jjp@pobox.com.
 // Copyright 2014-2015 Mikhail Afanasyev.  All rights reserved.
-// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -134,16 +134,16 @@ class CameraDriver : boost::noncopyable {
   struct CameraStats {
     boost::posix_time::ptime timestamp;
     // raw frames from camera
-    int raw_frames = 0;
+    int32_t raw_frames = 0;
     // h264 chunks
-    int h264_frames = 0;
-    int h264_key_frames = 0;
+    int32_t h264_frames = 0;
+    int32_t h264_key_frames = 0;
     double h264_max_interval_s = 0;
     // bytes in h264 chunks
-    int h264_bytes = 0;
-    int h264_max_bytes = 0;
+    int32_t h264_bytes = 0;
+    int32_t h264_max_bytes = 0;
     // h264 chunks which were sent to an active RTSP connection
-    int h264_frames_rtsp = 0;
+    int32_t h264_frames_rtsp = 0;
 
     template <typename Archive>
     void Serialize(Archive* a) {

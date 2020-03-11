@@ -1,6 +1,6 @@
 # -*- python -*-
 
-# Copyright 2018 Josh Pieper, jjp@pobox.com.
+# Copyright 2018-2020 Josh Pieper, jjp@pobox.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,16 +28,13 @@ genrule(
     cmd = "pyside-uic $< > $@",
 )
 
-genrule(
-    name = "tview_uic",
-    srcs = [
-        "tview_main_window.ui",
+py_binary(
+    name = "tplot",
+    srcs = ["tplot.py"],
+    data = [":tplot_uic"],
+    deps = [
+        "@com_github_mjbots_mjlib//mjlib/telemetry:py_file_reader",
     ],
-    outs = [
-        "ui_tview_main_window.py",
-    ],
-    output_to_bindir = 1,
-    cmd = "pyside-uic $< > $@",
 )
 
 exports_files([

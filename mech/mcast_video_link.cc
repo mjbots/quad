@@ -1,5 +1,5 @@
+// Copyright 2019-2020 Josh Pieper, jjp@pobox.com.
 // Copyright 2015 Mikhail Afanasyev.  All rights reserved.
-// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@
 #include "mjlib/base/system_error.h"
 #include "mjlib/io/deadline_timer.h"
 #include "mjlib/io/now.h"
+#include "mjlib/telemetry/format.h"
 
 #include "base/common.h"
 #include "base/context_full.h"
@@ -408,7 +409,7 @@ class McastVideoLinkTransmitter::Impl : boost::noncopyable {
   // NOTE: This requires that the queue_mutex_ lock be held.
   std::string MakeTelemetryData() const {
     mjlib::base::FastOStringStream ostr;
-    mjlib::telemetry::TelemetryWriteStream os(ostr);
+    mjlib::telemetry::WriteStream os(ostr);
 
     for (const auto& pair: telemetry_) {
       os.WriteString(pair.first); // name
@@ -814,13 +815,15 @@ class McastVideoLinkReceiver::Impl : boost::noncopyable {
 
   void DoAux(const std::string& aux) {
     mjlib::base::FastIStringStream istr(aux);
-    mjlib::telemetry::TelemetryReadStream is(istr);
+    mjlib::telemetry::ReadStream is(istr);
 
     try {
       while (istr.remaining()) {
-        const std::string name = is.ReadString();
-        const std::string data = is.ReadString();
-        (*parent_->telemetry_ready_signal())(name, data);
+        const auto maybe_name = is.ReadString();
+        const auto maybe_data = is.ReadString();
+        if (!!maybe_name && !!maybe_data) {
+          (*parent_->telemetry_ready_signal())(*maybe_name, *maybe_data);
+        }
       }
     } catch (mjlib::base::system_error& se) {
       log_.warn("corrupt aux data: " + se.code().message());

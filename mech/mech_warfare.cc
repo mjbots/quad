@@ -1,4 +1,4 @@
-// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,6 +25,8 @@
 
 #include "mjlib/io/now.h"
 #include "mjlib/io/repeating_timer.h"
+
+#include "mjlib/telemetry/binary_write_archive.h"
 
 #include "base/common.h"
 #include "base/context_full.h"
@@ -446,7 +448,7 @@ class MechWarfare::Impl : boost::noncopyable {
 
     telemetry_->SetTelemetry(
         "mech",
-        mjlib::telemetry::TelemetryWriteArchive<MechTelemetry>::Serialize(&telemetry),
+        mjlib::telemetry::BinaryWriteArchive::Write(&telemetry),
         Now() +
         mjlib::base::ConvertSecondsToDuration(kTelemetryTimeoutS));
   }

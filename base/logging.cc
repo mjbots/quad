@@ -1,4 +1,5 @@
-// Copyright 2015 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2020 Josh Pieper, jjp@pobox.com.
+// Copyright 2015 Mikhail Afanasyev.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,8 +23,6 @@
 #include <log4cpp/OstreamAppender.hh>
 #include <log4cpp/PatternLayout.hh>
 //#include <log4cpp/Formatter.hh>
-
-#include "telemetry_log.h"
 
 namespace mjmech {
 namespace base {
@@ -100,8 +99,6 @@ class LoggerSetup : boost::noncopyable {
          "enable debug logging for this exact source");
   }
 
-  //void WriteLogToTelemetryLog(TelemetryLog* log) {  }
-
   TextLogMessageSignal* GetLogMessageSignal() {
     return &signal_;
   }
@@ -160,10 +157,6 @@ void AddLoggingOptions(boost::program_options::options_description* desc) {
 void InitLogging() {
   LoggerSetup::get();
 }
-
-//void WriteLogToTelemetryLog(TelemetryLog* log) {
-//  LoggerSetup::get()->WriteLogToTelemetryLog(log);
-//}
 
 TextLogMessageSignal* GetLogMessageSignal() {
   return LoggerSetup::get()->GetLogMessageSignal();
