@@ -127,6 +127,19 @@ cc_binary(
 )
 
 cc_binary(
+    name = "qdd100_test",
+    srcs = ["qdd100_test.cc"],
+    deps = [
+        ":mech",
+        "//base",
+        "@com_github_mjbots_mjlib//mjlib/base:clipp_archive",
+        "@com_github_mjbots_mjlib//mjlib/base:clipp",
+        "@com_github_mjbots_mjlib//mjlib/multiplex:stream_asio_client_builder",
+        "@org_llvm_libcxx//:libcxx",
+    ],
+)
+
+cc_binary(
     name = "aruco_test",
     srcs = ["aruco_test.cc"],
     deps = ["//base", "@boost", "@boost//:timer", "@boost//:system", "@fmt",
