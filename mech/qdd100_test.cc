@@ -51,6 +51,7 @@ struct Options {
     a->Visit(MJ_NVP(joystick));
     a->Visit(MJ_NVP(stream));
     a->Visit(MJ_NVP(period_s));
+    a->Visit(MJ_NVP(max_torque_Nm));
   }
 };
 
@@ -126,7 +127,7 @@ class Application {
               Value(0.0f),  // kd_scale
               });
 
-    id_request_.request.ReadMultiple(moteus::kMode, 4, moteus::kFloat);
+    id_request_.request.ReadMultiple(moteus::kMode, 5, moteus::kFloat);
     id_request_.request.ReadMultiple(moteus::kVoltage, 3, moteus::kFloat);
 
     current_reply_ = {};
@@ -179,12 +180,14 @@ class Application {
 
     std::cout << fmt::format(
         " cmd={:5.1f}Nm  qdd100[ mode={:4} "
-        "pos={:7.1f}deg vel={:8.1f}dps torque={:5.1f}Nm t={:3.0f}C ]  \r",
+        "pos={:7.1f}deg vel={:6.1f}dps torque={:5.1f}Nm i={:4.1f}A "
+        "t={:3.0f}C ]  \r",
         command,
         MapMode(get(moteus::kMode)),
         get(moteus::kPosition) * 360.0,
         get(moteus::kVelocity) * 360.0,
         get(moteus::kTorque),
+        get(moteus::kQCurrent),
         get(moteus::kTemperature));
     std::cout.flush();
   }
