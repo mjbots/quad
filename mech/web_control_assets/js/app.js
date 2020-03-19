@@ -157,6 +157,7 @@
     var down = downButtons(gp);
 
     var mode_selector = document.getElementById("mode_selector");
+    var jump_acceleration = document.getElementById("jump_acceleration");
     var old_value = mode_selector.value;
 
     if (pressed[BUTTON_START]) {
@@ -232,7 +233,7 @@
       }
       if (value == 'jump') {
         cmd['command']['jump'] = {
-          "acceleration_mm_s2" : 2000.0,
+          "acceleration_mm_s2" : Number(jump_acceleration.value),
           "repeat" : true,
         };
       }
