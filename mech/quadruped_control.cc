@@ -1477,6 +1477,10 @@ class QuadrupedControl::Impl {
                 0.0,
                 js.velocity_mm_s +
                 js.acceleration_mm_s2 * timestamps_.delta_s);
+
+        extra_z_N = (config_.jump.landing_force_scale * config_.mass_kg *
+                     js.acceleration_mm_s2 * 0.001);
+
         if (js.velocity_mm_s == 0.0) {
           // We are either done, or going to start jumping again.
 
@@ -1486,6 +1490,10 @@ class QuadrupedControl::Impl {
           if (js.command.repeat &&
               current_command_.mode == QM::kJump) {
             js.mode = JM::kPushing;
+
+            // For the pushing phase, switch back to whatever
+            // acceleration we were commanded.
+            js.acceleration_mm_s2 = js.command.acceleration_mm_s2;
           } else {
             js.mode = JM::kDone;
 
@@ -1499,8 +1507,6 @@ class QuadrupedControl::Impl {
               &legs_R,
               js.velocity_mm_s,
               config_.jump.upper_height_mm);
-          extra_z_N = (config_.jump.landing_force_scale * config_.mass_kg *
-                       js.acceleration_mm_s2 * 0.001);
         }
         break;
       }
