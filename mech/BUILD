@@ -280,6 +280,7 @@ pkg_tar(
         "//utils:start-robot.sh": "start-robot.sh",
         "//utils:performance_governor.sh": "performance_governor.sh",
         "//utils:rezero.sh": "rezero.sh",
+        "//utils:update_limits.sh": "update_limits.sh",
         "//utils:update_pid.sh": "update_pid.sh",
         "//utils:update_voltage.sh": "update_voltage.sh",
         "web_control_assets/index.html" : "web_control_assets/index.html",

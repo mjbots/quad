@@ -41,6 +41,7 @@ exports_files([
     "rezero.sh",
     "start-robot.sh",
     "performance_governor.sh",
+    "update_limits.sh",
     "update_pid.sh",
     "update_voltage.sh",
 ])
