@@ -20,7 +20,7 @@ namespace mech {
 namespace moteus {
 
 enum {
-  kCurrentRegisterMapVersion = 2,
+  kCurrentRegisterMapVersion = 3,
 };
 
 enum Ids : uint8_t {
@@ -49,6 +49,8 @@ enum Register : uint32_t {
 
   kVFocTheta = 0x018,
   kVFocVoltage = 0x019,
+  kVoltageDqD = 0x01a,
+  kVoltageDqQ = 0x01b,
 
   kCommandQCurrent = 0x01c,
   kCommandDCurrent = 0x01d,
@@ -78,10 +80,11 @@ enum class Mode {
     kPwm = 5,
     kVoltage = 6,
     kVoltageFoc = 7,
-    kCurrent = 8,
-    kPosition = 9,
-    kPositionTimeout = 10,
-    kZeroVelocity = 11,
+    kVoltageDq = 8,
+    kCurrent = 9,
+    kPosition = 10,
+    kPositionTimeout = 11,
+    kZeroVelocity = 12,
 };
 
 using Value = mjlib::multiplex::Format::Value;
@@ -185,7 +188,7 @@ inline double ReadTorque(Value value) {
 }
 
 inline double ReadVoltage(Value value) {
-  return ReadScale(value, 1, 0.1, 0.001);
+  return ReadScale(value, 0.5, 0.1, 0.001);
 }
 
 inline double ReadTemperature(Value value) {

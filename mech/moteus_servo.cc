@@ -143,7 +143,7 @@ double read_torque(Value value) {
 }
 
 double read_voltage(Value value) {
-  return ReadScale(value, 1, 0.1, 0.001);
+  return ReadScale(value, 0.5, 0.1, 0.001);
 }
 
 double read_temperature(Value value) {

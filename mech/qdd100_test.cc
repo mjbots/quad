@@ -221,10 +221,11 @@ class Application {
     { 5, "pwm" },
     { 6, "volt" },
     { 7, "foc" },
-    { 8, "cur" },
-    { 9, "pos" },
-    { 10, "tmt" },
-    { 11, "zero" },
+    { 8, "vdq" },
+    { 9, "cur" },
+    { 10, "pos" },
+    { 11, "tmt" },
+    { 12, "zero" },
   };
 };
 
