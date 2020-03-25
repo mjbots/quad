@@ -41,13 +41,29 @@ namespace po = boost::program_options;
 namespace mjmech {
 namespace simulator {
 
+struct Options {
+  bool start_disabled = false;
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(MJ_NVP(start_disabled));
+  }
+};
+
 class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
  public:
   Impl(base::Context& context)
       : context_(context.context),
-        executor_(context.executor) {}
+        executor_(context.executor) {
+    mjlib::base::ProgramOptionsArchive(&desc_).Accept(&options_);
+  }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
+    if (!options_.start_disabled) {
+      // Send a space bar to get us simulating.
+      SimWindow::keyboard(' ', 0, 0);
+    }
+
     boost::asio::post(
         executor_,
         std::bind(std::move(callback), mjlib::base::error_code()));
@@ -55,7 +71,9 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
 
   boost::asio::io_context& context_;
   boost::asio::executor executor_;
-  po::options_description options_;
+  po::options_description desc_;
+
+  Options options_;
 };
 
 SimulatorWindow::SimulatorWindow(base::Context& context)
@@ -64,7 +82,7 @@ SimulatorWindow::SimulatorWindow(base::Context& context)
 SimulatorWindow::~SimulatorWindow() {}
 
 po::options_description* SimulatorWindow::options() {
-  return &impl_->options_;
+  return &impl_->desc_;
 }
 
 void SimulatorWindow::AsyncStart(mjlib::io::ErrorCallback callback) {
