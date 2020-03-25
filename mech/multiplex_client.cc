@@ -32,12 +32,17 @@
 #include "mjlib/io/repeating_timer.h"
 
 #include "base/logging.h"
+#include "mech/rpi3_hat_raw_spi.h"
 
 namespace pl = std::placeholders;
 namespace fs = boost::filesystem;
 
 namespace mjmech {
 namespace mech {
+
+namespace {
+using ConcreteClient = Rpi3HatRawSpi;
+}
 
 class MultiplexClient::Impl {
  public:
@@ -48,11 +53,11 @@ class MultiplexClient::Impl {
   }
 
   void AsyncStart(mjlib::io::ErrorCallback handler) {
-    Client::Options options;
+    ConcreteClient::Options options;
     options.query_timeout_s = 0.002;
     options.cpu_affinity = parameters_.cpu_affinity;
     options.spi_speed_hz = parameters_.spi_speed_hz;
-    client_ = std::make_unique<Client>(executor_, options);
+    client_ = std::make_unique<ConcreteClient>(executor_, options);
     ProcessRequests();
 
     boost::asio::post(

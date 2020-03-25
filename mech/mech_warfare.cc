@@ -61,7 +61,6 @@ struct JointData {
   boost::posix_time::ptime timestamp;
   std::vector<ServoInterface::JointStatus> joints;
   int32_t missing = 0;
-  MultiplexClient::Client::Stats serial_stats;
   double cycle_time_s = 0.0;
 
   template <typename Archive>
@@ -69,7 +68,6 @@ struct JointData {
     a->Visit(MJ_NVP(timestamp));
     a->Visit(MJ_NVP(joints));
     a->Visit(MJ_NVP(missing));
-    a->Visit(MJ_NVP(serial_stats));
     a->Visit(MJ_NVP(cycle_time_s));
   }
 };
@@ -392,10 +390,6 @@ class MechWarfare::Impl : boost::noncopyable {
         joint_data_.joints.push_back({});
         joint_data_.joints.back().address = i;
       }
-    }
-
-    if (multiplex_client_) {
-      joint_data_.serial_stats = multiplex_client_->stats();
     }
 
     std::sort(joint_data_.joints.begin(), joint_data_.joints.end(),

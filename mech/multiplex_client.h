@@ -17,7 +17,7 @@
 #include <boost/program_options.hpp>
 
 #include "mjlib/base/visitor.h"
-#include "mech/rpi3_hat_raw_spi.h"
+#include "mjlib/multiplex/asio_client.h"
 
 namespace mjmech {
 namespace mech {
@@ -42,7 +42,7 @@ class MultiplexClient {
   boost::program_options::options_description* options();
   void AsyncStart(mjlib::io::ErrorCallback);
 
-  using Client = Rpi3HatRawSpi;
+  using Client = mjlib::multiplex::AsioClient;
   using ClientCallback = fu2::unique_function<
     void (const mjlib::base::error_code&, Client*)>;
   void RequestClient(ClientCallback);
