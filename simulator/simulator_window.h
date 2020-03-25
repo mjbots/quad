@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,26 +16,25 @@
 
 #include <boost/program_options.hpp>
 
-#include <dart/dart.h>
+#include <dart/gui/SimWindow.hpp>
+
+#include "base/context.h"
 
 namespace mjmech {
 namespace simulator {
 
-class SimulatorWindow : public dart::gui::SimWindow {
+class SimulatorWindow {
  public:
-  SimulatorWindow();
+  SimulatorWindow(base::Context&);
   ~SimulatorWindow();
 
-  void keyboard(unsigned char key, int x, int y) override;
-  void timeStepping() override;
-  void render() override;
-
   boost::program_options::options_description* options();
-  void Start();
 
-  class Impl;
+  void AsyncStart(mjlib::io::ErrorCallback);
+  void InitWindow(int x, int y, const char* name);
 
  private:
+  class Impl;
   std::unique_ptr<Impl> impl_;
 };
 

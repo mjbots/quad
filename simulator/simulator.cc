@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,12 +14,12 @@
 
 #include <boost/program_options.hpp>
 
-#include <dart/dart.h>
+#include <dart/gui/LoadGlut.hpp>
 
 #include "base/logging.h"
 #include "base/program_options.h"
-#include "base/visitor.h"
-#include "simulator_window.h"
+
+#include "simulator/simulator_window.h"
 
 using namespace mjmech;
 using namespace mjmech::simulator;
@@ -27,16 +27,18 @@ using namespace mjmech::simulator;
 int main(int argc, char** argv) {
   namespace po = boost::program_options;
 
+  std::string config_file;
+
   po::options_description desc("Allowable options");
   desc.add_options()
       ("help,h", "display usage message")
+      ("config,c", po::value(&config_file), "read options from file")
       ;
   base::AddLoggingOptions(&desc);
 
-  SimulatorWindow window;
-  base::MergeProgramOptions(window.options(),
-                            "",
-                            &desc);
+  base::Context context;
+  SimulatorWindow window(context);
+  base::MergeProgramOptions(window.options(), "", &desc);
 
   po::variables_map vm;
   po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -49,8 +51,13 @@ int main(int argc, char** argv) {
 
   base::InitLogging();
 
+  if (!config_file.empty()) {
+    po::store(po::parse_config_file<char>(config_file.c_str(), desc), vm);
+  }
+  po::notify(vm);
+
   glutInit(&argc, argv);
-  window.initWindow(640, 480, "Mech Simulator");
-  window.Start();
+  window.InitWindow(640, 480, "Mech Simulator");
+  window.AsyncStart(mjlib::base::FailIf);
   glutMainLoop();
 }

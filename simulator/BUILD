@@ -1,6 +1,6 @@
 # -*- python -*-
 
-# Copyright 2018-2019 Josh Pieper, jjp@pobox.com.
+# Copyright 2020 Josh Pieper, jjp@pobox.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,12 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//tools/workspace:github_archive.bzl", "github_archive")
+package(default_visibility = ["//visibility:public"])
 
-def bazel_deps_repository(name):
-    github_archive(
-        name = name,
-        repo = "mjbots/bazel_deps",
-        commit = "6df76fbe120d378a5d1e1f78e15cdeeca18ef225",
-        sha256 = "742c00a37f1231bbeb940b5621192adb4649000a9904fb0b05d4d4455929f32a",
-    )
+load("//base:module_main.bzl", "module_main")
+
+cc_binary(
+    name = "simulator",
+    srcs = [
+        "simulator_window.cc",
+        "simulator.cc",
+    ] + glob(["*.h"]),
+    deps = [
+        "//mech",
+        "@dart//:gui",
+    ],
+)
