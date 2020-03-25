@@ -1,4 +1,4 @@
-// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,11 +16,12 @@
 
 #include <optional>
 
+#include <boost/signals2.hpp>
+
 #include "mjlib/base/visitor.h"
 
 #include "base/point3d.h"
 
-#include "mech/mech_defines.h"
 #include "mech/multiplex_client.h"
 #include "mech/turret_command.h"
 
@@ -32,9 +33,8 @@ namespace mech {
 class Turret : boost::noncopyable {
  public:
   template <typename Context>
-  Turret(Context& context,
-         Mech::ServoBase* servo)
-      : Turret(context.executor, servo, false) {
+  Turret(Context& context)
+      : Turret(context.executor, false) {
     context.telemetry_registry->Register("turret",
                                         &turret_data_signal_);
     context.telemetry_registry->Register("turret_command",
@@ -55,7 +55,6 @@ class Turret : boost::noncopyable {
   void StartBias();
 
   struct Parameters {
-    bool use_moteus_turret = false;
     int gimbal_address = 98;
     double period_s = 0.1;
     int command_update_decimate = 10;
@@ -77,7 +76,6 @@ class Turret : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(use_moteus_turret));
       a->Visit(MJ_NVP(gimbal_address));
       a->Visit(MJ_NVP(period_s));
       a->Visit(MJ_NVP(command_update_decimate));
@@ -148,8 +146,7 @@ class Turret : boost::noncopyable {
   const Data& data() const;
 
  private:
-  Turret(const boost::asio::executor& executor,
-         Mech::ServoBase* servo, bool);
+  Turret(const boost::asio::executor& executor, bool);
 
   struct CommandLog {
     boost::posix_time::ptime timestamp;

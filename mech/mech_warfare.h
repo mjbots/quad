@@ -21,7 +21,6 @@
 #include "base/component_archives.h"
 
 #include "mech/gait_driver.h"
-#include "mech/mech_defines.h"
 #include "mech/moteus_servo.h"
 #include "mech/multiplex_client.h"
 #include "mech/ripple.h"
@@ -45,8 +44,6 @@ class MechWarfare : boost::noncopyable {
 
   struct Members {
     std::unique_ptr<MultiplexClient> multiplex_client;
-    std::unique_ptr<Mech::ServoBase> servo_base;
-    std::unique_ptr<Mech::Servo> servo;
     std::unique_ptr<MoteusServo> moteus_servo;
     std::unique_ptr<ServoSelector> servo_selector;
     std::unique_ptr<GaitDriver> gait_driver;
@@ -56,8 +53,6 @@ class MechWarfare : boost::noncopyable {
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(multiplex_client));
-      a->Visit(MJ_NVP(servo_base));
-      a->Visit(MJ_NVP(servo));
       a->Visit(MJ_NVP(moteus_servo));
       a->Visit(MJ_NVP(servo_selector));
       a->Visit(MJ_NVP(gait_driver));

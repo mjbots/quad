@@ -43,8 +43,6 @@ namespace mech {
 namespace {
 const double kTelemetryTimeoutS = 0.2;
 
-typedef HerkuleXConstants HC;
-
 double Limit(double value, double min, double max) {
   if (value > max) { return max; }
   if (value < min) { return min; }
@@ -803,17 +801,14 @@ MechWarfare::MechWarfare(base::Context& context)
     : executor_(context.executor),
       impl_(new Impl(this, context)) {
   m_.multiplex_client = std::make_unique<MultiplexClient>(executor_);
-  m_.servo_base.reset(new Mech::ServoBase(executor_, *context.factory));
-  m_.servo.reset(new Mech::Servo(m_.servo_base.get()));
   m_.moteus_servo = std::make_unique<MoteusServo>(executor_, context.telemetry_registry.get());
 
   m_.servo_selector = std::make_unique<ServoSelector>();
-  m_.servo_selector->AddInterface("herkulex", m_.servo.get());
   m_.servo_selector->AddInterface("moteus", m_.moteus_servo.get());
 
   m_.gait_driver.reset(new GaitDriver(executor_,
                                       context.telemetry_registry.get()));
-  m_.turret.reset(new Turret(context, m_.servo_base.get()));
+  m_.turret.reset(new Turret(context));
 
   m_.multiplex_client->RequestClient([this](const auto& ec, auto* client) {
         mjlib::base::FailIf(ec);

@@ -26,7 +26,6 @@ cc_library(
         "gait_driver.cc",
         "gst_helpers.cc",
         "gst_main_loop.cc",
-        "herkulex.cc",
         "jump_test.cc",
         "mammal_ik.cc",
         "mcast_video_link.cc",
@@ -95,7 +94,6 @@ cc_library(
 cc_test(
     name = "test",
     srcs = ["test/" + x for x in [
-        "herkulex_test.cc",
         "leg_ik_test.cc",
         "mammal_ik_test.cc",
         "ripple_test.cc",
@@ -106,12 +104,6 @@ cc_test(
         ":mech",
         "@boost//:test",
     ],
-)
-
-cc_binary(
-    name = "herkulex_tool",
-    srcs = ["herkulex_tool.cc"],
-    deps = [":mech"],
 )
 
 cc_binary(
@@ -257,7 +249,6 @@ pkg_tar(
     package_dir = "mech",
     srcs = [
         ":bmi088_test",
-        ":herkulex_tool",
         ":jump_test",
         ":mech_warfare",
         ":moteus_tool",
