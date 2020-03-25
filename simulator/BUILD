@@ -21,6 +21,7 @@ load("//base:module_main.bzl", "module_main")
 cc_binary(
     name = "simulator",
     srcs = [
+        "make_robot.cc",
         "simulator_window.cc",
         "simulator.cc",
     ] + glob(["*.h"]),

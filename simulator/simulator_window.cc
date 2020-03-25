@@ -23,6 +23,7 @@
 #include <dart/dynamics/WeldJoint.hpp>
 
 #include "mjlib/base/fail.h"
+#include "mjlib/base/json5_read_archive.h"
 #include "mjlib/base/program_options_archive.h"
 #include "mjlib/io/now.h"
 #include "mjlib/io/debug_deadline_service.h"
@@ -32,6 +33,8 @@
 #include "base/program_options.h"
 
 #include "mech/mech_warfare.h"
+
+#include "simulator/make_robot.h"
 
 namespace dd = dart::dynamics;
 namespace ds = dart::simulation;
@@ -43,10 +46,12 @@ namespace simulator {
 
 struct Options {
   bool start_disabled = false;
+  std::string config = "configs/quada1.cfg";
 
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(start_disabled));
+    a->Visit(MJ_NVP(config));
   }
 };
 
@@ -56,6 +61,23 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
       : context_(context.context),
         executor_(context.executor) {
     mjlib::base::ProgramOptionsArchive(&desc_).Accept(&options_);
+
+    floor_ = MakeFloor();
+    mech::QuadrupedConfig config;
+    {
+      std::ifstream inf(options_.config);
+      mjlib::base::system_error::throw_if(
+          !inf.is_open(),
+          fmt::format("could not open config file '{}'", options_.config));
+      mjlib::base::Json5ReadArchive(inf).Accept(&config);
+    }
+
+    robot_ = MakeRobot(config);
+
+    world_->addSkeleton(floor_);
+    world_->addSkeleton(robot_);
+
+    setWorld(world_);
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
@@ -74,6 +96,11 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
   po::options_description desc_;
 
   Options options_;
+
+  dd::SkeletonPtr floor_;
+  dd::SkeletonPtr robot_;
+
+  ds::WorldPtr world_ = std::make_shared<ds::World>();
 };
 
 SimulatorWindow::SimulatorWindow(base::Context& context)

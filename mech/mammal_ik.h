@@ -30,8 +30,8 @@ class MammalIk : public IkSolver {
  public:
   struct Config {
     struct Joint {
-      // The femur is allowed to be unconstrained.  All other joints
-      // must only have a positive Z value.
+      // The shoulder is allowed to be unconstrained.  All other
+      // joints must only have a positive Z value.
       //
       // The reference frame for each joint is the center of rotation
       // of the relevant joint, with +x being away from the rotation
