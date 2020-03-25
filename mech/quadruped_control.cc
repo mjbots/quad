@@ -1491,7 +1491,12 @@ class QuadrupedControl::Impl {
               current_command_.mode == QM::kJump) {
             js.mode = JM::kPushing;
 
-            // For the pushing phase, switch back to whatever
+            // First, latch in our current jump command.
+            if (!!current_command_.jump) {
+              status_.state.jump.command = *current_command_.jump;
+            }
+
+            // Then, for the pushing phase, switch back to whatever
             // acceleration we were commanded.
             js.acceleration_mm_s2 = js.command.acceleration_mm_s2;
           } else {
