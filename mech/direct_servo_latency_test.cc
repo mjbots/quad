@@ -1,4 +1,4 @@
-// Copyright 2019 Josh Pieper, jjp@pobox.com.
+// Copyright 2019-2020 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,9 +24,8 @@
 
 #include <fmt/format.h>
 
-#include <boost/program_options.hpp>
-
 #include "mjlib/base/buffer_stream.h"
+#include "mjlib/base/clipp.h"
 #include "mjlib/base/system_error.h"
 
 #include "mjlib/multiplex/format.h"
@@ -35,8 +34,6 @@
 #include "mjlib/multiplex/stream.h"
 
 #include "base/system_fd.h"
-
-namespace po = boost::program_options;
 
 namespace base = mjlib::base;
 namespace multiplex = mjlib::multiplex;
@@ -119,23 +116,14 @@ struct Target {
 }
 
 int main(int argc, char** argv) {
-  po::options_description desc("Allowable options");
-
   std::string serial_port;
 
-  desc.add_options()
-      ("help,h", "display usage message")
-      ("port,p", po::value(&serial_port), "serial port to use")
-      ;
+  auto group = clipp::group(
+      (clipp::option("p", "port") & clipp::value("", serial_port)) %
+      "serial port to use"
+                            );
 
-  po::variables_map vm;
-  po::store(po::parse_command_line(argc, argv, desc), vm);
-  po::notify(vm);
-
-  if (vm.count("help")) {
-    std::cout << desc;
-    return 0;
-  }
+  mjlib::base::ClippParse(argc, argv, group);
 
   auto fd = open_serial(serial_port);
 

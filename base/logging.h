@@ -1,5 +1,5 @@
+// Copyright 2019-2020 Josh Pieper, jjp@pobox.com.
 // Copyright 2015 Mikhail Afanasyev.  All rights reserved.
-// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,21 +17,17 @@
 
 #include <log4cpp/Category.hh>
 
+#include <clipp/clipp.h>
+
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/signals2/signal.hpp>
 
 #include "mjlib/base/visitor.h"
 
-namespace boost {
-namespace program_options {
-class options_description;
-}
-}
-
 namespace mjmech {
 namespace base {
 
-void AddLoggingOptions(boost::program_options::options_description*);
+clipp::group MakeLoggingOptions();
 
 // Call after program_options has been notified, or if you do not support
 // program options.

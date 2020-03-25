@@ -1,4 +1,4 @@
-// Copyright 2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2019-2020 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,10 +19,10 @@
 #include <boost/beast/websocket.hpp>
 #include <boost/filesystem.hpp>
 
+#include "mjlib/base/clipp_archive.h"
 #include "mjlib/base/fail.h"
 #include "mjlib/base/json5_read_archive.h"
 #include "mjlib/base/json5_write_archive.h"
-#include "mjlib/base/program_options_archive.h"
 
 #include "base/logging.h"
 #include "mech/web_server.h"
@@ -70,7 +70,6 @@ class WebControl::Impl {
        QuadrupedControl* quadruped_control)
       : executor_(executor),
         quadruped_control_(quadruped_control) {
-    mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
@@ -204,7 +203,6 @@ class WebControl::Impl {
   boost::asio::executor executor_;
   QuadrupedControl* const quadruped_control_;
   Parameters parameters_;
-  boost::program_options::options_description options_;
 
   std::unique_ptr<WebServer> web_server_;
 };
@@ -219,8 +217,8 @@ void WebControl::AsyncStart(mjlib::io::ErrorCallback callback) {
   impl_->AsyncStart(std::move(callback));
 }
 
-boost::program_options::options_description* WebControl::options() {
-  return &impl_->options_;
+clipp::group WebControl::program_options() {
+  return mjlib::base::ClippArchive().Accept(&impl_->parameters_).release();
 }
 
 }

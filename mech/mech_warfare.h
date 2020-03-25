@@ -1,4 +1,4 @@
-// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,7 +24,6 @@
 #include "mech/moteus_servo.h"
 #include "mech/multiplex_client.h"
 #include "mech/ripple.h"
-#include "mech/servo_selector.h"
 #include "mech/turret.h"
 #include "mech/video_sender_app.h"
 
@@ -45,7 +44,6 @@ class MechWarfare : boost::noncopyable {
   struct Members {
     std::unique_ptr<MultiplexClient> multiplex_client;
     std::unique_ptr<MoteusServo> moteus_servo;
-    std::unique_ptr<ServoSelector> servo_selector;
     std::unique_ptr<GaitDriver> gait_driver;
     std::unique_ptr<Turret> turret;
     std::unique_ptr<VideoSenderApp> video;
@@ -54,7 +52,6 @@ class MechWarfare : boost::noncopyable {
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(multiplex_client));
       a->Visit(MJ_NVP(moteus_servo));
-      a->Visit(MJ_NVP(servo_selector));
       a->Visit(MJ_NVP(gait_driver));
       a->Visit(MJ_NVP(turret));
       a->Visit(MJ_NVP(video));
@@ -86,8 +83,6 @@ class MechWarfare : boost::noncopyable {
     base::Point3D body_offset_mm;
     base::Euler body_attitude_deg;
 
-    base::ComponentParameters<Members> children;
-
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(port));
@@ -105,20 +100,16 @@ class MechWarfare : boost::noncopyable {
       a->Visit(MJ_NVP(sitting_timeout_s));
       a->Visit(MJ_NVP(body_offset_mm));
       a->Visit(MJ_NVP(body_attitude_deg));
-      children.Serialize(a);
     }
-
-    Parameters(Members* m) : children(m) {}
   };
 
-  Parameters* parameters() { return &parameters_; }
-  boost::program_options::options_description* options();
+  clipp::group program_options();
 
  private:
   boost::asio::executor executor_;
 
   Members m_;
-  Parameters parameters_{&m_};
+  Parameters parameters_;
   class Impl;
   std::unique_ptr<Impl> impl_;
 

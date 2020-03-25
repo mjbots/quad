@@ -14,8 +14,9 @@
 
 #include <fmt/format.h>
 
-#include <boost/program_options.hpp>
+#include <clipp/clipp.h>
 
+#include "mjlib/base/clipp.h"
 #include "mjlib/base/time_conversions.h"
 #include "mjlib/telemetry/file_writer.h"
 
@@ -25,8 +26,6 @@
 #include "mech/imu_data.h"
 #include "mech/rpi3_raw_spi.h"
 
-namespace po = boost::program_options;
-
 namespace mjmech {
 namespace mech {
 
@@ -35,23 +34,13 @@ int do_main(int argc, char** argv) {
   int speed = 10000000;
   std::string log_file = "";
 
-  po::options_description desc("Allowable options");
+  auto group = clipp::group(
+      (clipp::option("d", "device") & clipp::value("", spi_device)) % "SPI device",
+      (clipp::option("s", "speed") & clipp::value("", speed)) % "SPI speed",
+      (clipp::option("l", "log") & clipp::value("", log_file)) % "log file name"
+                            );
 
-  desc.add_options()
-      ("help,h", "display usage message")
-      ("device,d", po::value(&spi_device), "SPI device")
-      ("speed,s", po::value(&speed), "SPI speed")
-      ("log,l", po::value(&log_file), "log file name")
-      ;
-
-  po::variables_map vm;
-  po::store(po::parse_command_line(argc, argv, desc), vm);
-  po::notify(vm);
-
-  if (vm.count("help")) {
-    std::cout << desc;
-    return 0;
-  }
+  mjlib::base::ClippParse(argc, argv, group);
 
   mjlib::telemetry::FileWriter log{[]() {
       mjlib::telemetry::FileWriter::Options options;

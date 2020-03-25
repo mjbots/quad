@@ -16,7 +16,6 @@
 #pragma once
 
 #include "mjlib/base/fail.h"
-#include "mjlib/base/program_options_archive.h"
 
 #include "base/component_archives.h"
 #include "base/logging.h"
@@ -57,12 +56,10 @@ class VideoSenderApp : boost::noncopyable {
 
     m_.camera->stats_signal()->connect(
        std::bind(&VideoSenderApp::HandleStats, this, std::placeholders::_1));
-
-    mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
   }
 
   void AsyncStart(mjlib::io::ErrorCallback handler) {
-    parameters_.children.Start(std::move(handler));
+    base::StartArchive::Start(&m_, std::move(handler));
   }
 
   struct Members {
@@ -83,8 +80,6 @@ class VideoSenderApp : boost::noncopyable {
   };
 
   struct Parameters {
-    base::ComponentParameters<Members> children;
-
     // if non-zero, exit after that many stats messages are received
     int max_stats = 0;
     // if True, crash when stats do indicate the camera is not working.
@@ -92,16 +87,17 @@ class VideoSenderApp : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      children.Serialize(a);
       a->Visit(MJ_NVP(max_stats));
       a->Visit(MJ_NVP(require_stats_good));
     }
-
-    Parameters(Members* m) : children(m) {}
   };
 
-  Parameters* parameters() { return &parameters_; }
-  boost::program_options::options_description* options() { return &options_; }
+  clipp::group program_options() {
+    return (
+        mjlib::base::ClippArchive().Accept(&parameters_).release(),
+        base::ClippComponentArchive().Accept(&m_).release()
+    );
+  }
 
   TargetTracker* target_tracker() { return m_.target_tracker.get(); }
   std::weak_ptr<McastTelemetryInterface> telemetry_interface() {
@@ -136,8 +132,7 @@ class VideoSenderApp : boost::noncopyable {
 
   boost::asio::executor executor_;
   Members m_;
-  Parameters parameters_{&m_};
-  boost::program_options::options_description options_;
+  Parameters parameters_;
   int stats_count_ = 0;
   base::LogRef log_ = base::GetLogInstance("video_sender_app");
 };

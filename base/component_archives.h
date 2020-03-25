@@ -1,4 +1,4 @@
-// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,8 +16,10 @@
 
 #include <map>
 
-#include "handler_util.h"
-#include "parameters_archive.h"
+#include "mjlib/base/clipp_archive.h"
+
+#include "base/handler_util.h"
+
 
 namespace mjmech {
 namespace base {
@@ -48,10 +50,15 @@ struct EnableArchive {
 };
 
 struct StartArchive {
-  StartArchive(std::map<std::string, bool>& enabled,
-               mjlib::io::ErrorCallback handler)
-      : enabled(enabled),
-        joiner(std::make_shared<ErrorHandlerJoiner>(std::move(handler))) {}
+  StartArchive(mjlib::io::ErrorCallback handler)
+      : joiner(std::make_shared<ErrorHandlerJoiner>(std::move(handler))) {}
+
+  template <typename Serializable>
+  static void Start(Serializable* serializable,
+                    mjlib::io::ErrorCallback callback) {
+    StartArchive archive(std::move(callback));
+    archive.Accept(serializable);
+  }
 
   template <typename T>
   StartArchive& Accept(T* value) {
@@ -67,42 +74,58 @@ struct StartArchive {
   template <typename T>
   auto Helper(const char* name, T* value, int)
       -> decltype((*value)->AsyncStart(mjlib::io::ErrorCallback())) {
-    if (enabled[name]) {
-      (*value)->AsyncStart(
-          joiner->Wrap(std::string("starting: '") + name + "'"));
-    }
+    (*value)->AsyncStart(
+        joiner->Wrap(std::string("starting: '") + name + "'"));
   }
 
   template <typename T>
   void Helper(const char*, T*, long) {}
 
-  std::map<std::string, bool>& enabled;
   std::shared_ptr<ErrorHandlerJoiner> joiner;
 };
 
-template <typename Members>
-struct ComponentParameters {
-  std::map<std::string, bool> enabled;
-
-  template <typename Archive>
-  void Serialize(Archive* a) {
-    for (auto& pair: enabled) {
-      a->Visit(mjlib::base::MakeNameValuePair(
-                   &pair.second, (pair.first + "_enable").c_str()));
-    }
-
-    ParametersArchive<Archive>(a).Accept(members_);
+class ClippComponentArchive {
+ public:
+  template <typename T>
+  ClippComponentArchive& Accept(T* value) {
+    value->Serialize(this);
+    return *this;
   }
 
-  ComponentParameters(Members* members) : members_(members) {
-    EnableArchive(enabled).Accept(members);
+  template <typename NameValuePair>
+  void Visit(const NameValuePair& pair) {
+    VisitHelper(pair, pair.value(), static_cast<int32_t>(0));
   }
 
-  void Start(mjlib::io::ErrorCallback handler) {
-    StartArchive(enabled, std::move(handler)).Accept(members_);
+  template <typename NameValuePair, typename Serializable>
+  auto VisitHelper(const NameValuePair& pair,
+                   Serializable* serializable,
+                   int32_t) -> decltype((*serializable)->program_options()) {
+    group_.push_back(
+        clipp::with_prefix(std::string(pair.name()) + ".",
+                           (*pair.value())->program_options()));
+    return {};
   }
 
-  Members* const members_;
+  template <typename NameValuePair, typename Serializable>
+  auto VisitHelper(const NameValuePair& pair,
+                   Serializable*,
+                   int64_t) {
+    group_.push_back(
+        mjlib::base::ClippArchive(std::string(pair.name()) + ".")
+        .Accept((*pair.value())->parameters()).release());
+  }
+
+  clipp::group release() {
+    return std::move(group_);
+  }
+
+  clipp::group group() {
+    return group_;
+  }
+
+ private:
+  clipp::group group_;
 };
 
 }

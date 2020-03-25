@@ -1,4 +1,4 @@
-// Copyright 2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2019-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,9 +20,9 @@
 
 #include <fmt/format.h>
 
+#include "mjlib/base/clipp_archive.h"
 #include "mjlib/base/fail.h"
 #include "mjlib/base/limit.h"
-#include "mjlib/base/program_options_archive.h"
 #include "mjlib/io/now.h"
 
 #include "base/logging.h"
@@ -171,7 +171,6 @@ class MoteusServo::Impl {
   Impl(const boost::asio::executor& executor,
        base::TelemetryRegistry* telemetry_registry)
       : executor_(executor) {
-    mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
     telemetry_registry->Register("moteus_command", &command_signal_);
   }
 
@@ -572,7 +571,6 @@ class MoteusServo::Impl {
   boost::asio::executor executor_;
 
   Parameters parameters_;
-  boost::program_options::options_description options_;
 
   bool outstanding_ = false;
   using Client = MultiplexClient::Client;
@@ -591,12 +589,8 @@ MoteusServo::MoteusServo(const boost::asio::executor& executor,
     : impl_(std::make_unique<Impl>(executor, telemetry_registry)) {}
 MoteusServo::~MoteusServo() {}
 
-MoteusServo::Parameters* MoteusServo::parameters() {
-  return &impl_->parameters_;
-}
-
-boost::program_options::options_description* MoteusServo::options() {
-  return &impl_->options_;
+clipp::group MoteusServo::program_options() {
+  return mjlib::base::ClippArchive().Accept(&impl_->parameters_).release();
 }
 
 void MoteusServo::AsyncStart(mjlib::io::ErrorCallback handler) {

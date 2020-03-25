@@ -1,4 +1,4 @@
-// Copyright 2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2019-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,8 +25,8 @@
 
 #include <fmt/format.h>
 
+#include "mjlib/base/clipp_archive.h"
 #include "mjlib/base/fail.h"
-#include "mjlib/base/program_options_archive.h"
 #include "mjlib/base/system_error.h"
 
 #include "mjlib/io/repeating_timer.h"
@@ -49,7 +49,6 @@ class MultiplexClient::Impl {
   Impl(const boost::asio::executor& executor)
       : executor_(executor),
         timer_(executor) {
-    mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
   }
 
   void AsyncStart(mjlib::io::ErrorCallback handler) {
@@ -85,8 +84,6 @@ class MultiplexClient::Impl {
   boost::asio::executor executor_;
   mjlib::io::RepeatingTimer timer_;
 
-  boost::program_options::options_description options_;
-
   std::unique_ptr<Client> client_;
   std::list<ClientCallback> callbacks_;
   bool done_ = false;
@@ -97,12 +94,8 @@ MultiplexClient::MultiplexClient(const boost::asio::executor& executor)
 
 MultiplexClient::~MultiplexClient() {}
 
-MultiplexClient::Parameters* MultiplexClient::parameters() {
-  return &impl_->parameters_;
-}
-
-boost::program_options::options_description* MultiplexClient::options() {
-  return &impl_->options_;
+clipp::group MultiplexClient::program_options() {
+  return mjlib::base::ClippArchive().Accept(&impl_->parameters_).release();
 }
 
 void MultiplexClient::AsyncStart(mjlib::io::ErrorCallback callback) {

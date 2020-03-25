@@ -22,7 +22,6 @@ cc_library(
         "context.cc",
         "linux_input.cc",
         "logging.cc",
-        "program_options.cc",
         "quaternion.cc",
         "system_fd.cc",
         "telemetry_remote_debug_server.cc",
@@ -35,11 +34,12 @@ cc_library(
     ]),
     deps = [
         "@boost",
-        "@boost//:program_options",
         "@boost//:system",
         "@eigen",
         "@fmt",
         "@log4cpp",
+        "@com_github_mjbots_mjlib//mjlib/base:clipp",
+        "@com_github_mjbots_mjlib//mjlib/base:clipp_archive",
         "@com_github_mjbots_mjlib//mjlib/base:eigen",
         "@com_github_mjbots_mjlib//mjlib/base:error_code",
         "@com_github_mjbots_mjlib//mjlib/base:fail",
@@ -47,7 +47,6 @@ cc_library(
         "@com_github_mjbots_mjlib//mjlib/base:json5_read_archive",
         "@com_github_mjbots_mjlib//mjlib/base:json5_write_archive",
         "@com_github_mjbots_mjlib//mjlib/base:limit",
-        "@com_github_mjbots_mjlib//mjlib/base:program_options_archive",
         "@com_github_mjbots_mjlib//mjlib/base:recording_stream",
         "@com_github_mjbots_mjlib//mjlib/base:system_error",
         "@com_github_mjbots_mjlib//mjlib/base:tokenizer",
@@ -76,7 +75,6 @@ cc_library(
 cc_test(
     name = "test",
     srcs = ["test/" + x for x in [
-        "program_options_test.cc",
         "quaternion_test.cc",
         "signal_result_test.cc",
         "sophus_test.cc",

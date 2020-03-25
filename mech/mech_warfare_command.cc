@@ -1,4 +1,4 @@
-// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,13 +18,13 @@
 
 #include <boost/asio/post.hpp>
 #include <boost/lexical_cast.hpp>
-#include <boost/program_options.hpp>
 
 #include <fmt/format.h>
 
+#include "mjlib/base/clipp_archive.h"
+#include "mjlib/base/eigen.h"
 #include "mjlib/base/json5_write_archive.h"
 #include "mjlib/base/fail.h"
-#include "mjlib/base/program_options_archive.h"
 #include "mjlib/io/deadline_timer.h"
 
 #include "base/logging.h"
@@ -200,7 +200,6 @@ class Commander::Impl {
         options_(params.opt),
         executor_(executor),
         timer_(executor) {
-    mjlib::base::ProgramOptionsArchive(&po_options_).Accept(&params);
   }
 
   void AsyncStart(mjlib::io::ErrorCallback handler) {
@@ -589,7 +588,6 @@ class Commander::Impl {
 
   const Parameters& parameters_;
   const OptOptions& options_;
-  boost::program_options::options_description po_options_;
   Command command_;
   boost::asio::executor executor_;
   udp::endpoint target_;
@@ -625,8 +623,8 @@ void Commander::SendMechMessage(const MechMessage& msg) {
   impl_->SendMechMessage(msg);
 }
 
-boost::program_options::options_description* Commander::options() {
-  return &impl_->po_options_;
+clipp::group Commander::program_options() {
+  return mjlib::base::ClippArchive().Accept(&parameters_).release();
 }
 
 Commander::TargetOffsetSignal* Commander::target_offset_signal() {

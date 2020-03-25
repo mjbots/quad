@@ -18,25 +18,24 @@
 
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/filesystem.hpp>
-#include <boost/program_options.hpp>
 
 #include <fmt/format.h>
 
+#include <clipp/clipp.h>
+
+#include "mjlib/base/clipp.h"
+#include "mjlib/base/clipp_archive.h"
 #include "mjlib/base/fail.h"
-#include "mjlib/base/program_options_archive.h"
 
 #include "context_full.h"
 #include "handler_util.h"
 #include "logging.h"
-#include "program_options.h"
 
 namespace mjmech {
 namespace base {
 
 template <typename Module>
 int safe_main(int argc, char**argv) {
-  namespace po = boost::program_options;
-
   Context context;
   Module module(context);
 
@@ -48,44 +47,36 @@ int safe_main(int argc, char**argv) {
   double idle_timeout_s = 0;
   int cpu_affinity = -1;
 
-  po::options_description desc("Allowable options");
-  desc.add_options()
-      ("help,h", "display usage message")
-      ("config,c", po::value(&config_file), "read options from file")
-      ("log,l", po::value(&log_file), "write to log file")
-      ("log_short_name,L", po::bool_switch(&log_short_name),
-       "do not insert timestamp in log file name")
-      ("debug,d", po::bool_switch(&debug),
-       "disable real-time signals and other debugging hindrances")
-      ("rt.event_timeout_s", po::value(&event_timeout_s))
-      ("rt.idle_timeout_s", po::value(&idle_timeout_s))
-      ("rt.cpu_affinity", po::value(&cpu_affinity))
-      ;
+  auto group = clipp::group(
+      (clipp::option("c", "config") & clipp::value("", config_file)) %
+      "read options from file",
+      (clipp::option("l", "log") & clipp::value("", log_file)) %
+      "write to log file",
+      (clipp::option("L", "log_short_name").set(log_short_name)) %
+      "do not insert timestamp in log file name",
+      (clipp::option("d", "debug").set(debug)) %
+      "disable real-time signals and other debugging hindrances",
+      (clipp::option("rt.event_timeout_s") & clipp::value("", event_timeout_s)),
+      (clipp::option("rt.idle_timeout_s") & clipp::value("", idle_timeout_s)),
+      (clipp::option("rt.cpu_affinity") & clipp::value("", cpu_affinity))
+  );
 
-  AddLoggingOptions(&desc);
-  mjlib::base::ProgramOptionsArchive(&desc, "remote_debug.").Accept(
-      context.remote_debug->parameters());
-  MergeProgramOptions(module.options(), "", &desc);
+  group.push_back(MakeLoggingOptions());
 
-  // Do not accept any positional arguments.
-  const po::positional_options_description empty_po;
+  group.push_back(mjlib::base::ClippArchive("remote_debug.")
+                  .Accept(context.remote_debug->parameters()).release());
 
-  po::variables_map vm;
-  po::store(
-      po::command_line_parser(argc, argv).options(desc).
-      positional(empty_po).run(), vm);
-  po::notify(vm);
+  group.push_back(module.program_options());
+
+  mjlib::base::ClippParse(argc, argv, group);
 
   InitLogging();
 
   if (!config_file.empty()) {
-    po::store(po::parse_config_file<char>(config_file.c_str(), desc), vm);
-  }
-  po::notify(vm);
-
-  if (vm.count("help")) {
-    std::cerr << desc;
-    return 0;
+    std::ifstream inf(config_file);
+    mjlib::base::system_error::throw_if(
+        !inf.is_open(), "opening " + config_file);
+    mjlib::base::ClippParseIni(inf, group);
   }
 
   if (!log_file.empty()) {

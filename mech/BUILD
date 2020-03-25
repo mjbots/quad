@@ -208,20 +208,10 @@ cc_binary(
 )
 
 cc_binary(
-    name = "ik_plot_generator",
-    srcs = ["ik_plot_generator.cc"],
-    deps = [
-        ":mech",
-        "@org_llvm_libcxx//:libcxx",
-    ],
-)
-
-cc_binary(
     name = "spi",
     srcs = ["spi.cc"],
     deps = [
         ":mech",
-        "@boost//:program_options",
         "@fmt",
         "@com_github_mjbots_mjlib//mjlib/base:string_span",
         "@com_github_mjbots_mjlib//mjlib/base:system_error",
@@ -234,7 +224,6 @@ cc_binary(
     srcs = ["bmi088_test.cc"],
     deps = [
         ":mech",
-        "@boost//:program_options",
         "@fmt",
         "@com_github_mjbots_mjlib//mjlib/base:string_span",
         "@com_github_mjbots_mjlib//mjlib/base:system_error",

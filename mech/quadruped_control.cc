@@ -18,8 +18,8 @@
 
 #include <fmt/format.h>
 
+#include "mjlib/base/clipp_archive.h"
 #include "mjlib/base/json5_read_archive.h"
-#include "mjlib/base/program_options_archive.h"
 
 #include "mjlib/io/now.h"
 #include "mjlib/io/repeating_timer.h"
@@ -208,8 +208,6 @@ class QuadrupedControl::Impl {
     context.telemetry_registry->Register("qc_control", &control_signal_);
     context.telemetry_registry->Register("imu", &imu_signal_);
     context.telemetry_registry->Register("servo_config", &servo_config_signal_);
-
-    mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
@@ -1967,7 +1965,6 @@ class QuadrupedControl::Impl {
 
   boost::asio::executor executor_;
   Parameters parameters_;
-  boost::program_options::options_description options_;
 
   base::LogRef log_ = base::GetLogInstance("QuadrupedControl");
 
@@ -2044,12 +2041,8 @@ const QuadrupedControl::Status& QuadrupedControl::status() const {
   return impl_->status_;
 }
 
-QuadrupedControl::Parameters* QuadrupedControl::parameters() {
-  return &impl_->parameters_;
-}
-
-boost::program_options::options_description* QuadrupedControl::options() {
-  return &impl_->options_;
+clipp::group QuadrupedControl::program_options() {
+  return mjlib::base::ClippArchive().Accept(&impl_->parameters_).release();
 }
 
 }

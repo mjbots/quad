@@ -1,4 +1,4 @@
-// Copyright 2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2019-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,8 +16,9 @@
 
 #include <memory>
 
+#include <clipp/clipp.h>
+
 #include <boost/noncopyable.hpp>
-#include <boost/program_options.hpp>
 
 #include "base/component_archives.h"
 #include "base/context.h"
@@ -50,18 +51,12 @@ class Quadruped : boost::noncopyable {
   };
 
   struct Parameters {
-    base::ComponentParameters<Members> children;
-
     template <typename Archive>
     void Serialize(Archive* a) {
-      children.Serialize(a);
     }
-
-    Parameters(Members* m) : children(m) {}
   };
 
-  Parameters* parameters();
-  boost::program_options::options_description* options();
+  clipp::group program_options();
 
  private:
   class Impl;

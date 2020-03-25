@@ -1,4 +1,4 @@
-// Copyright 2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2019-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,9 +16,10 @@
 
 #include <memory>
 
+#include <clipp/clipp.h>
+
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/noncopyable.hpp>
-#include <boost/program_options.hpp>
 
 #include "mjlib/base/visitor.h"
 
@@ -98,8 +99,7 @@ class QuadrupedControl : boost::noncopyable {
   void Command(const QuadrupedCommand&);
   const Status& status() const;
 
-  Parameters* parameters();
-  boost::program_options::options_description* options();
+  clipp::group program_options();
 
  private:
   class Impl;

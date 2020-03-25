@@ -1,5 +1,5 @@
+// Copyright 2019-2020 Josh Pieper, jjp@pobox.com.
 // Copyright 2015-2016 Mikhail Afanasyev.  All rights reserved.
-// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,7 +25,6 @@
 #include "base/error_code.h"
 #include "base/fail.h"
 #include "base/logging.h"
-#include "base/program_options_archive.h"
 #include "base/visitor.h"
 
 #include "base/udp_socket.h"
@@ -329,7 +328,6 @@ class UdpManualTest : boost::noncopyable {
     UdpManualTest(Context& context)
         : executor_(context.executor),
           exit_timer_(executor_) {
-    ProgramOptionsArchive(&options_).Accept(&parameters_);
   }
 
   void AsyncStart(base::ErrorHandler handler) {
@@ -385,13 +383,13 @@ class UdpManualTest : boost::noncopyable {
     }
   };
 
-  Parameters* parameters() { return &parameters_; }
-  boost::program_options::options_description* options() { return &options_; }
+  clipp::group program_options() {
+    return mjlib::base::ClippArchive().Accept(&parameters_).release();
+  }
 
  private:
   boost::asio::executor executor_;
   Parameters parameters_;
-  boost::program_options::options_description options_;
   typedef std::shared_ptr<SocketTesterBase> TesterPtr;
   std::vector<TesterPtr> testers_;
   base::LogRef log_ = base::GetLogInstance("manual_test");

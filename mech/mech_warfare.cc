@@ -19,9 +19,9 @@
 
 #include <fmt/format.h>
 
+#include "mjlib/base/clipp_archive.h"
 #include "mjlib/base/fail.h"
 #include "mjlib/base/json5_read_archive.h"
-#include "mjlib/base/program_options_archive.h"
 
 #include "mjlib/io/now.h"
 #include "mjlib/io/repeating_timer.h"
@@ -121,7 +121,8 @@ class MechWarfare::Impl : boost::noncopyable {
       return;
     }
 
-    parent_->parameters_.children.Start(
+    base::StartArchive::Start(
+        &parent_->m_,
         [this, handler=std::move(handler)](auto ec) mutable {
           mjlib::base::FailIf(ec);
           timer_.start(
@@ -757,7 +758,6 @@ class MechWarfare::Impl : boost::noncopyable {
   MechWarfare* const parent_;
   base::Context& context_;
   boost::asio::executor executor_;
-  boost::program_options::options_description options_;
 
   base::LogRef log_ = base::GetLogInstance("MechWarfare");
 
@@ -803,9 +803,6 @@ MechWarfare::MechWarfare(base::Context& context)
   m_.multiplex_client = std::make_unique<MultiplexClient>(executor_);
   m_.moteus_servo = std::make_unique<MoteusServo>(executor_, context.telemetry_registry.get());
 
-  m_.servo_selector = std::make_unique<ServoSelector>();
-  m_.servo_selector->AddInterface("moteus", m_.moteus_servo.get());
-
   m_.gait_driver.reset(new GaitDriver(executor_,
                                       context.telemetry_registry.get()));
   m_.turret.reset(new Turret(context));
@@ -830,8 +827,6 @@ MechWarfare::MechWarfare(base::Context& context)
       }
       m_.turret->UpdateTrackedTarget(point3d);
     });
-
-  mjlib::base::ProgramOptionsArchive(&impl_->options_).Accept(&parameters_);
 }
 
 MechWarfare::~MechWarfare() {}
@@ -840,8 +835,11 @@ void MechWarfare::AsyncStart(mjlib::io::ErrorCallback handler) {
   impl_->AsyncStart(std::move(handler));
 }
 
-boost::program_options::options_description* MechWarfare::options() {
-  return &impl_->options_;
+clipp::group MechWarfare::program_options() {
+  return (
+      mjlib::base::ClippArchive().Accept(&parameters_).release(),
+      base::ClippComponentArchive().Accept(&m_).release()
+  );
 }
 
 }

@@ -1,4 +1,4 @@
-// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,9 +14,10 @@
 
 #include "gait_driver.h"
 
+#include "mjlib/base/clipp_archive.h"
+#include "mjlib/base/eigen.h"
 #include "mjlib/base/fail.h"
 #include "mjlib/base/limit.h"
-#include "mjlib/base/program_options_archive.h"
 #include "mjlib/io/deadline_timer.h"
 #include "mjlib/io/now.h"
 
@@ -85,7 +86,6 @@ class GaitDriver::Impl : boost::noncopyable {
   Impl(const boost::asio::executor& executor,
        base::TelemetryRegistry* telemetry_registry)
       : executor_(executor) {
-    mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
     telemetry_registry->Register("gait_command", &command_data_signal_);
   }
 
@@ -368,8 +368,8 @@ class GaitDriver::Impl : boost::noncopyable {
     return PackResult(MakeCommandState(MakeRegularServoCommands(gait_commands_.joints)));
   }
 
-  boost::program_options::options_description* options() {
-    return &options_;
+  clipp::group program_options() {
+    return mjlib::base::ClippArchive().Accept(&parameters_).release();
   }
 
   const Gait* gait() const {
@@ -462,8 +462,6 @@ class GaitDriver::Impl : boost::noncopyable {
   boost::asio::executor executor_;
   std::unique_ptr<RippleGait> gait_;
 
-  boost::program_options::options_description options_;
-
   Parameters parameters_;
 
   boost::signals2::signal<void (const CommandData*)> command_data_signal_;
@@ -520,8 +518,9 @@ void GaitDriver::CommandSitDown() {
   impl_->CommandSitDown();
 }
 
-boost::program_options::options_description*
-GaitDriver::options() { return impl_->options(); }
+clipp::group GaitDriver::program_options() {
+  return impl_->program_options();
+}
 
 const Gait* GaitDriver::gait() const {
   return impl_->gait();

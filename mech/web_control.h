@@ -1,4 +1,4 @@
-// Copyright 2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2019-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,8 +16,9 @@
 
 #include <memory>
 
+#include <clipp/clipp.h>
+
 #include <boost/asio/executor.hpp>
-#include <boost/program_options.hpp>
 
 #include "mech/quadruped_control.h"
 
@@ -39,7 +40,7 @@ class WebControl {
     }
   };
 
-  boost::program_options::options_description* options();
+  clipp::group program_options();
   void AsyncStart(mjlib::io::ErrorCallback);
 
  private:

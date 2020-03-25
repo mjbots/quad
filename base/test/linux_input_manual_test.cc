@@ -1,4 +1,4 @@
-// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,9 +18,11 @@
 
 #include <iostream>
 
-#include <boost/asio/io_context.hpp>
-#include <boost/program_options.hpp>
+#include <clipp/clipp.h>
 
+#include <boost/asio/io_context.hpp>
+
+#include "mjlib/base/clipp.h"
 #include "mjlib/base/fail.h"
 
 namespace {
@@ -54,28 +56,16 @@ class Reader {
 };
 
 int work(int argc, char** argv) {
-  namespace po = boost::program_options;
-
   std::string device;
   bool wait = false;
   bool absinfo = false;
-  po::options_description desc("Allowable options");
-  desc.add_options()
-      ("help,h", "display usage message")
-      ("device,d", po::value(&device), "input device")
-      ("wait,w", po::bool_switch(&wait), "wait for events")
-      ("absinfo,a", po::bool_switch(&absinfo), "display absinfo")
-      ;
+  auto group = clipp::group(
+      (clipp::option("d", "device") & clipp::value("", device)) % "input device",
+      (clipp::option("w", "wait").set(wait)) % "wait for events",
+      (clipp::option("a", "absinfo").set(absinfo)) % "display absinfo"
+  );
 
-  po::variables_map vm;
-  po::store(po::parse_command_line(argc, argv, desc), vm);
-  po::notify(vm);
-
-  if (vm.count("help")) {
-    std::cerr << desc;
-    return 1;
-  }
-
+  mjlib::base::ClippParse(argc, argv, group);
 
   boost::asio::io_context context;
   LinuxInput linux_input(context.get_executor());

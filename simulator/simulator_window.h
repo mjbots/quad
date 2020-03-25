@@ -14,9 +14,9 @@
 
 #pragma once
 
-#include <boost/program_options.hpp>
-
 #include <dart/gui/SimWindow.hpp>
+
+#include <clipp/clipp.h>
 
 #include "base/context.h"
 
@@ -28,7 +28,7 @@ class SimulatorWindow {
   SimulatorWindow(base::Context&);
   ~SimulatorWindow();
 
-  boost::program_options::options_description* options();
+  clipp::group program_options();
 
   void AsyncStart(mjlib::io::ErrorCallback);
   void InitWindow(int x, int y, const char* name);

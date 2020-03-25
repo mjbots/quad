@@ -1,4 +1,4 @@
-// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2014-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,9 +14,10 @@
 
 #pragma once
 
+#include <clipp/clipp.h>
+
 #include <boost/asio/executor.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
-#include <boost/program_options.hpp>
 #include <boost/signals2/signal.hpp>
 
 #include "mjlib/base/visitor.h"
@@ -146,7 +147,7 @@ class GaitDriver : boost::noncopyable {
   /// active.  It returns the current set of commands to request.
   UpdateResult Update(double period_s);
 
-  boost::program_options::options_description* options();
+  clipp::group program_options();
 
   const Command& input_command() const;
   const Command& gait_command() const;

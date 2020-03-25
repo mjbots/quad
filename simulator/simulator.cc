@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <boost/program_options.hpp>
+#include <fstream>
 
 #include <dart/gui/LoadGlut.hpp>
 
+#include "mjlib/base/clipp.h"
+
 #include "base/logging.h"
-#include "base/program_options.h"
 
 #include "simulator/simulator_window.h"
 
@@ -25,36 +26,30 @@ using namespace mjmech;
 using namespace mjmech::simulator;
 
 int main(int argc, char** argv) {
-  namespace po = boost::program_options;
-
   std::string config_file;
 
-  po::options_description desc("Allowable options");
-  desc.add_options()
-      ("help,h", "display usage message")
-      ("config,c", po::value(&config_file), "read options from file")
-      ;
-  base::AddLoggingOptions(&desc);
+  auto group = clipp::group(
+      (clipp::option("c", "config") & clipp::value("", config_file)) %
+      "read options from file"
+                            );
+
+  group.push_back(base::MakeLoggingOptions());
 
   base::Context context;
   SimulatorWindow window(context);
-  base::MergeProgramOptions(window.options(), "", &desc);
 
-  po::variables_map vm;
-  po::store(po::parse_command_line(argc, argv, desc), vm);
-  po::notify(vm);
+  group.push_back(window.program_options());
 
-  if (vm.count("help")) {
-    std::cerr << desc;
-    return 0;
-  }
+  mjlib::base::ClippParse(argc, argv, group);
 
   base::InitLogging();
 
   if (!config_file.empty()) {
-    po::store(po::parse_config_file<char>(config_file.c_str(), desc), vm);
+    std::ifstream inf(config_file);
+    mjlib::base::system_error::throw_if(
+        !inf.is_open(), "opening "  + config_file);
+    mjlib::base::ClippParseIni(inf, group);
   }
-  po::notify(vm);
 
   glutInit(&argc, argv);
   window.InitWindow(640, 480, "Mech Simulator");

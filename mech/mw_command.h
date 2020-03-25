@@ -1,5 +1,5 @@
+// Copyright 2019-2020 Josh Pieper, jjp@pobox.com.
 // Copyright 2015-2016 Mikhail Afanasyev.  All rights reserved.
-// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,8 +15,9 @@
 
 #pragma once
 
+#include <clipp/clipp.h>
+
 #include "mjlib/base/fail.h"
-#include "mjlib/base/program_options_archive.h"
 
 #include "base/component_archives.h"
 #include "base/logging.h"
@@ -35,8 +36,6 @@ class MWCommand : boost::noncopyable {
     : executor_(context.executor) {
     m_.video_controller.reset(new VideoControllerApp(context));
     m_.commander.reset(new mw_command::Commander(executor_));
-
-    mjlib::base::ProgramOptionsArchive(&options_).Accept(&parameters_);
   }
 
   void AsyncStart(mjlib::io::ErrorCallback handler) {
@@ -73,32 +72,24 @@ class MWCommand : boost::noncopyable {
   };
 
   struct Parameters {
-    // We are not using ComponentParameters because we do not want an extra
-    // level of indirection in command line options.
-    Members* members = nullptr;
-
     // If true, sends a command once and immediately exits.
     bool send_once = false;
     double turret_pitch_rate_dps = 0.0;
     double turret_yaw_rate_dps = 0.0;
 
 
-    Parameters(Members& m) : members(&m) {};
-
     template <typename Archive>
     void Serialize(Archive* a) {
-      members->video_controller->parameters()->Serialize(a);
-      members->commander->parameters()->Serialize(a);
-
       a->Visit(MJ_NVP(send_once));
       a->Visit(MJ_NVP(turret_pitch_rate_dps));
       a->Visit(MJ_NVP(turret_yaw_rate_dps));
-
     }
   };
 
-  Parameters* parameters() { return &parameters_; }
-  boost::program_options::options_description* options() { return &options_; }
+  clipp::group program_options() {
+    return (mjlib::base::ClippArchive().Accept(&parameters_).release(),
+            base::ClippComponentArchive().Accept(&m_).release());
+  }
 
  private:
 
@@ -134,8 +125,7 @@ class MWCommand : boost::noncopyable {
 
   boost::asio::executor executor_;
   Members m_;
-  Parameters parameters_ = Parameters(m_);
-  boost::program_options::options_description options_;
+  Parameters parameters_;
   base::LogRef log_ = base::GetLogInstance("mw_command");
 };
 

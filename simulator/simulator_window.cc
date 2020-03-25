@@ -24,13 +24,11 @@
 
 #include "mjlib/base/fail.h"
 #include "mjlib/base/json5_read_archive.h"
-#include "mjlib/base/program_options_archive.h"
 #include "mjlib/io/now.h"
 #include "mjlib/io/debug_deadline_service.h"
 
 #include "base/common.h"
 #include "base/context_full.h"
-#include "base/program_options.h"
 
 #include "mech/mech_warfare.h"
 
@@ -38,8 +36,6 @@
 
 namespace dd = dart::dynamics;
 namespace ds = dart::simulation;
-
-namespace po = boost::program_options;
 
 namespace mjmech {
 namespace simulator {
@@ -60,8 +56,6 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
   Impl(base::Context& context)
       : context_(context.context),
         executor_(context.executor) {
-    mjlib::base::ProgramOptionsArchive(&desc_).Accept(&options_);
-
     floor_ = MakeFloor();
     mech::QuadrupedConfig config;
     {
@@ -93,7 +87,6 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
 
   boost::asio::io_context& context_;
   boost::asio::executor executor_;
-  po::options_description desc_;
 
   Options options_;
 
@@ -108,8 +101,8 @@ SimulatorWindow::SimulatorWindow(base::Context& context)
 
 SimulatorWindow::~SimulatorWindow() {}
 
-po::options_description* SimulatorWindow::options() {
-  return &impl_->desc_;
+clipp::group SimulatorWindow::program_options() {
+  return mjlib::base::ClippArchive().Accept(&impl_->options_).release();
 }
 
 void SimulatorWindow::AsyncStart(mjlib::io::ErrorCallback callback) {

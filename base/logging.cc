@@ -17,7 +17,6 @@
 
 #include <mutex>
 
-#include <boost/program_options.hpp>
 #include <boost/noncopyable.hpp>
 
 #include <log4cpp/OstreamAppender.hh>
@@ -78,25 +77,21 @@ class LoggerSetup : boost::noncopyable {
     return singleton;
   }
 
-  void AddLoggingOptions(boost::program_options::options_description* desc) {
-    namespace po = boost::program_options;
-
+  clipp::group MakeLoggingOptions() {
     // TODO theamk: consider always logging all messages to telemetry? but this
     // may trigger expensive debug message generation.
 
     // TODO theamk: consider adding flag which turns off all stderr messages,
     // only leaves messages in telemetry log.
 
-    desc->add_options()
-        ("verbose,v",
-         po::bool_switch()->notifier(
-             std::bind(&LoggerSetup::HandleVerbose,
-                       this, std::placeholders::_1)),
-         "enable debug logging for all components")
-        ("trace,t",
-         po::value<std::vector<std::string> >()->notifier(
-             std::bind(&LoggerSetup::HandleTrace, this, std::placeholders::_1)),
-         "enable debug logging for this exact source");
+    return clipp::group(
+        (clipp::option("v", "verbose").call([this]() { HandleVerbose(true);})) %
+        "enable debug logging for all components",
+        clipp::repeatable(
+            (clipp::option("t", "trace") &
+             clipp::value("").call([this](auto v) { HandleTrace(v); }))) %
+        "enable debug logging for this exact source"
+    );
   }
 
   TextLogMessageSignal* GetLogMessageSignal() {
@@ -132,15 +127,13 @@ class LoggerSetup : boost::noncopyable {
         value ? log4cpp::Priority::DEBUG : log4cpp::Priority::NOTICE);
   }
 
-  void HandleTrace(const std::vector<std::string> value) {
-    for (auto& s: value) {
-      if (s.substr(0, 1) == "~") {
-        log4cpp::Category::getInstance(s.substr(1)).setPriority(
-            log4cpp::Priority::WARN);
-      } else {
-        log4cpp::Category::getInstance(s).setPriority(
-            log4cpp::Priority::DEBUG);
-      }
+  void HandleTrace(const std::string& s) {
+    if (s.substr(0, 1) == "~") {
+      log4cpp::Category::getInstance(s.substr(1)).setPriority(
+          log4cpp::Priority::WARN);
+    } else {
+      log4cpp::Category::getInstance(s).setPriority(
+          log4cpp::Priority::DEBUG);
     }
   }
 
@@ -150,8 +143,8 @@ class LoggerSetup : boost::noncopyable {
 
 }
 
-void AddLoggingOptions(boost::program_options::options_description* desc) {
-  LoggerSetup::get()->AddLoggingOptions(desc);
+clipp::group MakeLoggingOptions() {
+  return LoggerSetup::get()->MakeLoggingOptions();
 }
 
 void InitLogging() {

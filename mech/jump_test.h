@@ -1,4 +1,4 @@
-// Copyright 2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2019-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@
 #include <memory>
 
 #include <boost/noncopyable.hpp>
-#include <boost/program_options.hpp>
 
 #include "mjlib/base/error_code.h"
 
@@ -90,8 +89,6 @@ class JumpTest : boost::noncopyable {
     double landing_threshold_dps = 20.0;
     double landing_torque_Nm = 1.0;
 
-    base::ComponentParameters<Members> children;
-
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(skip_powered));
@@ -118,19 +115,15 @@ class JumpTest : boost::noncopyable {
       a->Visit(MJ_NVP(landing_kp));
       a->Visit(MJ_NVP(landing_threshold_dps));
       a->Visit(MJ_NVP(landing_torque_Nm));
-
-      children.Serialize(a);
     }
-
-    Parameters(Members* m) : children(m) {}
   };
 
   Parameters* parameters() { return &parameters_; }
-  boost::program_options::options_description* options();
+  clipp::group program_options();
 
  private:
   Members m_;
-  Parameters parameters_{&m_};
+  Parameters parameters_;
   class Impl;
   std::unique_ptr<Impl> impl_;
 };

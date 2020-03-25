@@ -1,4 +1,4 @@
-// Copyright 2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2019-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,8 +25,8 @@
 
 #include <fmt/format.h>
 
+#include "mjlib/base/clipp_archive.h"
 #include "mjlib/base/fail.h"
-#include "mjlib/base/program_options_archive.h"
 #include "mjlib/base/time_conversions.h"
 #include "mjlib/io/async_sequence.h"
 #include "mjlib/io/deadline_timer.h"
@@ -91,7 +91,7 @@ class JumpTest::Impl {
     mjlib::io::AsyncSequence(executor_)
         .Add([this](auto callback) {
             std::cout << "starting children\n";
-            param_->children.Start(std::move(callback));
+            base::StartArchive::Start(&parent_->m_, std::move(callback));
           })
         .Add([this](auto callback) {
             std::cout << "starting mplex\n";
@@ -441,7 +441,6 @@ class JumpTest::Impl {
   JumpTest::Parameters* const param_;
   boost::asio::executor executor_;
   mjlib::io::StreamFactory* const factory_;
-  boost::program_options::options_description options_;
   mjlib::io::DeadlineTimer timer_;
 
   const std::vector<int> all_ids_ = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
@@ -466,9 +465,6 @@ JumpTest::JumpTest(base::Context& context)
       impl_->executor_);
   m_.moteus_servo = std::make_unique<MoteusServo>(
       impl_->executor_, context.telemetry_registry.get());
-
-  mjlib::base::ProgramOptionsArchive(&impl_->options_).Accept(&impl_->stdin_options_);
-  mjlib::base::ProgramOptionsArchive(&impl_->options_).Accept(&parameters_);
 }
 
 JumpTest::~JumpTest() {}
@@ -477,8 +473,12 @@ void JumpTest::AsyncStart(mjlib::io::ErrorCallback handler) {
   impl_->AsyncStart(std::move(handler));
 }
 
-boost::program_options::options_description* JumpTest::options() {
-  return &impl_->options_;
+clipp::group JumpTest::program_options() {
+  return (
+      mjlib::base::ClippArchive().Accept(impl_->param_).release(),
+      mjlib::base::ClippArchive().Accept(&impl_->stdin_options_).release(),
+      base::ClippComponentArchive().Accept(&m_).release()
+  );
 }
 
 }

@@ -1,4 +1,4 @@
-// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2015-2020 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,8 +16,9 @@
 #include <map>
 #include <optional>
 
+#include <clipp/clipp.h>
+
 #include <boost/asio.hpp>
-#include <boost/program_options.hpp>
 #include <boost/signals2/signal.hpp>
 
 #include "mjlib/base/visitor.h"
@@ -117,7 +118,7 @@ class Commander {
   };
 
   Parameters* parameters() { return &parameters_; }
-  boost::program_options::options_description* options();
+  clipp::group program_options();
 
   typedef boost::signals2::signal<void (int x, int y)> TargetOffsetSignal;
   TargetOffsetSignal* target_offset_signal();

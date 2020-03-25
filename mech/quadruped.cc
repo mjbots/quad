@@ -1,4 +1,4 @@
-// Copyright 2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2019-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,8 +13,6 @@
 // limitations under the License.
 
 #include "mech/quadruped.h"
-
-#include "mjlib/base/program_options_archive.h"
 
 #include "base/logging.h"
 #include "mech/quadruped_debug.h"
@@ -41,17 +39,14 @@ class Quadruped::Impl {
 
     debug_stream_.type = mjlib::io::StreamFactory::Type::kTcpServer;
     debug_stream_.tcp_server_port = 4556;
-
-    mjlib::base::ProgramOptionsArchive(&options_).Accept(&p_);
-    mjlib::base::ProgramOptionsArchive(&options_, "debug.")
-        .Accept(&debug_stream_);
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
-    p_.children.Start([this, callback=std::move(callback)](auto ec) mutable {
-        mjlib::base::FailIf(ec);
-        this->StartDebug(std::move(callback));
-      });
+    base::StartArchive::Start(
+        &m_, [this, callback=std::move(callback)](auto ec) mutable {
+          mjlib::base::FailIf(ec);
+          this->StartDebug(std::move(callback));
+        });
   }
 
   void StartDebug(mjlib::io::ErrorCallback callback) {
@@ -73,12 +68,11 @@ class Quadruped::Impl {
 
   boost::asio::executor executor_;
   mjlib::io::StreamFactory* const factory_;
-  boost::program_options::options_description options_;
 
   base::LogRef log_ = base::GetLogInstance("Quadruped");
 
   Members m_;
-  Parameters p_{&m_};
+  Parameters p_;
 
   mjlib::io::StreamFactory::Options debug_stream_;
 
@@ -94,12 +88,13 @@ void Quadruped::AsyncStart(mjlib::io::ErrorCallback callback) {
   impl_->AsyncStart(std::move(callback));
 }
 
-Quadruped::Parameters* Quadruped::parameters() {
-  return &impl_->p_;
-}
-
-boost::program_options::options_description* Quadruped::options() {
-  return &impl_->options_;
+clipp::group Quadruped::program_options() {
+  return (
+      mjlib::base::ClippArchive().Accept(&impl_->p_).release(),
+      mjlib::base::ClippArchive("debug.")
+      .Accept(&impl_->debug_stream_).release(),
+      base::ClippComponentArchive().Accept(&impl_->m_).release()
+  );
 }
 
 }

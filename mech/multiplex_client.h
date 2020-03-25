@@ -1,4 +1,4 @@
-// Copyright 2019 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2019-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include <boost/program_options.hpp>
+#include <clipp/clipp.h>
 
 #include "mjlib/base/visitor.h"
 #include "mjlib/multiplex/asio_client.h"
@@ -38,8 +38,7 @@ class MultiplexClient {
     }
   };
 
-  Parameters* parameters();
-  boost::program_options::options_description* options();
+  clipp::group program_options();
   void AsyncStart(mjlib::io::ErrorCallback);
 
   using Client = mjlib::multiplex::AsioClient;

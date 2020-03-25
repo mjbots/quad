@@ -18,15 +18,13 @@
 #include <fmt/format.h>
 
 #include <boost/algorithm/string.hpp>
-#include <boost/program_options.hpp>
 
+#include "mjlib/base/clipp.h"
 #include "mjlib/base/string_span.h"
 #include "mjlib/base/system_error.h"
 
 #include "mech/rpi3_raw_aux_spi.h"
 #include "mech/spidev.h"
-
-namespace po = boost::program_options;
 
 namespace {
 int ParseNybble(char c) {
@@ -145,29 +143,24 @@ int main(int argc, char** argv) {
   bool performance = false;
   bool interactive = false;
 
-  po::options_description desc("Allowable options");
+  auto group = clipp::group(
+      (clipp::option("d", "device") & clipp::value("", spi_device)) %
+      "SPI device",
+      (clipp::option("mode") & clipp::value("", mode)) % "spidev/raw",
+      (clipp::option("cs") & clipp::value("", cs)) % "CS line to use",
+      (clipp::option("a", "address") & clipp::value("", address)) %
+      "16 bit address",
+      (clipp::option("s", "speed") & clipp::value("", speed_hz)) %
+      "speed in Hz",
+      (clipp::option("w", "write") & clipp::value("", write_hex)) %
+      "data to write in hex",
+      (clipp::option("r", "read") & clipp::value("", read_bytes)) %
+      "bytes to read",
+      (clipp::option("p", "performance").set(performance)),
+      (clipp::option("i", "interactive").set(interactive))
+                            );
 
-  desc.add_options()
-      ("help,h", "display usage message")
-      ("device,d", po::value(&spi_device), "SPI device")
-      ("mode", po::value(&mode), "spidev/raw")
-      ("cs", po::value(&cs), "CS line to use")
-      ("address,a", po::value(&address), "16 bit address")
-      ("speed,s", po::value(&speed_hz), "speed in Hz")
-      ("write,w", po::value(&write_hex), "data to write in hex")
-      ("read,r", po::value(&read_bytes), "bytes to read")
-      ("performance,p", po::bool_switch(&performance), "")
-      ("interactive,i", po::bool_switch(&interactive), "")
-      ;
-
-  po::variables_map vm;
-  po::store(po::parse_command_line(argc, argv, desc), vm);
-  po::notify(vm);
-
-  if (vm.count("help")) {
-    std::cout << desc;
-    return 0;
-  }
+  mjlib::base::ClippParse(argc, argv, group);
 
   std::unique_ptr<SpiBase> spi;
   if (mode == "spidev") {
