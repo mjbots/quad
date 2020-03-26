@@ -21,6 +21,7 @@
 #include <dart/dynamics/FreeJoint.hpp>
 #include <dart/dynamics/RevoluteJoint.hpp>
 #include <dart/dynamics/WeldJoint.hpp>
+#include <dart/gui/LoadGlut.hpp>
 
 #include "mjlib/base/fail.h"
 #include "mjlib/base/json5_read_archive.h"
@@ -88,8 +89,12 @@ class SimImu : public mech::ImuClient {
 
   ~SimImu() override {}
 
-  void ReadImu(mech::AttitudeData*,
+  void ReadImu(mech::AttitudeData* attitude,
                mjlib::io::ErrorCallback callback) override {
+    *attitude = data_;
+    boost::asio::post(
+        executor_,
+        std::bind(std::move(callback), mjlib::base::error_code()));
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
@@ -98,8 +103,13 @@ class SimImu : public mech::ImuClient {
         std::bind(std::move(callback), mjlib::base::error_code()));
   }
 
+  void set_data(const mech::AttitudeData& data) {
+    data_ = data;
+  }
+
  private:
   boost::asio::executor executor_;
+  mech::AttitudeData data_;
 };
 }
 
@@ -116,10 +126,13 @@ struct Options {
 
 class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
  public:
+  static Impl* g_impl_;
+
   Impl(base::Context& context)
       : context_(context.context),
         executor_(context.executor),
         quadruped_(context) {
+    g_impl_ = this;
 
     quadruped_.m()->multiplex_client->Register<SimMultiplex>("sim");
     quadruped_.m()->multiplex_client->set_default("sim");
@@ -146,12 +159,53 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
+    // The GLUT timer will actually process our event loop, so it
+    // needs to be going right away.
+    StartGlutTimer();
+
     if (!options_.start_disabled) {
       // Send a space bar to get us simulating.
       SimWindow::keyboard(' ', 0, 0);
     }
 
-    quadruped_.AsyncStart(std::move(callback));
+    quadruped_.AsyncStart([this, callback=std::move(callback)](
+                              const auto& ec) mutable {
+        this->HandleStart(ec, std::move(callback));
+      });
+  }
+
+  void HandleStart(const mjlib::base::error_code& ec,
+                   mjlib::io::ErrorCallback callback) {
+    if (ec) {
+      boost::asio::post(
+          executor_,
+          std::bind(std::move(callback), ec));
+      return;
+    }
+
+    imu_ = dynamic_cast<SimImu*>(quadruped_.m()->imu_client->selected());
+    BOOST_ASSERT(imu_);
+    multiplex_ = dynamic_cast<SimMultiplex*>(
+        quadruped_.m()->multiplex_client->selected());
+    BOOST_ASSERT(multiplex_);
+
+    boost::asio::post(
+        executor_,
+        std::bind(std::move(callback), ec));
+  }
+
+  static void GlobalHandleGlutTimer(int) {
+    g_impl_->HandleGlutTimer();
+  }
+
+  void StartGlutTimer() {
+    glutTimerFunc(10, &GlobalHandleGlutTimer, 0);
+  }
+
+  void HandleGlutTimer() {
+    context_.poll();
+    context_.reset();
+    StartGlutTimer();
   }
 
   boost::asio::io_context& context_;
@@ -165,7 +219,12 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
   ds::WorldPtr world_ = std::make_shared<ds::World>();
 
   mech::Quadruped quadruped_;
+
+  SimImu* imu_ = nullptr;
+  SimMultiplex* multiplex_ = nullptr;
 };
+
+SimulatorWindow::Impl* SimulatorWindow::Impl::g_impl_ = nullptr;
 
 SimulatorWindow::SimulatorWindow(base::Context& context)
     : impl_(std::make_unique<Impl>(context)) {}
