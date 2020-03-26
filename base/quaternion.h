@@ -34,6 +34,9 @@ class Quaternion {
   Quaternion(double w, double x, double y, double z)
       : w_(w), x_(x), y_(y), z_(z) {}
 
+  Quaternion(Eigen::Quaterniond rhs)
+      : w_(rhs.w()), x_(rhs.x()), y_(rhs.y()), z_(rhs.z()) {}
+
   Quaternion()
       : w_(1.0), x_(0.), y_(0.), z_(0.) {}
 

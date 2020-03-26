@@ -54,12 +54,20 @@ class SimMultiplex : public mjlib::multiplex::AsioClient {
   ~SimMultiplex() override {}
 
   void AsyncRegister(
-      const IdRequest&, SingleReply*, mjlib::io::ErrorCallback) override {
+      const IdRequest&, SingleReply* reply,
+      mjlib::io::ErrorCallback callback) override {
+    *reply = {};
+    boost::asio::post(
+        executor_,
+        std::bind(std::move(callback), mjlib::base::error_code()));
   }
 
   void AsyncRegisterMultiple(
-      const std::vector<IdRequest>&, Reply*,
-      mjlib::io::ErrorCallback) override {
+      const std::vector<IdRequest>&, Reply* reply,
+      mjlib::io::ErrorCallback callback) override {
+    boost::asio::post(
+        executor_,
+        std::bind(std::move(callback), mjlib::base::error_code()));
   }
 
   mjlib::io::SharedStream MakeTunnel(
@@ -89,9 +97,33 @@ class SimImu : public mech::ImuClient {
 
   ~SimImu() override {}
 
+  void set_frame(dd::Frame* frame) {
+    frame_ = frame;
+  }
+
   void ReadImu(mech::AttitudeData* attitude,
                mjlib::io::ErrorCallback callback) override {
-    *attitude = data_;
+    if (frame_) {
+      attitude->timestamp = mjlib::io::Now(executor_.context());
+
+      // TODO(jpieper): Confirm the sign and magnitude of all these
+      // things compared to the real thing.
+
+      const Eigen::Isometry3d tf = frame_->getTransform();
+      attitude->attitude = Sophus::SE3d(tf.matrix()).unit_quaternion();
+      attitude->euler_deg = (180.0 / M_PI) * attitude->attitude.euler_rad();
+
+      const Eigen::Vector3d rate_rps = frame_->getAngularVelocity();
+      attitude->rate_dps.x() = base::Degrees(rate_rps[0]);
+      attitude->rate_dps.y() = base::Degrees(rate_rps[1]);
+      attitude->rate_dps.z() = -base::Degrees(rate_rps[2]);
+
+      Eigen::Vector3d accel =
+          frame_->getLinearAcceleration(Eigen::Vector3d(0, 0, 0));
+      attitude->accel_mps2 = accel;
+    } else {
+      *attitude = {};
+    }
     boost::asio::post(
         executor_,
         std::bind(std::move(callback), mjlib::base::error_code()));
@@ -110,6 +142,7 @@ class SimImu : public mech::ImuClient {
  private:
   boost::asio::executor executor_;
   mech::AttitudeData data_;
+  dd::Frame* frame_ = nullptr;
 };
 }
 
@@ -189,6 +222,8 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
         quadruped_.m()->multiplex_client->selected());
     BOOST_ASSERT(multiplex_);
 
+    imu_->set_frame(robot_->getBodyNode("robot"));
+
     boost::asio::post(
         executor_,
         std::bind(std::move(callback), ec));
@@ -199,7 +234,7 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
   }
 
   void StartGlutTimer() {
-    glutTimerFunc(10, &GlobalHandleGlutTimer, 0);
+    glutTimerFunc(1, &GlobalHandleGlutTimer, 0);
   }
 
   void HandleGlutTimer() {

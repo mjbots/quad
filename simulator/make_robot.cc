@@ -151,10 +151,12 @@ dd::BodyNodePtr MakeLeg(dd::SkeletonPtr skel,
 }  // namespace
 
 dd::SkeletonPtr MakeRobot(const mech::QuadrupedConfig& config) {
-  auto result = dd::Skeleton::create("robot");
+  auto result = dd::Skeleton::create("robot_skel");
 
   auto body =
-      result->createJointAndBodyNodePair<dd::FreeJoint>(nullptr).second;
+      result->createJointAndBodyNodePair<dd::FreeJoint>(
+          nullptr, dd::FreeJoint::Properties(),
+          dd::BodyNode::AspectProperties("robot")).second;
 
   auto box =
       std::make_shared<dd::BoxShape>(Eigen::Vector3d(0.230, 0.245, 0.115));
