@@ -26,6 +26,7 @@
 #include "base/component_archives.h"
 #include "base/context.h"
 
+#include "mech/imu_client.h"
 #include "mech/quadruped_control.h"
 #include "mech/web_control.h"
 
@@ -42,12 +43,14 @@ class Quadruped : boost::noncopyable {
   struct Members {
     std::unique_ptr<
       mjlib::io::Selector<mjlib::multiplex::AsioClient>> multiplex_client;
+    std::unique_ptr<mjlib::io::Selector<ImuClient>> imu_client;
     std::unique_ptr<QuadrupedControl> quadruped_control;
     std::unique_ptr<WebControl> web_control;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(multiplex_client));
+      a->Visit(MJ_NVP(imu_client));
       a->Visit(MJ_NVP(quadruped_control));
       a->Visit(MJ_NVP(web_control));
     }

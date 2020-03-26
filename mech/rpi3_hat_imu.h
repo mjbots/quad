@@ -22,6 +22,7 @@
 #include "mjlib/io/async_types.h"
 
 #include "mech/attitude_data.h"
+#include "mech/imu_client.h"
 
 namespace mjmech {
 namespace mech {
@@ -29,22 +30,31 @@ namespace mech {
 /// Read IMU data from the mjbots quad pi3 hat.
 ///
 /// For now, it operates in a polling manner.
-class Rpi3HatImu {
+class Rpi3HatImu : public ImuClient {
  public:
   struct Options {
     std::string device = "/dev/spidev0.0";
     int speed = 10000000;
     int cpu_affinity = -1;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(device));
+      a->Visit(MJ_NVP(speed));
+      a->Visit(MJ_NVP(cpu_affinity));
+    }
   };
 
   Rpi3HatImu(const boost::asio::executor&, const Options&);
-  ~Rpi3HatImu();
+  ~Rpi3HatImu() override;
+
+  void AsyncStart(mjlib::io::ErrorCallback);
 
   /// Read the next available IMU sample and store it in @p data.
   ///
   /// @param callback will be invoked when the operation completes or
   /// fails.
-  void ReadImu(AttitudeData* data, mjlib::io::ErrorCallback callback);
+  void ReadImu(AttitudeData* data, mjlib::io::ErrorCallback callback) override;
 
  private:
   class Impl;

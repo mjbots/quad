@@ -81,6 +81,12 @@ class Rpi3HatImu::Impl {
     thread_.join();
   }
 
+  void AsyncStart(mjlib::io::ErrorCallback callback) {
+    boost::asio::post(
+        executor_,
+        std::bind(std::move(callback), mjlib::base::error_code()));
+  }
+
   void ReadImu(AttitudeData* data, mjlib::io::ErrorCallback callback) {
     boost::asio::post(
         child_context_,
@@ -192,6 +198,10 @@ Rpi3HatImu::Rpi3HatImu(const boost::asio::executor& executor, const Options& opt
     : impl_(std::make_unique<Impl>(executor, options)) {}
 
 Rpi3HatImu::~Rpi3HatImu() {}
+
+void Rpi3HatImu::AsyncStart(mjlib::io::ErrorCallback callback) {
+  impl_->AsyncStart(std::move(callback));
+}
 
 void Rpi3HatImu::ReadImu(AttitudeData* data, mjlib::io::ErrorCallback callback) {
   impl_->ReadImu(data, std::move(callback));

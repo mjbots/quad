@@ -25,6 +25,7 @@
 
 #include "base/context.h"
 
+#include "mech/imu_client.h"
 #include "mech/moteus_servo.h"
 #include "mech/multiplex_client.h"
 #include "mech/quadruped_command.h"
@@ -38,7 +39,9 @@ class QuadrupedControl : boost::noncopyable {
  public:
   /// @param client_getter will be called at AsyncStart time
   using ClientGetter = std::function<mjlib::multiplex::AsioClient*()>;
-  QuadrupedControl(base::Context&, ClientGetter client_getter);
+  using ImuGetter = std::function<ImuClient*()>;
+  QuadrupedControl(base::Context&,
+                   ClientGetter client_getter, ImuGetter imu_getter);
   ~QuadrupedControl();
 
   void AsyncStart(mjlib::io::ErrorCallback handler);

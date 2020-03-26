@@ -16,6 +16,7 @@
 
 #include "base/logging.h"
 #include "mech/quadruped_debug.h"
+#include "mech/rpi3_hat_imu.h"
 #include "mech/rpi3_hat_raw_spi.h"
 
 namespace pl = std::placeholders;
@@ -34,9 +35,15 @@ class Quadruped::Impl {
     m_.multiplex_client->Register<Rpi3HatRawSpi>("rpi3");
     m_.multiplex_client->set_default("rpi3");
 
+    m_.imu_client = std::make_unique<mjlib::io::Selector<ImuClient>>(
+        executor_, "type");
+    m_.imu_client->Register<Rpi3HatImu>("rpi3");
+    m_.imu_client->set_default("rpi3");
+
     m_.quadruped_control = std::make_unique<QuadrupedControl>(
         context,
-        [&]() { return m_.multiplex_client->selected(); });
+        [&]() { return m_.multiplex_client->selected(); },
+        [&]() { return m_.imu_client->selected(); } );
     m_.web_control = std::make_unique<WebControl>(
         context.executor, m_.quadruped_control.get());
 

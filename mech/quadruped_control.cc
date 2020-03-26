@@ -200,10 +200,13 @@ struct ControlLog {
 
 class QuadrupedControl::Impl {
  public:
-  Impl(base::Context& context, ClientGetter client_getter)
+  Impl(base::Context& context,
+       ClientGetter client_getter,
+       ImuGetter imu_getter)
       : executor_(context.executor),
         timer_(executor_),
-        client_getter_(client_getter) {
+        client_getter_(client_getter),
+        imu_getter_(imu_getter) {
     context.telemetry_registry->Register("qc_status", &status_signal_);
     context.telemetry_registry->Register("qc_command", &command_signal_);
     context.telemetry_registry->Register("qc_control", &control_signal_);
@@ -213,17 +216,11 @@ class QuadrupedControl::Impl {
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
     client_ = client_getter_();
-    BOOST_ASSERT(!!client_);
-
     if (parameters_.enable_imu) {
-      imu_ = std::make_unique<Rpi3HatImu>(executor_, [&]() {
-          Rpi3HatImu::Options options;
-          options.device = parameters_.imu_device;
-          options.speed = parameters_.imu_speed;
-          options.cpu_affinity = parameters_.imu_cpu_affinity;
-          return options;
-        }());
+      imu_client_ = imu_getter_();
     }
+
+    BOOST_ASSERT(!!client_);
 
     // Load our configuration.
     std::ifstream inf(parameters_.config);
@@ -323,8 +320,9 @@ class QuadrupedControl::Impl {
     }();
     client_->AsyncRegisterMultiple(*request, &status_reply_,
                                    std::bind(&Impl::HandleStatus, this, pl::_1));
-    if (imu_) {
-      imu_->ReadImu(&imu_data_, std::bind(&Impl::HandleStatus, this, pl::_1));
+    if (imu_client_) {
+      imu_client_->ReadImu(
+          &imu_data_, std::bind(&Impl::HandleStatus, this, pl::_1));
       outstanding_status_requests_++;
     }
   }
@@ -337,7 +335,7 @@ class QuadrupedControl::Impl {
 
     timestamps_.status_done = Now();
 
-    if (!!imu_) {
+    if (!!imu_client_) {
       imu_signal_(&imu_data_);
     }
 
@@ -1987,7 +1985,10 @@ class QuadrupedControl::Impl {
   using Client = MultiplexClient::Client;
 
   ClientGetter client_getter_;
+  ImuGetter imu_getter_;
+
   Client* client_ = nullptr;
+  ImuClient* imu_client_ = nullptr;
 
   using Request = std::vector<Client::IdRequest>;
   Request status_request_;
@@ -2010,7 +2011,6 @@ class QuadrupedControl::Impl {
   } timestamps_;
 
   int outstanding_status_requests_ = 0;
-  std::unique_ptr<Rpi3HatImu> imu_;
   AttitudeData imu_data_;
 
   boost::signals2::signal<void (const Status*)> status_signal_;
@@ -2026,8 +2026,9 @@ class QuadrupedControl::Impl {
 };
 
 QuadrupedControl::QuadrupedControl(base::Context& context,
-                                   ClientGetter client_getter)
-    : impl_(std::make_unique<Impl>(context, client_getter)) {}
+                                   ClientGetter client_getter,
+                                   ImuGetter imu_getter)
+    : impl_(std::make_unique<Impl>(context, client_getter, imu_getter)) {}
 
 QuadrupedControl::~QuadrupedControl() {}
 
