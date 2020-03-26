@@ -101,7 +101,7 @@ class ClippComponentArchive {
   auto VisitHelper(const NameValuePair& pair,
                    Serializable* serializable,
                    int32_t) -> decltype((*serializable)->program_options()) {
-    group_.push_back(
+    group_.merge(
         clipp::with_prefix(std::string(pair.name()) + ".",
                            (*pair.value())->program_options()));
     return {};
@@ -111,7 +111,7 @@ class ClippComponentArchive {
   auto VisitHelper(const NameValuePair& pair,
                    Serializable*,
                    int64_t) {
-    group_.push_back(
+    group_.merge(
         mjlib::base::ClippArchive(std::string(pair.name()) + ".")
         .Accept((*pair.value())->parameters()).release());
   }
