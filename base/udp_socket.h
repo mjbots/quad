@@ -1,4 +1,4 @@
-// Copyright 2015 Mikhail Afanasyev.  All rights reserved.
+// Copyright 2015 Mikhail Afanasyev.
 // Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
