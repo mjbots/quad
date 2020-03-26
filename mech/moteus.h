@@ -154,6 +154,10 @@ inline Value WriteVoltage(double value, RegisterTypes reg) {
   return ScaleMapping(value, 0.5, 0.1, 0.001, reg);
 }
 
+inline Value WriteTemperature(double value, RegisterTypes reg) {
+  return ScaleMapping(value, 1.0, 0.1, 0.001, reg);
+}
+
 struct ValueScaler {
   double int8_scale;
   double int16_scale;

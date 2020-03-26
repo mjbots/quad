@@ -50,7 +50,7 @@ namespace {
 class Servo : public mjlib::multiplex::MicroServer::Server,
               public mjlib::multiplex::MicroDatagramServer {
  public:
-  Servo(dd::Joint* joint) : joint_(joint) {
+  Servo(dd::Joint* joint, double sign) : joint_(joint), sign_(sign) {
     server_.Start(this);
   }
 
@@ -73,29 +73,35 @@ class Servo : public mjlib::multiplex::MicroServer::Server,
       case mech::moteus::kVoltage: {
         return mech::moteus::WriteVoltage(23.0, type);
       }
+      case mech::moteus::kTemperature: {
+        return mech::moteus::WriteTemperature(20.0, type);
+      }
       case mech::moteus::kRezeroState: {
         return mech::moteus::WriteInt(1, type);
+      }
+      case mech::moteus::kFault: {
+        return mech::moteus::WriteInt(0, type);
       }
       case mech::moteus::kRegisterMapVersion: {
         return mech::moteus::WriteInt(
             static_cast<int8_t>(mech::moteus::kCurrentRegisterMapVersion),
             type);
       }
-      // case kPosition: {
-      // }
-      // case kVelocity: {
-      // }
-      // case kTorque: {
-      // }
+      case mech::moteus::kPosition: {
+        // TODO(jpieper): units for everything
+        return mech::moteus::WritePosition(
+            sign_ * 360.0 * joint_->getPosition(0) / (2.0 * M_PI), type);
+      }
+      case mech::moteus::kVelocity: {
+        return mech::moteus::WriteVelocity(
+            sign_ * 360.0 * joint_->getVelocity(0) / (2.0 * M_PI), type);
+      }
+      case mech::moteus::kTorque: {
+        return mech::moteus::WriteTorque(sign_ * joint_->getForce(0), type);
+      }
       // case kQCurrent: {
       // }
       // case kDCurrent: {
-      // }
-      // case kRezeroState: {
-      // }
-      // case kTemperature: {
-      // }
-      // case kFault: {
       // }
       default: {
         return mech::moteus::WritePwm(0, type);
@@ -175,6 +181,7 @@ class Servo : public mjlib::multiplex::MicroServer::Server,
 
  private:
   dd::Joint* const joint_;
+  const double sign_;
   mjlib::micro::SizedPool<16384> pool_;
   mjlib::multiplex::MicroServer server_{&pool_, this, {}};
 
@@ -240,7 +247,7 @@ class SimMultiplex : public mjlib::multiplex::AsioClient {
   }
 
   void AddServo(dd::Joint* joint, int id) {
-    servos_[id] = std::make_unique<Servo>(joint);
+    servos_[id] = std::make_unique<Servo>(joint, signs_.at(id));
   }
 
  private:
@@ -262,6 +269,21 @@ class SimMultiplex : public mjlib::multiplex::AsioClient {
 
   boost::asio::executor executor_;
   std::map<int, std::unique_ptr<Servo>> servos_;
+
+  std::map<int, double> signs_{
+    {1, 1.0},
+    {2, 1.0},
+    {3, 1.0},
+    {4, -1.0},
+    {5, -1.0},
+    {6, 1.0},
+    {7, 1.0},
+    {8, 1.0},
+    {9, 1.0},
+    {10, -1.0},
+    {11, -1.0},
+    {12, 1.0},
+        };
 };
 
 class SimImu : public mech::ImuClient {
