@@ -30,7 +30,7 @@
 #include "base/common.h"
 #include "base/context_full.h"
 
-#include "mech/mech_warfare.h"
+#include "mech/quadruped.h"
 
 #include "simulator/make_robot.h"
 
@@ -39,6 +39,69 @@ namespace ds = dart::simulation;
 
 namespace mjmech {
 namespace simulator {
+
+namespace {
+class SimMultiplex : public mjlib::multiplex::AsioClient {
+ public:
+  struct Options {
+    template <typename Archive>
+    void Serialize(Archive*) {}
+  };
+
+  SimMultiplex(boost::asio::executor executor, const Options&)
+      : executor_(executor) {}
+  ~SimMultiplex() override {}
+
+  void AsyncRegister(
+      const IdRequest&, SingleReply*, mjlib::io::ErrorCallback) override {
+  }
+
+  void AsyncRegisterMultiple(
+      const std::vector<IdRequest>&, Reply*,
+      mjlib::io::ErrorCallback) override {
+  }
+
+  mjlib::io::SharedStream MakeTunnel(
+      uint8_t id, uint32_t channel, const TunnelOptions& options) override {
+    return {};
+  }
+
+  void AsyncStart(mjlib::io::ErrorCallback callback) {
+    boost::asio::post(
+        executor_,
+        std::bind(std::move(callback), mjlib::base::error_code()));
+  }
+
+ private:
+  boost::asio::executor executor_;
+};
+
+class SimImu : public mech::ImuClient {
+ public:
+  struct Options {
+    template <typename Archive>
+    void Serialize(Archive*) {}
+  };
+
+  SimImu(boost::asio::executor executor, const Options&)
+      : executor_(executor) {}
+
+  ~SimImu() override {}
+
+  void ReadImu(mech::AttitudeData*,
+               mjlib::io::ErrorCallback callback) override {
+  }
+
+  void AsyncStart(mjlib::io::ErrorCallback callback) {
+    boost::asio::post(
+        executor_,
+        std::bind(std::move(callback), mjlib::base::error_code()));
+  }
+
+ private:
+  boost::asio::executor executor_;
+};
+}
 
 struct Options {
   bool start_disabled = false;
@@ -55,7 +118,15 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
  public:
   Impl(base::Context& context)
       : context_(context.context),
-        executor_(context.executor) {
+        executor_(context.executor),
+        quadruped_(context) {
+
+    quadruped_.m()->multiplex_client->Register<SimMultiplex>("sim");
+    quadruped_.m()->multiplex_client->set_default("sim");
+
+    quadruped_.m()->imu_client->Register<SimImu>("sim");
+    quadruped_.m()->imu_client->set_default("sim");
+
     floor_ = MakeFloor();
     mech::QuadrupedConfig config;
     {
@@ -80,9 +151,7 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
       SimWindow::keyboard(' ', 0, 0);
     }
 
-    boost::asio::post(
-        executor_,
-        std::bind(std::move(callback), mjlib::base::error_code()));
+    quadruped_.AsyncStart(std::move(callback));
   }
 
   boost::asio::io_context& context_;
@@ -94,6 +163,8 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
   dd::SkeletonPtr robot_;
 
   ds::WorldPtr world_ = std::make_shared<ds::World>();
+
+  mech::Quadruped quadruped_;
 };
 
 SimulatorWindow::SimulatorWindow(base::Context& context)
@@ -102,7 +173,9 @@ SimulatorWindow::SimulatorWindow(base::Context& context)
 SimulatorWindow::~SimulatorWindow() {}
 
 clipp::group SimulatorWindow::program_options() {
-  return mjlib::base::ClippArchive().Accept(&impl_->options_).release();
+  return clipp::group(
+      mjlib::base::ClippArchive().Accept(&impl_->options_).release(),
+      impl_->quadruped_.program_options());
 }
 
 void SimulatorWindow::AsyncStart(mjlib::io::ErrorCallback callback) {

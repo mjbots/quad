@@ -28,5 +28,6 @@ cc_binary(
     deps = [
         "//mech",
         "@dart//:gui",
+        "@org_llvm_libcxx//:libcxx",
     ],
 )

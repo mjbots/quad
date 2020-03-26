@@ -56,6 +56,8 @@ class Quadruped : boost::noncopyable {
     }
   };
 
+  Members* m();
+
   struct Parameters {
     template <typename Archive>
     void Serialize(Archive* a) {

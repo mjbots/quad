@@ -42,7 +42,8 @@ std::string FindAssetPath() {
   fs::path start = fs::canonical("/proc/self/exe").remove_filename();
 
   for (const char* to_try : { ".",
-          "quadruped.runfiles/com_github_mjbots_mech/mech"}) {
+          "quadruped.runfiles/com_github_mjbots_mech/mech",
+          "simulator.runfiles/com_github_mjbots_mech/mech"}) {
     fs::path this_root = start / to_try;
     fs::path assets = this_root / kAssetPath;
     if (fs::exists(assets)) {

@@ -27,11 +27,14 @@ using namespace mjmech::simulator;
 
 int main(int argc, char** argv) {
   std::string config_file;
+  std::string log_file;
 
-  auto group = clipp::group(
+  auto group = (
       (clipp::option("c", "config") & clipp::value("", config_file)) %
-      "read options from file"
-                            );
+      "read options from file",
+      (clipp::option("l", "log") & clipp::value("", log_file)) %
+      "write to log file"
+  );
 
   group.push_back(base::MakeLoggingOptions());
 

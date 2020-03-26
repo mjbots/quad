@@ -98,6 +98,8 @@ void Quadruped::AsyncStart(mjlib::io::ErrorCallback callback) {
   impl_->AsyncStart(std::move(callback));
 }
 
+Quadruped::Members* Quadruped::m() { return &impl_->m_; }
+
 clipp::group Quadruped::program_options() {
   return (
       mjlib::base::ClippArchive().Accept(&impl_->p_).release(),

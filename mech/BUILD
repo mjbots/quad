@@ -19,6 +19,15 @@ package(default_visibility = ["//visibility:public"])
 load("//base:module_main.bzl", "module_main")
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
 
+filegroup(
+    name = "web_control_assets",
+    srcs = [
+        "web_control_assets/index.html",
+        "web_control_assets/styles.css",
+        "web_control_assets/js/app.js",
+    ],
+)
+
 cc_library(
     name = "mech",
     srcs = [
@@ -82,9 +91,7 @@ cc_library(
         "//:raspberrypi" : ["-DCOM_GITHUB_MJBOTS_RASPBERRYPI"],
     }),
     data = [
-        "web_control_assets/index.html",
-        "web_control_assets/styles.css",
-        "web_control_assets/js/app.js",
+        ":web_control_assets",
     ],
     features = [
         "dbg",
