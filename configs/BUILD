@@ -19,7 +19,6 @@ package(default_visibility = ["//visibility:public"])
 filegroup(
     name = "configs",
     srcs = [
-        "jump_test.ini",
         "lizard.cfg",
         "moteus.ini",
         "moteus_ik.cfg",

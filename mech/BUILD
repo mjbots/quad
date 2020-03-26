@@ -26,7 +26,6 @@ cc_library(
         "gait_driver.cc",
         "gst_helpers.cc",
         "gst_main_loop.cc",
-        "jump_test.cc",
         "mammal_ik.cc",
         "mcast_video_link.cc",
         "mech_warfare.cc",
@@ -180,13 +179,6 @@ module_main(
     deps = [":mech"],
 )
 
-module_main(
-    name = "jump_test",
-    cname = "mjmech::mech::JumpTest",
-    prefix = "mech",
-    deps = [":mech"],
-)
-
 cc_binary(
     name = "multiplex_tool",
     srcs = ["multiplex_tool_main.cc"],
@@ -238,7 +230,6 @@ pkg_tar(
     package_dir = "mech",
     srcs = [
         ":bmi088_test",
-        ":jump_test",
         ":mech_warfare",
         ":moteus_tool",
         ":multiplex_tool",
@@ -253,7 +244,6 @@ pkg_tar(
         "//configs:lizard.cfg": "configs/lizard.cfg",
         "//configs:moteus.ini": "configs/moteus.ini",
         "//configs:moteus_ik.cfg": "configs/moteus_ik.cfg",
-        "//configs:jump_test.ini": "configs/jump_test.ini",
         "//configs:quadruped.ini": "configs/quadruped.ini",
         "//configs:quada0.cfg": "configs/quada0.cfg",
         "//configs:quada1.cfg": "configs/quada1.cfg",
