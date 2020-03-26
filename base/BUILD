@@ -25,6 +25,7 @@ cc_library(
         "quaternion.cc",
         "system_fd.cc",
         "telemetry_remote_debug_server.cc",
+        "timestamped_log.cc",
         "udp_data_link.cc",
         "udp_socket.cc",
     ],

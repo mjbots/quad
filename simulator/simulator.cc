@@ -19,6 +19,7 @@
 #include "mjlib/base/clipp.h"
 
 #include "base/logging.h"
+#include "base/timestamped_log.h"
 
 #include "simulator/simulator_window.h"
 
@@ -52,6 +53,13 @@ int main(int argc, char** argv) {
     mjlib::base::system_error::throw_if(
         !inf.is_open(), "opening "  + config_file);
     mjlib::base::ClippParseIni(inf, group);
+  }
+
+  if (!log_file.empty()) {
+    mjmech::base::OpenMaybeTimestampedLog(
+        context.telemetry_log.get(),
+        log_file,
+        mjmech::base::kTimestamped);
   }
 
   glutInit(&argc, argv);
