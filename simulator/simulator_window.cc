@@ -28,9 +28,14 @@
 #include "mjlib/io/now.h"
 #include "mjlib/io/debug_deadline_service.h"
 
+#include "mjlib/micro/pool_ptr.h"
+#include "mjlib/multiplex/micro_server.h"
+#include "mjlib/multiplex/micro_datagram_server.h"
+
 #include "base/common.h"
 #include "base/context_full.h"
 
+#include "mech/moteus.h"
 #include "mech/quadruped.h"
 
 #include "simulator/make_robot.h"
@@ -42,6 +47,152 @@ namespace mjmech {
 namespace simulator {
 
 namespace {
+class Servo : public mjlib::multiplex::MicroServer::Server,
+              public mjlib::multiplex::MicroDatagramServer {
+ public:
+  Servo(dd::Joint* joint) : joint_(joint) {
+    server_.Start(this);
+  }
+
+  ~Servo() override {}
+
+  uint32_t Write(mjlib::multiplex::MicroServer::Register reg,
+                 const mjlib::multiplex::MicroServer::Value& value) override {
+    return 0;
+  }
+
+  mjlib::multiplex::MicroServer::ReadResult Read(
+      mjlib::multiplex::MicroServer::Register reg,
+      size_t type_int) const override {
+    const auto type = static_cast<mech::moteus::RegisterTypes>(type_int);
+
+    switch (static_cast<mech::moteus::Register>(reg)) {
+      case mech::moteus::kMode: {
+        return mech::moteus::WriteInt(static_cast<int8_t>(state_.mode), type);
+      }
+      case mech::moteus::kVoltage: {
+        return mech::moteus::WriteVoltage(23.0, type);
+      }
+      case mech::moteus::kRezeroState: {
+        return mech::moteus::WriteInt(1, type);
+      }
+      case mech::moteus::kRegisterMapVersion: {
+        return mech::moteus::WriteInt(
+            static_cast<int8_t>(mech::moteus::kCurrentRegisterMapVersion),
+            type);
+      }
+      // case kPosition: {
+      // }
+      // case kVelocity: {
+      // }
+      // case kTorque: {
+      // }
+      // case kQCurrent: {
+      // }
+      // case kDCurrent: {
+      // }
+      // case kRezeroState: {
+      // }
+      // case kTemperature: {
+      // }
+      // case kFault: {
+      // }
+      default: {
+        return mech::moteus::WritePwm(0, type);
+      }
+    }
+    return {};
+  }
+
+  void AsyncRead(Header* header,
+                 const mjlib::base::string_span& read_buffer,
+                 const mjlib::micro::SizeCallback& read_callback) override {
+    BOOST_ASSERT(!read_header_);
+
+    read_header_ = header;
+    read_buffer_ = read_buffer;
+    read_callback_ = read_callback;
+  }
+
+  void AsyncWrite(const Header& header,
+                  const std::string_view& write_buffer,
+                  const mjlib::micro::SizeCallback& write_callback) override {
+    BOOST_ASSERT(!write_header_);
+
+    write_header_ = header;
+    write_buffer_ = write_buffer;
+    write_callback_ = write_callback;
+  }
+
+  mjlib::multiplex::MicroDatagramServer::Properties
+  properties() const override {
+    return {};
+  }
+
+  void Request(const mjlib::multiplex::RegisterRequest& request,
+               mjlib::multiplex::RegisterReply* reply,
+               mjlib::base::error_code*) {
+    BOOST_ASSERT(!!read_header_);
+
+    // For simulation purposes, each servo thinks it is ID 1.
+    read_header_->source = request.request_reply() ? 0x80 : 0x00;
+    read_header_->destination = 1;
+    read_header_->size = request.buffer().size();
+
+    const auto to_read =
+        std::min<size_t>(read_buffer_.size(), request.buffer().size());
+    std::memcpy(read_buffer_.data(), request.buffer().data(), to_read);
+
+    {
+      auto read_copy = std::move(read_callback_);
+
+      read_header_ = {};
+      read_buffer_ = {};
+      read_callback_ = {};
+
+      read_copy(mjlib::micro::error_code(), to_read);
+    }
+
+    *reply = {};
+
+    // This may have resulted in a write.
+
+    if (!write_header_) { return; }
+
+    mjlib::base::BufferReadStream stream{write_buffer_};
+    *reply = mjlib::multiplex::ParseRegisterReply(stream);
+
+    {
+      auto write_copy = std::move(write_callback_);
+
+      write_header_ = {};
+      write_buffer_ = {};
+      write_callback_ = {};
+
+      write_copy(mjlib::micro::error_code(), stream.offset());
+    }
+  }
+
+ private:
+  dd::Joint* const joint_;
+  mjlib::micro::SizedPool<16384> pool_;
+  mjlib::multiplex::MicroServer server_{&pool_, this, {}};
+
+  Header* read_header_ = nullptr;
+  mjlib::base::string_span read_buffer_;
+  mjlib::micro::SizeCallback read_callback_;
+
+  std::optional<Header> write_header_;
+  std::string_view write_buffer_;
+  mjlib::micro::SizeCallback write_callback_;
+
+  struct State {
+    mech::moteus::Mode mode = mech::moteus::Mode::kStopped;
+  };
+
+  State state_;
+};
+
 class SimMultiplex : public mjlib::multiplex::AsioClient {
  public:
   struct Options {
@@ -54,20 +205,27 @@ class SimMultiplex : public mjlib::multiplex::AsioClient {
   ~SimMultiplex() override {}
 
   void AsyncRegister(
-      const IdRequest&, SingleReply* reply,
+      const IdRequest& request, SingleReply* single_reply,
       mjlib::io::ErrorCallback callback) override {
-    *reply = {};
+    mjlib::base::error_code ec;
+    DoRequest(request, single_reply, &ec);
     boost::asio::post(
         executor_,
-        std::bind(std::move(callback), mjlib::base::error_code()));
+        std::bind(std::move(callback), ec));
   }
 
   void AsyncRegisterMultiple(
-      const std::vector<IdRequest>&, Reply* reply,
+      const std::vector<IdRequest>& requests, Reply* reply,
       mjlib::io::ErrorCallback callback) override {
+    *reply = {};
+    mjlib::base::error_code ec;
+    for (const auto& id_request : requests) {
+      reply->replies.push_back({});
+      DoRequest(id_request, &reply->replies.back(), &ec);
+    }
     boost::asio::post(
         executor_,
-        std::bind(std::move(callback), mjlib::base::error_code()));
+        std::bind(std::move(callback), ec));
   }
 
   mjlib::io::SharedStream MakeTunnel(
@@ -81,8 +239,29 @@ class SimMultiplex : public mjlib::multiplex::AsioClient {
         std::bind(std::move(callback), mjlib::base::error_code()));
   }
 
+  void AddServo(dd::Joint* joint, int id) {
+    servos_[id] = std::make_unique<Servo>(joint);
+  }
+
  private:
+  void DoRequest(const mjlib::multiplex::AsioClient::IdRequest& id_request,
+                 mjlib::multiplex::AsioClient::SingleReply* reply,
+                 mjlib::base::error_code* ec) {
+    const auto id = id_request.id;
+    const auto it = servos_.find(id);
+    if (it == servos_.end()) {
+      // We don't have this servo.
+      *ec = mjlib::base::error_code::einval(
+          fmt::format("unknown servo {}", id));
+      return;
+    }
+
+    reply->id = id;
+    it->second->Request(id_request.request, &reply->reply, ec);
+  }
+
   boost::asio::executor executor_;
+  std::map<int, std::unique_ptr<Servo>> servos_;
 };
 
 class SimImu : public mech::ImuClient {
@@ -174,16 +353,15 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
     quadruped_.m()->imu_client->set_default("sim");
 
     floor_ = MakeFloor();
-    mech::QuadrupedConfig config;
     {
       std::ifstream inf(options_.config);
       mjlib::base::system_error::throw_if(
           !inf.is_open(),
           fmt::format("could not open config file '{}'", options_.config));
-      mjlib::base::Json5ReadArchive(inf).Accept(&config);
+      mjlib::base::Json5ReadArchive(inf).Accept(&quadruped_config_);
     }
 
-    robot_ = MakeRobot(config);
+    robot_ = MakeRobot(quadruped_config_);
 
     world_->addSkeleton(floor_);
     world_->addSkeleton(robot_);
@@ -224,6 +402,19 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
 
     imu_->set_frame(robot_->getBodyNode("robot"));
 
+    for (int leg = 0; leg < 4; leg++) {
+      const auto& leg_config = quadruped_config_.legs.at(leg);
+
+      std::string leg_prefix = fmt::format("leg{}", leg);
+      auto add_servo = [&](auto name, auto id) {
+        multiplex_->AddServo(
+            robot_->getBodyNode(leg_prefix + name)->getParentJoint(), id);
+      };
+      add_servo("_shoulder", leg_config.ik.shoulder.id);
+      add_servo("_femur", leg_config.ik.femur.id);
+      add_servo("_tibia", leg_config.ik.tibia.id);
+    }
+
     boost::asio::post(
         executor_,
         std::bind(std::move(callback), ec));
@@ -253,6 +444,7 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
 
   ds::WorldPtr world_ = std::make_shared<ds::World>();
 
+  mech::QuadrupedConfig quadruped_config_;
   mech::Quadruped quadruped_;
 
   SimImu* imu_ = nullptr;

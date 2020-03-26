@@ -122,6 +122,15 @@ inline Value ScaleMapping(double value,
   return Value(static_cast<int8_t>(0));
 }
 
+inline Value WriteInt(int value, RegisterTypes type) {
+  switch (type) {
+    case kInt8: return Value(static_cast<int8_t>(value));
+    case kInt16: return Value(static_cast<int16_t>(value));
+    case kInt32: return Value(static_cast<int32_t>(value));
+    case kFloat: return Value(static_cast<float>(value));
+  }
+}
+
 inline Value WritePosition(double value, RegisterTypes reg) {
   return ScaleMapping(value / 360.0, 0.01, 0.001, 0.00001, reg);
 }
@@ -139,6 +148,10 @@ inline Value WritePwm(double value, RegisterTypes reg) {
                       1.0 / 32767.0,
                       1.0 / 2147483647.0,
                       reg);
+}
+
+inline Value WriteVoltage(double value, RegisterTypes reg) {
+  return ScaleMapping(value, 0.5, 0.1, 0.001, reg);
 }
 
 struct ValueScaler {

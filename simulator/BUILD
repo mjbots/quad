@@ -27,6 +27,8 @@ cc_binary(
     ] + glob(["*.h"]),
     deps = [
         "//mech",
+        "@com_github_mjbots_mjlib//mjlib/micro:pool_ptr",
+        "@com_github_mjbots_mjlib//mjlib/multiplex:micro_server",
         "@dart//:gui",
         "@org_llvm_libcxx//:libcxx",
     ],
