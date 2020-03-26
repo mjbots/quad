@@ -20,10 +20,12 @@
 
 #include <boost/noncopyable.hpp>
 
+#include "mjlib/io/selector.h"
+#include "mjlib/multiplex/asio_client.h"
+
 #include "base/component_archives.h"
 #include "base/context.h"
 
-#include "mech/multiplex_client.h"
 #include "mech/quadruped_control.h"
 #include "mech/web_control.h"
 
@@ -38,7 +40,8 @@ class Quadruped : boost::noncopyable {
   void AsyncStart(mjlib::io::ErrorCallback);
 
   struct Members {
-    std::unique_ptr<MultiplexClient> multiplex_client;
+    std::unique_ptr<
+      mjlib::io::Selector<mjlib::multiplex::AsioClient>> multiplex_client;
     std::unique_ptr<QuadrupedControl> quadruped_control;
     std::unique_ptr<WebControl> web_control;
 

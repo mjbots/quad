@@ -36,11 +36,12 @@ namespace mech {
 /// This sequences the primary control modes of the quadruped.
 class QuadrupedControl : boost::noncopyable {
  public:
-  QuadrupedControl(base::Context&);
+  /// @param client_getter will be called at AsyncStart time
+  using ClientGetter = std::function<mjlib::multiplex::AsioClient*()>;
+  QuadrupedControl(base::Context&, ClientGetter client_getter);
   ~QuadrupedControl();
 
   void AsyncStart(mjlib::io::ErrorCallback handler);
-  void SetClient(MultiplexClient::Client*);
 
   struct Parameters {
     double period_s = 0.01;

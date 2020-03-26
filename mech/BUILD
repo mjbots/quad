@@ -63,6 +63,7 @@ cc_library(
         "@gst-libav//:plugins",
         "@gst-rtsp-server//:rtsp-server",
         "@com_github_mjbots_mjlib//mjlib/io:exclusive_command",
+        "@com_github_mjbots_mjlib//mjlib/io:selector",
         "@com_github_mjbots_mjlib//mjlib/multiplex:asio_client",
         "@com_github_mjbots_mjlib//mjlib/multiplex:frame",
         "@com_github_mjbots_mjlib//mjlib/multiplex:register",

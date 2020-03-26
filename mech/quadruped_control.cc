@@ -200,9 +200,10 @@ struct ControlLog {
 
 class QuadrupedControl::Impl {
  public:
-  Impl(base::Context& context)
+  Impl(base::Context& context, ClientGetter client_getter)
       : executor_(context.executor),
-        timer_(executor_) {
+        timer_(executor_),
+        client_getter_(client_getter) {
     context.telemetry_registry->Register("qc_status", &status_signal_);
     context.telemetry_registry->Register("qc_command", &command_signal_);
     context.telemetry_registry->Register("qc_control", &control_signal_);
@@ -211,6 +212,9 @@ class QuadrupedControl::Impl {
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
+    client_ = client_getter_();
+    BOOST_ASSERT(!!client_);
+
     if (parameters_.enable_imu) {
       imu_ = std::make_unique<Rpi3HatImu>(executor_, [&]() {
           Rpi3HatImu::Options options;
@@ -1982,6 +1986,7 @@ class QuadrupedControl::Impl {
   mjlib::io::RepeatingTimer timer_;
   using Client = MultiplexClient::Client;
 
+  ClientGetter client_getter_;
   Client* client_ = nullptr;
 
   using Request = std::vector<Client::IdRequest>;
@@ -2020,17 +2025,14 @@ class QuadrupedControl::Impl {
   std::vector<int> all_leg_ids_{0, 1, 2, 3};
 };
 
-QuadrupedControl::QuadrupedControl(base::Context& context)
-    : impl_(std::make_unique<Impl>(context)) {}
+QuadrupedControl::QuadrupedControl(base::Context& context,
+                                   ClientGetter client_getter)
+    : impl_(std::make_unique<Impl>(context, client_getter)) {}
 
 QuadrupedControl::~QuadrupedControl() {}
 
 void QuadrupedControl::AsyncStart(mjlib::io::ErrorCallback callback) {
   impl_->AsyncStart(std::move(callback));
-}
-
-void QuadrupedControl::SetClient(MultiplexClient::Client* client) {
-  impl_->client_ = client;
 }
 
 void QuadrupedControl::Command(const QC& command) {
