@@ -244,7 +244,7 @@ class Servo : public mjlib::multiplex::MicroServer::Server,
         break;
       }
       case mech::moteus::Mode::kZeroVelocity: {
-        RunZeroVelocity();
+        RunZeroVelocity(dt_s);
         break;
       }
       default: {
@@ -262,7 +262,12 @@ class Servo : public mjlib::multiplex::MicroServer::Server,
     return joint_->getVelocity(0) / (2.0 * M_PI);
   }
 
-  void RunZeroVelocity() {
+  void RunZeroVelocity(double dt_s) {
+    mjlib::base::PID::ApplyOptions apply_options;
+    apply_options.kp_scale = 0.0;
+    apply_options.kd_scale = 1.0;
+
+    RunPositionCommon(dt_s, apply_options);
   }
 
   void RunPosition(double dt_s) {
@@ -270,6 +275,12 @@ class Servo : public mjlib::multiplex::MicroServer::Server,
     apply_options.kp_scale = command_.kp_scale;
     apply_options.kd_scale = command_.kd_scale;
 
+    RunPositionCommon(dt_s, apply_options);
+  }
+
+  void RunPositionCommon(
+      double dt_s,
+      const mjlib::base::PID::ApplyOptions& apply_options) {
     if (!std::isnan(command_.position)) {
       state_.control_position = command_.position;
       command_.position = std::numeric_limits<float>::quiet_NaN();
