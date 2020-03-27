@@ -237,6 +237,7 @@ class Servo : public mjlib::multiplex::MicroServer::Server,
     switch (state_.mode) {
       case mech::moteus::Mode::kStopped: {
         joint_->setForce(0, 0.0);
+        state_.control_position = std::numeric_limits<double>::quiet_NaN();
         break;
       }
       case mech::moteus::Mode::kPosition: {
@@ -245,9 +246,11 @@ class Servo : public mjlib::multiplex::MicroServer::Server,
       }
       case mech::moteus::Mode::kZeroVelocity: {
         RunZeroVelocity(dt_s);
+        state_.control_position = std::numeric_limits<double>::quiet_NaN();
         break;
       }
       default: {
+        state_.control_position = std::numeric_limits<double>::quiet_NaN();
         break;
       }
     }
