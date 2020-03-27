@@ -60,7 +60,7 @@ enum Register : uint32_t {
   kCommandFeedforwardTorque = 0x022,
   kCommandKpScale = 0x023,
   kCommandKdScale = 0x024,
-  kCommandPositionMaxCurrent = 0x025,
+  kCommandPositionMaxTorque = 0x025,
   kCommandStopPosition = 0x026,
   kCommandTimeout = 0x027,
 
@@ -85,6 +85,7 @@ enum class Mode {
     kPosition = 10,
     kPositionTimeout = 11,
     kZeroVelocity = 12,
+    kNumModes,
 };
 
 using Value = mjlib::multiplex::Format::Value;
@@ -200,6 +201,10 @@ inline double ReadPosition(Value value) {
   return ReadScale(value, 0.01, 0.001, 0.00001) * 360.0;
 }
 
+inline double ReadVelocity(Value value) {
+  return ReadScale(value, 0.01, 0.001, 0.00001) * 360.0;
+}
+
 inline double ReadTorque(Value value) {
   return ReadScale(value, 0.5, 0.01, 0.001);
 }
@@ -210,6 +215,14 @@ inline double ReadVoltage(Value value) {
 
 inline double ReadTemperature(Value value) {
   return ReadScale(value, 1.0, 0.1, 0.001);
+}
+
+inline double ReadPwm(Value value) {
+  return ReadScale(value, 1.0 / 127.0, 1.0 / 32767.0, 1.0 / 2147483647.0);
+}
+
+inline double ReadTime(Value value) {
+  return ReadScale(value, 0.01, 0.001, 0.000001);
 }
 
 inline int ReadInt(Value value) {

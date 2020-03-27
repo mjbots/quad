@@ -25,6 +25,8 @@
 
 #include "mjlib/base/fail.h"
 #include "mjlib/base/json5_read_archive.h"
+#include "mjlib/base/limit.h"
+#include "mjlib/base/pid.h"
 #include "mjlib/io/now.h"
 #include "mjlib/io/debug_deadline_service.h"
 
@@ -43,6 +45,8 @@
 namespace dd = dart::dynamics;
 namespace ds = dart::simulation;
 
+using mjlib::base::Limit;
+
 namespace mjmech {
 namespace simulator {
 
@@ -58,6 +62,53 @@ class Servo : public mjlib::multiplex::MicroServer::Server,
 
   uint32_t Write(mjlib::multiplex::MicroServer::Register reg,
                  const mjlib::multiplex::MicroServer::Value& value) override {
+    switch (static_cast<mech::moteus::Register>(reg)) {
+      case mech::moteus::kMode: {
+        const auto new_mode_int = mech::moteus::ReadInt(value);
+        if (new_mode_int >= static_cast<int>(mech::moteus::Mode::kNumModes)) {
+          return 3;
+        }
+        staged_command_valid_ = true;
+        staged_command_ = {};
+        staged_command_.mode = static_cast<mech::moteus::Mode>(new_mode_int);
+        return 0;
+      }
+      case mech::moteus::kCommandPosition: {
+        staged_command_.position = sign_ * mech::moteus::ReadPosition(value) / 360.0;
+        return 0;
+      }
+      case mech::moteus::kCommandVelocity: {
+        staged_command_.velocity = sign_ * mech::moteus::ReadVelocity(value) / 360.0;
+        return 0;
+      }
+      case mech::moteus::kCommandPositionMaxTorque: {
+        staged_command_.max_torque_Nm = mech::moteus::ReadTorque(value);
+        return 0;
+      }
+      case mech::moteus::kCommandStopPosition: {
+        staged_command_.stop_position = sign_ * mech::moteus::ReadPosition(value) / 360.0;
+        return 0;
+      }
+      case mech::moteus::kCommandTimeout: {
+        staged_command_.timeout_s = mech::moteus::ReadTime(value);
+        return 0;
+      }
+      case mech::moteus::kCommandFeedforwardTorque: {
+        staged_command_.feedforward_Nm = sign_ * mech::moteus::ReadTorque(value);
+        return 0;
+      }
+      case mech::moteus::kCommandKpScale: {
+        staged_command_.kp_scale = mech::moteus::ReadPwm(value);
+        return 0;
+      }
+      case mech::moteus::kCommandKdScale: {
+        staged_command_.kd_scale = mech::moteus::ReadPwm(value);
+        return 0;
+      }
+      default: {
+        break;
+      }
+    }
     return 0;
   }
 
@@ -88,16 +139,13 @@ class Servo : public mjlib::multiplex::MicroServer::Server,
             type);
       }
       case mech::moteus::kPosition: {
-        // TODO(jpieper): units for everything
-        return mech::moteus::WritePosition(
-            sign_ * 360.0 * joint_->getPosition(0) / (2.0 * M_PI), type);
+        return mech::moteus::WritePosition(sign_ * 360.0 * position(), type);
       }
       case mech::moteus::kVelocity: {
-        return mech::moteus::WriteVelocity(
-            sign_ * 360.0 * joint_->getVelocity(0) / (2.0 * M_PI), type);
+        return mech::moteus::WriteVelocity(sign_ * 360.0 * velocity(), type);
       }
       case mech::moteus::kTorque: {
-        return mech::moteus::WriteTorque(sign_ * joint_->getForce(0), type);
+        return mech::moteus::WriteTorque(sign_ * current_torque_Nm_, type);
       }
       // case kQCurrent: {
       // }
@@ -163,23 +211,127 @@ class Servo : public mjlib::multiplex::MicroServer::Server,
 
     // This may have resulted in a write.
 
-    if (!write_header_) { return; }
+    if (write_header_) {
 
-    mjlib::base::BufferReadStream stream{write_buffer_};
-    *reply = mjlib::multiplex::ParseRegisterReply(stream);
+      mjlib::base::BufferReadStream stream{write_buffer_};
+      *reply = mjlib::multiplex::ParseRegisterReply(stream);
 
-    {
-      auto write_copy = std::move(write_callback_);
+      {
+        auto write_copy = std::move(write_callback_);
 
-      write_header_ = {};
-      write_buffer_ = {};
-      write_callback_ = {};
+        write_header_ = {};
+        write_buffer_ = {};
+        write_callback_ = {};
 
-      write_copy(mjlib::micro::error_code(), stream.offset());
+        write_copy(mjlib::micro::error_code(), stream.offset());
+      }
+    }
+
+    Update();
+  }
+
+  void Run(double dt_s) {
+    // In case nothing else sets it.
+    current_torque_Nm_ = 0.0;
+
+    switch (state_.mode) {
+      case mech::moteus::Mode::kStopped: {
+        joint_->setForce(0, 0.0);
+        break;
+      }
+      case mech::moteus::Mode::kPosition: {
+        RunPosition(dt_s);
+        break;
+      }
+      case mech::moteus::Mode::kZeroVelocity: {
+        RunZeroVelocity();
+        break;
+      }
+      default: {
+        break;
+      }
     }
   }
 
  private:
+  double position() const {
+    return joint_->getPosition(0) / (2.0 * M_PI);
+  }
+
+  double velocity() const {
+    return joint_->getVelocity(0) / (2.0 * M_PI);
+  }
+
+  void RunZeroVelocity() {
+  }
+
+  void RunPosition(double dt_s) {
+    mjlib::base::PID::ApplyOptions apply_options;
+    apply_options.kp_scale = command_.kp_scale;
+    apply_options.kd_scale = command_.kd_scale;
+
+    if (!std::isnan(command_.position)) {
+      state_.control_position = command_.position;
+      command_.position = std::numeric_limits<float>::quiet_NaN();
+    } else if (std::isnan(state_.control_position)) {
+      state_.control_position = position();
+    }
+
+    auto velocity_command = command_.velocity;
+
+    const auto old_position = state_.control_position;
+    state_.control_position =
+        Limit(state_.control_position + velocity_command * dt_s,
+              position_min_, position_max_);
+    if (!std::isnan(command_.stop_position)) {
+      if ((state_.control_position -
+           command_.stop_position) * velocity_command > 0.0) {
+        // We are moving away from the stop position.  Force it to be there.
+        state_.control_position = command_.stop_position;
+      }
+    }
+    if (state_.control_position == old_position) {
+      // We have hit a limit.
+      velocity_command = 0.0;
+    }
+
+    const double unlimited_torque_Nm =
+        pid_position_.Apply(position(), state_.control_position,
+                            velocity(), velocity_command,
+                            1.0 / dt_s,
+                            apply_options) +
+        command_.feedforward_Nm;
+
+    const double limited_torque_Nm =
+        Limit(unlimited_torque_Nm, -command_.max_torque_Nm,
+              command_.max_torque_Nm);
+
+    current_torque_Nm_ = limited_torque_Nm;
+    joint_->setForce(0, limited_torque_Nm);
+  }
+
+  void Update() {
+    if (staged_command_valid_) {
+      // Update with the new command.
+      staged_command_valid_ = false;
+      command_ = staged_command_;
+
+      // The simulation doesn't have a state machine yet.  We just
+      // instantly switch to whatever we are commanded.
+      state_.mode = command_.mode;
+
+      if (std::isnan(command_.position) &&
+          !std::isnan(command_.stop_position) &&
+          !std::isnan(command_.velocity) &&
+          command_.velocity != 0.0) {
+        command_.velocity = std::abs(command_.velocity) *
+            ((command_.stop_position > position()) ? 1.0 : -1.0);
+      }
+    }
+
+    staged_command_ = {};
+  }
+
   dd::Joint* const joint_;
   const double sign_;
   mjlib::micro::SizedPool<16384> pool_;
@@ -195,9 +347,51 @@ class Servo : public mjlib::multiplex::MicroServer::Server,
 
   struct State {
     mech::moteus::Mode mode = mech::moteus::Mode::kStopped;
+    double control_position = std::numeric_limits<double>::quiet_NaN();
+
+    mjlib::base::PID::State pid_position;
   };
 
   State state_;
+
+  mjlib::base::PID::Config pid_position_config_ = []() {
+      mjlib::base::PID::Config config;
+      config.kp = 450.0;
+      config.ki = 100.0;
+      config.ilimit = 0.0;
+      config.kd = 9.0f;
+      config.sign = -1.0;
+      return config;
+  }();
+
+  mjlib::base::PID pid_position_{
+    &pid_position_config_, &state_.pid_position};
+
+  struct Command {
+    mech::moteus::Mode mode = mech::moteus::Mode::kStopped;
+
+    double position = 0.0f;
+    double velocity = 0.0f;
+
+    double max_torque_Nm = 100.0f;
+    double stop_position = std::numeric_limits<double>::quiet_NaN();
+    double feedforward_Nm = 0.0f;
+
+    double kp_scale = 1.0f;
+    double kd_scale = 1.0f;
+
+    double timeout_s = 0.0f;
+  };
+
+  Command staged_command_;
+  bool staged_command_valid_ = false;
+
+  Command command_;
+
+  double current_torque_Nm_ = 0.0;
+
+  const double position_min_ = -1.0;
+  const double position_max_ = 1.0;
 };
 
 class SimMultiplex : public mjlib::multiplex::AsioClient {
@@ -250,6 +444,12 @@ class SimMultiplex : public mjlib::multiplex::AsioClient {
     servos_[id] = std::make_unique<Servo>(joint, signs_.at(id));
   }
 
+  void Run(double dt_s) {
+    for (auto& pair : servos_) {
+      pair.second->Run(dt_s);
+    }
+  }
+
  private:
   void DoRequest(const mjlib::multiplex::AsioClient::IdRequest& id_request,
                  mjlib::multiplex::AsioClient::SingleReply* reply,
@@ -277,11 +477,11 @@ class SimMultiplex : public mjlib::multiplex::AsioClient {
     {4, -1.0},
     {5, -1.0},
     {6, 1.0},
-    {7, 1.0},
-    {8, 1.0},
+    {7, -1.0},
+    {8, -1.0},
     {9, 1.0},
-    {10, -1.0},
-    {11, -1.0},
+    {10, 1.0},
+    {11, 1.0},
     {12, 1.0},
         };
 };
@@ -454,6 +654,13 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
     context_.poll();
     context_.reset();
     StartGlutTimer();
+  }
+
+  void timeStepping() override {
+    const double dt_s = world_->getTimeStep();
+    multiplex_->Run(dt_s);
+
+    SimWindow::timeStepping();
   }
 
   boost::asio::io_context& context_;

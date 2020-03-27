@@ -27,7 +27,7 @@ namespace mjmech {
 namespace simulator {
 
 namespace {
-constexpr double kBodyMassKg = 4.0;
+constexpr double kBodyMassKg = 2.0;
 
 Sophus::SE3d ConvertSE3MmToM(const Sophus::SE3d& input) {
   auto result = input;
@@ -65,7 +65,7 @@ dd::BodyNodePtr MakeLegJoint(
   // TODO: Set the location.
   dart::dynamics::Inertia inertia;
   inertia.setMass(mass_kg);
-  inertia.setMoment(shape->computeInertia(mass_kg));
+  inertia.setMoment(5 * shape->computeInertia(mass_kg));
   joint->setInertia(inertia);
 
   return joint;
@@ -118,7 +118,7 @@ dd::BodyNodePtr MakeLeg(dd::SkeletonPtr skel,
       ConvertSE3MmToM(
           {Eigen::Quaterniond::Identity(), leg_config.ik.femur.pose_mm}),
       {0., 1., 0.},
-      0.1);
+      0.3);
 
   {
     // Do the foot.
@@ -137,11 +137,11 @@ dd::BodyNodePtr MakeLeg(dd::SkeletonPtr skel,
     foot_shape_node->getVisualAspect()->setColor(dart::Color::Black());
 
     dart::dynamics::Inertia inertia;
-    constexpr double foot_mass_kg = 0.05;
+    constexpr double foot_mass_kg = 0.1;
     inertia.setMass(foot_mass_kg);
-    inertia.setMoment(shape->computeInertia(foot_mass_kg));
+    inertia.setMoment(5 * shape->computeInertia(foot_mass_kg));
     foot->setInertia(inertia);
-    foot_shape_node->getDynamicsAspect()->setFrictionCoeff(0.5);
+    foot_shape_node->getDynamicsAspect()->setFrictionCoeff(0.25);
     foot_shape_node->getDynamicsAspect()->setRestitutionCoeff(0.4);
   }
 
@@ -159,7 +159,7 @@ dd::SkeletonPtr MakeRobot(const mech::QuadrupedConfig& config) {
           dd::BodyNode::AspectProperties("robot")).second;
 
   auto box =
-      std::make_shared<dd::BoxShape>(Eigen::Vector3d(0.230, 0.245, 0.115));
+      std::make_shared<dd::BoxShape>(Eigen::Vector3d(0.230, 0.245, 0.140));
   body->createShapeNodeWith<
     dd::VisualAspect, dd::CollisionAspect, dd::DynamicsAspect>(box);
 
