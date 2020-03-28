@@ -523,37 +523,32 @@ class SimImu : public mech::ImuClient {
 
       // DART uses a coordinate system where +Z is up.  The robot
       // expects its coordinate system to be with +Z down.  The legs
-      // are already modeled inverted, so here we need to mirror along
-      // the Y axis and fix up the Z sign.
+      // are already modeled inverted.  Thus we have a confusing set
+      // of transforms to get everything into an appropriate frame.
 
-      const Eigen::AngleAxisd mount(0.5 * M_PI, Eigen::Vector3d::UnitZ());
+      const Eigen::AngleAxisd mount(0, Eigen::Vector3d::UnitX());
 
-      const Eigen::Isometry3d mirror_tf = frame_->getTransform() * mount;
-      const base::Quaternion mirror_quaternion =
-          Sophus::SE3d(mirror_tf.matrix()).unit_quaternion();
+      const Eigen::Isometry3d tf = frame_->getTransform() * mount;
+      base::Quaternion mirror_quaternion =
+          Sophus::SE3d(tf.matrix()).unit_quaternion();
       // https://stackoverflow.com/questions/32438252/efficient-way-to-apply-mirror-effect-on-quaternion-rotation
       attitude->attitude =
           base::Quaternion(
               mirror_quaternion.w(),
               -mirror_quaternion.x(),
-              mirror_quaternion.y(),
-              -mirror_quaternion.z());
+              -mirror_quaternion.y(),
+              mirror_quaternion.z());
       attitude->euler_deg = (180.0 / M_PI) * attitude->attitude.euler_rad();
 
-      const Eigen::Vector3d mirror_rate_rps =
+      const Eigen::Vector3d rate_rps =
           mount * frame_->getAngularVelocity();
-      attitude->rate_dps.x() = -base::Degrees(mirror_rate_rps[1]);
-      attitude->rate_dps.y() = base::Degrees(mirror_rate_rps[0]);
-      attitude->rate_dps.z() = -base::Degrees(mirror_rate_rps[2]);
+      attitude->rate_dps.x() = -base::Degrees(rate_rps[0]);
+      attitude->rate_dps.y() = -base::Degrees(rate_rps[1]);
+      attitude->rate_dps.z() = base::Degrees(rate_rps[2]);
 
-      // TODO: fix signs and rotation.
       Eigen::Vector3d accel =
           mount * frame_->getLinearAcceleration(Eigen::Vector3d(0, 0, 0));
-      // We're not negating the Z axis here, because it seems to match
-      // the robot, although I think the robot may be broken.  Nothing
-      // is using the accelerometer value for now though, so I'm not
-      // going to worry about it.
-      attitude->accel_mps2 = accel;
+      attitude->accel_mps2 = -1.0 * accel;
     } else {
       *attitude = {};
     }
