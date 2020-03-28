@@ -14,6 +14,8 @@
 
 #include "base/quaternion.h"
 
+#include <fmt/format.h>
+
 #include <boost/test/auto_unit_test.hpp>
 
 #include "base/euler.h"
@@ -36,25 +38,25 @@ BOOST_AUTO_TEST_CASE(BasicQuaternion) {
   Point3D v(10., 0., 0);
 
   v = Quaternion::FromEuler(0, 0, M_PI_2).Rotate(v);
-  CheckVectorClose(v, 0, -10, 0);
+  CheckVectorClose(v, 0, 10, 0);
 
   v = Quaternion::FromEuler(0, 0, -M_PI_2).Rotate(v);
   CheckVectorClose(v, 10, 0, 0);
 
   v = Quaternion::FromEuler(0, M_PI_2, 0).Rotate(v);
-  CheckVectorClose(v, 10, 0, 0);
+  CheckVectorClose(v, 0, 0, -10);
 
   v = Quaternion::FromEuler(M_PI_2, 0, 0).Rotate(v);
-  CheckVectorClose(v, 0, 0, -10);
+  CheckVectorClose(v, 0, 10, 0);
 
   v = Quaternion::FromEuler(0, 0, M_PI_2).Rotate(v);
-  CheckVectorClose(v, 0, 0, -10);
+  CheckVectorClose(v, -10, 0, 0);
 
   v = Quaternion::FromEuler(0, M_PI_2, 0).Rotate(v);
-  CheckVectorClose(v, 0, 10, 0);
+  CheckVectorClose(v, 0, 0, 10);
 
   v = Quaternion::FromEuler(M_PI_2, 0, 0).Rotate(v);
-  CheckVectorClose(v, 0, 10, 0);
+  CheckVectorClose(v, 0, -10, 0);
 
   v = Quaternion::FromEuler(0, 0, M_PI_2).Rotate(v);
   CheckVectorClose(v, 10, 0, 0);
@@ -92,14 +94,17 @@ BOOST_AUTO_TEST_CASE(QuaternionEulerAndBack) {
   };
 
   for (const auto& x: tests) {
-    Euler result_rad = Quaternion::FromEuler(
-        x.roll_deg / 180 * M_PI,
-        x.pitch_deg / 180 * M_PI,
-        x.yaw_deg / 180 * M_PI).euler_rad();
-    CheckEuler(result_rad,
-               x.roll_deg / 180 * M_PI,
-               x.pitch_deg / 180 *M_PI,
-               x.yaw_deg / 180 * M_PI);
+    BOOST_TEST_CONTEXT(fmt::format("{} {} {}",
+                                   x.roll_deg, x.pitch_deg, x.yaw_deg)) {
+      Euler result_rad = Quaternion::FromEuler(
+          x.roll_deg / 180 * M_PI,
+          x.pitch_deg / 180 * M_PI,
+          x.yaw_deg / 180 * M_PI).euler_rad();
+      CheckEuler(result_rad,
+                 x.roll_deg / 180 * M_PI,
+                 x.pitch_deg / 180 *M_PI,
+                 x.yaw_deg / 180 * M_PI);
+    }
   }
 }
 
@@ -111,14 +116,14 @@ BOOST_AUTO_TEST_CASE(QuaternionMultiply1) {
   Quaternion result = xn90 * y90 * x90;
   Point3D vector(0, 1, 0);
   vector = result.Rotate(vector);
-  CheckVectorClose(vector, 1, 0, 0);
+  CheckVectorClose(vector, -1, 0, 0);
 
   Quaternion initial = Quaternion::FromEuler(0, 0, 0.5 * M_PI_2);
   initial = Quaternion::FromEuler(0, 0, 0.5 * M_PI_2) * initial;
   CheckEuler(initial.euler_rad(), 0, 0, M_PI_2);
 
-  initial = Quaternion::FromEuler(0, 10 / 180. * M_PI, 0) * initial;
+  initial = Quaternion::FromEuler(10 / 180. * M_PI, 0, 0) * initial;
   vector = initial.Rotate(vector);
   CheckVectorClose(vector, 0, -0.9848078, -0.17364818);
-  CheckEuler(initial.euler_rad(), 10 / 180.0 * M_PI, 0, M_PI_2);
+  CheckEuler(initial.euler_rad(), 0, -10 / 180.0 * M_PI, M_PI_2);
 }

@@ -82,7 +82,6 @@ cc_test(
         "telemetry_log_registrar_test.cc",
         "telemetry_registry_test.cc",
         "test_main.cc",
-        "tf_test.cc",
         "ukf_filter_test.cc",
     ]],
     deps = [

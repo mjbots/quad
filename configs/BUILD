@@ -1,6 +1,6 @@
 # -*- python -*-
 
-# Copyright 2018-2019 Josh Pieper, jjp@pobox.com.
+# Copyright 2018-2020 Josh Pieper, jjp@pobox.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,12 +19,6 @@ package(default_visibility = ["//visibility:public"])
 filegroup(
     name = "configs",
     srcs = [
-        "lizard.cfg",
-        "moteus.ini",
-        "moteus_ik.cfg",
-        "mw.ini",
-        "mw_lizard.ini",
-        "real.cfg",
         "quadruped.ini",
         "quada0.cfg",
         "quada1.cfg",

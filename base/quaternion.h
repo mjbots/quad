@@ -1,4 +1,4 @@
-// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.
+// Copyright 2014-2020 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -81,24 +81,27 @@ class Quaternion {
   }
 
   Euler euler_rad() const {
-    double sp = 2 * (w_ * x_ + y_ * z_);
     Euler result_rad;
-    if (std::abs(sp - 1.0) < 1e-8) { // north pole
+
+    const double sinp = 2.0 * (w_ * y_ - z_ * x_);
+    if (sinp >= (1.0 - 1e-8)) {
       result_rad.pitch = M_PI_2;
-      result_rad.roll = 0;
-      result_rad.yaw = -std::atan2((w_ * y_ + x_ * z_),
-                                   -(y_ * z_ - w_ * x_));
-    } else if (std::abs(sp + 1.0) < 1e-8) { // south pole
+      result_rad.roll = 0.0;
+      result_rad.yaw = -2.0 * std::atan2(x_, w_);
+    } else if (sinp <= (-1.0 + 1e-8)) {
       result_rad.pitch = -M_PI_2;
-      result_rad.roll = 0;
-      result_rad.yaw = std::atan2((w_ * y_ + x_ * z_),
-                                  (y_ * z_ - w_ * x_));
+      result_rad.roll = 0.0;
+      result_rad.yaw = 2.0 * std::atan2(x_, w_);
     } else {
-      result_rad.pitch = std::asin(sp);
-      result_rad.roll = -std::atan2(2 * (x_ * z_ - w_ * y_),
-                                    1.0 - 2 * x_ * x_ - 2 * y_ * y_);
-      result_rad.yaw = std::atan2(2 * (x_ * y_ - w_ * z_),
-                                  1 - 2 * x_ * x_ - 2 * z_ * z_);
+      result_rad.pitch = std::asin(sinp);
+
+      const double sinr_cosp = 2.0 * (w_ * x_ + y_ * z_);
+      const double cosr_cosp = 1.0 - 2.0 * (x_ * x_ + y_ * y_);
+      result_rad.roll = std::atan2(sinr_cosp, cosr_cosp);
+
+      const double siny_cosp = 2.0 * (w_ * z_ + x_ * y_);
+      const double cosy_cosp = 1.0 - 2.0 * (y_ * y_ + z_ * z_);
+      result_rad.yaw = std::atan2(siny_cosp, cosy_cosp);
     }
 
     return result_rad;
@@ -108,9 +111,9 @@ class Quaternion {
       double roll_rad, double pitch_rad, double yaw_rad) {
     // Quaternions multiply in opposite order, and we want to get into
     // roll, pitch, then yaw as standard.
-    return (Quaternion::FromAxisAngle(yaw_rad, 0, 0, -1) *
-            Quaternion::FromAxisAngle(pitch_rad, 1, 0, 0) *
-            Quaternion::FromAxisAngle(roll_rad, 0, 1, 0));
+    return (Quaternion::FromAxisAngle(yaw_rad, 0, 0, 1) *
+            Quaternion::FromAxisAngle(pitch_rad, 0, 1, 0) *
+            Quaternion::FromAxisAngle(roll_rad, 1, 0, 0));
   }
 
   static Quaternion FromEuler(Euler euler_rad) {

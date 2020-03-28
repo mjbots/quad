@@ -32,12 +32,10 @@ cc_library(
     name = "mech",
     srcs = [
         "camera_driver.cc",
-        "gait_driver.cc",
         "gst_helpers.cc",
         "gst_main_loop.cc",
         "mammal_ik.cc",
         "mcast_video_link.cc",
-        "mech_warfare.cc",
         "mech_warfare_command.cc",
         "mime_type.cc",
         "moteus_servo.cc",
@@ -101,9 +99,7 @@ cc_library(
 cc_test(
     name = "test",
     srcs = ["test/" + x for x in [
-        "leg_ik_test.cc",
         "mammal_ik_test.cc",
-        "ripple_test.cc",
         "trajectory_test.cc",
         "test_main.cc",
     ]],
@@ -162,13 +158,6 @@ module_main(
 module_main(
     name = "video_controller_app",
     cname = "mjmech::mech::VideoControllerApp",
-    prefix = "mech",
-    deps = [":mech"],
-)
-
-module_main(
-    name = "mech_warfare",
-    cname = "mjmech::mech::MechWarfare",
     prefix = "mech",
     deps = [":mech"],
 )
@@ -238,7 +227,6 @@ pkg_tar(
     package_dir = "mech",
     srcs = [
         ":bmi088_test",
-        ":mech_warfare",
         ":moteus_tool",
         ":multiplex_tool",
         ":quadruped",
@@ -246,12 +234,6 @@ pkg_tar(
         ":video_sender_app",
     ],
     files = {
-        "//configs:real.cfg": "configs/real.cfg",
-        "//configs:mw.ini": "configs/mw.ini",
-        "//configs:mw_lizard.ini": "configs/mw_lizard.ini",
-        "//configs:lizard.cfg": "configs/lizard.cfg",
-        "//configs:moteus.ini": "configs/moteus.ini",
-        "//configs:moteus_ik.cfg": "configs/moteus_ik.cfg",
         "//configs:quadruped.ini": "configs/quadruped.ini",
         "//configs:quada0.cfg": "configs/quada0.cfg",
         "//configs:quada1.cfg": "configs/quada1.cfg",
