@@ -220,6 +220,18 @@ cc_binary(
     ],
 )
 
+cc_binary(
+    name = "slot_rf_test",
+    srcs = ["slot_rf_test.cc"],
+    deps = [
+        ":mech",
+        "@fmt",
+        "@com_github_mjbots_mjlib//mjlib/base:string_span",
+        "@com_github_mjbots_mjlib//mjlib/base:system_error",
+        "@org_llvm_libcxx//:libcxx",
+    ],
+)
+
 pkg_tar(
     name = "deploy",
     extension = "tar",
@@ -230,6 +242,7 @@ pkg_tar(
         ":moteus_tool",
         ":multiplex_tool",
         ":quadruped",
+        ":slot_rf_test",
         ":spi",
         ":video_sender_app",
     ],

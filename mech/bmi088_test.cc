@@ -28,17 +28,16 @@
 
 namespace mjmech {
 namespace mech {
+namespace {
 
 int do_main(int argc, char** argv) {
-  std::string spi_device = "/dev/spidev0.0";
   int speed = 10000000;
   std::string log_file = "";
 
   auto group = clipp::group(
-      (clipp::option("d", "device") & clipp::value("", spi_device)) % "SPI device",
       (clipp::option("s", "speed") & clipp::value("", speed)) % "SPI speed",
       (clipp::option("l", "log") & clipp::value("", log_file)) % "log file name"
-                            );
+  );
 
   mjlib::base::ClippParse(argc, argv, group);
 
@@ -173,6 +172,7 @@ int do_main(int argc, char** argv) {
   return 0;
 }
 
+}
 }
 }
 
