@@ -46,6 +46,9 @@ class Quadruped::Impl {
         [&]() { return m_.imu_client->selected(); } );
     m_.web_control = std::make_unique<WebControl>(
         context.executor, m_.quadruped_control.get());
+    m_.rf_control = std::make_unique<RfControl>(
+        context, m_.quadruped_control.get(),
+        [&]() { return m_.imu_client->selected(); } );
 
     debug_stream_.type = mjlib::io::StreamFactory::Type::kTcpServer;
     debug_stream_.tcp_server_port = 4556;

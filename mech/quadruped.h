@@ -28,6 +28,7 @@
 
 #include "mech/aux_stm32.h"
 #include "mech/quadruped_control.h"
+#include "mech/rf_control.h"
 #include "mech/web_control.h"
 
 namespace mjmech {
@@ -46,6 +47,7 @@ class Quadruped : boost::noncopyable {
     std::unique_ptr<mjlib::io::Selector<AuxStm32>> imu_client;
     std::unique_ptr<QuadrupedControl> quadruped_control;
     std::unique_ptr<WebControl> web_control;
+    std::unique_ptr<RfControl> rf_control;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -53,6 +55,7 @@ class Quadruped : boost::noncopyable {
       a->Visit(MJ_NVP(imu_client));
       a->Visit(MJ_NVP(quadruped_control));
       a->Visit(MJ_NVP(web_control));
+      a->Visit(MJ_NVP(rf_control));
     }
   };
 
