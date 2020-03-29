@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mech/rpi3_hat_imu.h"
+#include "mech/rpi3_hat_aux_stm32.h"
 
 #include <sched.h>
 #include <linux/serial.h>
@@ -68,7 +68,7 @@ struct DeviceAttitudeData {
 } __attribute__((packed));
 }
 
-class Rpi3HatImu::Impl {
+class Rpi3HatAuxStm32::Impl {
  public:
   Impl(const boost::asio::executor& executor, const Options& options)
       : executor_(executor),
@@ -127,6 +127,8 @@ class Rpi3HatImu::Impl {
 
   void Child_ReadImu(AttitudeData* data, mjlib::io::ErrorCallback callback) {
     // Busy loop until data is available.
+    //
+    // TODO(jpieper): Switch to using the IRQ when it is available.
     while (true) {
       device_data_ = {};
 
@@ -135,8 +137,6 @@ class Rpi3HatImu::Impl {
                        reinterpret_cast<char*>(&device_data_), sizeof(device_data_)));
       }
 
-      // TODO: The child context won't have the correct time in a debug
-      // time world.
       data->timestamp = mjlib::io::Now(child_context_);
       const auto& dd = device_data_;
       data->attitude = { dd.w, dd.x, dd.y, dd.z };
@@ -194,16 +194,18 @@ class Rpi3HatImu::Impl {
   DeviceAttitudeData device_data_;
 };
 
-Rpi3HatImu::Rpi3HatImu(const boost::asio::executor& executor, const Options& options)
+Rpi3HatAuxStm32::Rpi3HatAuxStm32(
+    const boost::asio::executor& executor, const Options& options)
     : impl_(std::make_unique<Impl>(executor, options)) {}
 
-Rpi3HatImu::~Rpi3HatImu() {}
+Rpi3HatAuxStm32::~Rpi3HatAuxStm32() {}
 
-void Rpi3HatImu::AsyncStart(mjlib::io::ErrorCallback callback) {
+void Rpi3HatAuxStm32::AsyncStart(mjlib::io::ErrorCallback callback) {
   impl_->AsyncStart(std::move(callback));
 }
 
-void Rpi3HatImu::ReadImu(AttitudeData* data, mjlib::io::ErrorCallback callback) {
+void Rpi3HatAuxStm32::ReadImu(AttitudeData* data,
+                              mjlib::io::ErrorCallback callback) {
   impl_->ReadImu(data, std::move(callback));
 }
 

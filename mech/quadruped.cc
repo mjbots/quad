@@ -16,7 +16,7 @@
 
 #include "base/logging.h"
 #include "mech/quadruped_debug.h"
-#include "mech/rpi3_hat_imu.h"
+#include "mech/rpi3_hat_aux_stm32.h"
 #include "mech/rpi3_hat_raw_spi.h"
 
 namespace pl = std::placeholders;
@@ -37,7 +37,7 @@ class Quadruped::Impl {
 
     m_.imu_client = std::make_unique<mjlib::io::Selector<ImuClient>>(
         executor_, "type");
-    m_.imu_client->Register<Rpi3HatImu>("rpi3");
+    m_.imu_client->Register<Rpi3HatAuxStm32>("rpi3");
     m_.imu_client->set_default("rpi3");
 
     m_.quadruped_control = std::make_unique<QuadrupedControl>(

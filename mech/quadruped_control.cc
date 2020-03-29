@@ -32,7 +32,6 @@
 #include "mech/mammal_ik.h"
 #include "mech/moteus.h"
 #include "mech/quadruped_config.h"
-#include "mech/rpi3_hat_imu.h"
 #include "mech/trajectory.h"
 
 namespace pl = std::placeholders;

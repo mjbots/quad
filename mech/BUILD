@@ -43,7 +43,7 @@ cc_library(
         "quadruped.cc",
         "quadruped_control.cc",
         "quadruped_debug.cc",
-        "rpi3_hat_imu.cc",
+        "rpi3_hat_aux_stm32.cc",
         "rpi3_hat_raw_spi.cc",
         "rpi3_raw_aux_spi.cc",
         "rpi3_raw_spi.cc",

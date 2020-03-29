@@ -27,26 +27,25 @@
 namespace mjmech {
 namespace mech {
 
-/// Read IMU data from the mjbots quad pi3 hat.
-///
-/// For now, it operates in a polling manner.
-class Rpi3HatImu : public ImuClient {
+/// Operate the auxiliary stm32 on the quad pi3 hat.  This includes:
+///  * the standard bitrate CAN
+///  * the IMU
+///  * the RF interface
+class Rpi3HatAuxStm32 : public ImuClient {
  public:
   struct Options {
-    std::string device = "/dev/spidev0.0";
     int speed = 10000000;
     int cpu_affinity = -1;
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(device));
       a->Visit(MJ_NVP(speed));
       a->Visit(MJ_NVP(cpu_affinity));
     }
   };
 
-  Rpi3HatImu(const boost::asio::executor&, const Options&);
-  ~Rpi3HatImu() override;
+  Rpi3HatAuxStm32(const boost::asio::executor&, const Options&);
+  ~Rpi3HatAuxStm32() override;
 
   void AsyncStart(mjlib::io::ErrorCallback);
 
