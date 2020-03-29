@@ -95,6 +95,10 @@ class Rpi3HatAuxStm32::Impl {
         });
   }
 
+  const Slot& tmp_slot() const {
+    return slot_;
+  }
+
  private:
   void Run() {
     {
@@ -192,6 +196,8 @@ class Rpi3HatAuxStm32::Impl {
   boost::asio::io_context child_context_;
   std::unique_ptr<Rpi3RawSpi> spi_;
   DeviceAttitudeData device_data_;
+
+  Slot slot_;
 };
 
 Rpi3HatAuxStm32::Rpi3HatAuxStm32(
@@ -207,6 +213,22 @@ void Rpi3HatAuxStm32::AsyncStart(mjlib::io::ErrorCallback callback) {
 void Rpi3HatAuxStm32::ReadImu(AttitudeData* data,
                               mjlib::io::ErrorCallback callback) {
   impl_->ReadImu(data, std::move(callback));
+}
+
+void Rpi3HatAuxStm32::AsyncWaitForSlot(
+    uint16_t* bitfield,
+    mjlib::io::ErrorCallback callback) {
+}
+
+const Rpi3HatAuxStm32::Slot& Rpi3HatAuxStm32::rx_slot(int slot_idx) const {
+  return impl_->tmp_slot();
+}
+
+void Rpi3HatAuxStm32::tx_slot(int slot_id, const Slot&) {
+}
+
+const Rpi3HatAuxStm32::Slot& Rpi3HatAuxStm32::tx_slot(int slot_idx) {
+  return impl_->tmp_slot();
 }
 
 }

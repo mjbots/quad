@@ -22,7 +22,7 @@
 #include "mjlib/io/async_types.h"
 
 #include "mech/attitude_data.h"
-#include "mech/imu_client.h"
+#include "mech/aux_stm32.h"
 
 namespace mjmech {
 namespace mech {
@@ -31,7 +31,7 @@ namespace mech {
 ///  * the standard bitrate CAN
 ///  * the IMU
 ///  * the RF interface
-class Rpi3HatAuxStm32 : public ImuClient {
+class Rpi3HatAuxStm32 : public AuxStm32 {
  public:
   struct Options {
     int speed = 10000000;
@@ -49,11 +49,25 @@ class Rpi3HatAuxStm32 : public ImuClient {
 
   void AsyncStart(mjlib::io::ErrorCallback);
 
+  // ************************
+  // ImuClient
+
   /// Read the next available IMU sample and store it in @p data.
   ///
   /// @param callback will be invoked when the operation completes or
   /// fails.
   void ReadImu(AttitudeData* data, mjlib::io::ErrorCallback callback) override;
+
+  // ***********************
+  // RfClient
+
+  void AsyncWaitForSlot(uint16_t* bitfield, mjlib::io::ErrorCallback) override;
+
+  const Slot& rx_slot(int slot_idx) const override;
+
+  void tx_slot(int slot_id, const Slot&) override;
+
+  const Slot& tx_slot(int slot_idx) override;
 
  private:
   class Impl;

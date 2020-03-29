@@ -35,7 +35,7 @@ class Quadruped::Impl {
     m_.multiplex_client->Register<Rpi3HatRawSpi>("rpi3");
     m_.multiplex_client->set_default("rpi3");
 
-    m_.imu_client = std::make_unique<mjlib::io::Selector<ImuClient>>(
+    m_.imu_client = std::make_unique<mjlib::io::Selector<AuxStm32>>(
         executor_, "type");
     m_.imu_client->Register<Rpi3HatAuxStm32>("rpi3");
     m_.imu_client->set_default("rpi3");

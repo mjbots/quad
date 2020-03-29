@@ -500,17 +500,17 @@ class SimMultiplex : public mjlib::multiplex::AsioClient {
         };
 };
 
-class SimImu : public mech::ImuClient {
+class SimAuxStm32 : public mech::AuxStm32 {
  public:
   struct Options {
     template <typename Archive>
     void Serialize(Archive*) {}
   };
 
-  SimImu(boost::asio::executor executor, const Options&)
+  SimAuxStm32(boost::asio::executor executor, const Options&)
       : executor_(executor) {}
 
-  ~SimImu() override {}
+  ~SimAuxStm32() override {}
 
   void set_frame(dd::Frame* frame) {
     frame_ = frame;
@@ -557,6 +557,26 @@ class SimImu : public mech::ImuClient {
         std::bind(std::move(callback), mjlib::base::error_code()));
   }
 
+  // ***********************
+  // RfClient
+
+  void AsyncWaitForSlot(uint16_t* bitfield, mjlib::io::ErrorCallback) override {
+  }
+
+  const Slot& rx_slot(int slot_idx) const override {
+    return slot_;
+  }
+
+  void tx_slot(int slot_id, const Slot&) override {
+  }
+
+  const Slot& tx_slot(int slot_idx) override {
+    return slot_;
+  }
+
+
+  // Selector
+
   void AsyncStart(mjlib::io::ErrorCallback callback) {
     boost::asio::post(
         executor_,
@@ -571,6 +591,7 @@ class SimImu : public mech::ImuClient {
   boost::asio::executor executor_;
   mech::AttitudeData data_;
   dd::Frame* frame_ = nullptr;
+  Slot slot_;
 };
 }
 
@@ -598,7 +619,7 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
     quadruped_.m()->multiplex_client->Register<SimMultiplex>("sim");
     quadruped_.m()->multiplex_client->set_default("sim");
 
-    quadruped_.m()->imu_client->Register<SimImu>("sim");
+    quadruped_.m()->imu_client->Register<SimAuxStm32>("sim");
     quadruped_.m()->imu_client->set_default("sim");
 
     floor_ = MakeFloor();
@@ -643,7 +664,7 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
       return;
     }
 
-    imu_ = dynamic_cast<SimImu*>(quadruped_.m()->imu_client->selected());
+    imu_ = dynamic_cast<SimAuxStm32*>(quadruped_.m()->imu_client->selected());
     BOOST_ASSERT(imu_);
     multiplex_ = dynamic_cast<SimMultiplex*>(
         quadruped_.m()->multiplex_client->selected());
@@ -703,7 +724,7 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
   mech::QuadrupedConfig quadruped_config_;
   mech::Quadruped quadruped_;
 
-  SimImu* imu_ = nullptr;
+  SimAuxStm32* imu_ = nullptr;
   SimMultiplex* multiplex_ = nullptr;
 };
 

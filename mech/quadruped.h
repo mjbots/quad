@@ -26,7 +26,7 @@
 #include "base/component_archives.h"
 #include "base/context.h"
 
-#include "mech/imu_client.h"
+#include "mech/aux_stm32.h"
 #include "mech/quadruped_control.h"
 #include "mech/web_control.h"
 
@@ -43,7 +43,7 @@ class Quadruped : boost::noncopyable {
   struct Members {
     std::unique_ptr<
       mjlib::io::Selector<mjlib::multiplex::AsioClient>> multiplex_client;
-    std::unique_ptr<mjlib::io::Selector<ImuClient>> imu_client;
+    std::unique_ptr<mjlib::io::Selector<AuxStm32>> imu_client;
     std::unique_ptr<QuadrupedControl> quadruped_control;
     std::unique_ptr<WebControl> web_control;
 
