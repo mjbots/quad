@@ -42,13 +42,13 @@ class RfClient {
   };
 
   /// Return the current value of the given receive slot.
-  virtual const Slot& rx_slot(int slot_idx) const = 0;
+  virtual Slot rx_slot(int slot_idx) = 0;
 
   /// Set the given transmit slot.
   virtual void tx_slot(int slot_idx, const Slot&) = 0;
 
   /// Retrieve the currently selected transmit slot.
-  virtual const Slot& tx_slot(int slot_idx) = 0;
+  virtual Slot tx_slot(int slot_idx) = 0;
 };
 
 }

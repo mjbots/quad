@@ -63,11 +63,11 @@ class Rpi3HatAuxStm32 : public AuxStm32 {
 
   void AsyncWaitForSlot(uint16_t* bitfield, mjlib::io::ErrorCallback) override;
 
-  const Slot& rx_slot(int slot_idx) const override;
+  Slot rx_slot(int slot_idx) override;
 
   void tx_slot(int slot_id, const Slot&) override;
 
-  const Slot& tx_slot(int slot_idx) override;
+  Slot tx_slot(int slot_idx) override;
 
  private:
   class Impl;

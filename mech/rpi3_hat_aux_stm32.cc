@@ -88,6 +88,7 @@ class Rpi3HatAuxStm32::Impl {
   }
 
   void ReadImu(AttitudeData* data, mjlib::io::ErrorCallback callback) {
+    imu_read_outstanding_.store(true);
     boost::asio::post(
         child_context_,
         [this, data, callback=std::move(callback)]() mutable {
@@ -95,8 +96,34 @@ class Rpi3HatAuxStm32::Impl {
         });
   }
 
-  const Slot& tmp_slot() const {
-    return slot_;
+  void AsyncWaitForSlot(uint16_t* bitfield,
+                        mjlib::io::ErrorCallback callback) {
+    rf_read_outstanding_.store(true);
+    boost::asio::post(
+        child_context_,
+        [this, bitfield, callback=std::move(callback)]() mutable {
+          this->Child_WaitForSlot(bitfield, std::move(callback));
+        });
+  }
+
+  Slot rx_slot(int slot_idx) {
+    std::unique_lock lock(slot_mutex_);
+    return rx_slots_[slot_idx];
+  }
+
+  void tx_slot(int slot_idx, const Slot& slot) {
+    std::unique_lock lock(slot_mutex_);
+    tx_slots_[slot_idx] = slot;
+    boost::asio::post(
+        child_context_,
+        [this, slot_idx, slot]() {
+          this->Child_WriteSlot(slot_idx, slot);
+        });
+  }
+
+  Slot tx_slot(int slot_idx) {
+    std::unique_lock lock(slot_mutex_);
+    return tx_slots_[slot_idx];
   }
 
  private:
@@ -129,8 +156,98 @@ class Rpi3HatAuxStm32::Impl {
     child_context_.run();
   }
 
+  void Child_WriteSlot(int slot_idx, const Slot& slot) {
+    if (child_priorities_[slot_idx] != slot.priority) {
+      child_priorities_[slot_idx] = slot.priority;
+      uint8_t buf[5] = {};
+      buf[0] = slot_idx;
+      std::memcpy(&buf[1], &slot.priority, sizeof(slot.priority));
+      spi_->Write(0, 53, std::string_view(
+                      reinterpret_cast<const char*>(&buf[0]), sizeof(buf)));
+    }
+
+    uint8_t buf[17] = {};
+    buf[0] = slot_idx;
+    std::memcpy(&buf[1], slot.data, slot.size);
+    spi_->Write(0, 52, std::string_view(
+                    reinterpret_cast<const char*>(&buf[0]), slot.size + 1));
+  }
+
+  struct SlotData {
+    uint32_t age_ms = 0;
+    uint8_t size;
+    char data[15] = {};
+  } __attribute__((packed));
+
+  void Child_WaitForSlot(uint16_t* bitfield,
+                         mjlib::io::ErrorCallback callback) {
+    // We'll busy loop, and re-queue ourselves if IMU data is
+    // available and we have a request outstanding.
+    decltype(Child_PollData()) result = {};
+
+    while (true) {
+      result = Child_PollData();
+      if (result.rf_bitfield_delta) {
+        break;
+      }
+      if (result.imu && imu_read_outstanding_.load()) {
+        boost::asio::post(
+            child_context_,
+            [this, bitfield, callback=std::move(callback)]() mutable {
+              Child_WaitForSlot(bitfield, std::move(callback));
+            });
+        return;
+      }
+    }
+
+    last_bitfield_ ^= result.rf_bitfield_delta;
+
+    *bitfield = 0;
+
+    // Read any slots that need reading.
+    for (int i = 0; i < 15; i++) {
+      if ((result.rf_bitfield_delta & (3 << (i * 2))) == 0) {
+        continue;
+      }
+
+      *bitfield |= (1 << i);
+      SlotData slot_data;
+      spi_->Read(0, 64 + i, mjlib::base::string_span(
+                     reinterpret_cast<char*>(&slot_data), sizeof(slot_data)));
+
+      std::unique_lock lock(slot_mutex_);
+      rx_slots_[i].timestamp = mjlib::io::Now(child_context_);
+      rx_slots_[i].size = slot_data.size;
+      std::memcpy(&rx_slots_[i].data[0], slot_data.data, 16);
+    }
+
+    rf_read_outstanding_.store(false);
+
+    boost::asio::post(
+        executor_,
+        std::bind(std::move(callback), mjlib::base::error_code()));
+  }
+
   void Child_ReadImu(AttitudeData* data, mjlib::io::ErrorCallback callback) {
-    // Busy loop until data is available.
+    while (true) {
+      const auto result = Child_PollData();
+      if (result.imu) { break; }
+      if (result.rf_bitfield_delta && rf_read_outstanding_.load()) {
+        // We'll re-enqueue ourselves so that the RF read can
+        // complete.
+        boost::asio::post(
+            child_context_,
+            [this, data, callback=std::move(callback)]() mutable {
+              Child_ReadImu(data, std::move(callback));
+            });
+        return;
+      }
+    }
+
+    imu_read_outstanding_.store(false);
+
+    // We should have something for sure at this point, but just in
+    // case busy loop.
     //
     // TODO(jpieper): Switch to using the IRQ when it is available.
     while (true) {
@@ -187,6 +304,28 @@ class Rpi3HatAuxStm32::Impl {
         std::bind(std::move(callback), mjlib::base::error_code()));
   }
 
+  struct PollResult {
+    bool imu = false;
+    uint32_t rf_bitfield_delta = 0;
+  };
+
+  PollResult Child_PollData() {
+    struct Data {
+      uint8_t can_queue = 0;
+      uint8_t imu_present = 0;
+      uint32_t rf_bitfield = 0;
+    } __attribute__((packed));
+    Data data;
+
+    spi_->Read(0, 96, mjlib::base::string_span(
+                   reinterpret_cast<char*>(&data), sizeof(data)));
+    PollResult result;
+    result.imu = data.imu_present != 0;
+    result.rf_bitfield_delta = data.rf_bitfield ^ last_bitfield_;
+
+    return result;
+  }
+
   boost::asio::executor executor_;
   const Options options_;
 
@@ -196,8 +335,16 @@ class Rpi3HatAuxStm32::Impl {
   boost::asio::io_context child_context_;
   std::unique_ptr<Rpi3RawSpi> spi_;
   DeviceAttitudeData device_data_;
+  uint32_t last_bitfield_ = 0;
+  uint32_t child_priorities_[15] = {};
 
-  Slot slot_;
+  // Accessed from both.
+  std::atomic<bool> imu_read_outstanding_{false};
+  std::atomic<bool> rf_read_outstanding_{false};
+
+  std::mutex slot_mutex_;
+  std::array<Slot, 15> rx_slots_;
+  std::array<Slot, 15> tx_slots_;
 };
 
 Rpi3HatAuxStm32::Rpi3HatAuxStm32(
@@ -218,17 +365,19 @@ void Rpi3HatAuxStm32::ReadImu(AttitudeData* data,
 void Rpi3HatAuxStm32::AsyncWaitForSlot(
     uint16_t* bitfield,
     mjlib::io::ErrorCallback callback) {
+  impl_->AsyncWaitForSlot(bitfield, std::move(callback));
 }
 
-const Rpi3HatAuxStm32::Slot& Rpi3HatAuxStm32::rx_slot(int slot_idx) const {
-  return impl_->tmp_slot();
+Rpi3HatAuxStm32::Slot Rpi3HatAuxStm32::rx_slot(int slot_idx) {
+  return impl_->rx_slot(slot_idx);
 }
 
-void Rpi3HatAuxStm32::tx_slot(int slot_id, const Slot&) {
+void Rpi3HatAuxStm32::tx_slot(int slot_idx, const Slot& slot) {
+  impl_->tx_slot(slot_idx, slot);
 }
 
-const Rpi3HatAuxStm32::Slot& Rpi3HatAuxStm32::tx_slot(int slot_idx) {
-  return impl_->tmp_slot();
+Rpi3HatAuxStm32::Slot Rpi3HatAuxStm32::tx_slot(int slot_idx) {
+  return impl_->tx_slot(slot_idx);
 }
 
 }
