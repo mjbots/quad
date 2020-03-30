@@ -51,6 +51,8 @@ class QuadrupedControl : boost::noncopyable {
     double max_torque_Nm = -1.0;
     std::string config;
 
+    double command_timeout_s = 1.0;
+
     bool enable_imu = true;
     std::string imu_device = "/dev/spidev0.0";
     int imu_speed = 10000000;
@@ -61,6 +63,7 @@ class QuadrupedControl : boost::noncopyable {
       a->Visit(MJ_NVP(period_s));
       a->Visit(MJ_NVP(max_torque_Nm));
       a->Visit(MJ_NVP(config));
+      a->Visit(MJ_NVP(command_timeout_s));
       a->Visit(MJ_NVP(enable_imu));
       a->Visit(MJ_NVP(imu_device));
       a->Visit(MJ_NVP(imu_speed));

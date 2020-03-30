@@ -250,11 +250,20 @@ class QuadrupedControl::Impl {
   }
 
   void Command(const QC& command) {
+    const auto now = Now();
+    if (command.priority < current_command_.priority ||
+        (!current_command_timestamp_.is_not_a_date_time() &&
+         (mjlib::base::ConvertDurationToSeconds(
+             now - current_command_timestamp_) > parameters_.command_timeout_s))) {
+      return;
+    }
+
     CommandLog command_log;
-    command_log.timestamp = Now();
+    command_log.timestamp = now;
     command_log.command = &command;
 
     current_command_ = command;
+    current_command_timestamp_ = now;
 
     command_signal_(&command_log);
   }
@@ -1974,6 +1983,7 @@ class QuadrupedControl::Impl {
 
   QuadrupedControl::Status status_;
   QC current_command_;
+  boost::posix_time::ptime current_command_timestamp_;
   ReportedServoConfig reported_servo_config_;
 
   std::array<ControlLog, 2> control_logs_;

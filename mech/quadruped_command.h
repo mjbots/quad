@@ -25,6 +25,11 @@ namespace mjmech {
 namespace mech {
 
 struct QuadrupedCommand {
+  /// Higher values of priority take precedence.  A lower value
+  /// command is only used in place of a higher value if the higher
+  /// value is stale.
+  int priority = 0;
+
   enum Mode {
     // This is a transient state that should not be commanded.  The
     // quadruped uses it to perform initialization functions.
@@ -187,6 +192,7 @@ struct QuadrupedCommand {
 
   template <typename Archive>
   void Serialize(Archive* a) {
+    a->Visit(MJ_NVP(priority));
     a->Visit(MJ_ENUM(mode, ModeMapper));
     a->Visit(MJ_NVP(joints));
     a->Visit(MJ_NVP(legs_B));
