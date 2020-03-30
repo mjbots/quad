@@ -15,8 +15,11 @@
 # limitations under the License.
 
 load("//tools/workspace/bazel_deps:repository.bzl", "bazel_deps_repository")
+load("//tools/workspace/gl3w:repository.bzl", "gl3w_repository")
+load("//tools/workspace/glfw:repository.bzl", "glfw_repository")
 load("//tools/workspace/gst-rpicamsrc:repository.bzl", "gst_rpicamsrc_repository")
 load("//tools/workspace/i2c-tools:repository.bzl", "i2c_tools_repository")
+load("//tools/workspace/imgui:repository.bzl", "imgui_repository")
 load("//tools/workspace/mjlib:repository.bzl", "mjlib_repository")
 load("//tools/workspace/moteus:repository.bzl", "moteus_repository")
 load("//tools/workspace/raspberrypi-firmware:repository.bzl", "raspberrypi_firmware_repository")
@@ -27,10 +30,16 @@ load("//tools/workspace/sophus:repository.bzl", "sophus_repository")
 def add_default_repositories(excludes = []):
     if "bazel_deps" not in excludes:
         bazel_deps_repository(name = "com_github_mjbots_bazel_deps")
+    if "gl3w" not in excludes:
+        gl3w_repository(name = "gl3w")
+    if "glfw" not in excludes:
+        glfw_repository(name = "glfw")
     if "gst-rpicamsrc" not in excludes:
         gst_rpicamsrc_repository(name = "gst-rpicamsrc")
     if "i2c-tools" not in excludes:
         i2c_tools_repository(name = "i2c-tools")
+    if "imgui" not in excludes:
+        imgui_repository(name = "imgui")
     if "mjlib" not in excludes:
         mjlib_repository(name = "com_github_mjbots_mjlib")
     if "moteus" not in excludes:
