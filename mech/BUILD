@@ -262,3 +262,16 @@ pkg_tar(
         "web_control_assets/js/app.js" : "web_control_assets/js/app.js",
     },
 )
+
+cc_binary(
+    name = "imgui_test",
+    srcs = ["imgui_test.cc"],
+    deps = [
+        "@boost",
+        "@eigen",
+        "@ffmpeg",
+        "@fmt",
+        "@imgui",
+        "@org_llvm_libcxx//:libcxx",
+    ],
+)
