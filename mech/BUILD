@@ -170,13 +170,6 @@ module_main(
     deps = [":mech"],
 )
 
-module_main(
-    name = "mw_command",
-    cname = "mjmech::mech::MWCommand",
-    prefix = "mech",
-    deps = [":mech"],
-)
-
 cc_binary(
     name = "multiplex_tool",
     srcs = ["multiplex_tool_main.cc"],
