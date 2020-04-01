@@ -17,6 +17,7 @@
 #include "mjlib/base/buffer_stream.h"
 #include "mjlib/base/clipp.h"
 #include "mjlib/base/clipp_archive.h"
+#include "mjlib/io/now.h"
 #include "mjlib/io/stream_factory.h"
 #include "mjlib/telemetry/format.h"
 
@@ -39,7 +40,8 @@ namespace {
 class SlotCommand {
  public:
   SlotCommand(mjlib::io::AsyncStream* stream)
-      : nrfusb_(stream) {
+      : executor_(stream->get_executor()),
+        nrfusb_(stream) {
     StartRead();
   }
 
@@ -72,6 +74,8 @@ class SlotCommand {
 
   struct Data {
     QuadrupedCommand::Mode mode;
+    int tx_count = 0;
+    int rx_count = 0;
     base::Point3D v_mm_s_R;
     base::Point3D w_LB;
     double min_voltage = 0.0;
@@ -93,12 +97,21 @@ class SlotCommand {
   void HandleRead(const mjlib::base::error_code& ec) {
     mjlib::base::FailIf(ec);
 
+    const auto now = mjlib::io::Now(executor_.context());
+    receive_times_.push_back(now);
+    while (base::ConvertDurationToSeconds(now - receive_times_.front()) > 1.0) {
+      receive_times_.pop_front();
+    }
+
+    data_.rx_count = receive_times_.size();
+
     for (int i = 0; i < 15; i++) {
       if ((bitfield_ & (1 << i)) == 0) { continue; }
 
       const auto slot = nrfusb_.rx_slot(i);
       if (i == 0) {
         data_.mode = static_cast<QuadrupedCommand::Mode>(slot.data[0]);
+        data_.tx_count = slot.data[1];
       } else if (i == 1) {
         mjlib::base::BufferReadStream bs({slot.data, slot.size});
         mjlib::telemetry::ReadStream ts{bs};
@@ -119,9 +132,12 @@ class SlotCommand {
     StartRead();
   }
 
+  boost::asio::executor executor_;
   uint16_t bitfield_ = 0;
   NrfusbClient nrfusb_;
   Data data_;
+
+  std::deque<boost::posix_time::ptime> receive_times_;
 };
 
 int do_main(int argc, char** argv) {
@@ -167,6 +183,8 @@ int do_main(int argc, char** argv) {
 
         ImGui::Text("Mode: %s",
                     QuadrupedCommand::ModeMapper().at(d.mode));
+        ImGui::Text("tx/rx: %d/%d",
+                    d.tx_count, d.rx_count);
         ImGui::Text("cmd: (%4.0f, %4.0f, %4.0f)",
                     d.v_mm_s_R.x(), d.v_mm_s_R.y(),
                     d.w_LB.z());

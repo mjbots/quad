@@ -31,6 +31,7 @@
 ///     byte 1: repeat
 ///     byte 2-3: uint16_t acceleration_mm_s2
 ///    Walk - none
+///   byte 1: messages received in last second
 ///
 /// ## Slot 1 - pose_mm_RB ##
 ///
@@ -181,7 +182,13 @@ class RfControl::Impl {
   void HandleSlot(const mjlib::base::error_code& ec) {
     mjlib::base::FailIf(ec);
 
-    slot_data_.timestamp = mjlib::io::Now(executor_.context());
+    const auto now = mjlib::io::Now(executor_.context());
+    slot_data_.timestamp = now;
+    receive_times_.push_back(now);
+    while (mjlib::base::ConvertDurationToSeconds(
+               now - receive_times_.front()) > 1.0) {
+      receive_times_.pop_front();
+    }
 
     for (int i = 0; i < 15; i++) {
       if (!(bitfield_ & (1 << i))) { continue; }
@@ -295,12 +302,15 @@ class RfControl::Impl {
     const auto& qs = quadruped_control_->status();
     const auto& s = qs.state;
 
+    const bool fault = qs.mode == QuadrupedCommand::Mode::kFault;
+
     using Slot = RfClient::Slot;
     {
       Slot slot0;
-      slot0.size = 1;
+      slot0.size = 2;
       slot0.priority = 0xffffffff;
       slot0.data[0] = static_cast<uint8_t>(qs.mode);
+      slot0.data[1] = base::Saturate<uint8_t>(receive_times_.size());
       rf_->tx_slot(0, slot0);
     }
     {
@@ -337,13 +347,13 @@ class RfControl::Impl {
     }
     {
       Slot slot14;
-      if (qs.mode == QuadrupedCommand::Mode::kFault) {
+      if (!fault) {
         slot14.priority = 0x01010101;
         slot14.size = 0;
         rf_->tx_slot(14, slot14);
       } else {
-        slot14.priority = 0x55555555;
-        auto size = std::min<size_t>(sizeof(slot14.data), qs.fault.size());
+        slot14.priority = 0xaaaaaaaa;
+        auto size = std::min<size_t>(13, qs.fault.size());
         slot14.size = size;
         std::memcpy(slot14.data, qs.fault.data(), size);
         rf_->tx_slot(14, slot14);
@@ -363,6 +373,7 @@ class RfControl::Impl {
   boost::signals2::signal<void (const SlotData*)> slotrf_signal_;
 
   boost::posix_time::ptime last_telemetry_;
+  std::deque<boost::posix_time::ptime> receive_times_;
 };
 
 RfControl::RfControl(const base::Context& context,
