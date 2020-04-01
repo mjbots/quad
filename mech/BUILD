@@ -36,7 +36,6 @@ cc_library(
         "gst_main_loop.cc",
         "mammal_ik.cc",
         "mcast_video_link.cc",
-        "mech_warfare_command.cc",
         "mime_type.cc",
         "moteus_servo.cc",
         "multiplex_client.cc",
@@ -152,13 +151,6 @@ cc_binary(
 module_main(
     name = "video_sender_app",
     cname = "mjmech::mech::VideoSenderApp",
-    prefix = "mech",
-    deps = [":mech"],
-)
-
-module_main(
-    name = "video_controller_app",
-    cname = "mjmech::mech::VideoControllerApp",
     prefix = "mech",
     deps = [":mech"],
 )
