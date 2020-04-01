@@ -259,4 +259,7 @@ cc_binary(
         "@imgui",
         "@org_llvm_libcxx//:libcxx",
     ],
+    copts = [
+        "-Wno-deprecated-declarations",
+    ],
 )
