@@ -39,6 +39,7 @@ cc_library(
         "mime_type.cc",
         "moteus_servo.cc",
         "multiplex_client.cc",
+        "nrfusb_client.cc",
         "quadruped.cc",
         "quadruped_control.cc",
         "quadruped_debug.cc",
@@ -268,6 +269,7 @@ cc_binary(
     name = "rf_command",
     srcs = ["rf_command.cc"],
     deps = [
+        ":mech",
         "//gl",
         "@com_github_mjbots_mjlib//mjlib/base:clipp",
         "@org_llvm_libcxx//:libcxx",
