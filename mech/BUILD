@@ -263,3 +263,13 @@ cc_binary(
         "-Wno-deprecated-declarations",
     ],
 )
+
+cc_binary(
+    name = "rf_command",
+    srcs = ["rf_command.cc"],
+    deps = [
+        "//gl",
+        "@com_github_mjbots_mjlib//mjlib/base:clipp",
+        "@org_llvm_libcxx//:libcxx",
+    ],
+)
