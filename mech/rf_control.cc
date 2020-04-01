@@ -42,7 +42,7 @@
 ///  * int16 y (scaled to -1.0 -> 1.0)
 ///  * int16 z (scaled to -1.0 -> 1.0)
 ///
-/// ## Slot 2 - v_mm_S_R, w_LR ##
+/// ## Slot 2 - v_mm_s_R, w_LR ##
 ///
 ///  * int16 v_mm_s_R.x
 ///  * int16 v_mm_s_R.y
@@ -62,22 +62,26 @@
 ///  * int16 v_mm_s_R.y
 ///  * int16 w_LR.z (scaled to -+ 2 pi)
 ///
-/// ## Slot 4 - Joints 1-4 ##
+/// ## Slot 4 - Joints 1-3 ##
 ///
-///  * 4x of the following struct
+///  * 3x of the following struct
 ///    * int8_t temp_C
 ///    * int8_t fault
 ///    * int8_t mode
 ///
-/// ## Slot 5 - Joints 5-8 ##
+/// ## Slot 5 - Joints 4-6 ##
 ///
 /// Same as slot 4
 ///
-/// ## Slot 6 - Joints 9-12 ##
+/// ## Slot 6 - Joints 7-9 ##
 ///
 /// Same as slot 4
 ///
-/// ## Slot 7 - Joint Summary ##
+/// ## Slot 7 - Joints 10-12 ##
+///
+/// Same as slot 4
+///
+/// ## Slot 8 - Joint Summary ##
 ///
 ///  * int8_t min_voltage
 ///  * int8_t max_voltage
@@ -94,10 +98,32 @@
 
 #include "mjlib/io/now.h"
 
+#include "base/saturate.h"
+
 namespace pl = std::placeholders;
 
 namespace mjmech {
 namespace mech {
+
+namespace {
+auto vmin = [](const auto& container, auto getter, auto incase) {
+  if (container.empty()) { return incase; }
+  return getter(*std::min_element(
+      container.begin(), container.end(),
+      [&](const auto& lhs, const auto& rhs) {
+        return getter(lhs) < getter(rhs);
+      }));
+};
+
+auto vmax = [](const auto& container, auto getter, auto incase) {
+  if (container.empty()) { return incase; }
+  return getter(*std::max_element(
+      container.begin(), container.end(),
+      [&](const auto& lhs, const auto& rhs) {
+        return getter(lhs) < getter(rhs);
+      }));
+};
+}
 
 struct SlotData {
   boost::posix_time::ptime timestamp;
@@ -173,6 +199,8 @@ class RfControl::Impl {
     if (bitfield_ & 0x01) {
       SendCommand();
     }
+
+    ReportTelemetry();
 
     StartRead();
   }
@@ -256,6 +284,73 @@ class RfControl::Impl {
     quadruped_control_->Command(command);
   }
 
+  void ReportTelemetry() {
+    const auto now = mjlib::io::Now(executor_.context());
+    if (!last_telemetry_.is_not_a_date_time() &&
+        mjlib::base::ConvertDurationToSeconds(now - last_telemetry_) < 0.01) {
+      return;
+    }
+    last_telemetry_ = now;
+
+    const auto& qs = quadruped_control_->status();
+    const auto& s = qs.state;
+
+    using Slot = RfClient::Slot;
+    {
+      Slot slot0;
+      slot0.size = 1;
+      slot0.priority = 0xffffffff;
+      slot0.data[0] = static_cast<uint8_t>(qs.mode);
+      rf_->tx_slot(0, slot0);
+    }
+    {
+      Slot slot1;
+      slot1.size = 6;
+      slot1.priority = 0xffffffff;
+      mjlib::base::BufferWriteStream bs({slot1.data, 6});
+      mjlib::telemetry::WriteStream ts{bs};
+      ts.Write(base::Saturate<int16_t>(s.robot.v_mm_s_LB.x()));
+      ts.Write(base::Saturate<int16_t>(s.robot.v_mm_s_LB.y()));
+      ts.Write(base::Saturate<int16_t>(32767.0 * s.robot.w_LB.z() / (2 * M_PI)));
+      rf_->tx_slot(1, slot1);
+    }
+    {
+      Slot slot8;
+      slot8.size = 5;
+      slot8.priority = 0x55555555;
+      mjlib::base::BufferWriteStream bs({slot8.data, 5});
+      mjlib::telemetry::WriteStream ts{bs};
+      ts.Write(base::Saturate<int8_t>(
+                   vmin(s.joints, [](const auto& j) { return j.voltage; }, 0.0)));
+      ts.Write(base::Saturate<int8_t>(
+                   vmax(s.joints, [](const auto& j) { return j.voltage; }, 0.0)));
+      ts.Write(
+          base::Saturate<int8_t>(
+              vmin(s.joints, [](const auto& j) { return j.temperature_C; }, 0.0)));
+      ts.Write(
+          base::Saturate<int8_t>(
+              vmax(s.joints, [](const auto& j) { return j.temperature_C; }, 0.0)));
+      ts.Write(
+          base::Saturate<int8_t>(
+              vmax(s.joints, [](const auto& j) { return j.fault; }, 0)));
+      rf_->tx_slot(8, slot8);
+    }
+    {
+      Slot slot14;
+      if (qs.mode == QuadrupedCommand::Mode::kFault) {
+        slot14.priority = 0x01010101;
+        slot14.size = 0;
+        rf_->tx_slot(14, slot14);
+      } else {
+        slot14.priority = 0x55555555;
+        auto size = std::min<size_t>(sizeof(slot14.data), qs.fault.size());
+        slot14.size = size;
+        std::memcpy(slot14.data, qs.fault.data(), size);
+        rf_->tx_slot(14, slot14);
+      }
+    }
+  }
+
   boost::asio::executor executor_;
   QuadrupedControl* const quadruped_control_;
   RfGetter rf_getter_;
@@ -266,6 +361,8 @@ class RfControl::Impl {
 
   SlotData slot_data_;
   boost::signals2::signal<void (const SlotData*)> slotrf_signal_;
+
+  boost::posix_time::ptime last_telemetry_;
 };
 
 RfControl::RfControl(const base::Context& context,

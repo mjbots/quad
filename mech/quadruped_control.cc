@@ -812,7 +812,6 @@ class QuadrupedControl::Impl {
   }
 
   void DoControl_Configuring() {
-    log_.warn("Configuring!");
     EmitStop();
   }
 
