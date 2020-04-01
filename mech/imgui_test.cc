@@ -233,19 +233,17 @@ int main(int, char**) {
   AVInputFormat* input_format = av_find_input_format("v4l2");
   BOOST_ASSERT(input_format);
   AVDictionary* options = nullptr;
-  av_dict_set(&options, "framerate", "10", 0);
+  av_dict_set(&options, "input_format", "mjpeg", 0);
+  av_dict_set(&options, "framerate", "30", 0);
   av_dict_set(&options, "video_size", "960x720", 0);
 
-  AVFormatContext* av_format_context = nullptr;
   int ret = 0;
+  AVFormatContext* av_format_context = avformat_alloc_context();
+  av_format_context->flags = AVFMT_FLAG_NONBLOCK;
+
   if ((ret = avformat_open_input(
            &av_format_context, "/dev/video0", input_format, &options)) < 0) {
     fmt::print("could not open video source: {}\n", av_err2str(ret));
-    return 1;
-  }
-
-  if ((ret = avformat_find_stream_info(av_format_context, nullptr)) < 0) {
-    fmt::print("could not find stream info: {}\n", av_err2str(ret));
     return 1;
   }
 
@@ -267,18 +265,7 @@ int main(int, char**) {
     return 1;
   }
 
-  auto* avcodec_context = avcodec_alloc_context3(av_codec);
-  BOOST_ASSERT(avcodec_context);
-
-  avcodec_context->width = 960;
-  avcodec_context->height = 720;
-  avcodec_context->framerate = (AVRational){10, 1};
-  avcodec_context->pix_fmt = AV_PIX_FMT_YUYV422; // TODO: this needs to come from somewhere!
-
-  if ((ret = avcodec_open2(avcodec_context, av_codec, nullptr)) < 0) {
-    fmt::print("could not open codec {}\n", av_err2str(ret));
-    return 1;
-  }
+  AVCodecContext* avcodec_context = nullptr;
 
   auto* frame = av_frame_alloc();
   auto* gl_frame = av_frame_alloc();
@@ -288,10 +275,7 @@ int main(int, char**) {
   avpicture_fill((AVPicture*)gl_frame, internal_buffer, AV_PIX_FMT_RGB24,
                  codecpar->width, codecpar->height);
 
-  auto* sws_ctx = sws_getContext(
-      codecpar->width, codecpar->height, avcodec_context->pix_fmt,
-      codecpar->width, codecpar->height, AV_PIX_FMT_RGB24, SWS_BICUBIC,
-      nullptr, nullptr, nullptr);
+  SwsContext* sws_ctx = nullptr;
 
   AVPacket av_packet;
   av_init_packet(&av_packet);
@@ -300,6 +284,7 @@ int main(int, char**) {
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
   ImGuiIO& io = ImGui::GetIO();  (void)io;
+  io.IniFilename = nullptr;
 
   ImGui::StyleColorsDark();
 
@@ -362,7 +347,7 @@ int main(int, char**) {
 
   TRACE_GL_ERROR();
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB,
-               avcodec_context->width, avcodec_context->height,
+               codecpar->width, codecpar->height,
                0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
   TRACE_GL_ERROR();
   program.SetUniform("frameTex", 0);
@@ -423,14 +408,41 @@ int main(int, char**) {
     }
 
     if ((ret = av_read_frame(av_format_context, &av_packet)) < 0) {
-      std::cerr << "error reading frame: " << av_err2str(ret) << "\n";
-      return 1;
+      if (ret == AVERROR(EAGAIN)) {
+      } else {
+        std::cerr << "error reading frame: " << av_err2str(ret) << "\n";
+        return 1;
+      }
     }
-    if (av_packet.stream_index == video_stream) {
+    if (ret >= 0 && av_packet.stream_index == video_stream) {
+      if (avcodec_context == nullptr) {
+        avcodec_context = avcodec_alloc_context3(av_codec);
+        BOOST_ASSERT(avcodec_context);
+
+        avcodec_context->width = codecpar->width;
+        avcodec_context->height = codecpar->height;
+        avcodec_context->framerate = av_format_context->streams[video_stream]->avg_frame_rate;
+        avcodec_context->pix_fmt = static_cast<AVPixelFormat>(codecpar->format);
+
+        avcodec_context->color_range = codecpar->color_range;
+        avcodec_context->color_primaries = codecpar->color_primaries;
+        avcodec_context->color_trc = codecpar->color_trc;
+        avcodec_context->colorspace = codecpar->color_space;
+        avcodec_context->chroma_sample_location = codecpar->chroma_location;
+
+        // avcodec_context->pix_fmt = AV_PIX_FMT_YUYV422; // TODO: this needs to come from somewhere!
+
+        if ((ret = avcodec_open2(avcodec_context, av_codec, nullptr)) < 0) {
+          fmt::print("could not open codec {}\n", av_err2str(ret));
+          return 1;
+        }
+      }
+
       if ((ret = avcodec_send_packet(avcodec_context, &av_packet)) < 0) {
         fmt::print("error sending frame {}\n", av_err2str(ret));
         std::exit(1);
       }
+
       if ((ret = avcodec_receive_frame(avcodec_context, frame)) < 0) {
         if (ret == AVERROR(EAGAIN)) {
           // nothing to do.
@@ -440,6 +452,12 @@ int main(int, char**) {
         }
       } else {
         // We got a frame!
+        if (sws_ctx == nullptr) {
+          sws_ctx = sws_getContext(
+              codecpar->width, codecpar->height, avcodec_context->pix_fmt,
+              codecpar->width, codecpar->height, AV_PIX_FMT_RGB24, SWS_BICUBIC,
+              nullptr, nullptr, nullptr);
+        }
         sws_scale(sws_ctx, frame->data, frame->linesize, 0,
                   codecpar->height,
                   gl_frame->data, gl_frame->linesize);
