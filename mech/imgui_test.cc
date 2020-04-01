@@ -21,9 +21,9 @@ extern "C" {
 #include <libswscale/swscale.h>
 }
 
-#include "imgui.h"
-#include "examples/imgui_impl_glfw.h"
-#include "examples/imgui_impl_opengl3.h"
+#include <imgui.h>
+#include <examples/imgui_impl_glfw.h>
+#include <examples/imgui_impl_opengl3.h>
 
 #include <GL/gl3w.h>
 
@@ -478,9 +478,29 @@ int main(int, char**) {
 
     // Rendering
     ImGui::Render();
-    int display_w, display_h;
+    int display_w = 0, display_h = 0;
+    int x = 0, y = 0;
     glfwGetFramebufferSize(window, &display_w, &display_h);
-    glViewport(0, 0, display_w, display_h);
+
+    // Enforce an aspect ratio.
+    const double desired_aspect_ratio =
+        static_cast<double>(codecpar->width) /
+        static_cast<double>(codecpar->height);
+    const double actual_ratio =
+        static_cast<double>(display_w) /
+        static_cast<double>(display_h);
+    if (actual_ratio > desired_aspect_ratio) {
+      const int w = display_h * desired_aspect_ratio;
+      const int remaining = display_w - w;
+      x = remaining / 2;
+      display_w = w;
+    } else if (actual_ratio < desired_aspect_ratio) {
+      const int h = display_w / desired_aspect_ratio;
+      const int remaining = display_h - h;
+      y = remaining / 2;
+      display_h = h;
+    }
+    glViewport(x, y, display_w, display_h);
     glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
     glClear(GL_COLOR_BUFFER_BIT);
 
