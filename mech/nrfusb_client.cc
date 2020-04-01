@@ -131,7 +131,7 @@ class NrfusbClient::Impl {
     if (line == "OK") { return; }
 
     if (line.substr(0, 4) == "rcv ")  {
-      HandleReceive(line.substr(5));
+      HandleReceive(line.substr(4));
     }
 
     // Some unknown line.  We'll ignore for now.

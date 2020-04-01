@@ -30,6 +30,8 @@
 #include "mech/nrfusb_client.h"
 #include "mech/quadruped_command.h"
 
+namespace pl = std::placeholders;
+
 namespace mjmech {
 namespace mech {
 
@@ -37,7 +39,9 @@ namespace {
 class SlotCommand {
  public:
   SlotCommand(mjlib::io::AsyncStream* stream)
-      : nrfusb_(stream) {}
+      : nrfusb_(stream) {
+    StartRead();
+  }
 
   using Slot = NrfusbClient::Slot;
 
@@ -66,8 +70,58 @@ class SlotCommand {
     }
   }
 
+  struct Data {
+    QuadrupedCommand::Mode mode;
+    base::Point3D v_mm_s_R;
+    base::Point3D w_LB;
+    double min_voltage = 0.0;
+    double max_voltage = 0.0;
+    double min_temp_C = 0.0;
+    double max_temp_C = 0.0;
+    int fault = 0;
+  };
+
+  const Data& data() const { return data_; }
+
  private:
+  void StartRead() {
+    bitfield_ = 0;
+    nrfusb_.AsyncWaitForSlot(
+        &bitfield_, std::bind(&SlotCommand::HandleRead, this, pl::_1));
+  }
+
+  void HandleRead(const mjlib::base::error_code& ec) {
+    mjlib::base::FailIf(ec);
+
+    for (int i = 0; i < 15; i++) {
+      if ((bitfield_ & (1 << i)) == 0) { continue; }
+
+      const auto slot = nrfusb_.rx_slot(i);
+      if (i == 0) {
+        data_.mode = static_cast<QuadrupedCommand::Mode>(slot.data[0]);
+      } else if (i == 1) {
+        mjlib::base::BufferReadStream bs({slot.data, slot.size});
+        mjlib::telemetry::ReadStream ts{bs};
+        const double v_mm_s_R_x = *ts.Read<int16_t>();
+        const double v_mm_s_R_y = *ts.Read<int16_t>();
+        const double w_LB_z = *ts.Read<int16_t>();
+        data_.v_mm_s_R = base::Point3D(v_mm_s_R_x, v_mm_s_R_y, 0.0);
+        data_.w_LB = base::Point3D(0., 0., w_LB_z);
+      } else if (i == 8) {
+        data_.min_voltage = slot.data[0];
+        data_.max_voltage = slot.data[1];
+        data_.min_temp_C = slot.data[2];
+        data_.max_temp_C = slot.data[3];
+        data_.fault = slot.data[4];
+      }
+    }
+
+    StartRead();
+  }
+
+  uint16_t bitfield_ = 0;
   NrfusbClient nrfusb_;
+  Data data_;
 };
 
 int do_main(int argc, char** argv) {
@@ -94,8 +148,6 @@ int do_main(int argc, char** argv) {
   gl::Window window(1280, 720, "quad RF command");
   gl::GlImGui imgui(window);
 
-  bool show_demo_window = true;
-
   while (!window.should_close()) {
     context.poll(); context.reset();
     window.PollEvents();
@@ -107,7 +159,28 @@ int do_main(int argc, char** argv) {
 
     TRACE_GL_ERROR();
 
-    ImGui::ShowDemoWindow(&show_demo_window);
+    {
+      ImGui::Begin("quad");
+
+      if (slot_command) {
+        const auto& d = slot_command->data();
+
+        ImGui::Text("Mode: %s",
+                    QuadrupedCommand::ModeMapper().at(d.mode));
+        ImGui::Text("cmd: (%4.0f, %4.0f, %4.0f)",
+                    d.v_mm_s_R.x(), d.v_mm_s_R.y(),
+                    d.w_LB.z());
+        ImGui::Text("V: %.0f/%.0f", d.min_voltage, d.max_voltage);
+        ImGui::Text("T: %.0f/%.0f", d.min_temp_C, d.max_temp_C);
+        ImGui::Text("flt: %d", d.fault);
+
+      } else {
+        ImGui::Text("N/A");
+      }
+
+      ImGui::End();
+    }
+
 
     imgui.Render();
     window.SwapBuffers();
