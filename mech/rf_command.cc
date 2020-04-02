@@ -36,6 +36,13 @@ namespace pl = std::placeholders;
 namespace mjmech {
 namespace mech {
 
+constexpr double kMaxForwardVelocity_mm_s = 300.0;
+constexpr double kMaxLateralVelocity_mm_s = 100.0;
+constexpr double kMaxRotation_rad_s = (30.0 / 180.0) * M_PI;
+
+constexpr double kMovementEpsilon_mm_s = 25.0;
+constexpr double kMovementEpsilon_rad_s = (7.0 / 180.0) * M_PI;
+
 namespace {
 class SlotCommand {
  public:
@@ -140,6 +147,63 @@ class SlotCommand {
   std::deque<boost::posix_time::ptime> receive_times_;
 };
 
+void DrawTelemetry(const SlotCommand* slot_command) {
+  ImGui::Begin("Telemetry");
+
+  if (slot_command) {
+    const auto& d = slot_command->data();
+
+    ImGui::Text("Mode: %s",
+                QuadrupedCommand::ModeMapper().at(d.mode));
+    ImGui::Text("tx/rx: %d/%d",
+                d.tx_count, d.rx_count);
+    ImGui::Text("cmd: (%4.0f, %4.0f, %4.0f)",
+                d.v_mm_s_R.x(), d.v_mm_s_R.y(),
+                d.w_LB.z());
+    ImGui::Text("V: %.0f/%.0f", d.min_voltage, d.max_voltage);
+    ImGui::Text("T: %.0f/%.0f", d.min_temp_C, d.max_temp_C);
+    ImGui::Text("flt: %d", d.fault);
+
+  } else {
+    ImGui::Text("N/A");
+  }
+
+  ImGui::End();
+}
+
+void DrawGamepad(const GLFWgamepadstate& state) {
+  ImGui::SetNextWindowPos({400, 50}, ImGuiCond_FirstUseEver);
+  ImGui::Begin("Gamepad");
+
+  ImGui::Text("A=%d B=%d X=%d Y=%d",
+              state.buttons[GLFW_GAMEPAD_BUTTON_A],
+              state.buttons[GLFW_GAMEPAD_BUTTON_B],
+              state.buttons[GLFW_GAMEPAD_BUTTON_X],
+              state.buttons[GLFW_GAMEPAD_BUTTON_Y]);
+  ImGui::Text("DPAD U=%d R=%d D=%d L=%d",
+              state.buttons[GLFW_GAMEPAD_BUTTON_DPAD_UP],
+              state.buttons[GLFW_GAMEPAD_BUTTON_DPAD_RIGHT],
+              state.buttons[GLFW_GAMEPAD_BUTTON_DPAD_DOWN],
+              state.buttons[GLFW_GAMEPAD_BUTTON_DPAD_LEFT]);
+  ImGui::Text("LEFT: %.3f %.3f",
+              state.axes[GLFW_GAMEPAD_AXIS_LEFT_X],
+              state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y]);
+  ImGui::Text("RIGHT: %.3f %.3f",
+              state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X],
+              state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y]);
+
+  ImGui::End();
+}
+
+enum GaitMode {
+  kStop,
+  kRest,
+  kWalk,
+  kJump,
+  kZero,
+  kNumGaitModes,
+};
+
 int do_main(int argc, char** argv) {
   mjlib::io::StreamFactory::Options stream;
   stream.type = mjlib::io::StreamFactory::Type::kSerial;
@@ -164,9 +228,23 @@ int do_main(int argc, char** argv) {
   gl::Window window(1280, 720, "quad RF command");
   gl::GlImGui imgui(window);
 
+  QuadrupedCommand::Mode command_mode = QuadrupedCommand::Mode::kStopped;
+  int pending_gait_mode = kStop;
+
+  std::vector<bool> old_gamepad_buttons;
+  old_gamepad_buttons.resize(GLFW_GAMEPAD_BUTTON_LAST + 1);
+
   while (!window.should_close()) {
     context.poll(); context.reset();
     window.PollEvents();
+    GLFWgamepadstate gamepad;
+    glfwGetGamepadState(GLFW_JOYSTICK_1, &gamepad);
+
+    std::vector<bool> gamepad_pressed;
+    for (int i = 0; i <= GLFW_GAMEPAD_BUTTON_LAST; i++) {
+      gamepad_pressed.push_back(gamepad.buttons[i] && !old_gamepad_buttons[i]);
+      old_gamepad_buttons[i] = gamepad.buttons[i];
+    }
 
     imgui.NewFrame();
 
@@ -175,30 +253,94 @@ int do_main(int argc, char** argv) {
 
     TRACE_GL_ERROR();
 
-    {
-      ImGui::Begin("quad");
+    DrawTelemetry(slot_command.get());
+    DrawGamepad(gamepad);
 
-      if (slot_command) {
-        const auto& d = slot_command->data();
+    const bool gait_select_mode =
+        gamepad.buttons[GLFW_GAMEPAD_BUTTON_Y];
 
-        ImGui::Text("Mode: %s",
-                    QuadrupedCommand::ModeMapper().at(d.mode));
-        ImGui::Text("tx/rx: %d/%d",
-                    d.tx_count, d.rx_count);
-        ImGui::Text("cmd: (%4.0f, %4.0f, %4.0f)",
-                    d.v_mm_s_R.x(), d.v_mm_s_R.y(),
-                    d.w_LB.z());
-        ImGui::Text("V: %.0f/%.0f", d.min_voltage, d.max_voltage);
-        ImGui::Text("T: %.0f/%.0f", d.min_temp_C, d.max_temp_C);
-        ImGui::Text("flt: %d", d.fault);
-
-      } else {
-        ImGui::Text("N/A");
+    if (gait_select_mode) {
+      if (gamepad_pressed[GLFW_GAMEPAD_BUTTON_DPAD_UP]) {
+        pending_gait_mode =
+            (pending_gait_mode + kNumGaitModes - 1) % kNumGaitModes;
       }
-
-      ImGui::End();
+      if (gamepad_pressed[GLFW_GAMEPAD_BUTTON_DPAD_DOWN]) {
+        pending_gait_mode =
+            (pending_gait_mode + 1) % kNumGaitModes;
+      }
     }
 
+    {
+      ImGui::Begin("Gait");
+      const bool was_collapsed = ImGui::IsWindowCollapsed();
+
+      ImGui::SetWindowCollapsed(!gait_select_mode);
+      ImGui::SetWindowPos({800, 50}, ImGuiCond_FirstUseEver);
+
+      ImGui::RadioButton("Stop", &pending_gait_mode, kStop);
+      ImGui::RadioButton("Rest", &pending_gait_mode, kRest);
+      ImGui::RadioButton("Walk", &pending_gait_mode, kWalk);
+      ImGui::RadioButton("Jump", &pending_gait_mode, kJump);
+      ImGui::RadioButton("Zero", &pending_gait_mode, kZero);
+
+      ImGui::End();
+
+      if (!gait_select_mode && !was_collapsed) {
+        // Update our command.
+        command_mode = [&]() {
+          switch (pending_gait_mode) {
+            case kStop: return QuadrupedCommand::Mode::kStopped;
+            case kRest: return QuadrupedCommand::Mode::kRest;
+            case kWalk: return QuadrupedCommand::Mode::kWalk;
+            case kJump: return QuadrupedCommand::Mode::kJump;
+            case kZero: return QuadrupedCommand::Mode::kZeroVelocity;
+          }
+          mjlib::base::AssertNotReached();
+        }();
+      }
+    }
+
+    base::Point3D v_mm_s_R;
+    v_mm_s_R.x() = -kMaxForwardVelocity_mm_s * gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_Y];
+    v_mm_s_R.y() = kMaxLateralVelocity_mm_s * gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_X];
+
+    base::Point3D w_LR;
+    w_LR.z() = kMaxRotation_rad_s * gamepad.axes[GLFW_GAMEPAD_AXIS_RIGHT_X];
+
+    Sophus::SE3d pose_mm_RB;
+
+    const QuadrupedCommand::Mode actual_command_mode = [&]() {
+      const bool movement_commanded = (
+          v_mm_s_R.norm() > kMovementEpsilon_mm_s ||
+          w_LR.norm() > kMovementEpsilon_rad_s);
+#if 0
+      if (!movement_commanded &&
+          (command_mode == QuadrupedCommand::Mode::kWalk ||
+           command_mode == QuadrupedCommand::Mode::kJump)) {
+        return QuadrupedCommand::Mode::kRest;
+      }
+#endif
+      return command_mode;
+    }();
+
+    {
+      ImGui::Begin("Command");
+      ImGui::SetWindowPos({50, 400}, ImGuiCond_FirstUseEver);
+      ImGui::Text("Mode  : %14s", QuadrupedCommand::ModeMapper().at(command_mode));
+      ImGui::Text("Actual: %14s",
+                  QuadrupedCommand::ModeMapper().at(actual_command_mode));
+      ImGui::Text("cmd: (%4.0f, %4.0f, %6.3f)",
+                  v_mm_s_R.x(),
+                  v_mm_s_R.y(),
+                  w_LR.z());
+      ImGui::Text("pose x/y: (%3.0f, %3.0f)",
+                  pose_mm_RB.translation().x(),
+                  pose_mm_RB.translation().y());
+    }
+
+    if (slot_command) {
+      slot_command->Command(actual_command_mode, pose_mm_RB, v_mm_s_R, w_LR);
+    }
 
     imgui.Render();
     window.SwapBuffers();
