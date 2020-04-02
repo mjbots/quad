@@ -174,6 +174,17 @@ struct QuadrupedState {
 
   StandUp stand_up;
 
+  struct Rest {
+    bool done = false;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(done));
+    }
+  };
+
+  Rest rest;
+
   struct Jump {
     enum Mode {
       kLowering = 0,
@@ -217,11 +228,13 @@ struct QuadrupedState {
   struct Walk {
     double phase = 0.0;
     double moving_target_remaining_s = 0.0;
+    int idle_count = 0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(phase));
       a->Visit(MJ_NVP(moving_target_remaining_s));
+      a->Visit(MJ_NVP(idle_count));
     }
   };
 
@@ -234,6 +247,7 @@ struct QuadrupedState {
     a->Visit(MJ_NVP(robot));
 
     a->Visit(MJ_NVP(stand_up));
+    a->Visit(MJ_NVP(rest));
     a->Visit(MJ_NVP(jump));
     a->Visit(MJ_NVP(walk));
   }

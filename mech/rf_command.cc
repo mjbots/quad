@@ -61,8 +61,20 @@ class SlotCommand {
     {
       Slot slot0;
       slot0.priority = 0xffffffff;
-      slot0.size = 1;
-      slot0.data[0] = static_cast<uint8_t>(mode);
+      mjlib::base::BufferWriteStream bs({slot0.data, 15});
+      mjlib::telemetry::WriteStream ts{bs};
+
+      ts.Write(static_cast<int8_t>(mode));
+      if (mode == QuadrupedCommand::Mode::kJump) {
+        slot0.size = 4;
+        // For now, always repeat.
+        ts.Write(static_cast<int8_t>(1));
+
+        // And do a fixed 2000 mm/s^2 accel.
+        ts.Write(static_cast<uint16_t>(2000));
+      } else {
+        slot0.size = 1;
+      }
       nrfusb_.tx_slot(0, slot0);
     }
 
@@ -313,13 +325,11 @@ int do_main(int argc, char** argv) {
       const bool movement_commanded = (
           v_mm_s_R.norm() > kMovementEpsilon_mm_s ||
           w_LR.norm() > kMovementEpsilon_rad_s);
-#if 0
       if (!movement_commanded &&
           (command_mode == QuadrupedCommand::Mode::kWalk ||
            command_mode == QuadrupedCommand::Mode::kJump)) {
         return QuadrupedCommand::Mode::kRest;
       }
-#endif
       return command_mode;
     }();
 

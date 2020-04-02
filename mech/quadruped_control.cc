@@ -712,37 +712,22 @@ class QuadrupedControl::Impl {
         status_.state.stand_up = {};
         break;
       }
-      case QM::kRest: {
-        // This can only be done from standing up.  If we're stopped,
-        // then we should just go ahead and stand up first.
-        if (status_.mode == QM::kStopped ||
-            status_.mode == QM::kZeroVelocity) {
-          status_.mode = QM::kStandUp;
-          status_.state.stand_up = {};
-        } else if (status_.mode == QM::kStandUp &&
-                   status_.state.stand_up.mode ==
-                   QuadrupedState::StandUp::Mode::kDone) {
-          status_.mode = current_command_.mode;
-        } else if (status_.mode == QM::kJump &&
-                   status_.state.jump.mode ==
-                   QuadrupedState::Jump::Mode::kDone) {
-          status_.mode = current_command_.mode;
-        } else if (status_.mode == QM::kWalk) {
-          // TODO(jpieper): Force a zero step and wait for all the
-          // legs to be on the ground.
-
-          status_.mode = current_command_.mode;
-        }
-
-        break;
-      }
+      case QM::kRest:
       case QM::kJump:
       case QM::kWalk: {
+        // This can only be done from certain configurations, where we
+        // know all four legs are on the ground.  Modify our command
+        // to try and get into that state.
+        //
+        // TODO(jpieper): Add another layer of control which cycles
+        // between these lower level ones to reduce confusion rather
+        // than tucking this logic into state transitions.
         if (status_.mode == QM::kStopped ||
             status_.mode == QM::kZeroVelocity) {
           status_.mode = QM::kStandUp;
           status_.state.stand_up = {};
-        } else if (status_.mode == QM::kRest ||
+        } else if ((status_.mode == QM::kRest &&
+                    status_.state.rest.done) ||
                    (status_.mode == QM::kStandUp &&
                     status_.state.stand_up.mode ==
                     QuadrupedState::StandUp::Mode::kDone)) {
@@ -750,6 +735,25 @@ class QuadrupedControl::Impl {
 
           status_.state.jump.command = current_command_.jump.value_or(
               QuadrupedCommand::Jump());
+
+        } else if (status_.mode == QM::kJump &&
+                   status_.state.jump.mode ==
+                   QuadrupedState::Jump::Mode::kDone) {
+          status_.mode = current_command_.mode;
+        } else if (status_.mode == QM::kWalk) {
+          // We can only leave the walk state when our desired
+          // velocities are all 0 and all four legs are on the ground.
+          if (status_.state.walk.idle_count >= 2 &&
+              all_legs_stance()) {
+            status_.state.jump.command = current_command_.jump.value_or(
+                QuadrupedCommand::Jump());
+            status_.mode = current_command_.mode;
+          } else {
+            current_command_.v_mm_s_R = {};
+            current_command_.w_LR = {};
+          }
+        } else {
+          // We can't switch, just wait I guess.
         }
 
         break;
@@ -772,14 +776,16 @@ class QuadrupedControl::Impl {
           status_.state.walk = {};
           break;
         }
+        case QM::kRest: {
+          status_.state.rest = {};
+        }
         case QM::kConfiguring:
         case QM::kStopped:
         case QM::kFault:
         case QM::kZeroVelocity:
         case QM::kJoint:
         case QM::kLeg:
-        case QM::kNumModes:
-        case QM::kRest: {
+        case QM::kNumModes: {
           break;
         }
       }
@@ -1056,7 +1062,7 @@ class QuadrupedControl::Impl {
         leg_R.stance = 1.0;
         leg_R.landing = false;
       }
-      MoveLegsFixedSpeedZ(
+      status_.state.rest.done = MoveLegsFixedSpeedZ(
           all_leg_ids_,
           &legs_R,
           config_.rest.velocity_mm_s,
@@ -1070,6 +1076,7 @@ class QuadrupedControl::Impl {
         leg_R.position_mm = leg.idle_R;
         legs_R.push_back(leg_R);
       }
+      status_.state.rest.done = true;
     }
 
     UpdateLegsStanceForce(&legs_R, 0.0);
@@ -1339,9 +1346,19 @@ class QuadrupedControl::Impl {
 
     // Update our phase.
     auto& ws = status_.state.walk;
+    const auto old_phase = ws.phase;
     auto& phase = ws.phase;
     phase = std::fmod(
         phase + timestamps_.delta_s / config_.walk.cycle_time_s, 1.0);
+    if (phase < old_phase) {
+      // We have wrapped around.
+      if (status_.state.robot.desired_v_mm_s_R.norm() == 0.0 &&
+          status_.state.robot.desired_w_LR.norm() == 0.0) {
+        ws.idle_count++;
+      } else {
+        ws.idle_count = 0;
+      }
+    }
 
     // For now, we are hard-coding 2 leg movement.
 
@@ -1970,6 +1987,13 @@ class QuadrupedControl::Impl {
         desired_poses_mm_R,
         base::Point3D(0, 0, 1),
         base::Point3D(1, 1, 0));
+  }
+
+  bool all_legs_stance() const {
+    for (const auto& leg : old_control_log_->legs_R) {
+      if (leg.stance != 1.0) { return false; }
+    }
+    return true;
   }
 
   boost::asio::executor executor_;
