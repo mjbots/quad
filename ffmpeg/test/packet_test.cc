@@ -15,3 +15,9 @@
 #include "ffmpeg/packet.h"
 
 #include <boost/test/auto_unit_test.hpp>
+
+using namespace mjmech::ffmpeg;
+
+BOOST_AUTO_TEST_CASE(PacketTest) {
+  Packet dut;
+}

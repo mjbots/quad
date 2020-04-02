@@ -22,6 +22,7 @@ extern "C" {
 
 #include "ffmpeg/dictionary.h"
 #include "ffmpeg/error.h"
+#include "ffmpeg/ffmpeg.h"
 #include "ffmpeg/input_format.h"
 #include "ffmpeg/packet.h"
 #include "ffmpeg/stream.h"
@@ -33,12 +34,16 @@ class File {
  public:
   struct Flags {
     bool nonblock = false;
+    std::optional<InputFormat> input_format;
 
     Flags() {}
   };
 
-  File(std::string_view url, InputFormat input_format, const Dictionary& options,
+  File(std::string_view url,
+       const Dictionary& options = Dictionary(),
        const Flags& flags = Flags()) {
+    Ffmpeg::Register();
+
     context_ = avformat_alloc_context();
     if (flags.nonblock) {
       context_->flags = AVFMT_FLAG_NONBLOCK;
@@ -49,8 +54,15 @@ class File {
       av_dict_set(&av_options, pair.first.c_str(), pair.second.c_str(), 0);
     }
 
-    ErrorCheck(avformat_open_input(
-                   &context_, url.data(), input_format.get(), &av_options));
+    try {
+      ErrorCheck(avformat_open_input(
+                     &context_, url.data(),
+                     !flags.input_format ? nullptr : flags.input_format->get(),
+                     &av_options));
+    } catch (mjlib::base::system_error& se) {
+      se.code().Append(fmt::format("Opening: '{}'", url));
+      throw;
+    }
     // Check for leftover options?
   }
 

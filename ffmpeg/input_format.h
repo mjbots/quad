@@ -23,7 +23,7 @@ class InputFormat {
     input_format_ = av_find_input_format(name.data());
   }
 
-  AVInputFormat* get() { return input_format_; }
+  AVInputFormat* get() const { return input_format_; }
 
  private:
   AVInputFormat* input_format_ = nullptr;

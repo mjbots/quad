@@ -35,21 +35,11 @@ class Codec {
   // what is populated.
   Codec(const Stream& stream) {
     const auto av_codec = stream.av_codec();
-    const auto av_stream = stream.av_stream();
     const auto p = stream.codec_parameters();
 
     context_ = avcodec_alloc_context3(av_codec);
 
-    context_->width = p->width;
-    context_->height = p->height;
-    context_->framerate = av_stream->avg_frame_rate;
-    context_->pix_fmt = static_cast<AVPixelFormat>(p->format);
-
-    context_->color_range = p->color_range;
-    context_->color_primaries = p->color_primaries;
-    context_->color_trc = p->color_trc;
-    context_->colorspace = p->color_space;
-    context_->chroma_sample_location = p->chroma_location;
+    avcodec_parameters_to_context(context_, p);
 
     ErrorCheck(avcodec_open2(context_, av_codec, nullptr));
   }

@@ -12,12 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "ffmpeg/frame.h"
+#pragma once
 
-#include <boost/test/auto_unit_test.hpp>
+extern "C" {
+#include <libavdevice/avdevice.h>
+#include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
+}
 
-using namespace mjmech::ffmpeg;
+namespace mjmech {
+namespace ffmpeg {
 
-BOOST_AUTO_TEST_CASE(FrameTest) {
-  Frame dut;
+class Ffmpeg {
+ public:
+  static void Register() {
+    static bool is_registered = false;
+    if (is_registered) { return; }
+    is_registered = true;
+
+    avdevice_register_all();
+    avcodec_register_all();
+    av_register_all();
+  }
+};
+
+}
 }

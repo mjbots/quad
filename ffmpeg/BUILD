@@ -23,6 +23,7 @@ cc_library(
         "dictionary.h",
         "error.h",
         "file.h",
+        "ffmpeg.h",
         "frame.h",
         "input_format.h",
         "packet.h",
@@ -35,11 +36,12 @@ cc_library(
         "@com_github_mjbots_mjlib//mjlib/base:system_error",
         "@eigen",
         "@ffmpeg",
+        "@fmt",
     ],
 )
 
 cc_test(
-    name = "test",
+    name = "ffmpeg_test",
     srcs = ["test/" + x for x in [
         "codec_test.cc",
         "file_test.cc",
@@ -51,7 +53,11 @@ cc_test(
     ]],
     deps = [
         ":ffmpeg",
+        "@bazel_tools//tools/cpp/runfiles",
         "@boost//:test",
         "@org_llvm_libcxx//:libcxx",
+    ],
+    data = [
+        "test/data/sample_log.mp4",
     ],
 )
