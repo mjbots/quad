@@ -21,6 +21,7 @@
 #include "tools/cpp/runfiles/runfiles.h"
 
 #include "ffmpeg/codec.h"
+#include "ffmpeg/swscale.h"
 
 using namespace mjmech::ffmpeg;
 using bazel::tools::cpp::runfiles::Runfiles;
@@ -44,12 +45,23 @@ BOOST_AUTO_TEST_CASE(FileTest) {
   BOOST_TEST(stream.codec_parameters()->width == 1920);
 
   auto codec = Codec(stream);
+  std::optional<Swscale> swscale;
 
   Packet packet;
   Frame frame;
+  Frame dest_frame;
+  auto dest_ptr = dest_frame.Allocate(AV_PIX_FMT_RGB24, {640, 480}, 1);
   {
     auto pref = dut.Read(&packet);
     codec.SendPacket(pref);
     auto fref = codec.GetFrame(&frame);
+
+    if (!!fref) {
+      if (!swscale) {
+        swscale.emplace(codec, dest_frame.size(),
+                        dest_frame.format(), Swscale::kBicubic);
+      }
+      swscale->Scale(*fref, dest_ptr);
+    }
   }
 }

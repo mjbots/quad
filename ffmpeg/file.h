@@ -70,6 +70,9 @@ class File {
     avformat_free_context(context_);
   }
 
+  File(const File&) = delete;
+  File& operator=(const File&) = delete;
+
   enum StreamType {
     kVideo,
     kAudio,

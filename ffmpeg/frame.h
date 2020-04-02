@@ -20,6 +20,9 @@ extern "C" {
 
 #include <utility>
 
+#include <Eigen/Core>
+
+#include "ffmpeg/error.h"
 #include "ffmpeg/ref_base.h"
 
 namespace mjmech {
@@ -27,6 +30,8 @@ namespace ffmpeg {
 
 class Frame {
  public:
+  ///  Allocate an empty frame with no backing data.  This is required
+  ///  for certain APIs which need an empty object to dump into.
   Frame() {
     frame_ = av_frame_alloc();
   }
@@ -34,6 +39,9 @@ class Frame {
   ~Frame() {
     av_frame_free(&frame_);
   }
+
+  Frame(const Frame&) = delete;
+  Frame& operator=(const Frame&) = delete;
 
   class Ref : public RefBase<AVFrame, Ref> {
    public:
@@ -46,6 +54,25 @@ class Frame {
       value_ = nullptr;
     }
   };
+
+  /// Allocate a Frame of given size and alignment.
+  ///
+  /// @param align == 0 means select based on platform
+  Ref Allocate(AVPixelFormat format, Eigen::Vector2i size, int align = 1) {
+    frame_->format = format;
+    frame_->width = size.x();
+    frame_->height = size.y();
+    ErrorCheck(av_frame_get_buffer(frame_, align));
+    return Ref::MakeInternal(frame_);
+  }
+
+  Eigen::Vector2i size() const {
+    return {frame_->width, frame_->height};
+  }
+
+  AVPixelFormat format() const {
+    return static_cast<AVPixelFormat>(frame_->format);
+  }
 
   AVFrame* get() { return frame_; }
 

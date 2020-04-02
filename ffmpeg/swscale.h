@@ -22,6 +22,7 @@ extern "C" {
 
 #include "mjlib/base/fail.h"
 
+#include "ffmpeg/codec.h"
 #include "ffmpeg/frame.h"
 
 namespace mjmech {
@@ -34,10 +35,10 @@ class Swscale {
     kBilinear,
     kBicubic,
   };
-  Swscale(Eigen::Vector2i src_size, enum AVPixelFormat src_format,
+  Swscale(const Codec& codec,
           Eigen::Vector2i dst_size, enum AVPixelFormat dst_format,
           Algorithm algorithm)
-      : src_size_(src_size) {
+      : src_size_(codec.size()) {
     const int av_flags = [&]() {
       switch (algorithm) {
         case kFastBilinear: return SWS_FAST_BILINEAR;
@@ -46,8 +47,9 @@ class Swscale {
       }
       mjlib::base::AssertNotReached();
     }();
+
     context_ = sws_getContext(
-        src_size.x(), src_size.y(), src_format,
+        src_size_.x(), src_size_.y(), codec.pix_fmt(),
         dst_size.x(), dst_size.y(), dst_format,
         av_flags,
         nullptr, nullptr, nullptr);
@@ -56,6 +58,9 @@ class Swscale {
   ~Swscale() {
     sws_freeContext(context_);
   }
+
+  Swscale(const Swscale&) = delete;
+  Swscale& operator=(const Swscale&) = delete;
 
   void Scale(const Frame::Ref& src, const Frame::Ref& dst) {
     const auto av_src_frame = &*src;

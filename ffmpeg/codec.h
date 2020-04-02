@@ -20,6 +20,8 @@ extern "C" {
 
 #include <optional>
 
+#include <Eigen/Core>
+
 #include "ffmpeg/error.h"
 #include "ffmpeg/frame.h"
 #include "ffmpeg/packet.h"
@@ -30,9 +32,6 @@ namespace ffmpeg {
 
 class Codec {
  public:
-  // TODO(jpieper): Should I enforce this to be constructed after some
-  // frames have been read?  Determine if it makes a difference as to
-  // what is populated.
   Codec(const Stream& stream) {
     const auto av_codec = stream.av_codec();
     const auto p = stream.codec_parameters();
@@ -57,6 +56,14 @@ class Codec {
     if (ret == AVERROR(EAGAIN)) { return {}; }
     ErrorCheck(ret);
     return Frame::Ref::MakeInternal(frame->get());
+  }
+
+  AVPixelFormat pix_fmt() const {
+    return context_->pix_fmt;
+  }
+
+  Eigen::Vector2i size() const {
+    return Eigen::Vector2i(context_->width, context_->height);
   }
 
  private:

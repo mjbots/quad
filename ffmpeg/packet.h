@@ -31,6 +31,9 @@ class Packet {
     av_init_packet(&packet_);
   }
 
+  Packet(const Packet&) = delete;
+  Packet& operator=(const Packet&) = delete;
+
   class Ref : public RefBase<AVPacket, Ref> {
    public:
     using RefBase<AVPacket, Ref>::RefBase;
