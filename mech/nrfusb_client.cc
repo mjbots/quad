@@ -50,7 +50,7 @@ std::optional<std::string> ParseHexData(const std::string& data) {
 std::string FormatHexData(const std::string& data) {
   std::ostringstream ostr;
   for (char c : data) {
-    ostr << fmt::format("{:02x}", static_cast<int>(c));
+    ostr << fmt::format("{:02x}", static_cast<int>(static_cast<uint8_t>(c)));
   }
   return ostr.str();
 }
