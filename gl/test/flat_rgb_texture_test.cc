@@ -12,34 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "gl/flat_rgb_texture.h"
 
-#include "gl/gl.h"
-
-namespace mjmech {
-namespace gl {
-
-class Texture {
- public:
-  Texture() {
-    glGenTextures(1, &tex_);
-  }
-
-  ~Texture() {
-    glDeleteTextures(1, &tex_);
-  }
-
-  Texture(const Texture&) = delete;
-  Texture& operator=(const Texture&) = delete;
-
-  void bind(GLenum target, GLenum texture = GL_TEXTURE0) {
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(target, tex_);
-  }
-
- private:
-  GLuint tex_ = 0;
-};
-
-}
-}
+#include <boost/test/auto_unit_test.hpp>

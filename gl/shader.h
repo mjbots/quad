@@ -52,6 +52,9 @@ class Shader {
     glDeleteShader(shader_);
   }
 
+  Shader(const Shader&) = delete;
+  Shader& operator=(const Shader&) = delete;
+
   GLuint get() const { return shader_; }
 
  private:

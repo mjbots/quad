@@ -57,6 +57,9 @@ class Program {
     glDeleteProgram(program_);
   }
 
+  Program(const Program&) = delete;
+  Program& operator=(const Program&) = delete;
+
   Uniform uniform(std::string_view name) {
     return Uniform(glGetUniformLocation(program_, name.data()));
   }
@@ -76,7 +79,8 @@ class Program {
   template <int RowsAtCompileTime, int ColsAtCompileTime, int Options>
   void SetUniform(
       Uniform uniform,
-      const Eigen::Matrix<float, RowsAtCompileTime, ColsAtCompileTime>& matrix) {
+      const Eigen::Matrix<float, RowsAtCompileTime, ColsAtCompileTime,
+      Options>& matrix) {
     // We don't support row-major order.
     static_assert(Options == 0);
 
@@ -92,6 +96,16 @@ class Program {
   }
 
   GLuint get() const { return program_; }
+
+  // The corresponding VAO and VBO must be activated and populated
+  // before calling this.
+  void VertexAttribPointer(
+      Attribute attribute, GLint size, GLenum type,
+      GLboolean normalized, GLsizei stride, int offset) {
+    glVertexAttribPointer(attribute.get(), size, type, normalized, stride,
+                          reinterpret_cast<void*>(offset));
+    glEnableVertexAttribArray(attribute.get());
+  }
 
  private:
   const GLuint program_;

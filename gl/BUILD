@@ -19,11 +19,14 @@ package(default_visibility = ["//visibility:public"])
 cc_library(
     name = "gl",
     hdrs = [
+        "flat_rgb_texture.h",
         "gl.h",
         "gl_imgui.h",
         "program.h",
         "shader.h",
         "texture.h",
+        "vertex_array_object.h",
+        "vertex_buffer_object.h",
         "window.h",
     ],
     deps = [
@@ -39,12 +42,15 @@ cc_library(
 cc_test(
     name = "test",
     srcs = ["test/" + x for x in [
+        "flat_rgb_texture_test.cc",
         "gl_imgui_test.cc",
         "gl_test.cc",
         "program_test.cc",
         "shader_test.cc",
         "test_main.cc",
         "texture_test.cc",
+        "vertex_array_object_test.cc",
+        "vertex_buffer_object_test.cc",
         "window_test.cc",
     ]],
     deps = [

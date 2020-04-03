@@ -19,26 +19,29 @@
 namespace mjmech {
 namespace gl {
 
-class Texture {
+class VertexArrayObject {
  public:
-  Texture() {
-    glGenTextures(1, &tex_);
+  VertexArrayObject() {
+    glGenVertexArrays(1, &vao_);
   }
 
-  ~Texture() {
-    glDeleteTextures(1, &tex_);
+  ~VertexArrayObject() {
+    glDeleteVertexArrays(1, &vao_);
   }
 
-  Texture(const Texture&) = delete;
-  Texture& operator=(const Texture&) = delete;
+  VertexArrayObject(const VertexArrayObject&) = delete;
+  VertexArrayObject& operator=(const VertexArrayObject&) = delete;
 
-  void bind(GLenum target, GLenum texture = GL_TEXTURE0) {
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(target, tex_);
+  void bind() {
+    glBindVertexArray(vao_);
+  }
+
+  void unbind() {
+    glBindVertexArray(0);
   }
 
  private:
-  GLuint tex_ = 0;
+  GLuint vao_ = 0;
 };
 
 }

@@ -19,26 +19,31 @@
 namespace mjmech {
 namespace gl {
 
-class Texture {
+class VertexBufferObject {
  public:
-  Texture() {
-    glGenTextures(1, &tex_);
+  VertexBufferObject() {
+    glGenBuffers(1, &vbo_);
   }
 
-  ~Texture() {
-    glDeleteTextures(1, &tex_);
+  ~VertexBufferObject() {
+    glDeleteBuffers(1, &vbo_);
   }
 
-  Texture(const Texture&) = delete;
-  Texture& operator=(const Texture&) = delete;
+  VertexBufferObject(const VertexBufferObject&) = delete;
+  VertexBufferObject& operator=(const VertexBufferObject&) = delete;
 
-  void bind(GLenum target, GLenum texture = GL_TEXTURE0) {
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(target, tex_);
+  void bind(GLenum target) {
+    glBindBuffer(target, vbo_);
+  }
+
+  template <typename Array>
+  void set_data_array(GLenum target, const Array& array, GLenum usage) {
+    bind(target);
+    glBufferData(target, sizeof(array), &array[0], usage);
   }
 
  private:
-  GLuint tex_ = 0;
+  GLuint vbo_ = 0;
 };
 
 }

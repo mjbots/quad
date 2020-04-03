@@ -63,6 +63,9 @@ class Window {
     glfwTerminate();
   }
 
+  Window(const Window&) = delete;
+  Window& operator=(const Window&) = delete;
+
   GLFWwindow* window() const { return window_; }
 
   void PollEvents() {
