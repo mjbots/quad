@@ -25,7 +25,18 @@
 #include "base/saturate.h"
 #include "base/sophus.h"
 
+#include "ffmpeg/codec.h"
+#include "ffmpeg/file.h"
+#include "ffmpeg/frame.h"
+#include "ffmpeg/packet.h"
+#include "ffmpeg/swscale.h"
+
+#include "gl/flat_rgb_texture.h"
 #include "gl/gl_imgui.h"
+#include "gl/program.h"
+#include "gl/shader.h"
+#include "gl/vertex_array_object.h"
+#include "gl/vertex_buffer_object.h"
 #include "gl/window.h"
 
 #include "mech/nrfusb_client.h"
@@ -44,6 +55,15 @@ constexpr double kMovementEpsilon_mm_s = 25.0;
 constexpr double kMovementEpsilon_rad_s = (7.0 / 180.0) * M_PI;
 
 namespace {
+template <typename Container, typename Key>
+typename Container::mapped_type get(const Container& c, const Key& key) {
+  auto it = c.find(key);
+  if (it == c.end()) {
+    return typename Container::mapped_type{};
+  }
+  return it->second;
+}
+
 class SlotCommand {
  public:
   SlotCommand(mjlib::io::AsyncStream* stream)
@@ -166,7 +186,7 @@ void DrawTelemetry(const SlotCommand* slot_command) {
     const auto& d = slot_command->data();
 
     ImGui::Text("Mode: %s",
-                QuadrupedCommand::ModeMapper().at(d.mode));
+                get(QuadrupedCommand::ModeMapper(), d.mode));
     ImGui::Text("tx/rx: %d/%d",
                 d.tx_count, d.rx_count);
     ImGui::Text("cmd: (%4.0f, %4.0f, %4.0f)",
@@ -216,13 +236,228 @@ enum GaitMode {
   kNumGaitModes,
 };
 
+void DrawGait(const GLFWgamepadstate& gamepad,
+              const std::vector<bool>& gamepad_pressed,
+              int* pending_gait_mode,
+              QuadrupedCommand::Mode* command_mode) {
+  const bool gait_select_mode =
+      gamepad.buttons[GLFW_GAMEPAD_BUTTON_Y];
+
+  if (gait_select_mode) {
+    if (gamepad_pressed[GLFW_GAMEPAD_BUTTON_DPAD_UP]) {
+      *pending_gait_mode =
+          (*pending_gait_mode + kNumGaitModes - 1) % kNumGaitModes;
+    }
+    if (gamepad_pressed[GLFW_GAMEPAD_BUTTON_DPAD_DOWN]) {
+      *pending_gait_mode =
+          (*pending_gait_mode + 1) % kNumGaitModes;
+    }
+  }
+
+  {
+    ImGui::Begin("Gait");
+    const bool was_collapsed = ImGui::IsWindowCollapsed();
+
+    ImGui::SetWindowCollapsed(!gait_select_mode);
+    ImGui::SetWindowPos({800, 50}, ImGuiCond_FirstUseEver);
+
+    ImGui::RadioButton("Stop", pending_gait_mode, kStop);
+    ImGui::RadioButton("Rest", pending_gait_mode, kRest);
+    ImGui::RadioButton("Walk", pending_gait_mode, kWalk);
+    ImGui::RadioButton("Jump", pending_gait_mode, kJump);
+    ImGui::RadioButton("Zero", pending_gait_mode, kZero);
+
+    ImGui::End();
+
+    if (!gait_select_mode && !was_collapsed) {
+      // Update our command.
+      *command_mode = [&]() {
+        switch (*pending_gait_mode) {
+          case kStop: return QuadrupedCommand::Mode::kStopped;
+          case kRest: return QuadrupedCommand::Mode::kRest;
+          case kWalk: return QuadrupedCommand::Mode::kWalk;
+          case kJump: return QuadrupedCommand::Mode::kJump;
+          case kZero: return QuadrupedCommand::Mode::kZeroVelocity;
+        }
+        mjlib::base::AssertNotReached();
+      }();
+    }
+  }
+}
+
+class VideoRender {
+ public:
+  VideoRender(std::string_view filename)
+      : file_(
+          filename,
+          {
+            { "input_format", "mjpeg" },
+            { "framerate", "30" },
+                },
+          ffmpeg::File::Flags()
+          .set_nonblock(true)
+          .set_input_format(ffmpeg::InputFormat("v4l2"))) {
+    program_.use();
+
+    vao_.bind();
+
+    vertices_.bind(GL_ARRAY_BUFFER);
+
+    const float data[] = {
+      // vertex (x, y, z) texture (u, v)
+      -1.0f,  1.0f, 0.0f, 0.0f, 0.0f,
+      -1.0f, -1.0f, 0.0f, 0.0f, 1.0f,
+       1.0f, -1.0f, 0.0f, 1.0f, 1.0f,
+       1.0f,  1.0f, 0.0f, 1.0f, 0.0f
+    };
+    vertices_.set_data_array(GL_ARRAY_BUFFER, data, GL_STATIC_DRAW);
+
+    program_.VertexAttribPointer(
+        program_.attribute("vertex"),
+        3, GL_FLOAT, GL_FALSE, 20, 0);
+    program_.VertexAttribPointer(
+        program_.attribute("texCoord0"),
+        2, GL_FLOAT, GL_FALSE, 20, 12);
+
+    const uint8_t elements[] = {
+      0, 1, 2,
+      0, 2, 3,
+    };
+    elements_.set_data_array(
+        GL_ELEMENT_ARRAY_BUFFER, elements, GL_STATIC_DRAW);
+    vao_.unbind();
+
+    program_.SetUniform(program_.uniform("frameTex"), 0);
+    program_.SetUniform(program_.uniform("mvpMatrix"),
+                        Ortho(-1, 1, -1, 1, -1, 1));
+  }
+
+  void SetViewport(const Eigen::Vector2i& window_size) {
+    int x = 0;
+    int y = 0;
+    int display_w = window_size.x();
+    int display_h = window_size.y();
+
+    Eigen::Vector2i codec_size = codec_.size();
+    // Enforce an aspect ratio.
+    const double desired_aspect_ratio =
+        static_cast<double>(codec_size.x()) /
+        static_cast<double>(codec_size.y());
+    const double actual_ratio =
+        static_cast<double>(display_w) /
+        static_cast<double>(display_h);
+    if (actual_ratio > desired_aspect_ratio) {
+      const int w = display_h * desired_aspect_ratio;
+      const int remaining = display_w - w;
+      x = remaining / 2;
+      display_w = w;
+    } else if (actual_ratio < desired_aspect_ratio) {
+      const int h = display_w / desired_aspect_ratio;
+      const int remaining = display_h - h;
+      y = remaining / 2;
+      display_h = h;
+    }
+
+    glViewport(x, y, display_w, display_h);
+  }
+
+  void Update() {
+    UpdateVideo();
+    Draw();
+  }
+
+  void UpdateVideo() {
+    auto maybe_pref = file_.Read(&packet_);
+    if (!maybe_pref) { return; }
+
+    codec_.SendPacket(*maybe_pref);
+    auto maybe_fref = codec_.GetFrame(&frame_);
+
+    if (!maybe_fref) { return; }
+
+    if (!swscale_) {
+      swscale_.emplace(codec_, dest_frame_.size(), dest_frame_.format(),
+                       ffmpeg::Swscale::kBicubic);
+    }
+    swscale_->Scale(*maybe_fref, dest_frame_ptr_);
+
+    texture_.Store(dest_frame_ptr_->data[0]);
+  }
+
+  void Draw() {
+    program_.use();
+    vao_.bind();
+    texture_.bind();
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_BYTE, 0);
+    vao_.unbind();
+  }
+
+ private:
+  static Eigen::Matrix4f Ortho(float left, float right, float bottom, float top,
+                               float zNear, float zFar) {
+    Eigen::Matrix4f result = Eigen::Matrix4f::Identity();
+    result(0, 0) = 2.0f / (right - left);
+    result(1, 1) = 2.0f / (top - bottom);
+    result(2, 2) = 1.0f / (zFar - zNear);
+    result(3, 0) = - (right + left) / (right - left);
+    result(3, 1) = - (top + bottom) / (top - bottom);
+    result(3, 2) = - zNear / (zFar - zNear);
+    return result;
+  }
+
+  ffmpeg::File file_;
+  ffmpeg::Stream stream_{file_.FindBestStream(ffmpeg::File::kVideo)};
+  ffmpeg::Codec codec_{stream_};
+  std::optional<ffmpeg::Swscale> swscale_;
+  ffmpeg::Packet packet_;
+  ffmpeg::Frame frame_;
+  ffmpeg::Frame dest_frame_;
+  ffmpeg::Frame::Ref dest_frame_ptr_{dest_frame_.Allocate(
+        AV_PIX_FMT_RGB24, codec_.size(), 1)};
+
+  static constexpr const char* kVertexShaderSource =
+        "#version 150\n"
+	"in vec3 vertex;\n"
+	"in vec2 texCoord0;\n"
+	"uniform mat4 mvpMatrix;\n"
+	"out vec2 texCoord;\n"
+	"void main() {\n"
+	"	gl_Position = mvpMatrix * vec4(vertex, 1.0);\n"
+	"	texCoord = texCoord0;\n"
+	"}\n";
+
+  static constexpr const char* kFragShaderSource =
+        "#version 150\n"
+	"uniform sampler2D frameTex;\n"
+	"in vec2 texCoord;\n"
+	"out vec4 fragColor;\n"
+	"void main() {\n"
+	"	fragColor = texture(frameTex, texCoord);\n"
+	"}\n";
+
+  gl::Shader vertex_shader_{kVertexShaderSource, GL_VERTEX_SHADER};
+  gl::Shader fragment_shader_{kFragShaderSource, GL_FRAGMENT_SHADER};
+  gl::Program program_{vertex_shader_, fragment_shader_};
+
+  gl::VertexArrayObject vao_;
+  gl::VertexBufferObject vertices_;
+  gl::VertexBufferObject elements_;
+  gl::FlatRgbTexture texture_{codec_.size()};
+};
+
 int do_main(int argc, char** argv) {
+  std::string video = "/dev/video0";
+
   mjlib::io::StreamFactory::Options stream;
   stream.type = mjlib::io::StreamFactory::Type::kSerial;
   stream.serial_port = "/dev/nrfusb";
 
-  clipp::group group =
-      mjlib::base::ClippArchive("stream.").Accept(&stream).release();
+  clipp::group group = clipp::group(
+      (clipp::option("v", "video") & clipp::value("", video)),
+      (clipp::option("stuff")),
+      mjlib::base::ClippArchive("stream.").Accept(&stream).release()
+  );
+
   mjlib::base::ClippParse(argc, argv, group);
 
   mjlib::io::SharedStream shared_stream;
@@ -230,7 +465,7 @@ int do_main(int argc, char** argv) {
 
   boost::asio::io_context context;
   boost::asio::executor executor = context.get_executor();
-  mjlib::io::StreamFactory stream_factory(executor);
+  mjlib::io::StreamFactory stream_factory{executor};
   stream_factory.AsyncCreate(stream, [&](auto ec, auto shared_stream_in) {
       mjlib::base::FailIf(ec);
       shared_stream = shared_stream_in;  // so it sticks around
@@ -239,6 +474,16 @@ int do_main(int argc, char** argv) {
 
   gl::Window window(1280, 720, "quad RF command");
   gl::GlImGui imgui(window);
+
+  std::optional<VideoRender> video_render;
+  try {
+    video_render.emplace(video);
+  } catch (mjlib::base::system_error& se) {
+    if (std::string(se.what()).find("No such file or directory") ==
+        std::string::npos) {
+      throw;
+    }
+  }
 
   QuadrupedCommand::Mode command_mode = QuadrupedCommand::Mode::kStopped;
   int pending_gait_mode = kStop;
@@ -260,57 +505,24 @@ int do_main(int argc, char** argv) {
 
     imgui.NewFrame();
 
+    if (video_render) {
+      video_render->SetViewport(window.framebuffer_size());
+    }
     glClearColor(0.45f, 0.55f, 0.60f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
+
+    TRACE_GL_ERROR();
+
+    if (video_render) {
+      video_render->Update();
+    }
 
     TRACE_GL_ERROR();
 
     DrawTelemetry(slot_command.get());
     DrawGamepad(gamepad);
 
-    const bool gait_select_mode =
-        gamepad.buttons[GLFW_GAMEPAD_BUTTON_Y];
-
-    if (gait_select_mode) {
-      if (gamepad_pressed[GLFW_GAMEPAD_BUTTON_DPAD_UP]) {
-        pending_gait_mode =
-            (pending_gait_mode + kNumGaitModes - 1) % kNumGaitModes;
-      }
-      if (gamepad_pressed[GLFW_GAMEPAD_BUTTON_DPAD_DOWN]) {
-        pending_gait_mode =
-            (pending_gait_mode + 1) % kNumGaitModes;
-      }
-    }
-
-    {
-      ImGui::Begin("Gait");
-      const bool was_collapsed = ImGui::IsWindowCollapsed();
-
-      ImGui::SetWindowCollapsed(!gait_select_mode);
-      ImGui::SetWindowPos({800, 50}, ImGuiCond_FirstUseEver);
-
-      ImGui::RadioButton("Stop", &pending_gait_mode, kStop);
-      ImGui::RadioButton("Rest", &pending_gait_mode, kRest);
-      ImGui::RadioButton("Walk", &pending_gait_mode, kWalk);
-      ImGui::RadioButton("Jump", &pending_gait_mode, kJump);
-      ImGui::RadioButton("Zero", &pending_gait_mode, kZero);
-
-      ImGui::End();
-
-      if (!gait_select_mode && !was_collapsed) {
-        // Update our command.
-        command_mode = [&]() {
-          switch (pending_gait_mode) {
-            case kStop: return QuadrupedCommand::Mode::kStopped;
-            case kRest: return QuadrupedCommand::Mode::kRest;
-            case kWalk: return QuadrupedCommand::Mode::kWalk;
-            case kJump: return QuadrupedCommand::Mode::kJump;
-            case kZero: return QuadrupedCommand::Mode::kZeroVelocity;
-          }
-          mjlib::base::AssertNotReached();
-        }();
-      }
-    }
+    DrawGait(gamepad, gamepad_pressed, &pending_gait_mode, &command_mode);
 
     base::Point3D v_mm_s_R;
     v_mm_s_R.x() = -kMaxForwardVelocity_mm_s * gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_Y];
@@ -336,9 +548,9 @@ int do_main(int argc, char** argv) {
     {
       ImGui::Begin("Command");
       ImGui::SetWindowPos({50, 400}, ImGuiCond_FirstUseEver);
-      ImGui::Text("Mode  : %14s", QuadrupedCommand::ModeMapper().at(command_mode));
+      ImGui::Text("Mode  : %14s", get(QuadrupedCommand::ModeMapper(), command_mode));
       ImGui::Text("Actual: %14s",
-                  QuadrupedCommand::ModeMapper().at(actual_command_mode));
+                  get(QuadrupedCommand::ModeMapper(), actual_command_mode));
       ImGui::Text("cmd: (%4.0f, %4.0f, %6.3f)",
                   v_mm_s_R.x(),
                   v_mm_s_R.y(),
@@ -346,6 +558,7 @@ int do_main(int argc, char** argv) {
       ImGui::Text("pose x/y: (%3.0f, %3.0f)",
                   pose_mm_RB.translation().x(),
                   pose_mm_RB.translation().y());
+      ImGui::End();
     }
 
     if (slot_command) {

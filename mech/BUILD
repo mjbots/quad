@@ -270,6 +270,7 @@ cc_binary(
     srcs = ["rf_command.cc"],
     deps = [
         ":mech",
+        "//ffmpeg",
         "//gl",
         "@com_github_mjbots_mjlib//mjlib/base:clipp",
         "@org_llvm_libcxx//:libcxx",
