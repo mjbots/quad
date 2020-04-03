@@ -36,6 +36,16 @@ class File {
     bool nonblock = false;
     std::optional<InputFormat> input_format;
 
+    Flags& set_nonblock(bool v) {
+      nonblock = v;
+      return *this;
+    }
+
+    Flags& set_input_format(InputFormat v) {
+      input_format = std::move(v);
+      return *this;
+    }
+
     Flags() {}
   };
 
@@ -92,8 +102,10 @@ class File {
     return Stream::MakeInternal(context_->streams[stream_num], codec);
   }
 
-  Packet::Ref Read(Packet* packet) {
-    ErrorCheck(av_read_frame(context_, packet->get()));
+  std::optional<Packet::Ref> Read(Packet* packet) {
+    const int ret = av_read_frame(context_, packet->get());
+    if (ret == AVERROR(EAGAIN)) { return {}; }
+    ErrorCheck(ret);
     return Packet::Ref::MakeInternal(packet->get());
   }
 

@@ -52,16 +52,18 @@ BOOST_AUTO_TEST_CASE(FileTest) {
   Frame dest_frame;
   auto dest_ptr = dest_frame.Allocate(AV_PIX_FMT_RGB24, {640, 480}, 1);
   {
-    auto pref = dut.Read(&packet);
-    codec.SendPacket(pref);
-    auto fref = codec.GetFrame(&frame);
+    auto maybe_pref = dut.Read(&packet);
+    if (!!maybe_pref) {
+      codec.SendPacket(*maybe_pref);
+      auto maybe_fref = codec.GetFrame(&frame);
 
-    if (!!fref) {
-      if (!swscale) {
-        swscale.emplace(codec, dest_frame.size(),
-                        dest_frame.format(), Swscale::kBicubic);
+      if (!!maybe_fref) {
+        if (!swscale) {
+          swscale.emplace(codec, dest_frame.size(),
+                          dest_frame.format(), Swscale::kBicubic);
+        }
+        swscale->Scale(*maybe_fref, dest_ptr);
       }
-      swscale->Scale(*fref, dest_ptr);
     }
   }
 }
