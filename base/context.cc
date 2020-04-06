@@ -25,7 +25,7 @@ Context::Context()
         }())),
       remote_debug(std::make_unique<TelemetryRemoteDebugServer>(executor)),
       telemetry_registry(std::make_unique<TelemetryRegistry>(
-                             telemetry_log.get(), remote_debug.get())),
+                             context, telemetry_log.get(), remote_debug.get())),
       factory(std::make_unique<mjlib::io::StreamFactory>(executor))
 {
 }

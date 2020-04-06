@@ -615,6 +615,7 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
         executor_(context.executor),
         quadruped_(context) {
     g_impl_ = this;
+    mDisplayTimeout = 10;
 
     quadruped_.m()->multiplex_client->Register<SimMultiplex>("sim");
     quadruped_.m()->multiplex_client->set_default("sim");
@@ -706,6 +707,10 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
 
   void timeStepping() override {
     const double dt_s = world_->getTimeStep();
+
+    debug_time_->SetTime(debug_time_->now() +
+                         mjlib::base::ConvertSecondsToDuration(dt_s));
+
     multiplex_->Run(dt_s);
 
     SimWindow::timeStepping();
@@ -713,6 +718,15 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
 
   boost::asio::io_context& context_;
   boost::asio::executor executor_;
+  mjlib::io::DebugDeadlineService* const debug_time_ =
+      mjlib::io::DebugDeadlineService::Install(context_);
+  const bool set_time_ = [this]() {
+    debug_time_->SetTime(
+        boost::posix_time::microsec_clock::universal_time() +
+        boost::posix_time::hours(
+            static_cast<int>(24 * 365.25 * 10)));
+    return true;
+  }();
 
   Options options_;
 

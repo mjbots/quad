@@ -46,7 +46,8 @@ int do_main(int argc, char** argv) {
       options.blocking = false;
       return options;
     }()};
-  base::TelemetryLogRegistrar registrar{&log};
+  boost::asio::io_context context;
+  base::TelemetryLogRegistrar registrar{context, &log};
 
   boost::signals2::signal<void(const ImuData*)> imu_signal;
   ImuData imu_data;

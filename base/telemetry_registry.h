@@ -16,6 +16,7 @@
 
 #include <map>
 
+#include <boost/asio/io_context.hpp>
 #include <boost/signals2/signal.hpp>
 
 #include "mjlib/telemetry/file_writer.h"
@@ -28,9 +29,10 @@ namespace base {
 /// Maintain a local publish-subscribe model used for data objects.
 class TelemetryRegistry : boost::noncopyable {
  public:
-  TelemetryRegistry(mjlib::telemetry::FileWriter* log,
+  TelemetryRegistry(boost::asio::io_context& context,
+                    mjlib::telemetry::FileWriter* log,
                     TelemetryRemoteDebugServer* debug)
-      : log_(log), debug_(debug) {}
+      : log_(context, log), debug_(debug) {}
 
   /// Register a serializable object, and return a function object
   /// which when called will disseminate the

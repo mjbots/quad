@@ -14,8 +14,10 @@
 
 #pragma once
 
+#include <boost/asio/io_context.hpp>
 #include <boost/signals2/signal.hpp>
 
+#include "mjlib/io/now.h"
 #include "mjlib/telemetry/binary_write_archive.h"
 #include "mjlib/telemetry/file_writer.h"
 
@@ -33,8 +35,10 @@ namespace base {
 /// are written to the log and at what rate.
 class TelemetryLogRegistrar {
  public:
-  TelemetryLogRegistrar(mjlib::telemetry::FileWriter* telemetry_log)
-    : telemetry_log_(telemetry_log) {}
+  TelemetryLogRegistrar(boost::asio::io_context& context,
+                        mjlib::telemetry::FileWriter* telemetry_log)
+      : context_(context),
+        telemetry_log_(telemetry_log) {}
 
   template <typename T>
   void Register(const std::string& name,
@@ -56,9 +60,11 @@ class TelemetryLogRegistrar {
 
     auto buffer = telemetry_log_->GetBuffer();
     mjlib::telemetry::BinaryWriteArchive(*buffer).Accept(data);
-    telemetry_log_->WriteData({}, identifier, std::move(buffer));
+    telemetry_log_->WriteData(
+        mjlib::io::Now(context_), identifier, std::move(buffer));
   }
 
+  boost::asio::io_context& context_;
   mjlib::telemetry::FileWriter* const telemetry_log_;
 };
 }
