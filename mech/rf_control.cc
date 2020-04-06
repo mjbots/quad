@@ -319,9 +319,10 @@ class RfControl::Impl {
       slot1.priority = 0xffffffff;
       mjlib::base::BufferWriteStream bs({slot1.data, 6});
       mjlib::telemetry::WriteStream ts{bs};
-      ts.Write(base::Saturate<int16_t>(s.robot.v_mm_s_LB.x()));
-      ts.Write(base::Saturate<int16_t>(s.robot.v_mm_s_LB.y()));
-      ts.Write(base::Saturate<int16_t>(32767.0 * s.robot.w_LB.z() / (2 * M_PI)));
+      ts.Write(base::Saturate<int16_t>(s.robot.desired_v_mm_s_R.x()));
+      ts.Write(base::Saturate<int16_t>(s.robot.desired_v_mm_s_R.y()));
+      ts.Write(base::Saturate<int16_t>(
+                   32767.0 * s.robot.desired_w_LR.z() / (2 * M_PI)));
       rf_->tx_slot(1, slot1);
     }
     {
