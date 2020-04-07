@@ -251,10 +251,12 @@ class QuadrupedControl::Impl {
 
   void Command(const QC& command) {
     const auto now = Now();
-    if (command.priority < current_command_.priority ||
-        (!current_command_timestamp_.is_not_a_date_time() &&
-         (mjlib::base::ConvertDurationToSeconds(
-             now - current_command_timestamp_) > parameters_.command_timeout_s))) {
+    const bool higher_priority = command.priority >= current_command_.priority;
+    const bool stale =
+        !current_command_timestamp_.is_not_a_date_time() &&
+        (mjlib::base::ConvertDurationToSeconds(
+            now - current_command_timestamp_) > parameters_.command_timeout_s);
+    if (!higher_priority && !stale) {
       return;
     }
 
