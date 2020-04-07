@@ -27,7 +27,7 @@ namespace mjmech {
 namespace simulator {
 
 namespace {
-constexpr double kBodyMassKg = 2.0;
+constexpr double kBodyMassKg = 5.0;
 
 Sophus::SE3d ConvertSE3MmToM(const Sophus::SE3d& input) {
   auto result = input;
@@ -165,7 +165,7 @@ dd::SkeletonPtr MakeRobot(const mech::QuadrupedConfig& config) {
 
   dart::dynamics::Inertia inertia;
   inertia.setMass(kBodyMassKg);
-  inertia.setMoment(box->computeInertia(kBodyMassKg));
+  inertia.setMoment(4 * box->computeInertia(kBodyMassKg));
   body->setInertia(inertia);
 
   result->getDof("Joint_pos_z")->setPosition(0.5);
