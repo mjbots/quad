@@ -72,6 +72,22 @@ auto Max(Iter begin, Iter end, Functor f) -> decltype(f(*begin)) {
   return current;
 }
 
+template <typename Iter, typename Functor>
+auto Min(Iter begin, Iter end, Functor f) -> decltype(f(*begin)) {
+  using T = decltype(f(*begin));
+
+  MJ_ASSERT(begin != end);
+
+  T current = f(*begin);
+  Iter it = begin;
+  ++it;
+  for (; it != end; ++it) {
+    const auto value = f(*it);
+    if (value < current) { current = value; }
+  }
+  return current;
+}
+
 constexpr double kGravity = 9.81;
 
 struct ReportedServoConfig {
@@ -1116,227 +1132,278 @@ class QuadrupedControl::Impl {
 
     double extra_z_N = 0.0;
     auto& js = status_.state.jump;
+    std::optional<JM> previous_jump_mode;
 
-    auto legs_R = old_control_log_->legs_R;
+    while (true) {
+      // We should only loop here if our jumping state is different
+      // from what it was the previous time.
+      auto legs_R = old_control_log_->legs_R;
 
-    switch (status_.state.jump.mode) {
-      case JM::kLowering: {
-        // Move legs to take into account LR rates.
-        MoveLegsForLR(&legs_R);
-
-        // Lower all legs until they reach the lower_height.
-        const bool done = MoveLegsFixedSpeedZ(
-            all_leg_ids_,
-            &legs_R,
-            config_.jump.lower_velocity_mm_s,
-            config_.jump.lower_height_mm);
-        if (done) {
-          status_.state.jump.mode = JM::kPushing;
-          status_.state.jump.velocity_mm_s = 0.0;
-          status_.state.jump.acceleration_mm_s2 =
-              js.command.acceleration_mm_s2;
-        }
-        break;
+      if (!!previous_jump_mode) {
+        MJ_ASSERT(status_.state.jump.mode != *previous_jump_mode);
       }
-      case JM::kPushing: {
-        MoveLegsForLR(&legs_R);
+      previous_jump_mode = status_.state.jump.mode;
 
-        status_.state.jump.velocity_mm_s +=
-            js.command.acceleration_mm_s2 * timestamps_.delta_s;
-        const bool done = MoveLegsFixedSpeedZ(
-            all_leg_ids_,
-            &legs_R,
-            js.velocity_mm_s,
-            config_.jump.upper_height_mm);
-        extra_z_N = config_.mass_kg * js.acceleration_mm_s2 * 0.001;
-        if (done) {
-          js.mode = JM::kRetracting;
-          js.velocity_mm_s = 0.0;
-          js.acceleration_mm_s2 = 0.0;
-          for (auto& leg_R : legs_R) {
-            leg_R.stance = 0.0;
+      switch (status_.state.jump.mode) {
+        case JM::kLowering: {
+          // Move legs to take into account LR rates.
+          MoveLegsForLR(&legs_R);
+
+          // Lower all legs until they reach the lower_height.
+          const bool done = MoveLegsFixedSpeedZ(
+              all_leg_ids_,
+              &legs_R,
+              config_.jump.lower_velocity_mm_s,
+              config_.jump.lower_height_mm);
+          if (done) {
+            status_.state.jump.mode = JM::kPushing;
+            status_.state.jump.velocity_mm_s = 0.0;
+            status_.state.jump.acceleration_mm_s2 =
+                js.command.acceleration_mm_s2;
+            // Loop around and do the pushing behavior.
+            continue;
           }
+          break;
         }
-        break;
-      }
-      case JM::kRetracting: {
-        // We need to get our legs back into a lateral position
-        // suitable for the landing phase.
+        case JM::kPushing: {
+          MoveLegsForLR(&legs_R);
 
-        // TODO: This could be updated to reach at a given time (with
-        // a configurable time), instead of a fixed speed.
-        const bool done = MoveLegsFixedSpeed(
-            &legs_R,
-            config_.jump.retract_velocity_mm_s,
-            [&]() {
-              std::vector<std::pair<int, base::Point3D>> result;
-              for (const auto& leg : legs_) {
-                result.push_back(std::make_pair(leg.leg, leg.idle_R));
-              }
-              return result;
-            }());
-
-        const double average_velocity_mm_s = Average(
-            status_.state.legs_B.begin(),
-            status_.state.legs_B.end(),
-            [](const auto& leg_B) {
-              return leg_B.velocity_mm_s.z();
-            });
-        if (done &&
-            std::abs(average_velocity_mm_s) <
-            config_.jump.land_threshold_mm_s) {
-          js.mode = JM::kFalling;
-          for (auto& leg_R : legs_R) {
-            leg_R.landing = true;
+          status_.state.jump.velocity_mm_s +=
+              js.command.acceleration_mm_s2 * timestamps_.delta_s;
+          const bool done = MoveLegsFixedSpeedZ(
+              all_leg_ids_,
+              &legs_R,
+              js.velocity_mm_s,
+              config_.jump.upper_height_mm);
+          extra_z_N = config_.mass_kg * js.acceleration_mm_s2 * 0.001;
+          if (done) {
+            js.mode = JM::kRetracting;
+            js.velocity_mm_s = 0.0;
+            js.acceleration_mm_s2 = 0.0;
+            for (auto& leg_R : legs_R) {
+              leg_R.stance = 0.0;
+            }
+            // Loop around and do the retracting behavior.
+            old_control_log_->legs_R = legs_R;
+            continue;
           }
-          js.falling = Now();
+          break;
         }
-        break;
-      }
-      case JM::kFalling: {
-        // Keep the legs moving while falling so that relative
-        // velocity will be minimal when we do land.  We aren't trying
-        // to accelerate during this phase, so that should mostly work
-        // out.
-        MoveLegsForLR(&legs_R);
+        case JM::kRetracting: {
+          // We need to get our legs back into a lateral position
+          // suitable for the landing phase.
 
-        // Set our gains to be much lower while falling.
-        for (auto& leg_R : legs_R) {
-          const auto kp = config_.jump.land_kp;
-          leg_R.kp_scale = base::Point3D(kp, kp, kp);
-          const auto kd = config_.jump.land_kd;
-          leg_R.kd_scale = base::Point3D(kd, kd, kd);
+          // TODO: This could be updated to reach at a given time (with
+          // a configurable time), instead of a fixed speed.
+          const bool done = MoveLegsFixedSpeed(
+              &legs_R,
+              config_.jump.retract_velocity_mm_s,
+              [&]() {
+                std::vector<std::pair<int, base::Point3D>> result;
+                for (const auto& leg : legs_) {
+                  result.push_back(std::make_pair(leg.leg, leg.idle_R));
+                }
+                return result;
+              }());
+
+          if (done) {
+            js.mode = JM::kFalling;
+            for (auto& leg_R : legs_R) {
+              leg_R.velocity_mm_s = base::Point3D();
+              leg_R.landing = true;
+            }
+            // Loop around and do the falling behavior.
+            old_control_log_->legs_R = legs_R;
+            continue;
+          }
+          break;
         }
+        case JM::kFalling: {
+          // Keep the legs moving while falling so that relative
+          // velocity will be minimal when we do land.  We aren't trying
+          // to accelerate during this phase, so that should mostly work
+          // out.
+          MoveLegsForLR(&legs_R);
 
-        // Wait for our average velocity of all legs to exceed our
-        // threshold, which indicates we have landed.
-        auto get_vel = [](const auto& leg_B) { return leg_B.velocity_mm_s.z(); };
-        const double max_velocity_mm_s = Max(
-            status_.state.legs_B.begin(),
-            status_.state.legs_B.end(),
-            get_vel);
-        const double average_velocity_mm_s = Average(
-            status_.state.legs_B.begin(),
-            status_.state.legs_B.end(),
-            get_vel);
-        // Also, if we're already applying more than a fraction of our
-        // total weight, that must mean we have landed also.
-        const double total_force_z_N = Average(
-            status_.state.legs_B.begin(),
-            status_.state.legs_B.end(),
-            [](const auto& leg_B) {
-              return leg_B.force_N.z();
-            }) * status_.state.legs_B.size();
-        if (js.falling.is_not_a_date_time() ||
-            (max_velocity_mm_s >= -config_.jump.land_threshold_mm_s &&
-             total_force_z_N < (0.75 * kGravity * config_.mass_kg))) {
-          js.falling = Now();
-        }
-        const double moving_duration_s =
-            base::ConvertDurationToSeconds(Now() -
-                                           js.falling);
+          // Set our gains to be much lower while falling.
+          for (auto& leg_R : legs_R) {
+            const auto kp = config_.jump.land_kp;
+            leg_R.kp_scale = base::Point3D(kp, kp, kp);
+            const auto kd = config_.jump.land_kd;
+            leg_R.kd_scale = base::Point3D(kd, kd, kd);
+          }
 
-        if (moving_duration_s > config_.jump.land_threshold_s) {
-          js.velocity_mm_s = average_velocity_mm_s;
-          // Pick an acceleration that will ensure we reach stopped
-          // before hitting our lower height.
+          // Wait for our legs to be pushed up by a certain distance,
+          // which will indicate we have made contact with the ground.
           const double average_height_mm = Average(
               status_.state.legs_B.begin(),
               status_.state.legs_B.end(),
               [](const auto& leg_B) {
                 return leg_B.position_mm.z();
               });
-          const double error_mm =
-              average_height_mm - config_.jump.lower_height_mm;
-          if (error_mm < 0.0) {
-            // Whoops, we're already below our allowed limit.  Pick a
-            // safe maximum acceleration and hope for the best.
-            js.acceleration_mm_s2 =
-                config_.bounds.max_acceleration_mm_s2;
-          } else {
-            js.acceleration_mm_s2 =
-                std::max(
-                    js.command.acceleration_mm_s2,
-                    std::min(
-                        config_.bounds.max_acceleration_mm_s2,
-                        0.5 * std::pow(average_velocity_mm_s, 2) / error_mm));
+          const double max_height_mm = Max(
+              status_.state.legs_B.begin(),
+              status_.state.legs_B.end(),
+              [](const auto& leg_B) {
+                return leg_B.position_mm.z();
+              });
+          // We require the average to be below a threshold, and for
+          // all legs to have made contact of some kind.
+          const double average_error_mm =
+              average_height_mm - config_.stand_height_mm;
+          const double max_error_mm =
+              max_height_mm - config_.stand_height_mm;
+          if (average_error_mm < -config_.jump.land_threshold_mm &&
+              max_error_mm < -0.5 * config_.jump.land_threshold_mm) {
+            js.mode = JM::kLanding;
+            // Loop around and start landing.
+            continue;
           }
-
-          js.mode = JM::kLanding;
-          for (auto& leg_R : legs_R) {
-            const auto& pose_mm_RB = status_.state.robot.pose_mm_RB;
-            auto desired_B = pose_mm_RB.inverse() * leg_R.position_mm;
-            desired_B.z() = average_height_mm;
-
-            leg_R.position_mm = pose_mm_RB * desired_B;
-            leg_R.stance = 1.0;
-            leg_R.landing = false;
-          }
+          break;
         }
-        break;
-      }
-      case JM::kLanding: {
-        MoveLegsForLR(&legs_R);
+        case JM::kLanding: {
+          MoveLegsForLR(&legs_R);
 
-        // Turn our gains back up.
-        for (auto& leg_R : legs_R) {
-          leg_R.kp_scale = {};
-          leg_R.kd_scale = {};
-        }
+          const auto landing_result = SetLandingParameters(&legs_R);
+          extra_z_N = landing_result.extra_z_N;
 
-        // Work to zero our velocity.
-        js.velocity_mm_s =
-            std::min(
-                0.0,
-                js.velocity_mm_s +
-                js.acceleration_mm_s2 * timestamps_.delta_s);
+          if (landing_result.done) {
+            // We are either done, or going to start jumping again.
 
-        extra_z_N = (config_.jump.landing_force_scale * config_.mass_kg *
-                     js.acceleration_mm_s2 * 0.001);
+            // TODO(jpieper): Condition switching to rest on us having a
+            // sufficiently low R frame velocity.
 
-        if (js.velocity_mm_s == 0.0) {
-          // We are either done, or going to start jumping again.
+            if (js.command.repeat &&
+                current_command_.mode == QM::kJump) {
+              js.mode = JM::kPushing;
 
-          // TODO(jpieper): Condition switching to rest on us having a
-          // sufficiently low R frame velocity.
+              // First, latch in our current jump command.
+              if (!!current_command_.jump) {
+                status_.state.jump.command = *current_command_.jump;
+              }
 
-          if (js.command.repeat &&
-              current_command_.mode == QM::kJump) {
-            js.mode = JM::kPushing;
+              // Then, for the pushing phase, switch back to whatever
+              // acceleration we were commanded.
+              js.acceleration_mm_s2 = js.command.acceleration_mm_s2;
+              continue;
+            } else {
+              js.mode = JM::kDone;
 
-            // First, latch in our current jump command.
-            if (!!current_command_.jump) {
-              status_.state.jump.command = *current_command_.jump;
+              // Switch our top level command back to rest to make life
+              // more convenient.
+              current_command_.mode = QM::kRest;
             }
-
-            // Then, for the pushing phase, switch back to whatever
-            // acceleration we were commanded.
-            js.acceleration_mm_s2 = js.command.acceleration_mm_s2;
-          } else {
-            js.mode = JM::kDone;
-
-            // Switch our top level command back to rest to make life
-            // more convenient.
-            current_command_.mode = QM::kRest;
           }
-        } else {
-          MoveLegsFixedSpeedZ(
-              all_leg_ids_,
-              &legs_R,
-              js.velocity_mm_s,
-              config_.jump.upper_height_mm);
+          break;
         }
-        break;
+        case JM::kDone: {
+          DoControl_Rest();
+          return;
+        }
       }
-      case JM::kDone: {
-        DoControl_Rest();
-        return;
+
+      // If we make it here, then we haven't skipped back to redo our
+      // loop.  Thus we can actually emit our control.
+      UpdateLegsStanceForce(&legs_R, extra_z_N);
+
+      ControlLegs_R(std::move(legs_R));
+      return;
+    }
+  }
+
+  struct LandingResult {
+    double extra_z_N = 0.0;
+    bool done = false;
+  };
+
+  LandingResult SetLandingParameters(std::vector<QC::Leg>* legs_R) {
+    auto increase_gain = [&](auto& gain) {
+      if (!!gain) {
+        const auto old_value = gain->x();
+        const auto new_value = (
+            old_value + timestamps_.delta_s * config_.jump.land_gain_increase);
+        if (new_value > 1.0) {
+          gain = {};
+        } else {
+          gain = base::Point3D(new_value, new_value, new_value);
+        }
       }
+    };
+
+    // Turn our gains back up.
+    for (auto& leg_R : *legs_R) {
+      increase_gain(leg_R.kp_scale);
+      increase_gain(leg_R.kd_scale);
     }
 
-    UpdateLegsStanceForce(&legs_R, extra_z_N);
+    auto get_vel = [](const auto& leg_B) { return leg_B.velocity_mm_s.z(); };
+    auto& js = status_.state.jump;
 
-    ControlLegs_R(std::move(legs_R));
+    const double average_velocity_mm_s = Average(
+        status_.state.legs_B.begin(),
+        status_.state.legs_B.end(),
+        get_vel);
+    js.velocity_mm_s = average_velocity_mm_s;
+    // Pick an acceleration that will ensure we reach stopped
+    // before hitting our lower height.
+    const double average_height_mm = Average(
+        status_.state.legs_B.begin(),
+        status_.state.legs_B.end(),
+        [](const auto& leg_B) {
+          return leg_B.position_mm.z();
+        });
+    const double error_mm =
+        std::max(
+            10.0,
+            average_height_mm - config_.jump.lower_height_mm);
+
+    constexpr double kFudge = 0.7;
+    js.acceleration_mm_s2 =
+        std::max(
+            config_.jump.min_acceleration_mm_s2,
+            std::min(
+                config_.bounds.max_acceleration_mm_s2,
+                kFudge * 0.5 * std::pow(average_velocity_mm_s, 2) / error_mm));
+
+    const double command_height_mm =
+        std::max(average_height_mm, config_.jump.lower_height_mm);
+    const double limited_velocity_mm_s =
+        std::min(average_velocity_mm_s, -config_.jump.lower_velocity_mm_s);
+
+    const double command_velocity_mm_s =
+        (average_height_mm > config_.jump.lower_height_mm) ?
+        limited_velocity_mm_s : 0.0;
+
+    for (auto& leg_R : *legs_R) {
+      const auto& pose_mm_RB = status_.state.robot.pose_mm_RB;
+      auto desired_B = pose_mm_RB.inverse() * leg_R.position_mm;
+      desired_B.z() = command_height_mm;
+
+      leg_R.position_mm = pose_mm_RB * desired_B;
+      leg_R.velocity_mm_s.z() = command_velocity_mm_s;
+      leg_R.stance = 1.0;
+      leg_R.landing = false;
+    }
+
+    LandingResult result;
+    result.extra_z_N = config_.jump.landing_force_scale * config_.mass_kg *
+        js.acceleration_mm_s2 * 0.001;
+
+    const double min_velocity_mm_s = Min(
+        status_.state.legs_B.begin(),
+        status_.state.legs_B.end(),
+        [](const auto& leg_B) {
+          return leg_B.velocity_mm_s.z();
+        });
+
+    // We are done if we are low enough, or if no leg is still moving
+    // down (that can happen when part of the leg begins to rest on
+    // the ground).
+    result.done = (
+        (average_height_mm < config_.jump.lower_height_mm) ||
+        (min_velocity_mm_s > -10));
+
+    return result;
   }
 
   void DoControl_Walk() {

@@ -209,7 +209,6 @@ struct QuadrupedState {
     Mode mode = kLowering;
     double velocity_mm_s = 0.0;
     double acceleration_mm_s2 = 0.0;
-    boost::posix_time::ptime falling;
 
     QuadrupedCommand::Jump command;
 
@@ -218,7 +217,6 @@ struct QuadrupedState {
       a->Visit(MJ_ENUM(mode, ModeMapper));
       a->Visit(MJ_NVP(velocity_mm_s));
       a->Visit(MJ_NVP(acceleration_mm_s2));
-      a->Visit(MJ_NVP(falling));
       a->Visit(MJ_NVP(command));
     }
   };
