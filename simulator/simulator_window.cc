@@ -51,6 +51,8 @@ namespace mjmech {
 namespace simulator {
 
 namespace {
+constexpr double kMaxServoTorque_Nm = 12.0;
+
 class Servo : public mjlib::multiplex::MicroServer::Server,
               public mjlib::multiplex::MicroDatagramServer {
  public:
@@ -320,8 +322,11 @@ class Servo : public mjlib::multiplex::MicroServer::Server,
         Limit(unlimited_torque_Nm, -command_.max_torque_Nm,
               command_.max_torque_Nm);
 
-    current_torque_Nm_ = limited_torque_Nm;
-    joint_->setForce(0, limited_torque_Nm);
+    const double physical_torque_Nm =
+        Limit(limited_torque_Nm, -kMaxServoTorque_Nm, kMaxServoTorque_Nm);
+
+    current_torque_Nm_ = physical_torque_Nm;
+    joint_->setForce(0, physical_torque_Nm);
   }
 
   void Update() {
@@ -616,6 +621,7 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
         quadruped_(context) {
     g_impl_ = this;
     mDisplayTimeout = 10;
+    world_->setTimeStep(0.0001);
 
     quadruped_.m()->multiplex_client->Register<SimMultiplex>("sim");
     quadruped_.m()->multiplex_client->set_default("sim");
@@ -710,6 +716,8 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
 
     debug_time_->SetTime(debug_time_->now() +
                          mjlib::base::ConvertSecondsToDuration(dt_s));
+    context_.poll();
+    context_.reset();
 
     multiplex_->Run(dt_s);
 
