@@ -213,6 +213,21 @@ struct QuadrupedConfig {
 
   Walk walk;
 
+  struct Backflip {
+    double lower_height_mm = 45.0;
+    double pitch_accel_dps2 = 5000.0;
+    double max_pitch_deg = 35.0;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(lower_height_mm));
+      a->Visit(MJ_NVP(pitch_accel_dps2));
+      a->Visit(MJ_NVP(max_pitch_deg));
+    }
+  };
+
+  Backflip backflip;
+
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(joints));
@@ -229,6 +244,7 @@ struct QuadrupedConfig {
     a->Visit(MJ_NVP(lr_alpha_rad_s2));
     a->Visit(MJ_NVP(jump));
     a->Visit(MJ_NVP(walk));
+    a->Visit(MJ_NVP(backflip));
   }
 };
 

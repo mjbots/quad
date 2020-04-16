@@ -129,6 +129,7 @@ struct Leg {
   int leg = 0;
   Config::Leg config;
   Sophus::SE3d pose_mm_BG;
+  Eigen::Vector3d pose_mm_B_femur;
   MammalIk ik;
 
   base::Point3D stand_up_R;
@@ -143,6 +144,7 @@ struct Leg {
       : leg(config_in.leg),
         config(config_in),
         pose_mm_BG(config_in.pose_mm_BG),
+        pose_mm_B_femur(config_in.pose_mm_BG * config_in.ik.shoulder.pose_mm),
         ik(config_in.ik) {
     // The idle and standup poses assume a null RB transform
     const Sophus::SE3d pose_mm_RB;
@@ -1620,8 +1622,127 @@ class QuadrupedControl::Impl {
   }
 
   void DoControl_Backflip() {
-    // TODO: Just do rest for now.
-    DoControl_Rest();
+    using BM = QuadrupedState::Backflip::Mode;
+
+    std::optional<BM> previous_mode;
+    auto& bs = status_.state.backflip;
+    const double dt_s = timestamps_.delta_s;
+
+    while (true) {
+      auto legs_R = old_control_log_->legs_R;
+
+      // We loop around until we stop changing state.
+      if (!!previous_mode) {
+        MJ_ASSERT(bs.mode != *previous_mode);
+      }
+      previous_mode = bs.mode;
+
+      switch (bs.mode) {
+        case BM::kLowering: {
+          status_.state.robot.pose_mm_RB = Sophus::SE3d();
+
+          const bool done = MoveLegsFixedSpeedZ(
+              all_leg_ids_,
+              &legs_R,
+              config_.jump.lower_velocity_mm_s,
+              config_.backflip.lower_height_mm);
+          if (done) {
+            bs.mode = BM::kFrontPush;
+            // Loop around and do the pushing behavior.
+            continue;
+          }
+          UpdateLegsStanceForce(&legs_R, 0.0);
+
+          break;
+        }
+        case BM::kFrontPush: {
+          // During the front push phase, we anchor the robot through
+          // the axis of the rear servos, and apply an additional
+          // downward force on the front legs to impart an
+          // acceleration about the pitch axis.
+
+          // Just do a zeroth order numerical integration.  It doesn't
+          // need to be that accurate.
+          bs.pitch_rate_dps += config_.backflip.pitch_accel_dps2 * dt_s;
+          bs.pitch_deg += bs.pitch_rate_dps * dt_s;
+
+          const Eigen::Vector3d alpha_RB(
+              0, base::Radians(-config_.backflip.pitch_accel_dps2), 0);
+          const Eigen::Vector3d omega_RB(
+              0, base::Radians(-bs.pitch_rate_dps), 0);
+
+          // We'll denote the 'rleg' frame as centered between the
+          // axis of rotation of the rear femurs.
+
+          const double x_mm = Min(
+              legs_.begin(), legs_.end(), [](auto& leg) {
+                return leg.pose_mm_B_femur.x();
+              });
+
+          const Sophus::SE3d pose_mm_rleg_B =
+              Sophus::SE3d(Sophus::SO3d(), Eigen::Vector3d(-x_mm, 0, 0));
+
+          // And we'll denote the 'rlegp' frame as the one centered
+          // between the axis of rotation and pitched up by our
+          // current pitch amount.
+          const Sophus::SE3d pose_mm_rlegp_rleg =
+              Sophus::SE3d(
+                  Eigen::AngleAxisd(base::Radians(bs.pitch_deg),
+                                    Eigen::Vector3d::UnitY()).toRotationMatrix(),
+                  Eigen::Vector3d());
+
+          const Sophus::SE3d pose_mm_rlegp_B =
+              pose_mm_rlegp_rleg * pose_mm_rleg_B;
+
+          auto& pose_mm_RB = status_.state.robot.pose_mm_RB;
+          pose_mm_RB = pose_mm_rleg_B.inverse() * pose_mm_rlegp_B;
+
+          for (auto& leg_R : legs_R) {
+            // Find the position in the 'rleg' frame.
+            const Eigen::Vector3d leg_pose_mm_B =
+                pose_mm_RB.inverse() * leg_R.position_mm;
+            const Eigen::Vector3d leg_pose_mm_rleg =
+                pose_mm_rlegp_B * leg_pose_mm_B;
+
+            // TODO(jpieper): These calculations would be unecessary
+            // if we had the ability to pass the RB angular velocity
+            // and acceleration into the R frame controller.  For now,
+            // we just lie about the R frame velocity, since we know
+            // it will be passed through.
+            leg_R.velocity_mm_s = omega_RB.cross(leg_pose_mm_rleg);
+            leg_R.force_N =
+                (config_.mass_kg / legs_.size()) * 0.001 *
+                alpha_RB.cross(leg_pose_mm_rleg) +
+                (1.0 / legs_.size()) *
+                base::Point3D(0, 0, config_.mass_kg * kGravity);
+          }
+
+          // TODO: have an RB rate of change so that we can properly
+          // command velocities of the joints.
+
+          if (bs.pitch_deg > config_.backflip.max_pitch_deg) {
+            bs.mode = BM::kBackPush;
+            continue;
+          }
+
+          break;
+        }
+        case BM::kBackPush: {
+          break;
+        }
+        case BM::kFlight: {
+          break;
+        }
+        case BM::kDone: {
+          DoControl_Rest();
+          return;
+        }
+      }
+
+      // If we make it here, then we don't need to repeat.
+      ControlLegs_R(std::move(legs_R));
+      return;
+    }
   }
 
   void ClearDesiredMotion() {
