@@ -682,6 +682,10 @@ class QuadrupedControl::Impl {
         DoControl_Walk();
         break;
       }
+      case QM::kBackflip: {
+        DoControl_Backflip();
+        break;
+      }
       case QM::kNumModes: {
         mjlib::base::AssertNotReached();
       }
@@ -732,7 +736,8 @@ class QuadrupedControl::Impl {
       }
       case QM::kRest:
       case QM::kJump:
-      case QM::kWalk: {
+      case QM::kWalk:
+      case QM::kBackflip: {
         // This can only be done from certain configurations, where we
         // know all four legs are on the ground.  Modify our command
         // to try and get into that state.
@@ -770,6 +775,10 @@ class QuadrupedControl::Impl {
             current_command_.v_mm_s_R = {};
             current_command_.w_LR = {};
           }
+        } else if (status_.mode == QM::kBackflip &&
+                   status_.state.backflip.mode ==
+                   QuadrupedState::Backflip::Mode::kDone) {
+          status_.mode = current_command_.mode;
         } else {
           // We can't switch, just wait I guess.
         }
@@ -792,6 +801,10 @@ class QuadrupedControl::Impl {
         }
         case QM::kWalk: {
           status_.state.walk = {};
+          break;
+        }
+        case QM::kBackflip: {
+          status_.state.backflip = {};
           break;
         }
         case QM::kRest: {
@@ -1501,7 +1514,8 @@ class QuadrupedControl::Impl {
             std::sqrt(
                 std::pow(config_.bounds.max_acceleration_mm_s2, 2.0) *
                 std::pow(lift_time_s, 2.0) -
-                4 * config_.bounds.max_acceleration_mm_s2 * config_.walk.lift_height_mm) -
+                4 * config_.bounds.max_acceleration_mm_s2 *
+                config_.walk.lift_height_mm) -
             config_.bounds.max_acceleration_mm_s2 * lift_time_s);
 
         // If the speed isn't finite, then we cannot lift this far in
@@ -1603,6 +1617,11 @@ class QuadrupedControl::Impl {
     UpdateLegsStanceForce(&legs_R, 0.0);
 
     ControlLegs_R(std::move(legs_R));
+  }
+
+  void DoControl_Backflip() {
+    // TODO: Just do rest for now.
+    DoControl_Rest();
   }
 
   void ClearDesiredMotion() {

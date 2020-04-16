@@ -238,6 +238,35 @@ struct QuadrupedState {
 
   Walk walk;
 
+  struct Backflip {
+    enum Mode {
+      kLowering = 0,
+      kFrontPush = 1,
+      kBackPush = 2,
+      kFlight = 3,
+      kDone = 4,
+    };
+
+    static inline std::map<Mode, const char*> ModeMapper() {
+      return {
+        { kLowering, "lowering" },
+        { kFrontPush, "front_push" },
+        { kBackPush, "back_push" },
+        { kFlight, "flight" },
+        { kDone, "done" },
+      };
+    }
+
+    Mode mode = kLowering;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_ENUM(mode, ModeMapper));
+    }
+  };
+
+  Backflip backflip;
+
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(joints));
@@ -248,6 +277,7 @@ struct QuadrupedState {
     a->Visit(MJ_NVP(rest));
     a->Visit(MJ_NVP(jump));
     a->Visit(MJ_NVP(walk));
+    a->Visit(MJ_NVP(backflip));
   }
 };
 

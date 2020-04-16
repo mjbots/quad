@@ -73,6 +73,8 @@ struct QuadrupedCommand {
     // Walk
     kWalk = 9,
 
+    kBackflip = 10,
+
     kNumModes,
   };
 
@@ -88,6 +90,7 @@ struct QuadrupedCommand {
         { kRest, "rest" },
         { kJump, "jump" },
         { kWalk, "walk" },
+        { kBackflip, "backflip" },
       }};
   }
 
@@ -177,6 +180,14 @@ struct QuadrupedCommand {
 
   std::optional<Walk> walk;
 
+  struct Backflip {
+    template <typename Archive>
+    void Serialize(Archive* a) {
+    }
+  };
+
+  std::optional<Backflip> backflip;
+
   /////////////////////////////////////////////
   // Things which are common to multiple modes.
 
@@ -198,6 +209,7 @@ struct QuadrupedCommand {
     a->Visit(MJ_NVP(legs_B));
     a->Visit(MJ_NVP(jump));
     a->Visit(MJ_NVP(walk));
+    a->Visit(MJ_NVP(backflip));
     a->Visit(MJ_NVP(pose_mm_RB));
     a->Visit(MJ_NVP(v_mm_s_R));
     a->Visit(MJ_NVP(w_LR));

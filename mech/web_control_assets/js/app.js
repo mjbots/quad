@@ -213,7 +213,8 @@
         value == "zero_velocity" ||
         value == "rest" ||
         value == "jump" ||
-        value == "walk") {
+        value == "walk" ||
+        value == "backflip" ) {
       // We always send this command out.
       var command = {
         "mode" : value,
