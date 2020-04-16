@@ -51,12 +51,14 @@ namespace mjmech {
 namespace simulator {
 
 namespace {
-constexpr double kMaxServoTorque_Nm = 12.0;
 
 class Servo : public mjlib::multiplex::MicroServer::Server,
               public mjlib::multiplex::MicroDatagramServer {
  public:
-  Servo(dd::Joint* joint, double sign) : joint_(joint), sign_(sign) {
+  Servo(dd::Joint* joint, double sign, double max_torque_Nm)
+      : joint_(joint),
+        sign_(sign),
+        max_torque_Nm_(max_torque_Nm) {
     server_.Start(this);
   }
 
@@ -323,7 +325,7 @@ class Servo : public mjlib::multiplex::MicroServer::Server,
               command_.max_torque_Nm);
 
     const double physical_torque_Nm =
-        Limit(limited_torque_Nm, -kMaxServoTorque_Nm, kMaxServoTorque_Nm);
+        Limit(limited_torque_Nm, -max_torque_Nm_, max_torque_Nm_);
 
     current_torque_Nm_ = physical_torque_Nm;
     joint_->setForce(0, physical_torque_Nm);
@@ -353,6 +355,7 @@ class Servo : public mjlib::multiplex::MicroServer::Server,
 
   dd::Joint* const joint_;
   const double sign_;
+  const double max_torque_Nm_;
   mjlib::micro::SizedPool<16384> pool_;
   mjlib::multiplex::MicroServer server_{&pool_, this, {}};
 
@@ -460,7 +463,8 @@ class SimMultiplex : public mjlib::multiplex::AsioClient {
   }
 
   void AddServo(dd::Joint* joint, int id) {
-    servos_[id] = std::make_unique<Servo>(joint, signs_.at(id));
+    servos_[id] = std::make_unique<Servo>(
+        joint, signs_.at(id), torque_Nm_.at(id));
   }
 
   void Run(double dt_s) {
@@ -502,6 +506,21 @@ class SimMultiplex : public mjlib::multiplex::AsioClient {
     {10, 1.0},
     {11, 1.0},
     {12, 1.0},
+        };
+
+  std::map<int, double> torque_Nm_{
+    {1, 12.5},
+    {2, 22.2},
+    {3, 12.5},
+    {4, 12.5},
+    {5, 22.2},
+    {6, 12.5},
+    {7, 12.5},
+    {8, 22.2},
+    {9, 12.5},
+    {10, 12.5},
+    {11, 22.2},
+    {12, 12.5},
         };
 };
 
