@@ -52,6 +52,8 @@ cc_library(
         "rpi3_threaded_client.cc",
         "rtsp_server.cc",
         "target_tracker.cc",
+        "turret.cc",
+        "turret_control.cc",
         "trajectory.cc",
         "video_display.cc",
         "web_control.cc",
@@ -162,6 +164,13 @@ module_main(
     deps = [":mech"],
 )
 
+module_main(
+    name = "turret",
+    cname = "mjmech::mech::Turret",
+    prefix = "mech",
+    deps = [":mech"],
+)
+
 cc_binary(
     name = "multiplex_tool",
     srcs = ["multiplex_tool_main.cc"],
@@ -230,6 +239,7 @@ pkg_tar(
         ":quadruped",
         ":slot_rf_test",
         ":spi",
+        ":turret",
         ":video_sender_app",
     ],
     files = {
