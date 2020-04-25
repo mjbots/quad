@@ -16,6 +16,8 @@
 
 #include <fstream>
 
+#include <boost/asio/post.hpp>
+
 #include <fmt/format.h>
 
 #include "mjlib/base/clipp_archive.h"
@@ -27,6 +29,7 @@
 #include "base/common.h"
 #include "base/logging.h"
 #include "base/sophus.h"
+#include "base/telemetry_registry.h"
 
 #include "mech/attitude_data.h"
 #include "mech/mammal_ik.h"

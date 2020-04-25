@@ -97,8 +97,11 @@
 
 #include "mech/rf_control.h"
 
+#include <boost/asio/post.hpp>
+
 #include "mjlib/io/now.h"
 
+#include "base/telemetry_registry.h"
 #include "base/saturate.h"
 
 namespace pl = std::placeholders;

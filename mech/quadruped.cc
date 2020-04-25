@@ -14,6 +14,8 @@
 
 #include "mech/quadruped.h"
 
+#include <boost/asio/post.hpp>
+
 #include "base/logging.h"
 #include "mech/quadruped_debug.h"
 #include "mech/rpi3_hat_aux_stm32.h"

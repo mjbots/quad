@@ -26,7 +26,6 @@
 #include "base/context.h"
 
 #include "mech/imu_client.h"
-#include "mech/moteus_servo.h"
 #include "mech/multiplex_client.h"
 #include "mech/quadruped_command.h"
 #include "mech/quadruped_state.h"
