@@ -17,6 +17,13 @@
 #include <boost/asio/post.hpp>
 
 #include "mjlib/base/clipp_archive.h"
+#include "mjlib/io/repeating_timer.h"
+
+#include "base/telemetry_registry.h"
+
+#include "mech/moteus.h"
+
+namespace pl = std::placeholders;
 
 namespace mjmech {
 namespace mech {
@@ -29,12 +36,77 @@ class TurretControl::Impl {
       : executor_(context.executor),
         client_getter_(client_getter),
         imu_getter_(imu_getter) {
+    context.telemetry_registry->Register("imu", &imu_signal_);
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
+    client_ = client_getter_();
+    imu_client_ = imu_getter_();
+
+    PopulateStatusRequest();
+
+    timer_.start(mjlib::base::ConvertSecondsToDuration(parameters_.period_s),
+                 std::bind(&Impl::HandleTimer, this, pl::_1));
+
     boost::asio::post(
         executor_,
         std::bind(std::move(callback), mjlib::base::error_code()));
+  }
+
+  void PopulateStatusRequest() {
+    status_request_ = {};
+    for (int id : { 1, 2}) {
+      status_request_.push_back({});
+      auto& current = status_request_.back();
+      current.id = id;
+      current.request.ReadMultiple(moteus::Register::kMode, 4, 1);
+      current.request.ReadMultiple(moteus::Register::kVoltage, 3, 0);
+    }
+  }
+
+  void HandleTimer(const mjlib::base::error_code& ec) {
+    if (ec == boost::asio::error::operation_aborted) { return; }
+    mjlib::base::FailIf(ec);
+
+    if (!client_) { return; }
+    if (outstanding_) { return; }
+
+    outstanding_ = true;
+
+    status_outstanding_ = 2;
+
+    client_->AsyncRegisterMultiple(
+        status_request_, &status_reply_,
+        std::bind(&Impl::HandleStatus, this, pl::_1));
+
+    imu_client_->ReadImu(
+        &imu_data_, std::bind(&Impl::HandleStatus, this, pl::_1));
+  }
+
+  void HandleStatus(const mjlib::base::error_code& ec) {
+    mjlib::base::FailIf(ec);
+
+    status_outstanding_--;
+    if (status_outstanding_ > 0) { return; }
+
+    imu_signal_(&imu_data_);
+
+    UpdateStatus();
+
+    RunControl();
+  }
+
+  void UpdateStatus() {
+  }
+
+  void RunControl() {
+    boost::asio::post(
+        executor_,
+        std::bind(&Impl::HandleCommand, this, mjlib::base::error_code()));
+  }
+
+  void HandleCommand(const mjlib::base::error_code& ec) {
+    outstanding_ = false;
   }
 
   boost::asio::executor executor_;
@@ -43,6 +115,21 @@ class TurretControl::Impl {
 
   Status status_;
   Parameters parameters_;
+
+  using Client = MultiplexClient::Client;
+  Client* client_ = nullptr;
+  ImuClient* imu_client_ = nullptr;
+
+  mjlib::io::RepeatingTimer timer_{executor_};
+  bool outstanding_ = false;
+  int status_outstanding_ = 0;
+
+  using Request = std::vector<Client::IdRequest>;
+  Request status_request_;
+  Client::Reply status_reply_;
+
+  AttitudeData imu_data_;
+  boost::signals2::signal<void (const AttitudeData*)> imu_signal_;
 };
 
 TurretControl::TurretControl(base::Context& context,
