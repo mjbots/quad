@@ -46,8 +46,19 @@ class Quadruped::Impl {
         context,
         [&]() { return m_.multiplex_client->selected(); },
         [&]() { return m_.imu_client->selected(); } );
-    m_.web_control = std::make_unique<WebControl>(
-        context.executor, m_.quadruped_control.get());
+    m_.web_control = std::make_unique<QuadrupedWebControl>(
+        context.executor,
+        [q=m_.quadruped_control.get()](const auto& cmd) {
+          q->Command(cmd);
+        },
+        [q=m_.quadruped_control.get()]() {
+          return q->status();
+        },
+        []() {
+          QuadrupedWebControl::Options options;
+          options.asset_path = "web_control_assets";
+          return options;
+        }());
     m_.rf_control = std::make_unique<RfControl>(
         context, m_.quadruped_control.get(),
         [&]() { return m_.imu_client->selected(); } );

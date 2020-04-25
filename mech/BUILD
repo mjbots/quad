@@ -56,7 +56,6 @@ cc_library(
         "turret_control.cc",
         "trajectory.cc",
         "video_display.cc",
-        "web_control.cc",
         "web_server.cc",
     ],
     hdrs = glob(["*.h"]),
