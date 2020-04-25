@@ -1,6 +1,6 @@
 #!/usr/bin/python3 -B
 
-# Copyright 2018 Josh Pieper.  All rights reserved.
+# Copyright 2018-2020 Josh Pieper.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,12 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Sets up a raspberry pi 3b+ for use as an mjmech computer.
+"""Sets up a raspberry pi 3b+ for use as an mjmech computer.
+
+The base operating system should already be installed.  Either a
+vanilla raspbian can be used, or the PREEMPT_RT variant from
+https://github.com/guysoft/RealtimePi is possible.
 
 It is intended to be run as root, like:
 
 sudo ./setup-system.py
+
 """
 
 import os
@@ -34,6 +38,36 @@ ORIG_SUFFIX = time.strftime(".orig-%Y%m%d-%H%M%S")
 def run(*args, **kwargs):
     print('run: ' + args[0])
     subprocess.check_call(*args, shell=True, **kwargs)
+
+
+def ensure_keyword_present(filename, keyword, value):
+    '''Ensure the given keyword is present in a one-line file'''
+
+    current_content = [
+        x.strip() for x in open(filename, encoding='utf-8').readlines()]
+
+    assert len(current_content) == 1
+
+
+    new_item = "{}={}".format(keyword, value)
+
+    items = [x.strip() for x in current_content[0].split(' ')]
+
+    present = [x for x in items if x == keyword or x.startswith(keyword + '=')]
+    if len(present):
+        new_items = [x if not (x == keyword or x.startswith(keyword + '=')) else
+                     new_item for x in items]
+    else:
+        new_items = items + [new_item]
+
+    if new_items == items:
+        return
+
+    print('ensure_keyword_present({}): Adding: {}={}'.format(
+        filename, keyword, value))
+
+    with open(filename, 'w', encoding='utf-8') as f:
+        f.write(' '.join(new_items) + '\n')
 
 
 def ensure_present(filename, line):
@@ -121,10 +155,21 @@ def main():
     # This we have to manually enable the UART once it is done.
     set_config_var('enable_uart', '1')
 
+    # We have US keyboards!
+    ensure_contents('/etc/default/keyboard', '''
+XKBMODEL="pc105"
+XKBLAYOUT="us"
+XKBVARIANT=""
+XKBOPTIONS=""
+BACKSPACE="guess"
+''')
+
 
     # Switch to use the PL011 UART
     #  https://www.raspberrypi.org/documentation/configuration/uart.md
     ensure_present('/boot/config.txt', 'dtoverlay=pi3-disable-bt')
+
+    ensure_keyword_present('/boot/cmdline.txt', 'isolcpus', '1,2,3')
 
     ensure_contents('/etc/network/interfaces',
                     '''
@@ -157,13 +202,17 @@ iface wlan0 inet static
     post-up ip route add 239.89.108.0/24 dev wlan0
 ''')
 
+    MAC = subprocess.check_output(
+        "iw dev wlan0 info | grep addr | perl -pe 's/.*addr //; s/://g'",
+        shell=True).decode('utf-8').strip()
+
     ensure_contents('/etc/hostapd/hostapd.conf',
                     '''
 country_code=US
 
 interface=wlan0
 driver=nl80211
-ssid=MjMech
+ssid=MjMech-{MAC}
 hw_mode=a
 ieee80211n=1
 require_ht=1
@@ -189,7 +238,7 @@ wpa_passphrase=WalkingRobots
 wpa_key_mgmt=WPA-PSK
 wpa_pairwise=TKIP
 rsn_pairwise=CCMP
-''')
+'''.format(MAC=MAC))
 
     ensure_present('/etc/default/hostapd',
                    'DAEMON_CONF="/etc/hostapd/hostapd.conf"')
