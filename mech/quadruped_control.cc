@@ -1731,6 +1731,15 @@ class QuadrupedControl::Impl {
           break;
         }
         case BM::kBackPush: {
+          // In this mode, we just track the current pitch rate.
+          //
+          // TODO(jpieper): We could use the IMU here, but otherwise
+          // we currently have no IMU dependencies on control
+          // whatsoever.
+          bs.pitch_deg += bs.pitch_rate_dps * dt_s;
+
+
+
           break;
         }
         case BM::kFlight: {
