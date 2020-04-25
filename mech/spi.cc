@@ -24,6 +24,7 @@
 #include "mjlib/base/system_error.h"
 
 #include "mech/rpi3_raw_aux_spi.h"
+#include "mech/rpi3_raw_spi.h"
 #include "mech/spidev.h"
 
 namespace {
@@ -98,6 +99,24 @@ class RawAuxSpiWrapper : public SpiBase {
   const int cs_;
 };
 
+class RawPriSpiWrapper : public SpiBase {
+ public:
+  RawPriSpiWrapper(const mjmech::mech::Rpi3RawSpi::Options& options)
+      : spi_(options) {}
+  ~RawPriSpiWrapper() override {}
+
+  void Write(int address, std::string_view data) override {
+    spi_.Write(0, address, data);
+  }
+
+  void Read(int address, mjlib::base::string_span data) override {
+    spi_.Read(0, address, data);
+  }
+
+ private:
+  mjmech::mech::Rpi3RawSpi spi_;
+};
+
 template <typename Spi>
 void RunInteractive(Spi* spi) {
   while (std::cin) {
@@ -146,7 +165,7 @@ int main(int argc, char** argv) {
   auto group = clipp::group(
       (clipp::option("d", "device") & clipp::value("", spi_device)) %
       "SPI device",
-      (clipp::option("mode") & clipp::value("", mode)) % "spidev/raw",
+      (clipp::option("mode") & clipp::value("", mode)) % "spidev/auxraw/priraw",
       (clipp::option("cs") & clipp::value("", cs)) % "CS line to use",
       (clipp::option("a", "address") & clipp::value("", address)) %
       "16 bit address",
@@ -165,13 +184,19 @@ int main(int argc, char** argv) {
   std::unique_ptr<SpiBase> spi;
   if (mode == "spidev") {
     spi = std::make_unique<SpiDevWrapper>(spi_device, speed_hz);
-  } else if (mode == "raw") {
+  } else if (mode == "auxraw") {
     spi = std::make_unique<RawAuxSpiWrapper>([&]() {
         mjmech::mech::Rpi3RawAuxSpi::Options options;
         options.speed_hz = speed_hz;
         return options;
       }(),
       cs);
+  } else if (mode == "priraw") {
+    spi = std::make_unique<RawPriSpiWrapper>([&]() {
+        mjmech::mech::Rpi3RawSpi::Options options;
+        options.speed_hz = speed_hz;
+        return options;
+      }());
   } else {
     std::cerr << "Unknown mode\n";
     return 1;
