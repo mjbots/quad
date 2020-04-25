@@ -53,7 +53,6 @@ cc_library(
         "rtsp_server.cc",
         "target_tracker.cc",
         "trajectory.cc",
-        "turret.cc",
         "video_display.cc",
         "web_control.cc",
         "web_server.cc",
