@@ -42,7 +42,7 @@
 
   var handleEvent = function(e) {
     var state = document.getElementById('status');
-    state.innerHTML = "Status: " + e.data;
+    state.innerHTML = "<p>Status:</p><pre>" + e.data + "</pre>";
   };
 
   var openWebsocket = function() {
