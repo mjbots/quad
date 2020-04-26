@@ -162,6 +162,9 @@ class Rpi3HatAuxStm32::Impl {
       mjlib::base::system_error::throw_if(
           ::sched_setaffinity(0, sizeof(cpu_set_t), &cpuset) < 0,
           "error setting affinity");
+
+      std::cout << fmt::format(
+          "Rpi3HatAuxStm32 cpu affinity set to {}\n", options_.cpu_affinity);
     }
 
     spi_ = std::make_unique<Rpi3RawSpi>([&]() {

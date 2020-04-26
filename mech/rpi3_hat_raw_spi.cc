@@ -32,6 +32,8 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/post.hpp>
 
+#include <fmt/format.h>
+
 #include "mjlib/base/fail.h"
 #include "mjlib/io/deadline_timer.h"
 #include "mjlib/multiplex/frame.h"
@@ -241,6 +243,8 @@ class Rpi3HatRawSpi::Impl {
       CPU_SET(options_.cpu_affinity, &cpuset);
 
       ThrowIf(::sched_setaffinity(0, sizeof(cpu_set_t), &cpuset) < 0);
+      std::cout << fmt::format(
+          "Rpi3HatRawSpi cpu affinity set to: {}\n", options_.cpu_affinity);
     }
 
     // TODO: Set realtime priority and lock memory.
