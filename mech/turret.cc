@@ -38,7 +38,13 @@ class Turret::Impl {
 
     m_.imu_client = std::make_unique<mjlib::io::Selector<AuxStm32>>(
         executor_, "type");
-    m_.imu_client->Register<Rpi3HatAuxStm32>("rpi3");
+    {
+      Rpi3HatAuxStm32::Options hat_options;
+      hat_options.mounting.yaw_deg = 0;
+      hat_options.mounting.pitch_deg = 90;
+      hat_options.mounting.roll_deg = 90;
+      m_.imu_client->Register<Rpi3HatAuxStm32>("rpi3", hat_options);
+    }
     m_.imu_client->set_default("rpi3");
 
     m_.turret_control = std::make_unique<TurretControl>(

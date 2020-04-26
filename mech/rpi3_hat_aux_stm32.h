@@ -33,14 +33,29 @@ namespace mech {
 ///  * the RF interface
 class Rpi3HatAuxStm32 : public AuxStm32 {
  public:
+  struct Mounting {
+    double yaw_deg = 0.0;
+    double pitch_deg = 90.0;
+    double roll_deg = -90.0;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(yaw_deg));
+      a->Visit(MJ_NVP(pitch_deg));
+      a->Visit(MJ_NVP(roll_deg));
+    }
+  };
+
   struct Options {
     int speed = 10000000;
     int cpu_affinity = -1;
+    Mounting mounting;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(speed));
       a->Visit(MJ_NVP(cpu_affinity));
+      a->Visit(MJ_NVP(mounting));
     }
   };
 

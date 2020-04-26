@@ -29,6 +29,8 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/post.hpp>
 
+#include <fmt/format.h>
+
 #include "mjlib/base/json5_write_archive.h"
 #include "mjlib/base/string_span.h"
 #include "mjlib/base/system_error.h"
@@ -65,6 +67,22 @@ struct DeviceAttitudeData {
   float uncertainty_bias_y_dps = 0;
   float uncertainty_bias_z_dps = 0;
   uint8_t padding[4] = {};
+} __attribute__((packed));
+
+struct DeviceMountingAngle {
+  float yaw_deg = 0;
+  float pitch_deg = 0;
+  float roll_deg = 0;
+
+  bool operator==(const DeviceMountingAngle& rhs) const {
+    return yaw_deg == rhs.yaw_deg &&
+        pitch_deg == rhs.pitch_deg &&
+        roll_deg == rhs.roll_deg;
+  }
+
+  bool operator!=(const DeviceMountingAngle& rhs) const {
+    return !(*this == rhs);
+  }
 } __attribute__((packed));
 }
 
@@ -151,6 +169,31 @@ class Rpi3HatAuxStm32::Impl {
         options.speed_hz = options_.speed;
         return options;
       }());
+
+    // Configure our mounting angle.
+    DeviceMountingAngle device_mounting;
+    device_mounting.yaw_deg = options_.mounting.yaw_deg;
+    device_mounting.pitch_deg = options_.mounting.pitch_deg;
+    device_mounting.roll_deg = options_.mounting.roll_deg;
+
+    spi_->Write(0, 36, std::string_view(
+                    reinterpret_cast<const char*>(&device_mounting),
+                    sizeof(device_mounting)));
+    // Give it some time to work.
+    ::usleep(100);
+    DeviceMountingAngle mounting_verify;
+    spi_->Read(0, 35, mjlib::base::string_span(
+                   reinterpret_cast<char*>(&mounting_verify),
+                   sizeof(mounting_verify)));
+    mjlib::base::system_error::throw_if(
+        device_mounting != mounting_verify,
+        fmt::format("Mounting angle not set properly ({},{},{}) != ({},{},{})",
+                    device_mounting.yaw_deg,
+                    device_mounting.pitch_deg,
+                    device_mounting.roll_deg,
+                    mounting_verify.yaw_deg,
+                    mounting_verify.pitch_deg,
+                    mounting_verify.roll_deg));
 
     boost::asio::io_context::work work(child_context_);
     child_context_.run();
