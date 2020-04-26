@@ -402,7 +402,6 @@ class QuadrupedControl::Impl {
     mjlib::base::FailIf(ec);
     outstanding_ = false;
 
-    const auto now = Now();
     timing_.finish_command();
     status_.timing = timing_.status();
 
