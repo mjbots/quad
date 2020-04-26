@@ -61,8 +61,8 @@ class TurretControl::Impl {
       status_request_.push_back({});
       auto& current = status_request_.back();
       current.id = id;
-      current.request.ReadMultiple(moteus::Register::kMode, 4, 1);
-      current.request.ReadMultiple(moteus::Register::kVoltage, 3, 0);
+      current.request.ReadMultiple(moteus::Register::kMode, 4, 3);
+      current.request.ReadMultiple(moteus::Register::kVoltage, 3, 1);
     }
   }
 
