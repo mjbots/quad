@@ -29,6 +29,22 @@ namespace pl = std::placeholders;
 namespace mjmech {
 namespace mech {
 
+namespace {
+struct CommandLog {
+  boost::posix_time::ptime timestamp;
+
+  const TurretControl::CommandData* command = &ignored_command;
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(MJ_NVP(timestamp));
+    const_cast<TurretControl::CommandData*>(command)->Serialize(a);
+  }
+
+  static inline TurretControl::CommandData ignored_command;
+};
+}
+
 class TurretControl::Impl {
  public:
   Impl(base::Context& context,
@@ -39,6 +55,7 @@ class TurretControl::Impl {
         imu_getter_(imu_getter) {
     context.telemetry_registry->Register("imu", &imu_signal_);
     context.telemetry_registry->Register("turret", &turret_signal_);
+    context.telemetry_registry->Register("command", &command_signal_);
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
@@ -54,6 +71,16 @@ class TurretControl::Impl {
         executor_,
         std::bind(std::move(callback), mjlib::base::error_code()));
   }
+
+  void Command(const CommandData& data) {
+    current_command_ = data;
+    CommandLog command_log;
+    command_log.timestamp = Now();
+    command_log.command = &current_command_;
+    command_signal_(&command_log);
+  }
+
+  // private
 
   void PopulateStatusRequest() {
     status_request_ = {};
@@ -228,6 +255,7 @@ class TurretControl::Impl {
   base::LogRef log_ = base::GetLogInstance("QuadrupedControl");
 
   Status status_;
+  CommandData current_command_;
   Parameters parameters_;
 
   using Client = MultiplexClient::Client;
@@ -245,6 +273,7 @@ class TurretControl::Impl {
   AttitudeData imu_data_;
   boost::signals2::signal<void (const AttitudeData*)> imu_signal_;
   boost::signals2::signal<void (const Status*)> turret_signal_;
+  boost::signals2::signal<void (const CommandLog*)> command_signal_;
 
   ControlTiming timing_{executor_, {}};
 
@@ -269,7 +298,8 @@ const TurretControl::Status& TurretControl::status() const {
   return impl_->status_;
 }
 
-void TurretControl::Command(const CommandData&) {
+void TurretControl::Command(const CommandData& command) {
+  impl_->Command(command);
 }
 
 clipp::group TurretControl::program_options() {
