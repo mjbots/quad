@@ -262,7 +262,8 @@ class QuadrupedControl::Impl {
 
     PopulateStatusRequest();
 
-    timer_.start(mjlib::base::ConvertSecondsToDuration(parameters_.period_s),
+    period_s_ = parameters_.period_s;
+    timer_.start(mjlib::base::ConvertSecondsToDuration(period_s_),
                  std::bind(&Impl::HandleTimer, this, pl::_1));
 
     boost::asio::post(
@@ -331,11 +332,7 @@ class QuadrupedControl::Impl {
     if (!client_) { return; }
     if (outstanding_) { return; }
 
-    timestamps_.last_cycle_start = timestamps_.cycle_start;
-    timestamps_.cycle_start = Now();
-
-    timestamps_.delta_s = base::ConvertDurationToSeconds(
-        timestamps_.cycle_start - timestamps_.last_cycle_start);
+    timing_ = ControlTiming(executor_, timing_.cycle_start());
 
     outstanding_ = true;
 
@@ -364,7 +361,7 @@ class QuadrupedControl::Impl {
     outstanding_status_requests_--;
     if (outstanding_status_requests_ > 0) { return; }
 
-    timestamps_.status_done = Now();
+    timing_.finish_status();
 
     if (!!imu_client_) {
       imu_signal_(&imu_data_);
@@ -390,7 +387,7 @@ class QuadrupedControl::Impl {
     *control_log_ = {};
     RunControl();
 
-    timestamps_.control_done = Now();
+    timing_.finish_control();
 
     if (!client_command_.empty()) {
       client_command_reply_ = {};
@@ -406,22 +403,8 @@ class QuadrupedControl::Impl {
     outstanding_ = false;
 
     const auto now = Now();
-    timestamps_.command_done = now;
-
-    status_.timestamp = now;
-    status_.time_status_s =
-        mjlib::base::ConvertDurationToSeconds(
-            timestamps_.status_done - timestamps_.cycle_start);
-    status_.time_control_s =
-        mjlib::base::ConvertDurationToSeconds(
-            timestamps_.control_done - timestamps_.status_done);
-    status_.time_command_s =
-        mjlib::base::ConvertDurationToSeconds(
-            timestamps_.command_done - timestamps_.control_done);
-    status_.time_cycle_s =
-        mjlib::base::ConvertDurationToSeconds(
-            timestamps_.command_done - timestamps_.cycle_start);
-    status_.time_delta_s = timestamps_.delta_s;
+    timing_.finish_command();
+    status_.timing = timing_.status();
 
     status_signal_(&status_);
   }
@@ -1057,7 +1040,7 @@ class QuadrupedControl::Impl {
       const base::Point3D delta = leg.target_mm_R - leg.pose_mm_R;
       const double distance =
           std::min(delta.norm(),
-                   timestamps_.delta_s * config_.stand_up.velocity_mm_s);
+                   period_s_ * config_.stand_up.velocity_mm_s);
       if (distance != 0.0) {
         leg.pose_mm_R += distance * (delta / delta.norm());
       }
@@ -1187,7 +1170,7 @@ class QuadrupedControl::Impl {
           MoveLegsForLR(&legs_R);
 
           status_.state.jump.velocity_mm_s +=
-              js.command.acceleration_mm_s2 * timestamps_.delta_s;
+              js.command.acceleration_mm_s2 * period_s_;
           const bool done = MoveLegsFixedSpeedZ(
               all_leg_ids_,
               &legs_R,
@@ -1339,7 +1322,7 @@ class QuadrupedControl::Impl {
       if (!!gain) {
         const auto old_value = gain->x();
         const auto new_value = (
-            old_value + timestamps_.delta_s * config_.jump.land_gain_increase);
+            old_value + period_s_ * config_.jump.land_gain_increase);
         if (new_value > 1.0) {
           gain = {};
         } else {
@@ -1436,7 +1419,7 @@ class QuadrupedControl::Impl {
     const auto old_phase = ws.phase;
     auto& phase = ws.phase;
     phase = std::fmod(
-        phase + timestamps_.delta_s / config_.walk.cycle_time_s, 1.0);
+        phase + period_s_ / config_.walk.cycle_time_s, 1.0);
     if (phase < old_phase) {
       // We have wrapped around.
       if (status_.state.robot.desired_v_mm_s_R.norm() == 0.0 &&
@@ -1629,7 +1612,7 @@ class QuadrupedControl::Impl {
 
     std::optional<BM> previous_mode;
     auto& bs = status_.state.backflip;
-    const double dt_s = timestamps_.delta_s;
+    const double dt_s = period_s_;
 
     while (true) {
       auto legs_R = old_control_log_->legs_R;
@@ -1768,11 +1751,11 @@ class QuadrupedControl::Impl {
         current_command_.pose_mm_RB.translation() -
         status_.state.robot.pose_mm_RB.translation();
     status_.state.robot.pose_mm_RB.translation() +=
-        config_.rb_filter_constant_Hz * timestamps_.delta_s * translation;
+        config_.rb_filter_constant_Hz * period_s_ * translation;
     status_.state.robot.pose_mm_RB.so3() =
         Sophus::SO3d(
             status_.state.robot.pose_mm_RB.so3().unit_quaternion().slerp(
-                config_.rb_filter_constant_Hz * timestamps_.delta_s,
+                config_.rb_filter_constant_Hz * period_s_,
                 current_command_.pose_mm_RB.so3().unit_quaternion()));
   }
 
@@ -1781,7 +1764,7 @@ class QuadrupedControl::Impl {
         current_command_.v_mm_s_R - status_.state.robot.desired_v_mm_s_R);
     const double input_delta_norm_mm_s = input_delta_mm_s.norm();
     const double max_delta_mm_s =
-        config_.lr_acceleration_mm_s2 * timestamps_.delta_s;
+        config_.lr_acceleration_mm_s2 * period_s_;
     const base::Point3D delta_mm_s =
         (input_delta_norm_mm_s < max_delta_mm_s) ?
         input_delta_mm_s :
@@ -1795,7 +1778,7 @@ class QuadrupedControl::Impl {
         current_command_.w_LR - status_.state.robot.desired_w_LR);
     const double input_delta_norm_rad_s = input_delta_rad_s.norm();
     const double max_delta_rad_s =
-        config_.lr_alpha_rad_s2 * timestamps_.delta_s;
+        config_.lr_alpha_rad_s2 * period_s_;
     const base::Point3D delta_rad_s =
         (input_delta_norm_rad_s < max_delta_rad_s) ?
         input_delta_rad_s :
@@ -1837,7 +1820,7 @@ class QuadrupedControl::Impl {
   }
 
   void MoveLegsForLR(std::vector<QC::Leg>* legs_R) {
-    const double dt = timestamps_.delta_s;
+    const double dt = period_s_;
     const auto& desired_w_LR = status_.state.robot.desired_w_LR;
     const auto& desired_v_mm_s_R = status_.state.robot.desired_v_mm_s_R;
 
@@ -2115,7 +2098,7 @@ class QuadrupedControl::Impl {
       const base::Point3D error_mm = pair.second - leg_R.position_mm;
       const double error_norm_mm = error_mm.norm();
       const double velocity_mm_s = error_norm_mm /
-          std::max(timestamps_.delta_s, remaining_s);
+          std::max(period_s_, remaining_s);
 
       // For now, we'll do this as just an infinite acceleration
       // profile.
@@ -2123,7 +2106,7 @@ class QuadrupedControl::Impl {
       const double delta_mm =
           std::min(
               error_norm_mm,
-              velocity_mm_s * timestamps_.delta_s);
+              velocity_mm_s * period_s_);
       leg_R.position_mm += error_mm.normalized() * delta_mm;
       leg_R.velocity_mm_s =
           error_mm.normalized() * velocity_mm_s;
@@ -2173,7 +2156,7 @@ class QuadrupedControl::Impl {
       const auto result = CalculateAccelerationLimitedTrajectory(
           initial, pair.second, desired_velocity_mm_s,
           config_.bounds.max_acceleration_mm_s2,
-          timestamps_.delta_s);
+          period_s_);
 
       leg_R.position_mm = result.pose_l;
       leg_R.velocity_mm_s =
@@ -2234,6 +2217,7 @@ class QuadrupedControl::Impl {
   ControlLog* control_log_ = &control_logs_[0];
   ControlLog* old_control_log_ = &control_logs_[1];
 
+  double period_s_ = 0.0;
   mjlib::io::RepeatingTimer timer_;
   using Client = MultiplexClient::Client;
 
@@ -2252,16 +2236,7 @@ class QuadrupedControl::Impl {
   Client::Reply client_command_reply_;
 
   bool outstanding_ = false;
-
-  struct Timestamps {
-    boost::posix_time::ptime last_cycle_start;
-    double delta_s = 0.0;
-
-    boost::posix_time::ptime cycle_start;
-    boost::posix_time::ptime status_done;
-    boost::posix_time::ptime control_done;
-    boost::posix_time::ptime command_done;
-  } timestamps_;
+  ControlTiming timing_{executor_, {}};
 
   int outstanding_status_requests_ = 0;
   AttitudeData imu_data_;
