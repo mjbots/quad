@@ -26,6 +26,7 @@
 
 #include "base/context.h"
 
+#include "mech/control_timing.h"
 #include "mech/imu_client.h"
 #include "mech/multiplex_client.h"
 
@@ -66,11 +67,7 @@ class TurretControl : boost::noncopyable {
     std::string fault;
 
     int missing_replies = 0;
-    double time_status_s = 0.0;
-    double time_control_s = 0.0;
-    double time_command_s = 0.0;
-    double time_cycle_s = 0.0;
-    double time_delta_s = 0.0;
+    ControlTiming::Status timing;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -78,11 +75,7 @@ class TurretControl : boost::noncopyable {
       a->Visit(MJ_NVP(mode_start));
       a->Visit(MJ_NVP(fault));
       a->Visit(MJ_NVP(missing_replies));
-      a->Visit(MJ_NVP(time_status_s));
-      a->Visit(MJ_NVP(time_control_s));
-      a->Visit(MJ_NVP(time_command_s));
-      a->Visit(MJ_NVP(time_cycle_s));
-      a->Visit(MJ_NVP(time_delta_s));
+      a->Visit(MJ_NVP(timing));
     }
   };
 

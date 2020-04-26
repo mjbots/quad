@@ -37,6 +37,7 @@ class TurretControl::Impl {
         client_getter_(client_getter),
         imu_getter_(imu_getter) {
     context.telemetry_registry->Register("imu", &imu_signal_);
+    context.telemetry_registry->Register("turret", &turret_signal_);
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
@@ -71,6 +72,8 @@ class TurretControl::Impl {
     if (!client_) { return; }
     if (outstanding_) { return; }
 
+    timing_ = ControlTiming(executor_, timing_.cycle_start());
+
     outstanding_ = true;
 
     status_outstanding_ = 2;
@@ -89,6 +92,8 @@ class TurretControl::Impl {
     status_outstanding_--;
     if (status_outstanding_ > 0) { return; }
 
+    timing_.finish_status();
+
     imu_signal_(&imu_data_);
 
     UpdateStatus();
@@ -100,13 +105,25 @@ class TurretControl::Impl {
   }
 
   void RunControl() {
+
+    timing_.finish_control();
     boost::asio::post(
         executor_,
         std::bind(&Impl::HandleCommand, this, mjlib::base::error_code()));
   }
 
   void HandleCommand(const mjlib::base::error_code& ec) {
+    timing_.finish_command();
+
+    status_.timestamp = Now();
+    status_.timing = timing_.status();
+    turret_signal_(&status_);
+
     outstanding_ = false;
+  }
+
+  boost::posix_time::ptime Now() {
+    return mjlib::io::Now(executor_.context());
   }
 
   boost::asio::executor executor_;
@@ -130,6 +147,9 @@ class TurretControl::Impl {
 
   AttitudeData imu_data_;
   boost::signals2::signal<void (const AttitudeData*)> imu_signal_;
+  boost::signals2::signal<void (const Status*)> turret_signal_;
+
+  ControlTiming timing_{executor_, {}};
 };
 
 TurretControl::TurretControl(base::Context& context,
