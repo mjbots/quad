@@ -155,6 +155,11 @@ class TurretControl::Impl {
       }
     }
 
+    status_.imu.pitch_deg = imu_data_.euler_deg.pitch;
+    status_.imu.pitch_rate_dps = imu_data_.rate_dps.y();
+    status_.imu.yaw_deg = imu_data_.euler_deg.yaw;
+    status_.imu.yaw_rate_dps = imu_data_.rate_dps.z();
+
     if (status_.mode != Mode::kFault) {
       std::string fault;
 

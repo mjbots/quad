@@ -110,6 +110,23 @@ class TurretControl : boost::noncopyable {
     GimbalServo pitch_servo;
     GimbalServo yaw_servo;
 
+    struct Imu {
+      double pitch_deg = 0.0;
+      double pitch_rate_dps = 0.0;
+      double yaw_deg = 0.0;
+      double yaw_rate_dps = 0.0;
+
+      template <typename Archive>
+      void Serialize(Archive* a) {
+        a->Visit(MJ_NVP(pitch_deg));
+        a->Visit(MJ_NVP(pitch_rate_dps));
+        a->Visit(MJ_NVP(yaw_deg));
+        a->Visit(MJ_NVP(yaw_rate_dps));
+      }
+    };
+
+    Imu imu;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(timestamp));
@@ -119,6 +136,7 @@ class TurretControl : boost::noncopyable {
       a->Visit(MJ_NVP(timing));
       a->Visit(MJ_NVP(pitch_servo));
       a->Visit(MJ_NVP(yaw_servo));
+      a->Visit(MJ_NVP(imu));
     }
   };
 
