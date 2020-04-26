@@ -43,6 +43,18 @@ struct CommandLog {
 
   static inline TurretControl::CommandData ignored_command;
 };
+
+struct ControlLog {
+  boost::posix_time::ptime timestamp;
+
+  TurretControl::ControlData control;
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(MJ_NVP(timestamp));
+    a->Visit(MJ_NVP(control));
+  }
+};
 }
 
 class TurretControl::Impl {
@@ -56,6 +68,7 @@ class TurretControl::Impl {
     context.telemetry_registry->Register("imu", &imu_signal_);
     context.telemetry_registry->Register("turret", &turret_signal_);
     context.telemetry_registry->Register("command", &command_signal_);
+    context.telemetry_registry->Register("control", &control_signal_);
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
@@ -222,9 +235,8 @@ class TurretControl::Impl {
   }
 
   void DoControl_Stop() {
-    boost::asio::post(
-        executor_,
-        std::bind(&Impl::HandleCommand, this, mjlib::base::error_code()));
+    ControlData control;
+    Control(control);
   }
 
   void DoControl_Active() {
@@ -243,6 +255,49 @@ class TurretControl::Impl {
 
     DoControl_Fault();
   }
+
+  void AddServoCommand(int id, const ControlData::Servo& servo) {
+    const double sign = servo_sign_.at(id);
+
+    client_command_.push_back({});
+    auto& request = client_command_.back();
+    request.id = id;
+
+    const auto mode =
+        servo.power ? moteus::Mode::kPosition : moteus::Mode::kStopped;
+    request.request.WriteSingle(moteus::kMode, static_cast<int8_t>(mode));
+
+    if (servo.power) {
+      request.request.WriteSingle(
+          moteus::kCommandFeedforwardTorque,
+          static_cast<float>(sign * servo.torque_Nm));
+
+      // Static only to save allocations.
+      static std::vector<moteus::Value> values;
+      if (values.empty()) {
+        values.push_back(moteus::WritePwm(0, moteus::kInt8));
+        values.push_back(moteus::WritePwm(0, moteus::kInt8));
+      }
+      request.request.WriteMultiple(moteus::kCommandKpScale, values);
+    }
+  }
+
+  void Control(const ControlData& control) {
+    ControlLog control_log;
+    control_log.timestamp = Now();
+    control_log.control = control;
+    control_signal_(&control_log);
+
+    client_command_ = {};
+    AddServoCommand(1, control.pitch);
+    AddServoCommand(2, control.yaw);
+
+    client_command_reply_ = {};
+    client_->AsyncRegisterMultiple(
+        client_command_, &client_command_reply_,
+        std::bind(&Impl::HandleCommand, this, pl::_1));
+  }
+
 
   boost::posix_time::ptime Now() {
     return mjlib::io::Now(executor_.context());
@@ -270,10 +325,14 @@ class TurretControl::Impl {
   Request status_request_;
   Client::Reply status_reply_;
 
+  Request client_command_;
+  Client::Reply client_command_reply_;
+
   AttitudeData imu_data_;
   boost::signals2::signal<void (const AttitudeData*)> imu_signal_;
   boost::signals2::signal<void (const Status*)> turret_signal_;
   boost::signals2::signal<void (const CommandLog*)> command_signal_;
+  boost::signals2::signal<void (const ControlLog*)> control_signal_;
 
   ControlTiming timing_{executor_, {}};
 

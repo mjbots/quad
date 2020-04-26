@@ -157,6 +157,28 @@ class TurretControl : boost::noncopyable {
     }
   };
 
+  struct ControlData {
+    struct Servo {
+      bool power = false;
+      double torque_Nm = 0.0;
+
+      template <typename Archive>
+      void Serialize(Archive* a) {
+        a->Visit(MJ_NVP(power));
+        a->Visit(MJ_NVP(torque_Nm));
+      }
+    };
+
+    Servo pitch;
+    Servo yaw;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(pitch));
+      a->Visit(MJ_NVP(yaw));
+    }
+  };
+
   const Status& status() const;
   void Command(const CommandData&);
 
