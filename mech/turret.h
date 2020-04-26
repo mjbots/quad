@@ -28,6 +28,7 @@
 
 #include "mech/aux_stm32.h"
 #include "mech/turret_control.h"
+#include "mech/web_control.h"
 
 namespace mjmech {
 namespace mech {
@@ -39,17 +40,22 @@ class Turret : boost::noncopyable {
 
   void AsyncStart(mjlib::io::ErrorCallback);
 
+  using TurretWebControl =
+      WebControl<TurretControl::CommandData, TurretControl::Status>;
+
   struct Members {
     std::unique_ptr<
       mjlib::io::Selector<mjlib::multiplex::AsioClient>> multiplex_client;
     std::unique_ptr<mjlib::io::Selector<AuxStm32>> imu_client;
     std::unique_ptr<TurretControl> turret_control;
+    std::unique_ptr<TurretWebControl> web_control;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(multiplex_client));
       a->Visit(MJ_NVP(imu_client));
       a->Visit(MJ_NVP(turret_control));
+      a->Visit(MJ_NVP(web_control));
     }
   };
 

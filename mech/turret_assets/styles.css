@@ -1,0 +1,18 @@
+/* Copyright 2019 Josh Pieper, jjp@pobox.com */
+/* Licensed under the Apache License, Version 2.0.  See LICENSE */
+
+#current_joystick {
+    background-color: #e0e0e0;
+}
+
+#robot_state {
+    background-color: #a0e0e0;
+}
+
+#current_command {
+    background-color: #e0a0e0;
+}
+
+div {
+    padding: 1em;
+}

@@ -61,9 +61,9 @@ class TurretControl : boost::noncopyable {
   };
 
   enum class Mode {
-    kStop,
-    kActive,
-    kFault,
+    kStop = 0,
+    kActive = 1,
+    kFault = 2,
   };
 
   static inline std::map<Mode, const char*> ModeMapper() {
@@ -122,7 +122,25 @@ class TurretControl : boost::noncopyable {
     }
   };
 
+  struct CommandData {
+    int priority = 0;
+
+    Mode mode = Mode::kStop;
+
+    double pitch_rate_dps = 0.0;
+    double yaw_rate_dps = 0.0;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(priority));
+      a->Visit(MJ_ENUM(mode, ModeMapper));
+      a->Visit(MJ_NVP(pitch_rate_dps));
+      a->Visit(MJ_NVP(yaw_rate_dps));
+    }
+  };
+
   const Status& status() const;
+  void Command(const CommandData&);
 
   clipp::group program_options();
 

@@ -264,6 +264,9 @@ const TurretControl::Status& TurretControl::status() const {
   return impl_->status_;
 }
 
+void TurretControl::Command(const CommandData&) {
+}
+
 clipp::group TurretControl::program_options() {
   return mjlib::base::ClippArchive().Accept(&impl_->parameters_).release();
 }

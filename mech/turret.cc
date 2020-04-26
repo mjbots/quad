@@ -51,6 +51,19 @@ class Turret::Impl {
         context,
         [&]() { return m_.multiplex_client->selected(); },
         [&]() { return m_.imu_client->selected(); } );
+    m_.web_control = std::make_unique<TurretWebControl>(
+        context.executor,
+        [t=m_.turret_control.get()](const auto& cmd) {
+          t->Command(cmd);
+        },
+        [t=m_.turret_control.get()]() {
+          return t->status();
+        },
+        []() {
+          TurretWebControl::Options options;
+          options.asset_path = "turret_assets";
+          return options;
+        }());
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {

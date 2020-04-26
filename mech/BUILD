@@ -25,6 +25,9 @@ filegroup(
         "web_control_assets/index.html",
         "web_control_assets/styles.css",
         "web_control_assets/js/app.js",
+        "turret_assets/index.html",
+        "turret_assets/styles.css",
+        "turret_assets/js/app.js",
     ],
 )
 
@@ -254,6 +257,9 @@ pkg_tar(
         "web_control_assets/index.html" : "web_control_assets/index.html",
         "web_control_assets/styles.css" : "web_control_assets/styles.css",
         "web_control_assets/js/app.js" : "web_control_assets/js/app.js",
+        "turret_assets/index.html" : "turret_assets/index.html",
+        "turret_assets/styles.css" : "turret_assets/styles.css",
+        "turret_assets/js/app.js" : "turret_assets/js/app.js",
     },
 )
 
