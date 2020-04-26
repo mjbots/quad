@@ -217,10 +217,44 @@ class TurretControl::Impl {
   }
 
   void RunControl() {
+    if (current_command_.mode != status_.mode) {
+      MaybeChangeMode();
+    }
+
     switch (status_.mode) {
       case Mode::kStop: { DoControl_Stop(); break; }
       case Mode::kActive: { DoControl_Active(); break; }
       case Mode::kFault: { DoControl_Fault(); break; }
+    }
+  }
+
+  void MaybeChangeMode() {
+    const auto old_mode = status_.mode;
+    switch (current_command_.mode) {
+      case Mode::kStop: {
+        status_.mode = Mode::kStop;
+        break;
+      }
+      case Mode::kActive: {
+        if (status_.mode == Mode::kFault) { break; }
+
+        status_.control = {};
+
+        // Start controlling right where we are.
+        status_.control.pitch.angle_deg = imu_data_.euler_deg.pitch;
+        status_.control.yaw.angle_deg = imu_data_.euler_deg.yaw;
+
+        status_.mode = Mode::kActive;
+        break;
+      }
+      case Mode::kFault: {
+        mjlib::base::AssertNotReached();
+      }
+    }
+
+    if (old_mode != status_.mode &&
+        old_mode == Mode::kFault) {
+      status_.fault = "";
     }
   }
 
@@ -240,7 +274,36 @@ class TurretControl::Impl {
   }
 
   void DoControl_Active() {
-    DoControl_Stop();
+    status_.control.pitch.angle_deg +=
+        current_command_.pitch_rate_dps * parameters_.period_s;
+    status_.control.yaw.angle_deg +=
+        current_command_.yaw_rate_dps * parameters_.period_s;
+
+    // Wrap around our yaw angle to always be a limited distance from
+    // the current actual.
+    const double yaw_delta_deg =
+        base::Degrees(
+            base::WrapNegPiToPi(
+                base::Radians(
+                    status_.control.yaw.angle_deg - imu_data_.euler_deg.yaw)));
+    status_.control.yaw.angle_deg = imu_data_.euler_deg.yaw + yaw_delta_deg;
+
+    ControlData control;
+    control.pitch.power = true;
+    control.pitch.torque_Nm =
+        pitch_pid_.Apply(
+            imu_data_.euler_deg.pitch, status_.control.pitch.angle_deg,
+            imu_data_.rate_dps.y(), current_command_.pitch_rate_dps,
+            1.0 / parameters_.period_s);
+
+    control.yaw.power = true;
+    control.yaw.torque_Nm =
+        yaw_pid_.Apply(
+            imu_data_.euler_deg.yaw, status_.control.yaw.angle_deg,
+            imu_data_.rate_dps.z(), current_command_.yaw_rate_dps,
+            1.0 / parameters_.period_s);
+
+    Control(control);
   }
 
   void DoControl_Fault() {
@@ -340,6 +403,9 @@ class TurretControl::Impl {
     { 1, 1.0 },
     { 2, -1.0 },
   };
+
+  mjlib::base::PID pitch_pid_{&parameters_.pitch, &status_.control.pitch.pid};
+  mjlib::base::PID yaw_pid_{&parameters_.yaw, &status_.control.yaw.pid};
 };
 
 TurretControl::TurretControl(base::Context& context,

@@ -38,7 +38,7 @@
   var NUM_BUTTONS = 16;
 
   var PITCH_RATE_MAX_DPS = 30.0;
-  var YAW_RATE_MAX_DPS = 30.0;
+  var YAW_RATE_MAX_DPS = 100.0;
 
   var handleEvent = function(e) {
     var state = document.getElementById('status');

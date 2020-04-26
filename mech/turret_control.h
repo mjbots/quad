@@ -22,6 +22,7 @@
 
 #include <boost/noncopyable.hpp>
 
+#include "mjlib/base/pid.h"
 #include "mjlib/base/visitor.h"
 
 #include "base/context.h"
@@ -48,6 +49,8 @@ class TurretControl : boost::noncopyable {
     double period_s = 0.01;
     double max_torque_Nm = -1.0;
     std::string config;
+    mjlib::base::PID::Config pitch;
+    mjlib::base::PID::Config yaw;
 
     double command_timeout_s = 1.0;
 
@@ -57,6 +60,24 @@ class TurretControl : boost::noncopyable {
       a->Visit(MJ_NVP(max_torque_Nm));
       a->Visit(MJ_NVP(config));
       a->Visit(MJ_NVP(command_timeout_s));
+      a->Visit(MJ_NVP(pitch));
+      a->Visit(MJ_NVP(yaw));
+    }
+
+    Parameters() {
+      pitch.kp = 0.05;
+      pitch.kd = 0.005;
+      pitch.ki = 0.0;
+      pitch.ilimit = 0.0;
+      pitch.sign = -1.0;
+      pitch.max_desired_rate = 100.0;
+
+      yaw.kp = 0.05;
+      yaw.kd = 0.005;
+      yaw.ki = 0.0;
+      yaw.ilimit = 0.0;
+      yaw.sign = -1.0;
+      yaw.max_desired_rate = 0.0;  // disable this
     }
   };
 
@@ -110,6 +131,30 @@ class TurretControl : boost::noncopyable {
     GimbalServo pitch_servo;
     GimbalServo yaw_servo;
 
+    struct ServoControl {
+      double angle_deg = 0.0;
+      mjlib::base::PID::State pid;
+
+      template <typename Archive>
+      void Serialize(Archive* a) {
+        a->Visit(MJ_NVP(angle_deg));
+        a->Visit(MJ_NVP(pid));
+      }
+    };
+
+    struct Control {
+      ServoControl pitch;
+      ServoControl yaw;
+
+      template <typename Archive>
+      void Serialize(Archive* a) {
+        a->Visit(MJ_NVP(pitch));
+        a->Visit(MJ_NVP(yaw));
+      }
+    };
+
+    Control control;
+
     struct Imu {
       double pitch_deg = 0.0;
       double pitch_rate_dps = 0.0;
@@ -136,6 +181,7 @@ class TurretControl : boost::noncopyable {
       a->Visit(MJ_NVP(timing));
       a->Visit(MJ_NVP(pitch_servo));
       a->Visit(MJ_NVP(yaw_servo));
+      a->Visit(MJ_NVP(control));
       a->Visit(MJ_NVP(imu));
     }
   };
