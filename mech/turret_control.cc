@@ -113,6 +113,7 @@ class TurretControl::Impl {
       if (!servo) { continue; }
 
       servo->id = reply.id;
+      const double sign = servo_sign_.at(reply.id);
 
       for (const auto& pair : reply.reply) {
         const auto* maybe_value = std::get_if<moteus::Value>(&pair.second);
@@ -124,15 +125,15 @@ class TurretControl::Impl {
             break;
           }
           case moteus::kPosition: {
-            servo->angle_deg = moteus::ReadPosition(value);
+            servo->angle_deg = sign * moteus::ReadPosition(value);
             break;
           }
           case moteus::kVelocity: {
-            servo->velocity_dps = moteus::ReadPosition(value);
+            servo->velocity_dps = sign * moteus::ReadPosition(value);
             break;
           }
           case moteus::kTorque: {
-            servo->torque_Nm = moteus::ReadTorque(value);
+            servo->torque_Nm = sign * moteus::ReadTorque(value);
             break;
           }
           case moteus::kVoltage: {
@@ -241,6 +242,11 @@ class TurretControl::Impl {
   boost::signals2::signal<void (const Status*)> turret_signal_;
 
   ControlTiming timing_{executor_, {}};
+
+  std::map<int, double> servo_sign_ = {
+    { 1, 1.0 },
+    { 2, -1.0 },
+  };
 };
 
 TurretControl::TurretControl(base::Context& context,
