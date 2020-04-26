@@ -60,22 +60,65 @@ class TurretControl : boost::noncopyable {
     }
   };
 
+  enum class Mode {
+    kStop,
+    kActive,
+    kFault,
+  };
+
+  static inline std::map<Mode, const char*> ModeMapper() {
+    return {
+      { Mode::kStop, "stop" },
+      { Mode::kActive, "active" },
+      { Mode::kFault, "fault" },
+          };
+  };
+
   struct Status {
     boost::posix_time::ptime timestamp;
+    Mode mode = Mode::kStop;
 
-    boost::posix_time::ptime mode_start;
     std::string fault;
 
     int missing_replies = 0;
     ControlTiming::Status timing;
 
+    struct GimbalServo {
+      int id = 0;
+      double angle_deg = 0.0;
+      double velocity_dps = 0.0;
+      double torque_Nm = 0.0;
+
+      double temperature_C = 0.0;
+      double voltage = 0.0;
+      int32_t mode = 0;
+      int32_t fault = 0;
+
+      template <typename Archive>
+      void Serialize(Archive* a) {
+        a->Visit(MJ_NVP(id));
+        a->Visit(MJ_NVP(angle_deg));
+        a->Visit(MJ_NVP(velocity_dps));
+        a->Visit(MJ_NVP(torque_Nm));
+        a->Visit(MJ_NVP(temperature_C));
+        a->Visit(MJ_NVP(voltage));
+        a->Visit(MJ_NVP(mode));
+        a->Visit(MJ_NVP(fault));
+      }
+    };
+
+    GimbalServo pitch_servo;
+    GimbalServo yaw_servo;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(timestamp));
-      a->Visit(MJ_NVP(mode_start));
+      a->Visit(MJ_ENUM(mode, ModeMapper));
       a->Visit(MJ_NVP(fault));
       a->Visit(MJ_NVP(missing_replies));
       a->Visit(MJ_NVP(timing));
+      a->Visit(MJ_NVP(pitch_servo));
+      a->Visit(MJ_NVP(yaw_servo));
     }
   };
 

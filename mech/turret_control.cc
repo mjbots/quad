@@ -19,6 +19,7 @@
 #include "mjlib/base/clipp_archive.h"
 #include "mjlib/io/repeating_timer.h"
 
+#include "base/logging.h"
 #include "base/telemetry_registry.h"
 
 #include "mech/moteus.h"
@@ -77,6 +78,7 @@ class TurretControl::Impl {
     outstanding_ = true;
 
     status_outstanding_ = 2;
+    status_reply_ = {};
 
     client_->AsyncRegisterMultiple(
         status_request_, &status_reply_,
@@ -92,24 +94,88 @@ class TurretControl::Impl {
     status_outstanding_--;
     if (status_outstanding_ > 0) { return; }
 
-    timing_.finish_status();
-
     imu_signal_(&imu_data_);
 
     UpdateStatus();
+    timing_.finish_status();
 
     RunControl();
+    timing_.finish_control();
   }
 
   void UpdateStatus() {
+    for (const auto& reply : status_reply_.replies) {
+      auto* const servo = [&]() -> Status::GimbalServo* {
+        if (reply.id == 1) { return &status_.pitch_servo; }
+        if (reply.id == 2) { return &status_.yaw_servo; }
+        return nullptr;
+      }();
+      if (!servo) { continue; }
+
+      servo->id = reply.id;
+
+      for (const auto& pair : reply.reply) {
+        const auto* maybe_value = std::get_if<moteus::Value>(&pair.second);
+        if (!maybe_value) { continue; }
+        const auto& value = *maybe_value;
+        switch (static_cast<moteus::Register>(pair.first)) {
+          case moteus::kMode: {
+            servo->mode = moteus::ReadInt(value);
+            break;
+          }
+          case moteus::kPosition: {
+            servo->angle_deg = moteus::ReadPosition(value);
+            break;
+          }
+          case moteus::kVelocity: {
+            servo->velocity_dps = moteus::ReadPosition(value);
+            break;
+          }
+          case moteus::kTorque: {
+            servo->torque_Nm = moteus::ReadTorque(value);
+            break;
+          }
+          case moteus::kVoltage: {
+            servo->voltage = moteus::ReadVoltage(value);
+            break;
+          }
+          case moteus::kTemperature: {
+            servo->temperature_C = moteus::ReadTemperature(value);
+            break;
+          }
+          case moteus::kFault: {
+            servo->fault = moteus::ReadInt(value);
+            break;
+          }
+          default: {
+            break;
+          }
+        }
+      }
+    }
+
+    if (status_.mode != Mode::kFault) {
+      std::string fault;
+
+      for (auto* servo : { &status_.pitch_servo, &status_.yaw_servo }) {
+        if (servo->fault) {
+          if (!fault.empty()) { fault += ", "; }
+          fault += fmt::format("servo {} fault: {}", servo->id, servo->fault);
+        }
+      }
+
+      if (!fault.empty()) {
+        Fault(fault);
+      }
+    }
   }
 
   void RunControl() {
-
-    timing_.finish_control();
-    boost::asio::post(
-        executor_,
-        std::bind(&Impl::HandleCommand, this, mjlib::base::error_code()));
+    switch (status_.mode) {
+      case Mode::kStop: { DoControl_Stop(); break; }
+      case Mode::kActive: { DoControl_Active(); break; }
+      case Mode::kFault: { DoControl_Fault(); break; }
+    }
   }
 
   void HandleCommand(const mjlib::base::error_code& ec) {
@@ -122,6 +188,29 @@ class TurretControl::Impl {
     outstanding_ = false;
   }
 
+  void DoControl_Stop() {
+    boost::asio::post(
+        executor_,
+        std::bind(&Impl::HandleCommand, this, mjlib::base::error_code()));
+  }
+
+  void DoControl_Active() {
+    DoControl_Stop();
+  }
+
+  void DoControl_Fault() {
+    DoControl_Stop();
+  }
+
+  void Fault(std::string_view message) {
+    status_.mode = Mode::kFault;
+    status_.fault = message;
+
+    log_.warn("Fault: " + std::string(message));
+
+    DoControl_Fault();
+  }
+
   boost::posix_time::ptime Now() {
     return mjlib::io::Now(executor_.context());
   }
@@ -129,6 +218,8 @@ class TurretControl::Impl {
   boost::asio::executor executor_;
   ClientGetter client_getter_;
   ImuGetter imu_getter_;
+
+  base::LogRef log_ = base::GetLogInstance("QuadrupedControl");
 
   Status status_;
   Parameters parameters_;
