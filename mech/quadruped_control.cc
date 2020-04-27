@@ -403,6 +403,7 @@ class QuadrupedControl::Impl {
     outstanding_ = false;
 
     timing_.finish_command();
+    status_.timestamp = Now();
     status_.timing = timing_.status();
 
     status_signal_(&status_);
