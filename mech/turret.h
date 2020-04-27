@@ -28,6 +28,7 @@
 
 #include "mech/aux_stm32.h"
 #include "mech/turret_control.h"
+#include "mech/turret_rf_control.h"
 #include "mech/web_control.h"
 
 namespace mjmech {
@@ -49,6 +50,7 @@ class Turret : boost::noncopyable {
     std::unique_ptr<mjlib::io::Selector<AuxStm32>> imu_client;
     std::unique_ptr<TurretControl> turret_control;
     std::unique_ptr<TurretWebControl> web_control;
+    std::unique_ptr<TurretRfControl> rf_control;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -56,6 +58,7 @@ class Turret : boost::noncopyable {
       a->Visit(MJ_NVP(imu_client));
       a->Visit(MJ_NVP(turret_control));
       a->Visit(MJ_NVP(web_control));
+      a->Visit(MJ_NVP(rf_control));
     }
   };
 

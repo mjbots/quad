@@ -57,6 +57,7 @@ cc_library(
         "target_tracker.cc",
         "turret.cc",
         "turret_control.cc",
+        "turret_rf_control.cc",
         "trajectory.cc",
         "video_display.cc",
         "web_server.cc",

@@ -64,6 +64,9 @@ class Turret::Impl {
           options.asset_path = "turret_assets";
           return options;
         }());
+    m_.rf_control = std::make_unique<TurretRfControl>(
+        context, m_.turret_control.get(),
+        [&]() { return m_.imu_client->selected(); });
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {

@@ -86,7 +86,21 @@ class TurretControl::Impl {
   }
 
   void Command(const CommandData& data) {
+    const auto now = Now();
+
+    const bool higher_priority = data.priority >= current_command_.priority;
+    const bool stale =
+        !current_command_timestamp_.is_not_a_date_time() &&
+        (mjlib::base::ConvertDurationToSeconds(
+            now - current_command_timestamp_) > parameters_.command_timeout_s);
+
+    if (!higher_priority && !stale) {
+      return;
+    }
+
     current_command_ = data;
+    current_command_timestamp_ = now;
+
     CommandLog command_log;
     command_log.timestamp = Now();
     command_log.command = &current_command_;
@@ -374,6 +388,7 @@ class TurretControl::Impl {
 
   Status status_;
   CommandData current_command_;
+  boost::posix_time::ptime current_command_timestamp_;
   Parameters parameters_;
 
   using Client = MultiplexClient::Client;
