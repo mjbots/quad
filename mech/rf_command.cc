@@ -525,10 +525,10 @@ int do_main(int argc, char** argv) {
     DrawGait(gamepad, gamepad_pressed, &pending_gait_mode, &command_mode);
 
     base::Point3D v_mm_s_R;
+    base::Point3D w_LR;
     v_mm_s_R.x() = -kMaxForwardVelocity_mm_s * gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_Y];
     v_mm_s_R.y() = kMaxLateralVelocity_mm_s * gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_X];
 
-    base::Point3D w_LR;
     w_LR.z() = kMaxRotation_rad_s * gamepad.axes[GLFW_GAMEPAD_AXIS_RIGHT_X];
 
     Sophus::SE3d pose_mm_RB;
