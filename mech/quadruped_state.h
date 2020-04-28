@@ -260,12 +260,16 @@ struct QuadrupedState {
     Mode mode = kLowering;
     double pitch_deg = 0.0;
     double pitch_rate_dps = 0.0;
+    double pitch_accel_dps2 = 0.0;
+    double velocity_mm_s = 0.0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_ENUM(mode, ModeMapper));
       a->Visit(MJ_NVP(pitch_deg));
       a->Visit(MJ_NVP(pitch_rate_dps));
+      a->Visit(MJ_NVP(pitch_accel_dps2));
+      a->Visit(MJ_NVP(velocity_mm_s));
     }
   };
 

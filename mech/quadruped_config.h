@@ -217,12 +217,19 @@ struct QuadrupedConfig {
     double lower_height_mm = 45.0;
     double pitch_accel_dps2 = 5000.0;
     double max_pitch_deg = 35.0;
+    double push_pitch_deg = 55.0;
+
+    double acceleration_mm_s2 = 30000.0;
+    double push_height_mm = 180.0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(lower_height_mm));
       a->Visit(MJ_NVP(pitch_accel_dps2));
       a->Visit(MJ_NVP(max_pitch_deg));
+      a->Visit(MJ_NVP(push_pitch_deg));
+      a->Visit(MJ_NVP(acceleration_mm_s2));
+      a->Visit(MJ_NVP(push_height_mm));
     }
   };
 

@@ -1649,66 +1649,20 @@ class QuadrupedControl::Impl {
 
           // Just do a zeroth order numerical integration.  It doesn't
           // need to be that accurate.
-          bs.pitch_rate_dps += config_.backflip.pitch_accel_dps2 * dt_s;
+          bs.pitch_accel_dps2 = config_.backflip.pitch_accel_dps2;
+          bs.pitch_rate_dps += bs.pitch_accel_dps2 * dt_s;
           bs.pitch_deg += bs.pitch_rate_dps * dt_s;
 
-          const Eigen::Vector3d alpha_RB(
-              0, base::Radians(-config_.backflip.pitch_accel_dps2), 0);
-          const Eigen::Vector3d omega_RB(
-              0, base::Radians(-bs.pitch_rate_dps), 0);
-
-          // We'll denote the 'rleg' frame as centered between the
-          // axis of rotation of the rear femurs.
-
-          const double x_mm = Min(
-              legs_.begin(), legs_.end(), [](auto& leg) {
-                return leg.pose_mm_B_femur.x();
-              });
-
-          const Sophus::SE3d pose_mm_rleg_B =
-              Sophus::SE3d(Sophus::SO3d(), Eigen::Vector3d(-x_mm, 0, 0));
-
-          // And we'll denote the 'rlegp' frame as the one centered
-          // between the axis of rotation and pitched up by our
-          // current pitch amount.
-          const Sophus::SE3d pose_mm_rlegp_rleg =
-              Sophus::SE3d(
-                  Eigen::AngleAxisd(base::Radians(bs.pitch_deg),
-                                    Eigen::Vector3d::UnitY()).toRotationMatrix(),
-                  Eigen::Vector3d());
-
-          const Sophus::SE3d pose_mm_rlegp_B =
-              pose_mm_rlegp_rleg * pose_mm_rleg_B;
-
-          auto& pose_mm_RB = status_.state.robot.pose_mm_RB;
-          pose_mm_RB = pose_mm_rleg_B.inverse() * pose_mm_rlegp_B;
-
           for (auto& leg_R : legs_R) {
-            // Find the position in the 'rleg' frame.
-            const Eigen::Vector3d leg_pose_mm_B =
-                pose_mm_RB.inverse() * leg_R.position_mm;
-            const Eigen::Vector3d leg_pose_mm_rleg =
-                pose_mm_rlegp_B * leg_pose_mm_B;
-
-            // TODO(jpieper): These calculations would be unecessary
-            // if we had the ability to pass the RB angular velocity
-            // and acceleration into the R frame controller.  For now,
-            // we just lie about the R frame velocity, since we know
-            // it will be passed through.
-            leg_R.velocity_mm_s = omega_RB.cross(leg_pose_mm_rleg);
-            leg_R.force_N =
-                (config_.mass_kg / legs_.size()) * 0.001 *
-                alpha_RB.cross(leg_pose_mm_rleg) +
-                (1.0 / legs_.size()) *
-                base::Point3D(0, 0, config_.mass_kg * kGravity);
+            leg_R.stance = 1.0;
           }
 
-          // TODO: have an RB rate of change so that we can properly
-          // command velocities of the joints.
+          BackflipUpdateLegs(&legs_R, 0.0);
 
           if (bs.pitch_deg > config_.backflip.max_pitch_deg) {
             bs.mode = BM::kBackPush;
-            continue;
+            // We'll get this next time.
+            break;
           }
 
           break;
@@ -1719,13 +1673,54 @@ class QuadrupedControl::Impl {
           // TODO(jpieper): We could use the IMU here, but otherwise
           // we currently have no IMU dependencies on control
           // whatsoever.
+
+          const bool push = bs.pitch_deg > config_.backflip.push_pitch_deg;
+          const double acceleration_mm_s2 =
+              push ? config_.backflip.acceleration_mm_s2 : 0.0;
+
+          bs.pitch_accel_dps2 =
+              push ? 0.0 : config_.backflip.pitch_accel_dps2;
+          bs.pitch_rate_dps += bs.pitch_accel_dps2 * dt_s;
           bs.pitch_deg += bs.pitch_rate_dps * dt_s;
+          bs.velocity_mm_s += acceleration_mm_s2 * period_s_;
 
+          for (auto& leg_R : legs_R) {
+            const auto& config = [&]() -> const Config::Leg& {
+              for (auto& v : legs_) {
+                if (v.leg == leg_R.leg_id) { return v.config; }
+              }
+              mjlib::base::AssertNotReached();
+            }();
+            leg_R.stance = config.pose_mm_BG.translation().x() < 0.0 ? 1.0 : 0.0;
+          }
 
+          BackflipUpdateLegs(&legs_R, acceleration_mm_s2);
+
+          // We switch to flight when our legs have extended to our
+          // max jump height.
+          const double leg_mm_z = [&]() {
+            for (auto& leg_R : legs_R) {
+              if (leg_R.stance == 1.0) { return leg_R.position_mm.z(); }
+            }
+            mjlib::base::AssertNotReached();
+          }();
+
+          if (leg_mm_z > config_.backflip.push_height_mm) {
+            bs.mode = BM::kFlight;
+            continue;
+          }
 
           break;
         }
         case BM::kFlight: {
+          // In this mode, we get our legs gently back into the idle
+          // position and set our gains to be ready for landing.
+          //
+          // TODO
+          for (auto& leg_R : legs_R) {
+            leg_R.force_N = Eigen::Vector3d();
+            leg_R.velocity_mm_s = Eigen::Vector3d();
+          }
           break;
         }
         case BM::kDone: {
@@ -1738,6 +1733,88 @@ class QuadrupedControl::Impl {
       ControlLegs_R(std::move(legs_R));
       return;
     }
+  }
+
+  void BackflipUpdateLegs(std::vector<QC::Leg>* legs_R,
+                          double acceleration_mm_s2) {
+    auto& bs = status_.state.backflip;
+
+    const Eigen::Vector3d alpha_RB(
+        0, base::Radians(-bs.pitch_accel_dps2), 0);
+    const Eigen::Vector3d omega_RB(
+        0, base::Radians(-bs.pitch_rate_dps), 0);
+
+    // We'll denote the 'rleg' frame as centered between the
+    // axis of rotation of the rear femurs.
+
+    const double x_mm = Min(
+        legs_.begin(), legs_.end(), [](auto& leg) {
+          return leg.pose_mm_B_femur.x();
+        });
+
+    const Sophus::SE3d pose_mm_rleg_B =
+        Sophus::SE3d(Sophus::SO3d(), Eigen::Vector3d(-x_mm, 0, 0));
+
+    // And we'll denote the 'rlegp' frame as the one centered
+    // between the axis of rotation and pitched up by our
+    // current pitch amount.
+    const Sophus::SE3d pose_mm_rlegp_rleg =
+        Sophus::SE3d(
+            Eigen::AngleAxisd(base::Radians(bs.pitch_deg),
+                              Eigen::Vector3d::UnitY()).toRotationMatrix(),
+            Eigen::Vector3d());
+
+    const Sophus::SE3d pose_mm_rlegp_B =
+        pose_mm_rlegp_rleg * pose_mm_rleg_B;
+
+    auto& pose_mm_RB = status_.state.robot.pose_mm_RB;
+    const Sophus::SE3d old_pose_mm_RB = pose_mm_RB;
+    pose_mm_RB = pose_mm_rleg_B.inverse() * pose_mm_rlegp_B;
+    const Sophus::SE3d delta_RB = old_pose_mm_RB.inverse() * pose_mm_RB;
+
+    const double stance_legs = [&]() {
+      double result = 0.0;
+      for (const auto& leg_R : *legs_R) {
+        result += leg_R.stance;
+      }
+      return result;
+    }();
+
+    for (auto& leg_R : *legs_R) {
+      // Find the position in the 'rleg' frame.
+      const Eigen::Vector3d leg_pose_mm_B =
+          pose_mm_RB.inverse() * leg_R.position_mm;
+     const Eigen::Vector3d leg_pose_mm_rleg =
+          pose_mm_rlegp_B * leg_pose_mm_B;
+
+      if (leg_R.stance == 0.0) {
+        // We set the velocity and force to 0.  Ideally we would do so
+        // in the body frame, but we don't currently have the ability
+        // to set velocities in the body frame.
+        leg_R.position_mm = delta_RB * leg_R.position_mm;
+        leg_R.velocity_mm_s = -omega_RB.cross(leg_pose_mm_rleg);
+        leg_R.force_N = Eigen::Vector3d();
+      } else {
+        // TODO(jpieper): These calculations would be unecessary
+        // if we had the ability to pass the RB angular velocity
+        // and acceleration into the R frame controller.  For now,
+        // we just lie about the R frame velocity, since we know
+        // it will be passed through.
+        leg_R.position_mm.z() += bs.velocity_mm_s * period_s_;
+        leg_R.velocity_mm_s = omega_RB.cross(leg_pose_mm_rleg) +
+            Eigen::Vector3d(0, 0, bs.velocity_mm_s);
+        leg_R.force_N =
+            (leg_R.stance * config_.mass_kg / stance_legs) * 0.001 *
+            alpha_RB.cross(leg_pose_mm_rleg) +
+            (leg_R.stance / stance_legs) *
+            base::Point3D(
+                0, 0, config_.mass_kg * (
+                    kGravity + acceleration_mm_s2 * 0.001));
+      }
+    }
+
+    // TODO: have an RB rate of change so that we can properly
+    // command velocities of the joints.
   }
 
   void ClearDesiredMotion() {
