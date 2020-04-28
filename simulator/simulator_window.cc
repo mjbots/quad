@@ -419,12 +419,17 @@ class Servo : public mjlib::multiplex::MicroServer::Server,
 class SimMultiplex : public mjlib::multiplex::AsioClient {
  public:
   struct Options {
+    double torque_scale = 1.0;
+
     template <typename Archive>
-    void Serialize(Archive*) {}
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(torque_scale));
+    }
   };
 
-  SimMultiplex(boost::asio::executor executor, const Options&)
-      : executor_(executor) {}
+  SimMultiplex(boost::asio::executor executor, const Options& options)
+      : executor_(executor),
+        options_(options) {}
   ~SimMultiplex() override {}
 
   void AsyncRegister(
@@ -464,7 +469,7 @@ class SimMultiplex : public mjlib::multiplex::AsioClient {
 
   void AddServo(dd::Joint* joint, int id) {
     servos_[id] = std::make_unique<Servo>(
-        joint, signs_.at(id), torque_Nm_.at(id));
+        joint, signs_.at(id), options_.torque_scale * torque_Nm_.at(id));
   }
 
   void Run(double dt_s) {
@@ -491,6 +496,7 @@ class SimMultiplex : public mjlib::multiplex::AsioClient {
   }
 
   boost::asio::executor executor_;
+  const Options options_;
   std::map<int, std::unique_ptr<Servo>> servos_;
 
   std::map<int, double> signs_{
@@ -622,11 +628,13 @@ class SimAuxStm32 : public mech::AuxStm32 {
 struct Options {
   bool start_disabled = false;
   std::string config = "configs/quada1.cfg";
+  double torque_scale = 1.0;
 
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(start_disabled));
     a->Visit(MJ_NVP(config));
+    a->Visit(MJ_NVP(torque_scale));
   }
 };
 
