@@ -1721,6 +1721,8 @@ class QuadrupedControl::Impl {
               leg_R.position_mm = leg_B.position_mm;
               leg_R.velocity_mm_s = leg_B.velocity_mm_s;
               leg_R.force_N = Eigen::Vector3d();
+              const auto kp = config_.backflip.flight_kp;
+              leg_R.kp_scale = base::Point3D(kp, kp, kp);
               leg_R.stance = 0.0;
             }
 
