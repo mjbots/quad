@@ -221,6 +221,7 @@ struct QuadrupedConfig {
 
     double acceleration_mm_s2 = 30000.0;
     double push_height_mm = 180.0;
+    double flight_velocity_mm_s = 500.0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -230,6 +231,7 @@ struct QuadrupedConfig {
       a->Visit(MJ_NVP(push_pitch_deg));
       a->Visit(MJ_NVP(acceleration_mm_s2));
       a->Visit(MJ_NVP(push_height_mm));
+      a->Visit(MJ_NVP(flight_velocity_mm_s));
     }
   };
 

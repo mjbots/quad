@@ -1103,6 +1103,14 @@ class QuadrupedControl::Impl {
     ControlLegs_R(std::move(legs_R));
   }
 
+  std::vector<std::pair<int, base::Point3D>> MakeIdleLegs() const {
+    std::vector<std::pair<int, base::Point3D>> result;
+    for (const auto& leg : legs_) {
+      result.push_back(std::make_pair(leg.leg, leg.idle_R));
+    }
+    return result;
+  }
+
   void DoControl_Jump() {
     using JM = QuadrupedState::Jump::Mode;
 
@@ -1199,13 +1207,7 @@ class QuadrupedControl::Impl {
           const bool done = MoveLegsFixedSpeed(
               &legs_R,
               config_.jump.retract_velocity_mm_s,
-              [&]() {
-                std::vector<std::pair<int, base::Point3D>> result;
-                for (const auto& leg : legs_) {
-                  result.push_back(std::make_pair(leg.leg, leg.idle_R));
-                }
-                return result;
-              }());
+              MakeIdleLegs());
 
           if (done) {
             js.mode = JM::kFalling;
@@ -1706,8 +1708,28 @@ class QuadrupedControl::Impl {
           }();
 
           if (leg_mm_z > config_.backflip.push_height_mm) {
+            // Reset our RB transform.
+            auto& pose_mm_RB = status_.state.robot.pose_mm_RB;
+
+            for (auto& leg_R : legs_R) {
+              const auto& leg_B = [&]() {
+                for (const auto& v : old_control_log_->legs_B) {
+                  if (v.leg_id == leg_R.leg_id) { return v; }
+                }
+                mjlib::base::AssertNotReached();
+              }();
+              leg_R.position_mm = leg_B.position_mm;
+              leg_R.velocity_mm_s = leg_B.velocity_mm_s;
+              leg_R.force_N = Eigen::Vector3d();
+              leg_R.stance = 0.0;
+            }
+
+            pose_mm_RB = Sophus::SE3d();
+
             bs.mode = BM::kFlight;
-            continue;
+            // Execute at least one iteration here so that our new R
+            // frame coordinates take effect.
+            break;
           }
 
           break;
@@ -1715,12 +1737,9 @@ class QuadrupedControl::Impl {
         case BM::kFlight: {
           // In this mode, we get our legs gently back into the idle
           // position and set our gains to be ready for landing.
-          //
-          // TODO
-          for (auto& leg_R : legs_R) {
-            leg_R.force_N = Eigen::Vector3d();
-            leg_R.velocity_mm_s = Eigen::Vector3d();
-          }
+          MoveLegsFixedSpeed(&legs_R, config_.backflip.flight_velocity_mm_s,
+                             MakeIdleLegs());
+
           break;
         }
         case BM::kDone: {
