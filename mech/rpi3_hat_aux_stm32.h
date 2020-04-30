@@ -78,13 +78,14 @@ class Rpi3HatAuxStm32 : public AuxStm32 {
   // ***********************
   // RfClient
 
-  void AsyncWaitForSlot(uint16_t* bitfield, mjlib::io::ErrorCallback) override;
+  void AsyncWaitForSlot(
+      int* remote, uint16_t* bitfield, mjlib::io::ErrorCallback) override;
 
-  Slot rx_slot(int slot_idx) override;
+  Slot rx_slot(int remote, int slot_idx) override;
 
-  void tx_slot(int slot_id, const Slot&) override;
+  void tx_slot(int remote, int slot_id, const Slot&) override;
 
-  Slot tx_slot(int slot_idx) override;
+  Slot tx_slot(int remote, int slot_idx) override;
 
  private:
   class Impl;

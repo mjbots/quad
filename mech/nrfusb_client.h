@@ -24,14 +24,21 @@ namespace mech {
 /// An implementation of RfClient that uses the nrfusb.
 class NrfusbClient : public RfClient {
  public:
-  NrfusbClient(mjlib::io::AsyncStream*);
+  struct Options {
+    uint32_t id0 = 5678;
+    uint32_t id1 = 88754;
+
+    Options() {}
+  };
+  NrfusbClient(mjlib::io::AsyncStream*, const Options& = Options());
   ~NrfusbClient() override;
 
-  void AsyncWaitForSlot(uint16_t* bitfield, mjlib::io::ErrorCallback) override;
+  void AsyncWaitForSlot(
+      int* remote, uint16_t* bitfield, mjlib::io::ErrorCallback) override;
 
-  Slot rx_slot(int slot_idx) override;
-  void tx_slot(int slot_idx, const Slot&) override;
-  Slot tx_slot(int slot_idx) override;
+  Slot rx_slot(int remote, int slot_idx) override;
+  void tx_slot(int remote, int slot_idx, const Slot&) override;
+  Slot tx_slot(int remote, int slot_idx) override;
 
  private:
   class Impl;

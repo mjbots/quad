@@ -31,6 +31,7 @@
 
 #include <fmt/format.h>
 
+#include "mjlib/base/assert.h"
 #include "mjlib/base/json5_write_archive.h"
 #include "mjlib/base/string_span.h"
 #include "mjlib/base/system_error.h"
@@ -114,22 +115,25 @@ class Rpi3HatAuxStm32::Impl {
         });
   }
 
-  void AsyncWaitForSlot(uint16_t* bitfield,
+  void AsyncWaitForSlot(int* remote,
+                        uint16_t* bitfield,
                         mjlib::io::ErrorCallback callback) {
     rf_read_outstanding_.store(true);
     boost::asio::post(
         child_context_,
-        [this, bitfield, callback=std::move(callback)]() mutable {
-          this->Child_WaitForSlot(bitfield, std::move(callback));
+        [this, remote, bitfield, callback=std::move(callback)]() mutable {
+          this->Child_WaitForSlot(remote, bitfield, std::move(callback));
         });
   }
 
-  Slot rx_slot(int slot_idx) {
+  Slot rx_slot(int remote, int slot_idx) {
+    MJ_ASSERT(remote == 0);
     std::unique_lock lock(slot_mutex_);
     return rx_slots_[slot_idx];
   }
 
-  void tx_slot(int slot_idx, const Slot& slot) {
+  void tx_slot(int remote, int slot_idx, const Slot& slot) {
+    MJ_ASSERT(remote == 0);
     std::unique_lock lock(slot_mutex_);
     tx_slots_[slot_idx] = slot;
     boost::asio::post(
@@ -139,7 +143,8 @@ class Rpi3HatAuxStm32::Impl {
         });
   }
 
-  Slot tx_slot(int slot_idx) {
+  Slot tx_slot(int remote, int slot_idx) {
+    MJ_ASSERT(remote == 0);
     std::unique_lock lock(slot_mutex_);
     return tx_slots_[slot_idx];
   }
@@ -239,8 +244,11 @@ class Rpi3HatAuxStm32::Impl {
     char data[15] = {};
   } __attribute__((packed));
 
-  void Child_WaitForSlot(uint16_t* bitfield,
+  void Child_WaitForSlot(int* remote, uint16_t* bitfield,
                          mjlib::io::ErrorCallback callback) {
+    // We don't support multiple remotes.
+    *remote = 0;
+
     // We'll busy loop, and re-queue ourselves if IMU data is
     // available and we have a request outstanding.
     decltype(Child_PollData()) result = {};
@@ -253,8 +261,8 @@ class Rpi3HatAuxStm32::Impl {
       if (result.imu && imu_read_outstanding_.load()) {
         boost::asio::post(
             child_context_,
-            [this, bitfield, callback=std::move(callback)]() mutable {
-              Child_WaitForSlot(bitfield, std::move(callback));
+            [this, remote, bitfield, callback=std::move(callback)]() mutable {
+              Child_WaitForSlot(remote, bitfield, std::move(callback));
             });
         return;
       }
@@ -423,21 +431,22 @@ void Rpi3HatAuxStm32::ReadImu(AttitudeData* data,
 }
 
 void Rpi3HatAuxStm32::AsyncWaitForSlot(
+    int* remote,
     uint16_t* bitfield,
     mjlib::io::ErrorCallback callback) {
-  impl_->AsyncWaitForSlot(bitfield, std::move(callback));
+  impl_->AsyncWaitForSlot(remote, bitfield, std::move(callback));
 }
 
-Rpi3HatAuxStm32::Slot Rpi3HatAuxStm32::rx_slot(int slot_idx) {
-  return impl_->rx_slot(slot_idx);
+Rpi3HatAuxStm32::Slot Rpi3HatAuxStm32::rx_slot(int remote, int slot_idx) {
+  return impl_->rx_slot(remote, slot_idx);
 }
 
-void Rpi3HatAuxStm32::tx_slot(int slot_idx, const Slot& slot) {
-  impl_->tx_slot(slot_idx, slot);
+void Rpi3HatAuxStm32::tx_slot(int remote, int slot_idx, const Slot& slot) {
+  impl_->tx_slot(remote, slot_idx, slot);
 }
 
-Rpi3HatAuxStm32::Slot Rpi3HatAuxStm32::tx_slot(int slot_idx) {
-  return impl_->tx_slot(slot_idx);
+Rpi3HatAuxStm32::Slot Rpi3HatAuxStm32::tx_slot(int remote, int slot_idx) {
+  return impl_->tx_slot(remote, slot_idx);
 }
 
 }

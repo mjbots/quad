@@ -41,11 +41,15 @@
 
 #include "mech/nrfusb_client.h"
 #include "mech/quadruped_command.h"
+#include "mech/turret_control.h"
 
 namespace pl = std::placeholders;
 
 namespace mjmech {
 namespace mech {
+
+const int kRemoteRobot = 0;
+const int kRemoteTurret = 1;
 
 constexpr double kMaxForwardVelocity_mm_s = 300.0;
 constexpr double kMaxLateralVelocity_mm_s = 100.0;
@@ -95,7 +99,7 @@ class SlotCommand {
       } else {
         slot0.size = 1;
       }
-      nrfusb_.tx_slot(0, slot0);
+      nrfusb_.tx_slot(kRemoteRobot, 0, slot0);
     }
 
     {
@@ -107,12 +111,35 @@ class SlotCommand {
       tstream.Write(base::Saturate<int16_t>(v_mm_s_R.x()));
       tstream.Write(base::Saturate<int16_t>(v_mm_s_R.y()));
       tstream.Write(base::Saturate<int16_t>(32767.0 * w_LR.z() / (2 * M_PI)));
-      nrfusb_.tx_slot(2, slot2);
+      nrfusb_.tx_slot(kRemoteRobot, 2, slot2);
+    }
+
+    {
+      Slot slot0;
+      slot0.priority = 0xffffffff;
+      slot0.data[0] = 0;
+      nrfusb_.tx_slot(kRemoteTurret, 0, slot0);
     }
   }
 
+  struct Turret {
+    TurretControl::Mode mode = TurretControl::Mode::kStop;
+    int rx_count = 0;
+    double imu_pitch_deg = 0.0;
+    double imu_yaw_deg = 0.0;
+    double imu_pitch_rate_dps = 0.0;
+    double imu_yaw_rate_dps = 0.0;
+    double servo_pitch_deg = 0.0;
+    double servo_yaw_deg = 0.0;
+    double min_voltage = 0.0;
+    double max_voltage = 0.0;
+    double min_temp_C = 0.0;
+    double max_temp_C = 0.0;
+    int fault = 0;
+  };
+
   struct Data {
-    QuadrupedCommand::Mode mode;
+    QuadrupedCommand::Mode mode = QuadrupedCommand::Mode::kStopped;
     int tx_count = 0;
     int rx_count = 0;
     base::Point3D v_mm_s_R;
@@ -122,6 +149,8 @@ class SlotCommand {
     double min_temp_C = 0.0;
     double max_temp_C = 0.0;
     int fault = 0;
+
+    Turret turret;
   };
 
   const Data& data() const { return data_; }
@@ -130,12 +159,26 @@ class SlotCommand {
   void StartRead() {
     bitfield_ = 0;
     nrfusb_.AsyncWaitForSlot(
-        &bitfield_, std::bind(&SlotCommand::HandleRead, this, pl::_1));
+        &remote_, &bitfield_, std::bind(&SlotCommand::HandleRead, this, pl::_1));
   }
 
   void HandleRead(const mjlib::base::error_code& ec) {
     mjlib::base::FailIf(ec);
 
+    ProcessRead();
+
+    StartRead();
+  }
+
+  void ProcessRead() {
+    if (remote_ == kRemoteRobot) {
+      ProcessRobot();
+    } else if (remote_ == kRemoteTurret) {
+      ProcessTurret();
+    }
+  }
+
+  void ProcessRobot() {
     const auto now = mjlib::io::Now(executor_.context());
     receive_times_.push_back(now);
     while (base::ConvertDurationToSeconds(now - receive_times_.front()) > 1.0) {
@@ -147,7 +190,7 @@ class SlotCommand {
     for (int i = 0; i < 15; i++) {
       if ((bitfield_ & (1 << i)) == 0) { continue; }
 
-      const auto slot = nrfusb_.rx_slot(i);
+      const auto slot = nrfusb_.rx_slot(remote_, i);
       if (i == 0) {
         data_.mode = static_cast<QuadrupedCommand::Mode>(slot.data[0]);
         data_.tx_count = slot.data[1];
@@ -167,11 +210,39 @@ class SlotCommand {
         data_.fault = slot.data[4];
       }
     }
+  }
 
-    StartRead();
+  void ProcessTurret() {
+    auto& t = data_.turret;
+    for (int i = 0; i < 15; i++) {
+      if ((bitfield_ & (1 << i)) == 0) { continue; }
+
+      const auto slot = nrfusb_.rx_slot(remote_, i);
+      mjlib::base::BufferReadStream bs({slot.data, slot.size});
+      mjlib::telemetry::ReadStream ts{bs};
+      if (i == 0) {
+        t.mode = static_cast<TurretControl::Mode>(slot.data[0]);
+        t.rx_count = slot.data[1];
+      } else if (i == 1) {
+        t.imu_pitch_deg = *ts.Read<int16_t>() / 32767.0 * 180.0;
+        t.imu_yaw_deg = *ts.Read<int16_t>() / 32767.0 * 180.0;
+        t.imu_pitch_rate_dps = *ts.Read<int16_t>() / 32767.0 * 400.0;
+        t.imu_yaw_rate_dps = *ts.Read<int16_t>() / 32767.0 * 400.0;
+      } else if (i == 2) {
+        t.servo_pitch_deg = *ts.Read<int16_t>() / 32767.0 * 180.0;
+        t.servo_yaw_deg = *ts.Read<int16_t>() / 32767.0 * 180.0;
+      } else if (i == 8) {
+        t.min_voltage = slot.data[0];
+        t.max_voltage = slot.data[1];
+        t.min_temp_C = slot.data[2];
+        t.max_temp_C = slot.data[3];
+        t.fault = slot.data[4];
+      }
+    }
   }
 
   boost::asio::executor executor_;
+  int remote_ = 0;
   uint16_t bitfield_ = 0;
   NrfusbClient nrfusb_;
   Data data_;
@@ -179,7 +250,7 @@ class SlotCommand {
   std::deque<boost::posix_time::ptime> receive_times_;
 };
 
-void DrawTelemetry(const SlotCommand* slot_command) {
+void DrawTelemetry(const SlotCommand* slot_command, bool turret) {
   ImGui::Begin("Telemetry");
 
   if (slot_command) {
@@ -201,6 +272,29 @@ void DrawTelemetry(const SlotCommand* slot_command) {
   }
 
   ImGui::End();
+
+  if (turret) {
+    ImGui::Begin("Turret");
+    ImGui::SetWindowPos({50, 200}, ImGuiCond_FirstUseEver);
+    if (slot_command) {
+      const auto& t = slot_command->data().turret;
+      ImGui::Text("Mode: %s",
+                  get(TurretControl::ModeMapper(), t.mode));
+      ImGui::Text("tx: %d", t.rx_count);
+      ImGui::Text("pitch/yaw: (%6.1f, %6.1f)",
+                  t.imu_pitch_deg, t.imu_yaw_deg);
+      ImGui::Text("prate/yrate: (%4.0f, %4.0f)",
+                  t.imu_pitch_rate_dps, t.imu_yaw_rate_dps);
+      ImGui::Text("spitch/syaw: (%6.1f, %6.1f)",
+                  t.servo_pitch_deg, t.servo_yaw_deg);
+      ImGui::Text("V: %.0f/%.0f", t.min_voltage, t.max_voltage);
+      ImGui::Text("T: %.0f/%.0f", t.min_temp_C, t.max_temp_C);
+      ImGui::Text("flt: %d", t.fault);
+    } else {
+      ImGui::Text("N/A");
+    }
+    ImGui::End();
+  }
 }
 
 void DrawGamepad(const GLFWgamepadstate& state) {
@@ -447,6 +541,7 @@ class VideoRender {
 
 int do_main(int argc, char** argv) {
   std::string video = "/dev/video0";
+  bool turret = false;
 
   mjlib::io::StreamFactory::Options stream;
   stream.type = mjlib::io::StreamFactory::Type::kSerial;
@@ -455,6 +550,7 @@ int do_main(int argc, char** argv) {
   clipp::group group = clipp::group(
       (clipp::option("v", "video") & clipp::value("", video)),
       (clipp::option("stuff")),
+      (clipp::option("t", "turret").set(turret)),
       mjlib::base::ClippArchive("stream.").Accept(&stream).release()
   );
 
@@ -519,7 +615,7 @@ int do_main(int argc, char** argv) {
 
     TRACE_GL_ERROR();
 
-    DrawTelemetry(slot_command.get());
+    DrawTelemetry(slot_command.get(), turret);
     DrawGamepad(gamepad);
 
     DrawGait(gamepad, gamepad_pressed, &pending_gait_mode, &command_mode);

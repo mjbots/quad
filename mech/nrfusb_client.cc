@@ -29,6 +29,7 @@
 
 #include "mjlib/base/assert.h"
 #include "mjlib/base/fail.h"
+#include "mjlib/base/tokenizer.h"
 #include "mjlib/io/now.h"
 
 namespace pl = std::placeholders;
@@ -58,35 +59,39 @@ std::string FormatHexData(const std::string& data) {
 
 class NrfusbClient::Impl {
  public:
-  Impl(mjlib::io::AsyncStream* stream)
+  Impl(mjlib::io::AsyncStream* stream, const Options& options)
       : stream_(stream) {
+    Write(fmt::format("\nconf set slot.ids.0 {}\nconf set slot.ids.1 {}\n",
+                      options.id0, options.id1));
     StartRead();
   }
 
-  void AsyncWaitForSlot(uint16_t* bitfield, mjlib::io::ErrorCallback callback) {
+  void AsyncWaitForSlot(int* remote,
+                        uint16_t* bitfield, mjlib::io::ErrorCallback callback) {
     BOOST_ASSERT(!bitfield_);
+    remote_ = remote;
     bitfield_ = bitfield;
     callback_ = std::move(callback);
     MaybeProcessCallback();
   }
 
-  Slot rx_slot(int slot_idx) {
-    MJ_ASSERT(slot_idx >= 0 && slot_idx < rx_slots_.size());
-    return rx_slots_[slot_idx];
+  Slot rx_slot(int remote, int slot_idx) {
+    MJ_ASSERT(slot_idx >= 0 && slot_idx < 15);
+    return rx_slots_[remote][slot_idx];
   }
 
-  void tx_slot(int slot_idx, const Slot& slot) {
-    MJ_ASSERT(slot_idx >= 0 && slot_idx < tx_slots_.size());
-    tx_slots_[slot_idx] = slot;
+  void tx_slot(int remote, int slot_idx, const Slot& slot) {
+    MJ_ASSERT(slot_idx >= 0 && slot_idx < 15);
+    tx_slots_[remote][slot_idx] = slot;
 
-    Write(fmt::format("slot pri {} {:08x}\nslot tx {} {}\n",
-                      slot_idx, slot.priority,
-                      slot_idx, FormatHexData({slot.data, slot.size})));
+    Write(fmt::format("slot pri2 {} {} {:08x}\nslot tx2 {} {} {}\n",
+                      remote, slot_idx, slot.priority,
+                      remote, slot_idx, FormatHexData({slot.data, slot.size})));
   }
 
-  Slot tx_slot(int slot_idx) {
-    MJ_ASSERT(slot_idx >= 0 && slot_idx < tx_slots_.size());
-    return tx_slots_[slot_idx];
+  Slot tx_slot(int remote, int slot_idx) {
+    MJ_ASSERT(slot_idx >= 0 && slot_idx < 15);
+    return tx_slots_[remote][slot_idx];
   }
 
  private:
@@ -101,6 +106,7 @@ class NrfusbClient::Impl {
         stream_->get_executor(),
         std::bind(std::move(callback_), mjlib::base::error_code()));
 
+    remote_ = nullptr;
     bitfield_ = nullptr;
     callback_ = {};
   }
@@ -130,26 +136,39 @@ class NrfusbClient::Impl {
     if (line.empty()) { return; }
     if (line == "OK") { return; }
 
-    if (line.substr(0, 4) == "rcv ")  {
-      HandleReceive(line.substr(4));
+    if (line.substr(0, 5) == "rcv2 ") {
+      HandleReceive2(line.substr(5));
+    } else if (line.substr(0, 4) == "rcv ")  {
+      HandleReceive(0, line.substr(4));
     }
 
     // Some unknown line.  We'll ignore for now.
   }
 
-  void HandleReceive(const std::string& line) {
+  void HandleReceive2(const std::string& line) {
+    mjlib::base::Tokenizer tokenizer(line, " ");
+    const int remote = std::strtol(tokenizer.next().data(), nullptr, 0);
+    HandleReceive(remote, std::string(tokenizer.remaining()));
+  }
+
+  void HandleReceive(int remote, const std::string& line) {
     const auto now = mjlib::io::Now(stream_->get_executor().context());
 
     std::vector<std::string> fields;
     boost::split(fields, line, boost::is_any_of(" "));
     for (const auto& field : fields) {
-      HandleField(now, field);
+      HandleField(now, remote, field);
+    }
+
+    if (remote_) {
+      *remote_ = remote;
     }
 
     MaybeProcessCallback();
   }
 
   void HandleField(boost::posix_time::ptime now,
+                   int remote,
                    const std::string& field) {
     const size_t pos = field.find(':');
     if (pos == std::string::npos) {
@@ -169,7 +188,7 @@ class NrfusbClient::Impl {
 
     const auto data = *maybe_data;
 
-    auto& slot = rx_slots_[slot_num];
+    auto& slot = rx_slots_[remote][slot_num];
     const auto to_copy =
         std::min<std::size_t>(sizeof(slot.data), data.size());
     std::memcpy(&slot.data[0], data.data(), to_copy);
@@ -205,8 +224,8 @@ class NrfusbClient::Impl {
 
   mjlib::io::AsyncStream* const stream_;
 
-  std::array<Slot, 15> rx_slots_ = {};
-  std::array<Slot, 15> tx_slots_ = {};
+  std::map<int, std::array<Slot, 15>> rx_slots_ = {};
+  std::map<int, std::array<Slot, 15>> tx_slots_ = {};
 
   boost::asio::streambuf read_streambuf_;
   boost::asio::streambuf write_streambuf_;
@@ -214,30 +233,32 @@ class NrfusbClient::Impl {
 
   uint16_t pending_bitfield_ = 0;
 
+  int* remote_ = nullptr;
   uint16_t* bitfield_ = nullptr;
   mjlib::io::ErrorCallback callback_;
 };
 
-NrfusbClient::NrfusbClient(mjlib::io::AsyncStream* stream)
-    : impl_(std::make_unique<Impl>(stream)) {}
+NrfusbClient::NrfusbClient(mjlib::io::AsyncStream* stream,
+                           const Options& options)
+    : impl_(std::make_unique<Impl>(stream, options)) {}
 
 NrfusbClient::~NrfusbClient() {}
 
 void NrfusbClient::AsyncWaitForSlot(
-    uint16_t* bitfield, mjlib::io::ErrorCallback callback) {
-  impl_->AsyncWaitForSlot(bitfield, std::move(callback));
+    int* remote, uint16_t* bitfield, mjlib::io::ErrorCallback callback) {
+  impl_->AsyncWaitForSlot(remote, bitfield, std::move(callback));
 }
 
-NrfusbClient::Slot NrfusbClient::rx_slot(int slot_idx) {
-  return impl_->rx_slot(slot_idx);
+NrfusbClient::Slot NrfusbClient::rx_slot(int remote, int slot_idx) {
+  return impl_->rx_slot(remote, slot_idx);
 }
 
-void NrfusbClient::tx_slot(int slot_idx, const Slot& slot) {
-  impl_->tx_slot(slot_idx, slot);
+void NrfusbClient::tx_slot(int remote, int slot_idx, const Slot& slot) {
+  impl_->tx_slot(remote, slot_idx, slot);
 }
 
-NrfusbClient::Slot NrfusbClient::tx_slot(int slot_idx) {
-  return impl_->tx_slot(slot_idx);
+NrfusbClient::Slot NrfusbClient::tx_slot(int remote, int slot_idx) {
+  return impl_->tx_slot(remote, slot_idx);
 }
 
 

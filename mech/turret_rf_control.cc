@@ -97,6 +97,8 @@ auto vmax = [](const auto& container, auto getter, auto incase) {
         return getter(lhs) < getter(rhs);
       }));
 };
+
+constexpr int kOnlyRemote = 0;
 }
 
 struct SlotData {
@@ -149,7 +151,7 @@ class TurretRfControl::Impl {
  private:
   void StartRead() {
     rf_->AsyncWaitForSlot(
-        &bitfield_, std::bind(&Impl::HandleSlot, this, pl::_1));
+        &remote_, &bitfield_, std::bind(&Impl::HandleSlot, this, pl::_1));
   }
 
   void HandleSlot(const mjlib::base::error_code& ec) {
@@ -166,7 +168,7 @@ class TurretRfControl::Impl {
     for (int i = 0; i < 15; i++) {
       if (!(bitfield_ & (1 << i))) { continue; }
 
-      const auto slot = rf_->rx_slot(i);
+      const auto slot = rf_->rx_slot(kOnlyRemote, i);
       slot_data_.rx[i].timestamp = slot.timestamp;
       slot_data_.rx[i].size = slot.size;
       std::memcpy(&slot_data_.rx[i].data[0], &slot.data[0], slot.size);
@@ -241,7 +243,7 @@ class TurretRfControl::Impl {
       slot0.priority = 0xffffffff;
       slot0.data[0] = static_cast<uint8_t>(s.mode);
       slot0.data[1] = base::Saturate<uint8_t>(receive_times_.size());
-      rf_->tx_slot(0, slot0);
+      rf_->tx_slot(kOnlyRemote, 0, slot0);
     }
     {
       Slot slot1;
@@ -249,11 +251,11 @@ class TurretRfControl::Impl {
       slot1.priority = 0xffffffff;
       mjlib::base::BufferWriteStream bs({slot1.data, slot1.size});
       mjlib::telemetry::WriteStream ts{bs};
-      ts.Write(base::Saturate<int16_t>(s.imu.pitch_deg / 32767.0 * 180.0));
-      ts.Write(base::Saturate<int16_t>(s.imu.yaw_deg / 32767.0 * 180.0));
-      ts.Write(base::Saturate<int16_t>(s.imu.pitch_rate_dps / 32767.0 * 400.0));
-      ts.Write(base::Saturate<int16_t>(s.imu.yaw_rate_dps / 32767.0 * 400.0));
-      rf_->tx_slot(1, slot1);
+      ts.Write(base::Saturate<int16_t>(32767.0 * s.imu.pitch_deg / 180.0));
+      ts.Write(base::Saturate<int16_t>(32767.0 * s.imu.yaw_deg / 180.0));
+      ts.Write(base::Saturate<int16_t>(32767.0 * s.imu.pitch_rate_dps /  400.0));
+      ts.Write(base::Saturate<int16_t>(32767.0 * s.imu.yaw_rate_dps / 400.0));
+      rf_->tx_slot(kOnlyRemote, 1, slot1);
     }
     {
       Slot slot2;
@@ -263,7 +265,7 @@ class TurretRfControl::Impl {
       mjlib::telemetry::WriteStream ts{bs};
       ts.Write(base::Saturate<int16_t>(s.pitch_servo.angle_deg / 180.0 * 32767.0));
       ts.Write(base::Saturate<int16_t>(base::WrapNegPiToPi(base::Radians(s.yaw_servo.angle_deg)) / M_PI * 32767.0));
-      rf_->tx_slot(2, slot2);
+      rf_->tx_slot(kOnlyRemote, 2, slot2);
     }
 
     {
@@ -287,20 +289,20 @@ class TurretRfControl::Impl {
       ts.Write(
           base::Saturate<int8_t>(
               vmax(servos, [](const auto& j) { return j->fault; }, 0)));
-      rf_->tx_slot(8, slot8);
+      rf_->tx_slot(kOnlyRemote, 8, slot8);
     }
     {
       Slot slot14;
       if (!fault) {
         slot14.priority = 0x01010101;
         slot14.size = 0;
-        rf_->tx_slot(14, slot14);
+        rf_->tx_slot(kOnlyRemote, 14, slot14);
       } else {
         slot14.priority = 0xaaaaaaaa;
         auto size = std::min<size_t>(13, s.fault.size());
         slot14.size = size;
         std::memcpy(slot14.data, s.fault.data(), size);
-        rf_->tx_slot(14, slot14);
+        rf_->tx_slot(kOnlyRemote, 14, slot14);
       }
     }
   }
@@ -311,6 +313,7 @@ class TurretRfControl::Impl {
 
   RfClient* rf_ = nullptr;
 
+  int remote_ = 0;
   uint16_t bitfield_ = 0;
 
   SlotData slot_data_;

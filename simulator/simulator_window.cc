@@ -590,17 +590,17 @@ class SimAuxStm32 : public mech::AuxStm32 {
   // ***********************
   // RfClient
 
-  void AsyncWaitForSlot(uint16_t* bitfield, mjlib::io::ErrorCallback) override {
+  void AsyncWaitForSlot(int*, uint16_t* bitfield, mjlib::io::ErrorCallback) override {
   }
 
-  Slot rx_slot(int slot_idx) override {
+  Slot rx_slot(int, int slot_idx) override {
     return slot_;
   }
 
-  void tx_slot(int slot_id, const Slot&) override {
+  void tx_slot(int, int slot_id, const Slot&) override {
   }
 
-  Slot tx_slot(int slot_idx) override {
+  Slot tx_slot(int, int slot_idx) override {
     return slot_;
   }
 

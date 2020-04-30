@@ -29,7 +29,8 @@ class RfClient {
   ///
   /// @param bitfield will be set with a 1 for each slot which has
   /// been updated.
-  virtual void AsyncWaitForSlot(uint16_t* bitfield, mjlib::io::ErrorCallback) = 0;
+  virtual void AsyncWaitForSlot(
+      int* remote, uint16_t* bitfield, mjlib::io::ErrorCallback) = 0;
 
   struct Slot {
     /// The timestamp is only valid for rx, and is ignored for tx.
@@ -44,13 +45,13 @@ class RfClient {
   };
 
   /// Return the current value of the given receive slot.
-  virtual Slot rx_slot(int slot_idx) = 0;
+  virtual Slot rx_slot(int remote, int slot_idx) = 0;
 
   /// Set the given transmit slot.
-  virtual void tx_slot(int slot_idx, const Slot&) = 0;
+  virtual void tx_slot(int remote, int slot_idx, const Slot&) = 0;
 
   /// Retrieve the currently selected transmit slot.
-  virtual Slot tx_slot(int slot_idx) = 0;
+  virtual Slot tx_slot(int remote, int slot_idx) = 0;
 };
 
 }
