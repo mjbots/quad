@@ -198,6 +198,20 @@ class Rpi3HatAuxStm32::Impl {
                     mounting_verify.pitch_deg,
                     mounting_verify.roll_deg));
 
+    // Configure our RF id.
+    spi_->Write(0, 50, std::string_view(
+                    reinterpret_cast<const char*>(&options_.rf_id),
+                    sizeof(uint32_t)));
+    ::usleep(100);
+    uint32_t id_verify = 0;
+    spi_->Read(0, 49, mjlib::base::string_span(
+                   reinterpret_cast<char*>(&id_verify), sizeof(id_verify)));
+    mjlib::base::system_error::throw_if(
+        options_.rf_id != id_verify,
+        fmt::format("RF Id not set properly ({} != {})",
+                    options_.rf_id,
+                    id_verify));
+
     boost::asio::io_context::work work(child_context_);
     child_context_.run();
   }

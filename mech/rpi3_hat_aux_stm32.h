@@ -50,12 +50,14 @@ class Rpi3HatAuxStm32 : public AuxStm32 {
     int speed = 10000000;
     int cpu_affinity = -1;
     Mounting mounting;
+    uint32_t rf_id = 5678;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(speed));
       a->Visit(MJ_NVP(cpu_affinity));
       a->Visit(MJ_NVP(mounting));
+      a->Visit(MJ_NVP(rf_id));
     }
   };
 

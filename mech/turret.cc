@@ -43,6 +43,7 @@ class Turret::Impl {
       hat_options.mounting.yaw_deg = 0;
       hat_options.mounting.pitch_deg = 90;
       hat_options.mounting.roll_deg = 90;
+      hat_options.rf_id = 88754;
       m_.imu_client->Register<Rpi3HatAuxStm32>("rpi3", hat_options);
     }
     m_.imu_client->set_default("rpi3");
