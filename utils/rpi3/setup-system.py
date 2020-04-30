@@ -133,7 +133,7 @@ def main():
         raise RuntimeError('must be run as root')
 
     # Some useful utilities
-    run('apt install --yes socat setserial')
+    run('apt install --yes socat setserial screen')
 
     # Things necessary to be an AP
     run('apt install --yes hostapd dnsmasq')
