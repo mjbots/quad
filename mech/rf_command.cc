@@ -381,7 +381,12 @@ void DrawGait(const GLFWgamepadstate& gamepad,
 
 class VideoRender {
  public:
-  VideoRender(std::string_view filename)
+  struct Options {
+    double rotate_deg = 0.0;
+
+    Options() {}
+  };
+  VideoRender(std::string_view filename, const Options& options = Options())
       : file_(
           filename,
           {
@@ -390,19 +395,33 @@ class VideoRender {
                 },
           ffmpeg::File::Flags()
           .set_nonblock(true)
-          .set_input_format(ffmpeg::InputFormat("v4l2"))) {
+          .set_input_format(ffmpeg::InputFormat("v4l2"))),
+        options_(options) {
     program_.use();
 
     vao_.bind();
 
     vertices_.bind(GL_ARRAY_BUFFER);
 
+    std::vector<base::Point3D> points = {
+      { -1.0, 1.0, 0.0, },
+      { -1.0, -1.0, 0.0 },
+      { 1.0, -1.0, 0.0 },
+      { 1.0, 1.0, 0.0 },
+    };
+
+    for (auto& point : points) {
+      point = rotate_.Rotate(point);
+    }
+
+    const auto& ps = points;
+    auto f = [](auto v) { return static_cast<float>(v); };
     const float data[] = {
       // vertex (x, y, z) texture (u, v)
-      -1.0f,  1.0f, 0.0f, 0.0f, 0.0f,
-      -1.0f, -1.0f, 0.0f, 0.0f, 1.0f,
-       1.0f, -1.0f, 0.0f, 1.0f, 1.0f,
-       1.0f,  1.0f, 0.0f, 1.0f, 0.0f
+      f(ps[0].x()), f(ps[0].y()), f(ps[0].z()), 0.0f, 0.0f,
+      f(ps[1].x()), f(ps[1].y()), f(ps[1].z()), 0.0f, 1.0f,
+      f(ps[2].x()), f(ps[2].y()), f(ps[2].z()), 1.0f, 1.0f,
+      f(ps[3].x()), f(ps[3].y()), f(ps[3].z()), 1.0f, 0.0f
     };
     vertices_.set_data_array(GL_ARRAY_BUFFER, data, GL_STATIC_DRAW);
 
@@ -432,11 +451,11 @@ class VideoRender {
     int display_w = window_size.x();
     int display_h = window_size.y();
 
-    Eigen::Vector2i codec_size = codec_.size();
+    Eigen::Vector2i codec_size = Rotate(codec_.size());
     // Enforce an aspect ratio.
     const double desired_aspect_ratio =
-        static_cast<double>(codec_size.x()) /
-        static_cast<double>(codec_size.y());
+        static_cast<double>(std::abs(codec_size.x())) /
+        static_cast<double>(std::abs(codec_size.y()));
     const double actual_ratio =
         static_cast<double>(display_w) /
         static_cast<double>(display_h);
@@ -487,6 +506,12 @@ class VideoRender {
   }
 
  private:
+  Eigen::Vector2i Rotate(const Eigen::Vector2i value) {
+    base::Point3D p(value.x(), value.y(), 0.0);
+    const auto result = rotate_.Rotate(p);
+    return {static_cast<int>(result.x()), static_cast<int>(result.y())};
+  }
+
   static Eigen::Matrix4f Ortho(float left, float right, float bottom, float top,
                                float zNear, float zFar) {
     Eigen::Matrix4f result = Eigen::Matrix4f::Identity();
@@ -500,6 +525,9 @@ class VideoRender {
   }
 
   ffmpeg::File file_;
+  const Options options_;
+  base::Quaternion rotate_{
+    base::Quaternion::FromEuler(0, 0, base::Radians(options_.rotate_deg))};
   ffmpeg::Stream stream_{file_.FindBestStream(ffmpeg::File::kVideo)};
   ffmpeg::Codec codec_{stream_};
   std::optional<ffmpeg::Swscale> swscale_;
@@ -542,6 +570,7 @@ class VideoRender {
 int do_main(int argc, char** argv) {
   std::string video = "/dev/video0";
   bool turret = false;
+  double rotate_deg = 180.0;
 
   mjlib::io::StreamFactory::Options stream;
   stream.type = mjlib::io::StreamFactory::Type::kSerial;
@@ -551,6 +580,7 @@ int do_main(int argc, char** argv) {
       (clipp::option("v", "video") & clipp::value("", video)),
       (clipp::option("stuff")),
       (clipp::option("t", "turret").set(turret)),
+      (clipp::option("r", "rotate") & clipp::value("", rotate_deg)),
       mjlib::base::ClippArchive("stream.").Accept(&stream).release()
   );
 
@@ -573,7 +603,9 @@ int do_main(int argc, char** argv) {
 
   std::optional<VideoRender> video_render;
   try {
-    video_render.emplace(video);
+    VideoRender::Options video_options;
+    video_options.rotate_deg = rotate_deg;
+    video_render.emplace(video, video_options);
   } catch (mjlib::base::system_error& se) {
     if (std::string(se.what()).find("No such file or directory") ==
         std::string::npos) {
