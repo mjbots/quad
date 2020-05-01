@@ -139,10 +139,9 @@ class TurretControl::Impl {
   }
 
   void HandleImage(TargetTracker::Result result) {
-    ImageLog image_log;
-    image_log.timestamp = Now();
-    image_log.targets = result.targets;
-    image_signal_(&image_log);
+    image_data_.timestamp = Now();
+    image_data_.targets = result.targets;
+    image_signal_(&image_data_);
   }
 
   void PopulateStatusRequest() {
@@ -331,11 +330,24 @@ class TurretControl::Impl {
   }
 
   void DoControl_Active() {
-    double pitch_rate_dps = current_command_.pitch_rate_dps;
+    auto [pitch_rate_dps, yaw_rate_dps] = [&]() {
+      if (!current_command_.track_target) {
+        return std::make_pair(current_command_.pitch_rate_dps,
+                              current_command_.yaw_rate_dps);
+      }
+      if (Recent(image_data_.timestamp) && !image_data_.targets.empty()) {
+        // Pick the target closest to the center.
+        const auto to_track = PickTarget();
+        return std::make_pair(
+            (to_track.y() - 0.5) * -parameters_.target_gain_dps,
+            (to_track.x() - 0.5) * parameters_.target_gain_dps);
+      }
+      return std::make_pair(0., 0.);
+    }();
     status_.control.pitch.angle_deg +=
         pitch_rate_dps * parameters_.period_s;
     status_.control.yaw.angle_deg +=
-        current_command_.yaw_rate_dps * parameters_.period_s;
+        yaw_rate_dps * parameters_.period_s;
 
     // Limit the pitch angle to within some region based on the pitch servo.
     const double imu_pitch_min =
@@ -372,7 +384,7 @@ class TurretControl::Impl {
     control.yaw.torque_Nm =
         yaw_pid_.Apply(
             imu_data_.euler_deg.yaw, status_.control.yaw.angle_deg,
-            imu_data_.rate_dps.z(), current_command_.yaw_rate_dps,
+            imu_data_.rate_dps.z(), yaw_rate_dps,
             1.0 / parameters_.period_s);
 
     Control(control);
@@ -415,6 +427,23 @@ class TurretControl::Impl {
       }
       request.request.WriteMultiple(moteus::kCommandKpScale, values);
     }
+  }
+
+  bool Recent(boost::posix_time::ptime timestamp) {
+    return base::ConvertDurationToSeconds(Now() - timestamp) <
+      parameters_.target_timeout_s;
+  }
+
+  Eigen::Vector2d PickTarget() {
+    // Pick the target closest to the center.
+    auto it = std::min_element(
+        image_data_.targets.begin(), image_data_.targets.end(),
+        [&](const auto& lhs, const auto& rhs) {
+          return ((lhs - Eigen::Vector2d(0.5, 0.5)).norm() <
+                  (rhs - Eigen::Vector2d(0.5, 0.5)).norm());
+        });
+    BOOST_VERIFY(it != image_data_.targets.end());
+    return *it;
   }
 
   void Control(const ControlData& control) {
@@ -465,6 +494,7 @@ class TurretControl::Impl {
   Client::Reply client_command_reply_;
 
   AttitudeData imu_data_;
+  ImageLog image_data_;
   boost::signals2::signal<void (const AttitudeData*)> imu_signal_;
   boost::signals2::signal<void (const Status*)> turret_signal_;
   boost::signals2::signal<void (const CommandLog*)> command_signal_;

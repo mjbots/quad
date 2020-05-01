@@ -36,13 +36,16 @@ class TargetTracker::Impl {
         marker_corners, marker_ids,
         aruco_parameters_);
 
+    auto scale = [&](Eigen::Vector2d v) {
+      return Eigen::Vector2d(v.x() / image.cols, v.y() / image.rows);
+    };
     Result result;
     for (const auto& corners : marker_corners) {
       Eigen::Vector2d total;
       for (const auto& corner : corners) {
         total += Eigen::Vector2d(corner.x, corner.y);
       }
-      result.targets.push_back(total * (1.0 / corners.size()));
+      result.targets.push_back(scale(total * (1.0 / corners.size())));
     }
     return result;
   }

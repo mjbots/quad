@@ -63,6 +63,9 @@ class TurretControl : boost::noncopyable {
     CameraDriver::Options camera;
     TargetTracker::Options tracker;
 
+    double target_gain_dps = 10.0;
+    double target_timeout_s = 0.3;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(period_s));
@@ -76,6 +79,8 @@ class TurretControl : boost::noncopyable {
       a->Visit(MJ_NVP(command_timeout_s));
       a->Visit(MJ_NVP(camera));
       a->Visit(MJ_NVP(tracker));
+      a->Visit(MJ_NVP(target_gain_dps));
+      a->Visit(MJ_NVP(target_timeout_s));
     }
 
     Parameters() {
@@ -210,6 +215,7 @@ class TurretControl : boost::noncopyable {
 
     double pitch_rate_dps = 0.0;
     double yaw_rate_dps = 0.0;
+    bool track_target = false;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -217,6 +223,7 @@ class TurretControl : boost::noncopyable {
       a->Visit(MJ_ENUM(mode, ModeMapper));
       a->Visit(MJ_NVP(pitch_rate_dps));
       a->Visit(MJ_NVP(yaw_rate_dps));
+      a->Visit(MJ_NVP(track_target));
     }
   };
 

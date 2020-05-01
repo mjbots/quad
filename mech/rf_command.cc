@@ -86,7 +86,8 @@ class SlotCommand {
                const base::Point3D& v_mm_s_R,
                const base::Point3D& w_LR,
                TurretControl::Mode turret_mode,
-               const base::Euler& turret_rate_dps) {
+               const base::Euler& turret_rate_dps,
+               bool turret_track) {
     {
       Slot slot0;
       slot0.priority = 0xffffffff;
@@ -130,11 +131,12 @@ class SlotCommand {
     {
       Slot slot1;
       slot1.priority = 0xffffffff;
-      slot1.size = 4;
+      slot1.size = 5;
       mjlib::base::BufferWriteStream bstream({slot1.data, slot1.size});
       mjlib::telemetry::WriteStream tstream{bstream};
       tstream.Write(base::Saturate<int16_t>(32767.0 * turret_rate_dps.pitch / 400.0));
       tstream.Write(base::Saturate<int16_t>(32767.0 * turret_rate_dps.yaw / 400.0));
+      tstream.Write(static_cast<int8_t>(turret_track ? 1 : 0));
       nrfusb_.tx_slot(kRemoteTurret, 1, slot1);
     }
   }
@@ -328,12 +330,18 @@ void DrawGamepad(const GLFWgamepadstate& state) {
               state.buttons[GLFW_GAMEPAD_BUTTON_DPAD_RIGHT],
               state.buttons[GLFW_GAMEPAD_BUTTON_DPAD_DOWN],
               state.buttons[GLFW_GAMEPAD_BUTTON_DPAD_LEFT]);
+  ImGui::Text("BUMP L=%d Y=%d",
+              state.buttons[GLFW_GAMEPAD_BUTTON_LEFT_BUMPER],
+              state.buttons[GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER]);
   ImGui::Text("LEFT: %.3f %.3f",
               state.axes[GLFW_GAMEPAD_AXIS_LEFT_X],
               state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y]);
   ImGui::Text("RIGHT: %.3f %.3f",
               state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X],
               state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y]);
+  ImGui::Text("TRIG: %.3f  %.3f",
+              state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER],
+              state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER]);
 
   ImGui::End();
 }
@@ -719,6 +727,7 @@ int do_main(int argc, char** argv) {
     base::Point3D v_mm_s_R;
     base::Point3D w_LR;
     base::Euler turret_rate_dps;
+    bool turret_track = false;
     if (!turret) {
       v_mm_s_R.x() = -kMaxForwardVelocity_mm_s *
           gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_Y];
@@ -736,6 +745,7 @@ int do_main(int argc, char** argv) {
           gamepad.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y];
       turret_rate_dps.yaw = kMaxTurretYaw_dps *
           gamepad.axes[GLFW_GAMEPAD_AXIS_RIGHT_X];
+      turret_track = gamepad.buttons[GLFW_GAMEPAD_BUTTON_LEFT_BUMPER] != 0;
     }
 
     Sophus::SE3d pose_mm_RB;
@@ -771,7 +781,7 @@ int do_main(int argc, char** argv) {
     if (slot_command) {
       slot_command->Command(
           actual_command_mode, pose_mm_RB, v_mm_s_R, w_LR,
-          turret_mode, turret_rate_dps);
+          turret_mode, turret_rate_dps, turret_track);
     }
 
     imgui.Render();
