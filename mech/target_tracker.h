@@ -14,46 +14,35 @@
 
 #pragma once
 
-#include "base/point3d.h"
+#include <Eigen/Core>
 
-#include "camera_driver.h"
-#include "target_tracker_data.h"
+#include <opencv2/core/core.hpp>
+
+#include "mjlib/base/visitor.h"
 
 namespace mjmech {
 namespace mech  {
 
-class TargetTracker : boost::noncopyable {
+class TargetTracker {
  public:
-  TargetTracker(base::Context& context);
-  ~TargetTracker();
-
-  void AsyncStart(mjlib::io::ErrorCallback);
-
-  struct Parameters {
-    int region_width = 420;
-    int region_height = 420;
-
+  struct Options {
     template <typename Archive>
-    void Serialize(Archive* a)  {
-      a->Visit(MJ_NVP(region_width));
-      a->Visit(MJ_NVP(region_height));
+    void Serialize(Archive* a) {
     }
   };
 
-  Parameters* parameters() { return &parameters_; }
+  TargetTracker(const Options& = Options());
+  ~TargetTracker();
 
-  // Get a frameconsumer interface. pointer has same lifetime
-  // as this object.
-  std::weak_ptr<CameraFrameConsumer> get_frame_consumer();
+  struct Result {
+    std::vector<Eigen::Vector2d> targets;
+  };
 
-  const TargetTrackerData& data() const;
-  TargetTrackerDataSignal* data_signal();
+  Result Track(const cv::Mat&);
 
  private:
-  Parameters parameters_;
-
   class Impl;
-  std::shared_ptr<Impl> impl_;
+  std::unique_ptr<Impl> impl_;
 };
 
 }

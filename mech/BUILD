@@ -50,6 +50,7 @@ cc_library(
         "rpi3_raw_spi.cc",
         "rpi3_raw_uart.cc",
         "rpi3_threaded_client.cc",
+        "target_tracker.cc",
         "turret.cc",
         "turret_control.cc",
         "turret_rf_control.cc",
@@ -70,6 +71,7 @@ cc_library(
         "@opencv//:core",
         "@opencv//:aruco",
         "@opencv//:imgcodecs",
+        "@opencv//:videoio",
         "@sophus",
     ] + select({
         "//conditions:default" : [],

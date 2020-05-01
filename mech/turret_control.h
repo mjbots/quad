@@ -27,9 +27,11 @@
 
 #include "base/context.h"
 
+#include "mech/camera_driver.h"
 #include "mech/control_timing.h"
 #include "mech/imu_client.h"
 #include "mech/multiplex_client.h"
+#include "mech/target_tracker.h"
 
 namespace mjmech {
 namespace mech {
@@ -58,6 +60,9 @@ class TurretControl : boost::noncopyable {
     double imu_servo_filter_s = 2.0;
     double command_timeout_s = 1.0;
 
+    CameraDriver::Options camera;
+    TargetTracker::Options tracker;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(period_s));
@@ -69,6 +74,8 @@ class TurretControl : boost::noncopyable {
       a->Visit(MJ_NVP(servo_pitch_max_deg));
       a->Visit(MJ_NVP(imu_servo_filter_s));
       a->Visit(MJ_NVP(command_timeout_s));
+      a->Visit(MJ_NVP(camera));
+      a->Visit(MJ_NVP(tracker));
     }
 
     Parameters() {

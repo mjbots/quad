@@ -14,10 +14,11 @@
 
 #pragma once
 
-#include <boost/asio/executor.hpp>
+#include <boost/signals2/signal.hpp>
 
 #include <opencv2/core/core.hpp>
 
+#include "mjlib/base/visitor.h"
 #include "mjlib/io/async_types.h"
 
 namespace mjmech {
@@ -27,16 +28,28 @@ namespace mech {
 class CameraDriver {
  public:
   struct Options {
+    int width = 1280;
+    int height = 720;
+    int mode = 6;
+    int fps = 60;
+    int rotation = 270;
 
     template <typename Archive>
     void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(width));
+      a->Visit(MJ_NVP(height));
+      a->Visit(MJ_NVP(mode));
+      a->Visit(MJ_NVP(fps));
+      a->Visit(MJ_NVP(rotation));
     }
   };
 
-  CameraDriver(const boost::asio::executor& context, const Options& options);
+  CameraDriver(const Options& options);
   ~CameraDriver();
 
-  void AsyncReadFrame(cv::Mat* mat, mjlib::io::ErrorCallback);
+  using ImageSignal = boost::signals2::signal<void (const cv::Mat&)>;
+  // This will be emitted from a background thread.
+  ImageSignal* image_signal();
 
  private:
   class Impl;

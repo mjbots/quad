@@ -56,6 +56,17 @@ struct ControlLog {
     a->Visit(MJ_NVP(control));
   }
 };
+
+struct ImageLog {
+  boost::posix_time::ptime timestamp;
+  std::vector<Eigen::Vector2d> targets;
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(MJ_NVP(timestamp));
+    a->Visit(MJ_NVP(targets));
+  }
+};
 }
 
 class TurretControl::Impl {
@@ -70,9 +81,13 @@ class TurretControl::Impl {
     context.telemetry_registry->Register("turret", &turret_signal_);
     context.telemetry_registry->Register("command", &command_signal_);
     context.telemetry_registry->Register("control", &control_signal_);
+    context.telemetry_registry->Register("image", &image_signal_);
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
+    camera_ = std::make_unique<CameraDriver>(parameters_.camera);
+    camera_->image_signal()->connect(
+        std::bind(&Impl::HandleImage_THREAD, this, pl::_1));
     client_ = client_getter_();
     imu_client_ = imu_getter_();
 
@@ -109,6 +124,26 @@ class TurretControl::Impl {
   }
 
   // private
+
+  void HandleImage_THREAD(const cv::Mat& image) {
+    // WE ARE IN A BG THREAD.
+    if (!target_tracker_) {
+      target_tracker_ = std::make_unique<TargetTracker>(parameters_.tracker);
+    }
+    const auto result = target_tracker_->Track(image);
+
+    // Bounce these results back to the main thread.
+    boost::asio::post(
+        executor_,
+        std::bind(&Impl::HandleImage, this, result));
+  }
+
+  void HandleImage(TargetTracker::Result result) {
+    ImageLog image_log;
+    image_log.timestamp = Now();
+    image_log.targets = result.targets;
+    image_signal_(&image_log);
+  }
 
   void PopulateStatusRequest() {
     status_request_ = {};
@@ -434,6 +469,7 @@ class TurretControl::Impl {
   boost::signals2::signal<void (const Status*)> turret_signal_;
   boost::signals2::signal<void (const CommandLog*)> command_signal_;
   boost::signals2::signal<void (const ControlLog*)> control_signal_;
+  boost::signals2::signal<void (const ImageLog*)> image_signal_;
 
   ControlTiming timing_{executor_, {}};
 
@@ -444,6 +480,9 @@ class TurretControl::Impl {
 
   mjlib::base::PID pitch_pid_{&parameters_.pitch, &status_.control.pitch.pid};
   mjlib::base::PID yaw_pid_{&parameters_.yaw, &status_.control.yaw.pid};
+
+  std::unique_ptr<CameraDriver> camera_;
+  std::unique_ptr<TargetTracker> target_tracker_;
 };
 
 TurretControl::TurretControl(base::Context& context,

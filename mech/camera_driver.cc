@@ -14,7 +14,10 @@
 
 #include "mech/camera_driver.h"
 
-#include <boost/asio/post.hpp>
+#include <thread>
+
+#include <opencv2/core/core.hpp>
+#include <opencv2/videoio/videoio.hpp>
 
 #ifdef COM_GITHUB_MJBOTS_RASPBERRYPI
 #include <raspicam_cv.h>
@@ -26,44 +29,53 @@ namespace mech {
 #ifdef COM_GITHUB_MJBOTS_RASPBERRYPI
 class CameraDriver::Impl {
  public:
-  Impl(const boost::asio::executor& executor, const Options&)
-      : executor_(executor) {}
-
-  void AsyncReadFrame(cv::Mat* mat, mjlib::io::ErrorCallback callback) {
-    *mat = cv::Mat();
-    boost::asio::post(
-        executor_,
-        std::bind(std::move(callback), mjlib::base::error_code()));
+  Impl(const Options& options)
+      : thread_(std::bind(&Impl::Run, this, options)) {
   }
 
-  boost::asio::executor executor_;
+  ~Impl() {
+    done_.store(true);
+    thread_.join();
+  }
+
+  void Run(Options options) {
+    raspicam::RaspiCam_Cv camera;
+    camera.set(cv::CAP_PROP_FRAME_WIDTH, options.width);
+    camera.set(cv::CAP_PROP_FRAME_HEIGHT, options.height);
+    camera.set(cv::CAP_PROP_MODE, options.mode);
+    camera.set(cv::CAP_PROP_FPS, options.fps);
+    camera.setRotation(options.rotation);
+    camera.set(cv::CAP_PROP_FORMAT, CV_8UC3);
+    camera.open();
+
+    cv::Mat image;
+    while (!done_.load()) {
+      camera.grab();
+      camera.retrieve(image);
+      image_signal_(image);
+    }
+  }
+
+  std::thread thread_;
+  std::atomic<bool> done_{false};
+  ImageSignal image_signal_;
 };
 #else
 class CameraDriver::Impl {
  public:
-  Impl(const boost::asio::executor& executor, const Options&)
-      : executor_(executor) {}
+  Impl(const Options&) {}
 
-  void AsyncReadFrame(cv::Mat* mat, mjlib::io::ErrorCallback callback) {
-    *mat = cv::Mat();
-    boost::asio::post(
-        executor_,
-        std::bind(std::move(callback), mjlib::base::error_code()));
-  }
-
-  boost::asio::executor executor_;
+  ImageSignal image_signal_;
 };
 #endif
 
-CameraDriver::CameraDriver(const boost::asio::executor& executor,
-                           const Options& options)
-    : impl_(std::make_unique<Impl>(executor, options)) {}
+CameraDriver::CameraDriver(const Options& options)
+    : impl_(std::make_unique<Impl>(options)) {}
 
 CameraDriver::~CameraDriver() {}
 
-void CameraDriver::AsyncReadFrame(cv::Mat* mat,
-                                  mjlib::io::ErrorCallback callback) {
-  impl_->AsyncReadFrame(mat, std::move(callback));
+CameraDriver::ImageSignal* CameraDriver::image_signal() {
+  return &impl_->image_signal_;
 }
 
 }
