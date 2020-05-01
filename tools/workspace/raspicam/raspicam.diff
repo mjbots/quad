@@ -1,0 +1,235 @@
+diff --git a/src/raspicam_cv.cpp b/src/raspicam_cv.cpp
+index 18e2800..645b1da 100755
+--- a/src/raspicam_cv.cpp
++++ b/src/raspicam_cv.cpp
+@@ -38,13 +38,13 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ #include "raspicam_cv.h"
+ #include "private/private_impl.h"
+ #include <iostream>
+-#include <opencv2/highgui/highgui.hpp>
++#include <opencv2/videoio/videoio.hpp>
+ #include "scaler.h"
+ namespace raspicam {
+     RaspiCam_Cv::RaspiCam_Cv() {
+         _impl=new _private::Private_Impl();
+ 	set(cv::CAP_PROP_FORMAT,CV_8UC3);
+- 
++
+     }
+     RaspiCam_Cv::~RaspiCam_Cv() {
+         delete _impl;
+@@ -105,7 +105,7 @@ namespace raspicam {
+         case cv::CAP_PROP_BRIGHTNESS :
+             return _impl->getBrightness();
+         case cv::CAP_PROP_CONTRAST :
+-            return Scaler::scale ( -100,100,0,100,  _impl->getContrast() ); 
++            return Scaler::scale ( -100,100,0,100,  _impl->getContrast() );
+         case cv::CAP_PROP_SATURATION :
+             return  Scaler::scale ( -100,100,0,100, _impl->getSaturation() );;
+ //     case cv::CAP_PROP_HUE : return _cam_impl->getSharpness();
+@@ -130,7 +130,7 @@ namespace raspicam {
+         case cv::CAP_PROP_MODE:
+             _impl->setSensorMode(value);
+             break;
+-            
++
+         case cv::CAP_PROP_FRAME_WIDTH :
+             _impl->setWidth ( value );
+             break;
+@@ -153,7 +153,7 @@ namespace raspicam {
+         case cv::CAP_PROP_BRIGHTNESS :
+             _impl->setBrightness ( value );
+             break;
+-        case cv::CAP_PROP_CONTRAST : 
++        case cv::CAP_PROP_CONTRAST :
+             _impl->setContrast ( Scaler::scale ( 0,100,-100,100, value ) );
+             break;
+         case cv::CAP_PROP_SATURATION :
+@@ -164,7 +164,7 @@ namespace raspicam {
+             _impl->setISO ( Scaler::scale ( 0,100,0,800, value ) );
+             break;
+         case cv::CAP_PROP_EXPOSURE :
+-            if ( value>0 && value<=100 ) { 
++            if ( value>0 && value<=100 ) {
+                 _impl->setShutterSpeed ( Scaler::scale ( 0,100,0,330000, value ) );
+             } else {
+                 _impl->setExposure ( RASPICAM_EXPOSURE_AUTO );
+@@ -181,54 +181,52 @@ namespace raspicam {
+         };
+         return true;
+     }
+-	
++
+ 	void RaspiCam_Cv::setRotation ( int nRotation ) {
+ 		// input is [0;3], map to [0; 360]
+ 		int clamped = std::max(0, std::min(nRotation, 3));
+ 		int degrees = clamped * 90;
+ 		_impl->setRotation ( degrees );
+ 	}
+-	
++
+ 	void RaspiCam_Cv::setImageEffect ( int nEffect ) {
+ 		// Clamp to enum
+ 		int clamped = std::max((int)RASPICAM_IMAGE_EFFECT::RASPICAM_IMAGE_EFFECT_NONE, std::min(nEffect, (int)RASPICAM_IMAGE_EFFECT::RASPICAM_IMAGE_EFFECT_CARTOON));
+ 		_impl->setImageEffect ( (RASPICAM_IMAGE_EFFECT)clamped );
+ 	}
+-	
++
+ 	void RaspiCam_Cv::setVideoStabilization ( bool enable ) {
+ 		_impl->setVideoStabilization ( enable );
+ 	}
+-	
++
+ 	void RaspiCam_Cv::setHorizontalFlip ( bool enable ) {
+ 		_impl->setHorizontalFlip ( enable );
+ 	}
+-	
++
+ 	void RaspiCam_Cv::setVerticalFlip ( bool enable ) {
+ 		_impl->setVerticalFlip ( enable );
+ 	}
+-	
++
+ 	void RaspiCam_Cv::setExposureCompensation ( int value ) {
+ 		// clamp to [-10; 10]
+ 		int clamped = std::max(-10, std::min(value, 10));
+ 		_impl->setExposureCompensation ( clamped );
+ 	}
+-	
++
+ 	void RaspiCam_Cv::setAWB ( int nEnumValue ) {
+ 		// Clamp to enum
+ 		int clamped = std::max((int)RASPICAM_AWB::RASPICAM_AWB_OFF, std::min(nEnumValue, (int)RASPICAM_AWB::RASPICAM_AWB_HORIZON));
+ 		_impl->setAWB ( (RASPICAM_AWB)clamped );
+ 	}
+-	
++
+ 	void RaspiCam_Cv::setMetering ( int nEnumValue ) {
+ 		// Clamp to enum
+ 		int clamped = std::max((int)RASPICAM_METERING::RASPICAM_METERING_AVERAGE, std::min(nEnumValue, (int)RASPICAM_METERING::RASPICAM_METERING_MATRIX));
+ 		_impl->setMetering ( (RASPICAM_METERING)clamped );
+ 	}
+-	
++
+     std::string RaspiCam_Cv::getId() const{
+         return _impl->getId();
+     }
+ 
+ }
+-
+-
+diff --git a/src/raspicam_cv.h b/src/raspicam_cv.h
+index ca1b170..121ef68 100755
+--- a/src/raspicam_cv.h
++++ b/src/raspicam_cv.h
+@@ -38,7 +38,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ #ifndef RaspiCam_CV_H
+ #define RaspiCam_CV_H
+ #include <opencv2/core/core.hpp>
+-#include <opencv2/highgui/highgui.hpp>
+ namespace raspicam {
+ 
+     namespace _private{
+@@ -88,9 +87,9 @@ namespace raspicam {
+ 
+         double get ( int propId );
+ 
+-        /**Sets a property in the VideoCapture. 
+-	 * 
+-	 * 
++        /**Sets a property in the VideoCapture.
++	 *
++	 *
+ 	 * Implemented properties:
+ 	 * cv::CAP_PROP_FRAME_WIDTH,cv::CAP_PROP_FRAME_HEIGHT,
+ 	 * cv::CAP_PROP_FORMAT: CV_8UC1 or CV_8UC3
+@@ -106,39 +105,39 @@ namespace raspicam {
+          */
+ 
+         bool set ( int propId, double value );
+-		
++
+ 		/** Sets the rotation
+ 		0: none
+ 		1: 90 degrees clockwise
+ 		2: 180 degrees
+-		3: 270 degrees clockwise		
++		3: 270 degrees clockwise
+ 		*/
+         void setRotation ( int nRotation );
+-		
++
+ 		/** Sets the image effect. See RASPICAM_IMAGE_EFFECT enum. 19 values as of current implementation.
+ 		*/
+         void setImageEffect ( int nEffect );
+-		
++
+ 		/** Enable or disable video stabilization
+ 		*/
+         void setVideoStabilization ( bool enable );
+-		
++
+ 		/** Enable or disable horizontal flip
+ 		*/
+ 		void setHorizontalFlip ( bool enable );
+-		
++
+ 		/** Enable or disable vertical flip
+ 		*/
+ 		void setVerticalFlip ( bool enable );
+-		
++
+ 		/** Set exposure compensation. -10,10
+ 		*/
+ 		void setExposureCompensation( int value );
+-		
++
+ 		/** Sets auto white balance. See RASPICAM_AWB enum. 9 values as of current implementation.
+ 		*/
+         void setAWB ( int nEnumValue );
+-		
++
+ 		/** Sets metering type. See RASPICAM_METERING enum. 4 values as of current implementation.
+ 		*/
+ 		void setMetering ( int nEnumValue );
+@@ -154,5 +153,3 @@ namespace raspicam {
+ 
+ }
+ #endif
+-
+-
+diff --git a/src/raspicam_still_cv.cpp b/src/raspicam_still_cv.cpp
+index a929262..c69f80b 100755
+--- a/src/raspicam_still_cv.cpp
++++ b/src/raspicam_still_cv.cpp
+@@ -35,6 +35,7 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ ****************************************************************/
+ 
++#include <opencv2/videoio/videoio.hpp>
+ #include "private_still/private_still_impl.h"
+ #include "raspicam_still_cv.h"
+ #include "scaler.h"
+@@ -181,5 +182,3 @@ namespace raspicam {
+         return _impl->getId();
+     }
+ }
+-
+-
+diff --git a/src/raspicam_still_cv.h b/src/raspicam_still_cv.h
+index f87c8ce..7c4117a 100755
+--- a/src/raspicam_still_cv.h
++++ b/src/raspicam_still_cv.h
+@@ -36,7 +36,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ ****************************************************************/
+ #ifndef _RaspiCam_STILL_H
+ #define _RaspiCam_STILL_H
+-#include <opencv2/highgui/highgui.hpp>
+ #include "raspicamtypes.h"
+ #include <cstdio>
+ #include <opencv2/core/core.hpp>
+@@ -115,4 +114,3 @@ namespace raspicam {
+     };
+ }
+ #endif
+-

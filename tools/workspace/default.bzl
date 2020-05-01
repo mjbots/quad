@@ -22,6 +22,7 @@ load("//tools/workspace/i2c-tools:repository.bzl", "i2c_tools_repository")
 load("//tools/workspace/imgui:repository.bzl", "imgui_repository")
 load("//tools/workspace/mjlib:repository.bzl", "mjlib_repository")
 load("//tools/workspace/moteus:repository.bzl", "moteus_repository")
+load("//tools/workspace/raspicam:repository.bzl", "raspicam_repository")
 load("//tools/workspace/raspberrypi-firmware:repository.bzl", "raspberrypi_firmware_repository")
 load("//tools/workspace/rpi_bazel:repository.bzl", "rpi_bazel_repository")
 load("//tools/workspace/rules_pkg:repository.bzl", "rules_pkg_repository")
@@ -44,6 +45,8 @@ def add_default_repositories(excludes = []):
         mjlib_repository(name = "com_github_mjbots_mjlib")
     if "moteus" not in excludes:
         moteus_repository(name = "moteus")
+    if "raspicam" not in excludes:
+        raspicam_repository(name = "raspicam")
     if "raspberrypi-firmware" not in excludes:
         raspberrypi_firmware_repository(name = "raspberrypi-firmware")
     if "rpi_bazel" not in excludes:
