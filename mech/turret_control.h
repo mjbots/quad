@@ -52,6 +52,10 @@ class TurretControl : boost::noncopyable {
     mjlib::base::PID::Config pitch;
     mjlib::base::PID::Config yaw;
 
+    double servo_pitch_min_deg = -15.0;
+    double servo_pitch_max_deg = 10.0;
+
+    double imu_servo_filter_s = 2.0;
     double command_timeout_s = 1.0;
 
     template <typename Archive>
@@ -59,16 +63,19 @@ class TurretControl : boost::noncopyable {
       a->Visit(MJ_NVP(period_s));
       a->Visit(MJ_NVP(max_torque_Nm));
       a->Visit(MJ_NVP(config));
-      a->Visit(MJ_NVP(command_timeout_s));
       a->Visit(MJ_NVP(pitch));
       a->Visit(MJ_NVP(yaw));
+      a->Visit(MJ_NVP(servo_pitch_min_deg));
+      a->Visit(MJ_NVP(servo_pitch_max_deg));
+      a->Visit(MJ_NVP(imu_servo_filter_s));
+      a->Visit(MJ_NVP(command_timeout_s));
     }
 
     Parameters() {
       pitch.kp = 0.05;
       pitch.kd = 0.005;
-      pitch.ki = 0.0;
-      pitch.ilimit = 0.0;
+      pitch.ki = 0.01;
+      pitch.ilimit = 0.1;
       pitch.sign = -1.0;
       pitch.max_desired_rate = 100.0;
 
@@ -172,6 +179,8 @@ class TurretControl : boost::noncopyable {
 
     Imu imu;
 
+    double imu_servo_pitch_deg = 0.0;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(timestamp));
@@ -183,6 +192,7 @@ class TurretControl : boost::noncopyable {
       a->Visit(MJ_NVP(yaw_servo));
       a->Visit(MJ_NVP(control));
       a->Visit(MJ_NVP(imu));
+      a->Visit(MJ_NVP(imu_servo_pitch_deg));
     }
   };
 

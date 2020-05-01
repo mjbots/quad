@@ -17,6 +17,7 @@
 #include <boost/asio/post.hpp>
 
 #include "mjlib/base/clipp_archive.h"
+#include "mjlib/base/limit.h"
 #include "mjlib/io/repeating_timer.h"
 
 #include "base/logging.h"
@@ -158,6 +159,13 @@ class TurretControl::Impl {
   }
 
   void UpdateStatus() {
+    const double imu_servo_pitch_deg =
+        imu_data_.euler_deg.pitch - status_.pitch_servo.angle_deg;
+    const double alpha = parameters_.period_s / parameters_.imu_servo_filter_s;
+    status_.imu_servo_pitch_deg =
+        (1.0 - alpha) * status_.imu_servo_pitch_deg +
+        alpha * imu_servo_pitch_deg;
+
     for (const auto& reply : status_reply_.replies) {
       auto* const servo = [&]() -> Status::GimbalServo* {
         if (reply.id == 1) { return &status_.pitch_servo; }
@@ -288,10 +296,25 @@ class TurretControl::Impl {
   }
 
   void DoControl_Active() {
+    double pitch_rate_dps = current_command_.pitch_rate_dps;
     status_.control.pitch.angle_deg +=
-        current_command_.pitch_rate_dps * parameters_.period_s;
+        pitch_rate_dps * parameters_.period_s;
     status_.control.yaw.angle_deg +=
         current_command_.yaw_rate_dps * parameters_.period_s;
+
+    // Limit the pitch angle to within some region based on the pitch servo.
+    const double imu_pitch_min =
+        parameters_.servo_pitch_min_deg + status_.imu_servo_pitch_deg;
+    const double imu_pitch_max =
+        parameters_.servo_pitch_max_deg + status_.imu_servo_pitch_deg;
+
+    const double old_pitch_deg = status_.control.pitch.angle_deg;
+    status_.control.pitch.angle_deg =
+        mjlib::base::Limit(old_pitch_deg, imu_pitch_min, imu_pitch_max);
+    if (status_.control.pitch.angle_deg != old_pitch_deg) {
+      pitch_rate_dps = 0.0;
+    }
+
 
     // Wrap around our yaw angle to always be a limited distance from
     // the current actual.
@@ -307,7 +330,7 @@ class TurretControl::Impl {
     control.pitch.torque_Nm =
         pitch_pid_.Apply(
             imu_data_.euler_deg.pitch, status_.control.pitch.angle_deg,
-            imu_data_.rate_dps.y(), current_command_.pitch_rate_dps,
+            imu_data_.rate_dps.y(), pitch_rate_dps,
             1.0 / parameters_.period_s);
 
     control.yaw.power = true;
