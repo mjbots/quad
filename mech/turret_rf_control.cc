@@ -215,7 +215,7 @@ class TurretRfControl::Impl {
     };
 
     command.pitch_rate_dps = 400.0 * read_int16(1, 0) / 32767.0;
-    command.yaw_rate_dps = 400.0 * read_int16(1, 0) / 32767.0;
+    command.yaw_rate_dps = 400.0 * read_int16(1, 2) / 32767.0;
 
     // RF control takes precendence over everything if we're seeing
     // it.
