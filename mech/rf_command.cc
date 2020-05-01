@@ -55,6 +55,9 @@ constexpr double kMaxForwardVelocity_mm_s = 300.0;
 constexpr double kMaxLateralVelocity_mm_s = 100.0;
 constexpr double kMaxRotation_rad_s = (30.0 / 180.0) * M_PI;
 
+constexpr double kMaxTurretPitch_dps = 50.0;
+constexpr double kMaxTurretYaw_dps = 200.0;
+
 constexpr double kMovementEpsilon_mm_s = 25.0;
 constexpr double kMovementEpsilon_rad_s = (7.0 / 180.0) * M_PI;
 
@@ -81,7 +84,9 @@ class SlotCommand {
   void Command(QuadrupedCommand::Mode mode,
                const Sophus::SE3d& pose_mm_RB,
                const base::Point3D& v_mm_s_R,
-               const base::Point3D& w_LR) {
+               const base::Point3D& w_LR,
+               TurretControl::Mode turret_mode,
+               const base::Euler& turret_rate_dps) {
     {
       Slot slot0;
       slot0.priority = 0xffffffff;
@@ -117,8 +122,20 @@ class SlotCommand {
     {
       Slot slot0;
       slot0.priority = 0xffffffff;
-      slot0.data[0] = 0;
+      slot0.size = 1;
+      slot0.data[0] = static_cast<uint8_t>(turret_mode);
       nrfusb_.tx_slot(kRemoteTurret, 0, slot0);
+    }
+
+    {
+      Slot slot1;
+      slot1.priority = 0xffffffff;
+      slot1.size = 4;
+      mjlib::base::BufferWriteStream bstream({slot1.data, slot1.size});
+      mjlib::telemetry::WriteStream tstream{bstream};
+      tstream.Write(base::Saturate<int16_t>(32767.0 * turret_rate_dps.pitch / 400.0));
+      tstream.Write(base::Saturate<int16_t>(32767.0 * turret_rate_dps.yaw / 400.0));
+      nrfusb_.tx_slot(kRemoteTurret, 1, slot1);
     }
   }
 
@@ -379,6 +396,50 @@ void DrawGait(const GLFWgamepadstate& gamepad,
   }
 }
 
+constexpr int kNumTurretModes = 2;
+
+void DrawTurret(const GLFWgamepadstate& gamepad,
+                const std::vector<bool>& gamepad_pressed,
+                int* pending_turret_mode,
+                TurretControl::Mode* turret_mode) {
+  const bool turret_select_mode =
+      gamepad.buttons[GLFW_GAMEPAD_BUTTON_X];
+
+  if (turret_select_mode) {
+    if (gamepad_pressed[GLFW_GAMEPAD_BUTTON_DPAD_UP]) {
+      *pending_turret_mode =
+          (*pending_turret_mode + kNumTurretModes - 1) % kNumTurretModes;
+    }
+    if (gamepad_pressed[GLFW_GAMEPAD_BUTTON_DPAD_DOWN]) {
+      *pending_turret_mode =
+          (*pending_turret_mode + 1) % kNumTurretModes;
+    }
+  }
+
+  {
+    ImGui::Begin("Turret Cmd");
+    const bool was_collapsed = ImGui::IsWindowCollapsed();
+
+    ImGui::SetWindowCollapsed(!turret_select_mode);
+    ImGui::SetWindowPos({800, 200}, ImGuiCond_FirstUseEver);
+
+    ImGui::RadioButton("Stop", pending_turret_mode, 0);
+    ImGui::RadioButton("Active", pending_turret_mode, 1);
+
+    ImGui::End();
+
+    if (!turret_select_mode && !was_collapsed) {
+      *turret_mode = [&]() {
+        switch (*pending_turret_mode) {
+          case 0: return TurretControl::Mode::kStop;
+          case 1: return TurretControl::Mode::kActive;
+        }
+        mjlib::base::AssertNotReached();
+      }();
+    }
+  }
+}
+
 class VideoRender {
  public:
   struct Options {
@@ -615,6 +676,8 @@ int do_main(int argc, char** argv) {
 
   QuadrupedCommand::Mode command_mode = QuadrupedCommand::Mode::kStopped;
   int pending_gait_mode = kStop;
+  TurretControl::Mode turret_mode = TurretControl::Mode::kStop;
+  int pending_turret_mode = 0;
 
   std::vector<bool> old_gamepad_buttons;
   old_gamepad_buttons.resize(GLFW_GAMEPAD_BUTTON_LAST + 1);
@@ -651,13 +714,29 @@ int do_main(int argc, char** argv) {
     DrawGamepad(gamepad);
 
     DrawGait(gamepad, gamepad_pressed, &pending_gait_mode, &command_mode);
+    DrawTurret(gamepad, gamepad_pressed, &pending_turret_mode, &turret_mode);
 
     base::Point3D v_mm_s_R;
     base::Point3D w_LR;
-    v_mm_s_R.x() = -kMaxForwardVelocity_mm_s * gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_Y];
-    v_mm_s_R.y() = kMaxLateralVelocity_mm_s * gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_X];
+    base::Euler turret_rate_dps;
+    if (!turret) {
+      v_mm_s_R.x() = -kMaxForwardVelocity_mm_s *
+          gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_Y];
+      v_mm_s_R.y() = kMaxLateralVelocity_mm_s *
+          gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_X];
 
-    w_LR.z() = kMaxRotation_rad_s * gamepad.axes[GLFW_GAMEPAD_AXIS_RIGHT_X];
+      w_LR.z() = kMaxRotation_rad_s * gamepad.axes[GLFW_GAMEPAD_AXIS_RIGHT_X];
+    } else {
+      v_mm_s_R.x() = -kMaxForwardVelocity_mm_s *
+          gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_Y];
+      w_LR.z() = kMaxRotation_rad_s *
+          gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_X];
+
+      turret_rate_dps.pitch = -kMaxTurretPitch_dps *
+          gamepad.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y];
+      turret_rate_dps.yaw = kMaxTurretYaw_dps *
+          gamepad.axes[GLFW_GAMEPAD_AXIS_RIGHT_X];
+    }
 
     Sophus::SE3d pose_mm_RB;
 
@@ -690,7 +769,9 @@ int do_main(int argc, char** argv) {
     }
 
     if (slot_command) {
-      slot_command->Command(actual_command_mode, pose_mm_RB, v_mm_s_R, w_LR);
+      slot_command->Command(
+          actual_command_mode, pose_mm_RB, v_mm_s_R, w_LR,
+          turret_mode, turret_rate_dps);
     }
 
     imgui.Render();
