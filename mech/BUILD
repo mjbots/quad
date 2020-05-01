@@ -34,6 +34,7 @@ filegroup(
 cc_library(
     name = "mech",
     srcs = [
+        "camera_driver.cc",
         "mammal_ik.cc",
         "mime_type.cc",
         "moteus_servo.cc",
@@ -72,7 +73,7 @@ cc_library(
         "@sophus",
     ] + select({
         "//conditions:default" : [],
-        "//:raspberrypi" : [],
+        "//:raspberrypi" : ["@raspicam"],
     }),
     copts = [
         "-Wno-gnu-designator",
