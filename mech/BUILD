@@ -34,11 +34,7 @@ filegroup(
 cc_library(
     name = "mech",
     srcs = [
-        "camera_driver.cc",
-        "gst_helpers.cc",
-        "gst_main_loop.cc",
         "mammal_ik.cc",
-        "mcast_video_link.cc",
         "mime_type.cc",
         "moteus_servo.cc",
         "multiplex_client.cc",
@@ -53,13 +49,10 @@ cc_library(
         "rpi3_raw_spi.cc",
         "rpi3_raw_uart.cc",
         "rpi3_threaded_client.cc",
-        "rtsp_server.cc",
-        "target_tracker.cc",
         "turret.cc",
         "turret_control.cc",
         "turret_rf_control.cc",
         "trajectory.cc",
-        "video_display.cc",
         "web_server.cc",
     ],
     hdrs = glob(["*.h"]),
@@ -67,13 +60,6 @@ cc_library(
         "//base",
         "@boost//:filesystem",
         "@dart",
-        "@gstreamer",
-        "@gst-plugins-base//:gstapp",
-        "@gst-plugins-base//:plugins",
-        "@gst-plugins-bad//:plugins",
-        "@gst-plugins-ugly//:plugins",
-        "@gst-libav//:plugins",
-        "@gst-rtsp-server//:rtsp-server",
         "@com_github_mjbots_mjlib//mjlib/base:pid",
         "@com_github_mjbots_mjlib//mjlib/io:exclusive_command",
         "@com_github_mjbots_mjlib//mjlib/io:selector",
@@ -86,7 +72,7 @@ cc_library(
         "@sophus",
     ] + select({
         "//conditions:default" : [],
-        "//:raspberrypi" : ["@gst-rpicamsrc"],
+        "//:raspberrypi" : [],
     }),
     copts = [
         "-Wno-gnu-designator",
@@ -152,13 +138,6 @@ cc_binary(
     srcs = ["aruco_draw.cc"],
     deps = ["//base", "@boost", "@boost//:timer",
             "@opencv//:aruco", "@opencv//:imgcodecs"],
-)
-
-module_main(
-    name = "video_sender_app",
-    cname = "mjmech::mech::VideoSenderApp",
-    prefix = "mech",
-    deps = [":mech"],
 )
 
 module_main(
@@ -244,7 +223,6 @@ pkg_tar(
         ":slot_rf_test",
         ":spi",
         ":turret",
-        ":video_sender_app",
     ],
     files = {
         "//configs:quadruped.ini": "configs/quadruped.ini",
