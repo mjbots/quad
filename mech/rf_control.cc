@@ -129,6 +129,7 @@ auto vmax = [](const auto& container, auto getter, auto incase) {
 };
 
 constexpr int kOnlyRemote = 0;
+constexpr double kVoltageScale = 4.0;
 }
 
 struct SlotData {
@@ -336,9 +337,9 @@ class RfControl::Impl {
       slot8.priority = 0x55555555;
       mjlib::base::BufferWriteStream bs({slot8.data, 5});
       mjlib::telemetry::WriteStream ts{bs};
-      ts.Write(base::Saturate<int8_t>(
+      ts.Write(base::Saturate<int8_t>(kVoltageScale *
                    vmin(s.joints, [](const auto& j) { return j.voltage; }, 0.0)));
-      ts.Write(base::Saturate<int8_t>(
+      ts.Write(base::Saturate<int8_t>(kVoltageScale *
                    vmax(s.joints, [](const auto& j) { return j.voltage; }, 0.0)));
       ts.Write(
           base::Saturate<int8_t>(

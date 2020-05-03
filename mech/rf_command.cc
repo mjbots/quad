@@ -222,8 +222,8 @@ class SlotCommand {
         data_.v_mm_s_R = base::Point3D(v_mm_s_R_x, v_mm_s_R_y, 0.0);
         data_.w_LB = base::Point3D(0., 0., w_LB_z);
       } else if (i == 8) {
-        data_.min_voltage = slot.data[0];
-        data_.max_voltage = slot.data[1];
+        data_.min_voltage = slot.data[0] * 0.25;
+        data_.max_voltage = slot.data[1] * 0.25;
         data_.min_temp_C = slot.data[2];
         data_.max_temp_C = slot.data[3];
         data_.fault = slot.data[4];
@@ -251,8 +251,8 @@ class SlotCommand {
         t.servo_pitch_deg = *ts.Read<int16_t>() / 32767.0 * 180.0;
         t.servo_yaw_deg = *ts.Read<int16_t>() / 32767.0 * 180.0;
       } else if (i == 8) {
-        t.min_voltage = slot.data[0];
-        t.max_voltage = slot.data[1];
+        t.min_voltage = slot.data[0] * 0.25;
+        t.max_voltage = slot.data[1] * 0.25;
         t.min_temp_C = slot.data[2];
         t.max_temp_C = slot.data[3];
         t.fault = slot.data[4];
@@ -282,7 +282,7 @@ void DrawTelemetry(const SlotCommand* slot_command, bool turret) {
     ImGui::Text("cmd: (%4.0f, %4.0f, %4.0f)",
                 d.v_mm_s_R.x(), d.v_mm_s_R.y(),
                 d.w_LB.z());
-    ImGui::Text("V: %.0f/%.0f", d.min_voltage, d.max_voltage);
+    ImGui::Text("V: %.2f/%.2f", d.min_voltage, d.max_voltage);
     ImGui::Text("T: %.0f/%.0f", d.min_temp_C, d.max_temp_C);
     ImGui::Text("flt: %d", d.fault);
 
@@ -306,7 +306,7 @@ void DrawTelemetry(const SlotCommand* slot_command, bool turret) {
                   t.imu_pitch_rate_dps, t.imu_yaw_rate_dps);
       ImGui::Text("spitch/syaw: (%6.1f, %6.1f)",
                   t.servo_pitch_deg, t.servo_yaw_deg);
-      ImGui::Text("V: %.0f/%.0f", t.min_voltage, t.max_voltage);
+      ImGui::Text("V: %.2f/%.2f", t.min_voltage, t.max_voltage);
       ImGui::Text("T: %.0f/%.0f", t.min_temp_C, t.max_temp_C);
       ImGui::Text("flt: %d", t.fault);
     } else {
