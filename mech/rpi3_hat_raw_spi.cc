@@ -527,7 +527,7 @@ class Rpi3HatRawSpi::Impl {
     auto size = RoundUpDlc(data.size());
 
     char buf[70] = {};
-    MJ_ASSERT((6 + size) < sizeof(buf));
+    MJ_ASSERT((6 + size) <= sizeof(buf));
     buf[0] = bus;
     buf[3] = source_id | (reply_type == kRequestReply) ? 0x80 : 00;
     buf[4] = dest_id;
