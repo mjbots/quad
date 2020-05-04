@@ -85,6 +85,7 @@ class SlotCommand {
                const Sophus::SE3d& pose_mm_RB,
                const base::Point3D& v_mm_s_R,
                const base::Point3D& w_LR,
+               double jump_accel_mm_s2,
                TurretControl::Mode turret_mode,
                const base::Euler& turret_rate_dps,
                bool turret_track) {
@@ -99,9 +100,7 @@ class SlotCommand {
         slot0.size = 4;
         // For now, always repeat.
         ts.Write(static_cast<int8_t>(1));
-
-        // And do a fixed 2000 mm/s^2 accel.
-        ts.Write(static_cast<uint16_t>(2000));
+        ts.Write(static_cast<uint16_t>(jump_accel_mm_s2));
       } else {
         slot0.size = 1;
       }
@@ -640,6 +639,7 @@ int do_main(int argc, char** argv) {
   std::string video = "/dev/video0";
   bool turret = false;
   double rotate_deg = 180.0;
+  double jump_accel_mm_s2 = 2000.0;
 
   mjlib::io::StreamFactory::Options stream;
   stream.type = mjlib::io::StreamFactory::Type::kSerial;
@@ -650,6 +650,7 @@ int do_main(int argc, char** argv) {
       (clipp::option("stuff")),
       (clipp::option("t", "turret").set(turret)),
       (clipp::option("r", "rotate") & clipp::value("", rotate_deg)),
+      (clipp::option("jump-accel") & clipp::value("", jump_accel_mm_s2)),
       mjlib::base::ClippArchive("stream.").Accept(&stream).release()
   );
 
@@ -781,6 +782,7 @@ int do_main(int argc, char** argv) {
     if (slot_command) {
       slot_command->Command(
           actual_command_mode, pose_mm_RB, v_mm_s_R, w_LR,
+          jump_accel_mm_s2,
           turret_mode, turret_rate_dps, turret_track);
     }
 
