@@ -55,7 +55,8 @@ namespace {
 class Servo : public mjlib::multiplex::MicroServer::Server,
               public mjlib::multiplex::MicroDatagramServer {
  public:
-  Servo(dd::Joint* joint, double sign, double max_torque_Nm)
+  Servo(dd::Joint* joint, double sign,
+        double max_torque_Nm)
       : joint_(joint),
         sign_(sign),
         max_torque_Nm_(max_torque_Nm) {
@@ -467,9 +468,21 @@ class SimMultiplex : public mjlib::multiplex::AsioClient {
         std::bind(std::move(callback), mjlib::base::error_code()));
   }
 
-  void AddServo(dd::Joint* joint, int id) {
+  void AddServo(dd::Joint* joint, int id,
+                double lower_limit, double upper_limit) {
+    const double sign = signs_.at(id);
     servos_[id] = std::make_unique<Servo>(
-        joint, signs_.at(id), options_.torque_scale * torque_Nm_.at(id));
+        joint, sign, options_.torque_scale * torque_Nm_.at(id));
+    if (std::isfinite(lower_limit)) {
+      joint->setLimitEnforcement(true);
+      if (sign > 0.0) {
+        joint->setPositionLowerLimit(0, lower_limit);
+        joint->setPositionUpperLimit(0, upper_limit);
+      } else {
+        joint->setPositionLowerLimit(0, -upper_limit);
+        joint->setPositionUpperLimit(0, -lower_limit);
+      }
+    }
   }
 
   void Run(double dt_s) {
@@ -710,13 +723,15 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
       const auto& leg_config = quadruped_config_.legs.at(leg);
 
       std::string leg_prefix = fmt::format("leg{}", leg);
-      auto add_servo = [&](auto name, auto id) {
-        multiplex_->AddServo(
-            robot_->getBodyNode(leg_prefix + name)->getParentJoint(), id);
+      auto add_servo = [&](auto name, auto id, double lower, double upper) {
+        auto* const joint = robot_->getBodyNode(leg_prefix + name)->getParentJoint();
+        multiplex_->AddServo(joint, id, lower, upper);
       };
-      add_servo("_shoulder", leg_config.ik.shoulder.id);
-      add_servo("_femur", leg_config.ik.femur.id);
-      add_servo("_tibia", leg_config.ik.tibia.id);
+      constexpr auto kNaN = std::numeric_limits<double>::signaling_NaN();
+      add_servo("_shoulder", leg_config.ik.shoulder.id, kNaN, kNaN);
+      add_servo("_femur", leg_config.ik.femur.id, kNaN, kNaN);
+      add_servo("_tibia", leg_config.ik.tibia.id,
+                base::Radians(-140), base::Radians(140));
     }
 
     boost::asio::post(
