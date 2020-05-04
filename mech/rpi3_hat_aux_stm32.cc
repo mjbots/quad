@@ -32,15 +32,22 @@
 #include <fmt/format.h>
 
 #include "mjlib/base/assert.h"
+#include "mjlib/base/fail.h"
 #include "mjlib/base/json5_write_archive.h"
 #include "mjlib/base/string_span.h"
 #include "mjlib/base/system_error.h"
 #include "mjlib/io/now.h"
+#include "mjlib/io/repeating_timer.h"
+
+#include "base/logging.h"
+#include "base/saturate.h"
 
 #include "mech/rpi3_raw_spi.h"
 
 namespace mjmech {
 namespace mech {
+
+namespace pl = std::placeholders;
 
 namespace {
 /// This is the format exported by register 34 on the hat.
@@ -101,6 +108,9 @@ class Rpi3HatAuxStm32::Impl {
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
+    timer_.start(base::ConvertSecondsToDuration(
+                     options_.power_poll_period_s),
+                 std::bind(&Impl::HandleTimer, this, pl::_1));
     boost::asio::post(
         executor_,
         std::bind(std::move(callback), mjlib::base::error_code()));
@@ -147,6 +157,16 @@ class Rpi3HatAuxStm32::Impl {
     MJ_ASSERT(remote == 0);
     std::unique_lock lock(slot_mutex_);
     return tx_slots_[slot_idx];
+  }
+
+  void HandleTimer(const mjlib::base::error_code& ec) {
+    mjlib::base::FailIf(ec);
+
+    boost::asio::post(
+        child_context_,
+        [this]() {
+          this->Child_KickPowerDist();
+        });
   }
 
  private:
@@ -255,6 +275,9 @@ class Rpi3HatAuxStm32::Impl {
 
     while (true) {
       result = Child_PollData();
+      if (result.can) {
+        Child_ReadCan();
+      }
       if (result.rf_bitfield_delta) {
         break;
       }
@@ -299,6 +322,9 @@ class Rpi3HatAuxStm32::Impl {
   void Child_ReadImu(AttitudeData* data, mjlib::io::ErrorCallback callback) {
     while (true) {
       const auto result = Child_PollData();
+      if (result.can) {
+        Child_ReadCan();
+      }
       if (result.imu) { break; }
       if (result.rf_bitfield_delta && rf_read_outstanding_.load()) {
         // We'll re-enqueue ourselves so that the RF read can
@@ -375,7 +401,21 @@ class Rpi3HatAuxStm32::Impl {
   struct PollResult {
     bool imu = false;
     uint32_t rf_bitfield_delta = 0;
+    bool can = false;
   };
+
+  void Child_KickPowerDist() {
+    char buf[8] = {};
+    buf[0] = 1;  // CAN bus 1
+    buf[1] = 0x00; // ID = 0x00010005
+    buf[2] = 0x01;
+    buf[3] = 0x00;
+    buf[4] = 0x05;
+    buf[5] = 2;  // size=2
+    buf[6] = 0;  // ignored
+    buf[7] = base::Saturate<uint8_t>(options_.shutdown_timeout_s / 0.1);
+    spi_->Write(0, 18, std::string_view(buf, sizeof(buf)));
+  }
 
   PollResult Child_PollData() {
     struct Data {
@@ -390,12 +430,48 @@ class Rpi3HatAuxStm32::Impl {
     PollResult result;
     result.imu = data.imu_present != 0;
     result.rf_bitfield_delta = data.rf_bitfield ^ last_bitfield_;
+    result.can = data.can_queue != 0;
 
     return result;
   }
 
+  void Child_ReadCan() {
+    char buf[70] = {};
+    spi_->Read(0, 17, buf);
+
+    // buf[0] - we don't care which bus this came from
+
+    const auto u8 = [](auto v) { return static_cast<uint8_t>(v); };
+
+    const uint32_t id = (
+        (u8(buf[1]) << 24) |
+        (u8(buf[2]) << 16) |
+        (u8(buf[3]) << 8) |
+        (u8(buf[4])));
+
+    if (id != 0x00010004) { return; }
+    if (buf[5] < 2) { return; }
+
+    const bool power_switch = buf[6] != 0;
+    // const int remaining_tenth_seconds = u8(buf[7]);
+
+    if (!power_switch) {
+      // The power switch is off.  Shut everything down!
+      log_.warn("Shutting down!");
+      mjlib::base::system_error::throw_if(
+          ::system("shutdown -h now") < 0,
+          "error trying to shutdown, at least we'll exit the app");
+      // Quit the application to make the shutdown process go faster.
+      std::exit(0);
+    }
+  }
+
+  base::LogRef log_ = base::GetLogInstance("Rpi3HatAuxStm32");
+
   boost::asio::executor executor_;
   const Options options_;
+
+  mjlib::io::RepeatingTimer timer_{executor_};
 
   std::thread thread_;
 

@@ -31,6 +31,11 @@ namespace mech {
 ///  * the standard bitrate CAN
 ///  * the IMU
 ///  * the RF interface
+///
+/// For now, the auxiliary CAN interface is assumed to be connected
+/// solely to a power distribution board.  This class handles soft
+/// shutdown with no API calls necessary.  (it kicks the board's dead
+/// man and shuts down the computer when the switch is turned off)
 class Rpi3HatAuxStm32 : public AuxStm32 {
  public:
   struct Mounting {
@@ -51,6 +56,8 @@ class Rpi3HatAuxStm32 : public AuxStm32 {
     int cpu_affinity = -1;
     Mounting mounting;
     uint32_t rf_id = 5678;
+    double power_poll_period_s = 0.1;
+    double shutdown_timeout_s = 15.0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -58,6 +65,8 @@ class Rpi3HatAuxStm32 : public AuxStm32 {
       a->Visit(MJ_NVP(cpu_affinity));
       a->Visit(MJ_NVP(mounting));
       a->Visit(MJ_NVP(rf_id));
+      a->Visit(MJ_NVP(power_poll_period_s));
+      a->Visit(MJ_NVP(shutdown_timeout_s));
     }
   };
 
