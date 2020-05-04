@@ -1189,8 +1189,22 @@ class QuadrupedControl::Impl {
             js.mode = JM::kRetracting;
             js.velocity_mm_s = 0.0;
             js.acceleration_mm_s2 = 0.0;
+
+            auto get_leg_B = [&](int id) -> const QuadrupedState::Leg& {
+              for (auto& leg_B : status_.state.legs_B) {
+                if (leg_B.leg == id) { return leg_B; }
+              }
+              mjlib::base::AssertNotReached();
+            };
             for (auto& leg_R : legs_R) {
               leg_R.stance = 0.0;
+              // Latch the current measured position so our retract
+              // maneuver is well formed.
+              const auto& cur_leg_B = get_leg_B(leg_R.leg_id);
+              leg_R.position_mm =
+                  status_.state.robot.pose_mm_RB * cur_leg_B.position_mm;
+              leg_R.velocity_mm_s =
+                  status_.state.robot.pose_mm_RB * cur_leg_B.velocity_mm_s;
             }
             // Loop around and do the retracting behavior.
             old_control_log_->legs_R = legs_R;
