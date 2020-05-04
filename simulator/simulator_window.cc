@@ -473,8 +473,8 @@ class SimMultiplex : public mjlib::multiplex::AsioClient {
     const double sign = signs_.at(id);
     servos_[id] = std::make_unique<Servo>(
         joint, sign, options_.torque_scale * torque_Nm_.at(id));
+    joint->setLimitEnforcement(true);
     if (std::isfinite(lower_limit)) {
-      joint->setLimitEnforcement(true);
       if (sign > 0.0) {
         joint->setPositionLowerLimit(0, lower_limit);
         joint->setPositionUpperLimit(0, upper_limit);
@@ -483,6 +483,8 @@ class SimMultiplex : public mjlib::multiplex::AsioClient {
         joint->setPositionUpperLimit(0, -lower_limit);
       }
     }
+    joint->setVelocityLowerLimit(0, -base::Radians(speed_dps_.at(id)));
+    joint->setVelocityUpperLimit(0, base::Radians(speed_dps_.at(id)));
   }
 
   void Run(double dt_s) {
@@ -541,6 +543,21 @@ class SimMultiplex : public mjlib::multiplex::AsioClient {
     {11, 22.2},
     {12, 12.5},
         };
+
+  std::map<int, double> speed_dps_{
+    {1, 2400},
+    {2, 1350},
+    {3, 2400},
+    {4, 2400},
+    {5, 1350},
+    {6, 2400},
+    {7, 2400},
+    {8, 1350},
+    {9, 2400},
+    {10, 2400},
+    {11, 1350},
+    {12, 2400},
+  };
 };
 
 class SimAuxStm32 : public mech::AuxStm32 {
