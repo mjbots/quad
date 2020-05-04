@@ -44,4 +44,7 @@ exports_files([
     "update_limits.sh",
     "update_pid.sh",
     "update_voltage.sh",
+    "turret-start.sh",
+    "turret_screen.conf",
+    "turret.cmd",
 ])

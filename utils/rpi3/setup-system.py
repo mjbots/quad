@@ -88,7 +88,7 @@ def ensure_present(filename, line):
         f.write(line + '\n')
 
 
-def ensure_contents(filename, contents):
+def ensure_contents(filename, contents, mode=None):
     '''Ensure the given file has exactly the given contents'''
 
     if os.path.exists(filename):
@@ -102,6 +102,9 @@ def ensure_contents(filename, contents):
 
     with open(filename, 'w', encoding='utf-8') as f:
         f.write(contents)
+
+    if mode:
+        os.chmod(filename, mode)
 
 
 def set_config_var(name, value):
@@ -254,6 +257,22 @@ dhcp-range=192.168.16.100,192.168.16.150,255.255.255.0,24h
     run('systemctl unmask hostapd')
     run('systemctl enable hostapd')
     run('systemctl start hostapd')
+
+    ensure_contents('/etc/systemd/system/mjbots.service', '''
+[Unit]
+Description=mjbots system software
+After=network.target
+
+[Service]
+Type=forking
+ExecStart=/home/pi/mjbots-start.sh
+
+[Install]
+WantedBy=default.target
+    ''')
+
+    subprocess.check_call("systemctl daemon-reload", shell=True)
+    subprocess.check_call("systemctl enable mjbots.service", shell=True)
 
 
 if __name__ == '__main__':
