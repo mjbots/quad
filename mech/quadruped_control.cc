@@ -385,7 +385,11 @@ class QuadrupedControl::Impl {
     }
 
     // Fill in the status structure.
-    UpdateStatus();
+    if (!UpdateStatus()) {
+      // Guess we didn't have enough to actually do anything.
+      outstanding_ = false;
+      return;
+    }
 
     // Now run our control loop and generate our command.
     std::swap(control_log_, old_control_log_);
@@ -414,14 +418,14 @@ class QuadrupedControl::Impl {
     status_signal_(&status_);
   }
 
-  double GetSign(int id) const {
+  std::optional<double> MaybeGetSign(int id) const {
     for (const auto& joint : config_.joints) {
       if (joint.id == id) { return joint.sign; }
     }
-    mjlib::base::AssertNotReached();
+    return {};
   }
 
-  void UpdateStatus() {
+  bool UpdateStatus() {
     std::vector<QuadrupedState::Link> links;
 
     if (status_.mode == QM::kConfiguring) {
@@ -445,7 +449,12 @@ class QuadrupedControl::Impl {
 
       out_joint.id = out_link.id = reply.id;
 
-      const double sign = GetSign(reply.id);
+      const auto maybe_sign = MaybeGetSign(reply.id);
+      if (!maybe_sign) {
+        log_.warn(fmt::format("Reply from unknown servo {}", reply.id));
+        continue;
+      }
+      const double sign = *maybe_sign;
 
       for (const auto& pair : reply.reply) {
         const auto* maybe_value = std::get_if<moteus::Value>(&pair.second);
@@ -497,9 +506,6 @@ class QuadrupedControl::Impl {
                 return lhs.id < rhs.id;
               });
 
-    // We should only be here if we have something for all our joints.
-    MJ_ASSERT(status_.state.joints.size() == 12);
-
     if (status_.mode != QM::kFault) {
       std::string fault;
 
@@ -514,6 +520,11 @@ class QuadrupedControl::Impl {
       if (!fault.empty()) {
         Fault(fault);
       }
+    }
+
+    // We should only be here if we have something for all our joints.
+    if (status_.state.joints.size() != 12) {
+      return false;
     }
 
     IkSolver::JointAngles joint_angles;
@@ -572,6 +583,7 @@ class QuadrupedControl::Impl {
     // Now update the robot values.
 
     // pose_mm_RB isn't sensed, but is just a commanded value.
+    return true;
   }
 
   void UpdateConfiguringStatus() {
@@ -2121,7 +2133,12 @@ class QuadrupedControl::Impl {
       values.resize(0);
 
       if (mode == moteus::Mode::kPosition) {
-        const double sign = GetSign(joint.id);
+        const auto maybe_sign = MaybeGetSign(joint.id);
+        if (!maybe_sign) {
+          log_.warn(fmt::format("Unknown servo {}", joint.id));
+          continue;
+        }
+        const double sign = *maybe_sign;
 
         if (joint.angle_deg != 0.0) { values.resize(1); }
         if (joint.velocity_dps != 0.0) { values.resize(2); }
