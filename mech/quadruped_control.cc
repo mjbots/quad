@@ -16,6 +16,7 @@
 
 #include <fstream>
 
+#include <boost/algorithm/string.hpp>
 #include <boost/asio/post.hpp>
 
 #include <fmt/format.h>
@@ -243,12 +244,16 @@ class QuadrupedControl::Impl {
     BOOST_ASSERT(!!client_);
 
     // Load our configuration.
-    std::ifstream inf(parameters_.config);
-    mjlib::base::system_error::throw_if(
-        !inf.is_open(),
-        fmt::format("could not open config file '{}'", parameters_.config));
+    std::vector<std::string> configs;
+    boost::split(configs, parameters_.config, boost::is_any_of(" "));
+    for (const auto& config : configs) {
+      std::ifstream inf(config);
+      mjlib::base::system_error::throw_if(
+          !inf.is_open(),
+          fmt::format("could not open config file '{}'", parameters_.config));
 
-    mjlib::base::Json5ReadArchive(inf).Accept(&config_);
+      mjlib::base::Json5ReadArchive(inf).Accept(&config_);
+    }
 
     if (config_.legs.size() != 4 ||
         config_.joints.size() != 12) {
