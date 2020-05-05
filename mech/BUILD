@@ -94,6 +94,7 @@ cc_library(
 cc_test(
     name = "test",
     srcs = ["test/" + x for x in [
+        "expo_map_test.cc",
         "mammal_ik_test.cc",
         "trajectory_test.cc",
         "test_main.cc",

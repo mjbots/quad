@@ -39,6 +39,7 @@
 #include "gl/vertex_buffer_object.h"
 #include "gl/window.h"
 
+#include "mech/expo_map.h"
 #include "mech/nrfusb_client.h"
 #include "mech/quadruped_command.h"
 #include "mech/turret_control.h"
@@ -691,6 +692,14 @@ int do_main(int argc, char** argv) {
   std::vector<bool> old_gamepad_buttons;
   old_gamepad_buttons.resize(GLFW_GAMEPAD_BUTTON_LAST + 1);
 
+  ExpoMap expo{[]() {
+      ExpoMap::Options options;
+      options.deadband = 0.15;
+      options.slow_range = 0.40;
+      options.slow_value = 0.10;
+      return options;
+    }()};
+
   while (!window.should_close()) {
     context.poll(); context.reset();
     window.PollEvents();
@@ -743,9 +752,9 @@ int do_main(int argc, char** argv) {
           gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_X];
 
       turret_rate_dps.pitch = -kMaxTurretPitch_dps *
-          gamepad.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y];
+          expo(gamepad.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y]);
       turret_rate_dps.yaw = kMaxTurretYaw_dps *
-          gamepad.axes[GLFW_GAMEPAD_AXIS_RIGHT_X];
+          expo(gamepad.axes[GLFW_GAMEPAD_AXIS_RIGHT_X]);
       turret_track = gamepad.buttons[GLFW_GAMEPAD_BUTTON_LEFT_BUMPER] != 0;
     }
 
