@@ -149,6 +149,7 @@ struct QuadrupedConfig {
       a->Visit(MJ_NVP(upper_height_mm));
       a->Visit(MJ_NVP(retract_height_mm));
       a->Visit(MJ_NVP(landing_force_scale));
+      a->Visit(MJ_NVP(land_gain_increase));
       a->Visit(MJ_NVP(min_acceleration_mm_s2));
     }
   };
