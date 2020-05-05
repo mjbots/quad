@@ -63,6 +63,8 @@ class TurretControl : boost::noncopyable {
     CameraDriver::Options camera;
     TargetTracker::Options tracker;
 
+    double max_rate_accel_dps2 = 1000.0;
+
     double target_gain_dps = 10.0;
     double target_timeout_s = 0.3;
 
@@ -79,6 +81,7 @@ class TurretControl : boost::noncopyable {
       a->Visit(MJ_NVP(command_timeout_s));
       a->Visit(MJ_NVP(camera));
       a->Visit(MJ_NVP(tracker));
+      a->Visit(MJ_NVP(max_rate_accel_dps2));
       a->Visit(MJ_NVP(target_gain_dps));
       a->Visit(MJ_NVP(target_timeout_s));
     }
@@ -152,11 +155,13 @@ class TurretControl : boost::noncopyable {
 
     struct ServoControl {
       double angle_deg = 0.0;
+      double rate_dps = 0.0;
       mjlib::base::PID::State pid;
 
       template <typename Archive>
       void Serialize(Archive* a) {
         a->Visit(MJ_NVP(angle_deg));
+        a->Visit(MJ_NVP(rate_dps));
         a->Visit(MJ_NVP(pid));
       }
     };

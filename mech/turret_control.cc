@@ -344,6 +344,22 @@ class TurretControl::Impl {
       }
       return std::make_pair(0., 0.);
     }();
+
+    const double max_rate_change_dps =
+        parameters_.max_rate_accel_dps2 * parameters_.period_s;
+
+    pitch_rate_dps = mjlib::base::Limit(
+        pitch_rate_dps,
+        status_.control.pitch.rate_dps - max_rate_change_dps,
+        status_.control.pitch.rate_dps + max_rate_change_dps);
+    yaw_rate_dps = mjlib::base::Limit(
+        yaw_rate_dps,
+        status_.control.yaw.rate_dps - max_rate_change_dps,
+        status_.control.yaw.rate_dps + max_rate_change_dps);
+
+    status_.control.pitch.rate_dps = pitch_rate_dps;
+    status_.control.yaw.rate_dps = yaw_rate_dps;
+
     status_.control.pitch.angle_deg +=
         pitch_rate_dps * parameters_.period_s;
     status_.control.yaw.angle_deg +=
