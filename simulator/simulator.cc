@@ -53,6 +53,8 @@ int main(int argc, char** argv) {
     mjlib::base::system_error::throw_if(
         !inf.is_open(), "opening "  + config_file);
     mjlib::base::ClippParseIni(inf, group);
+
+    mjlib::base::ClippParse(argc, argv, group);
   }
 
   if (!log_file.empty()) {

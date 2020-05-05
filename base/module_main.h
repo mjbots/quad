@@ -75,6 +75,9 @@ int safe_main(int argc, char**argv) {
     mjlib::base::system_error::throw_if(
         !inf.is_open(), "opening " + config_file);
     mjlib::base::ClippParseIni(inf, group);
+
+    // Re-parse any cmdline options so they take precedence.
+    mjlib::base::ClippParse(argc, argv, group);
   }
 
   if (!log_file.empty()) {
