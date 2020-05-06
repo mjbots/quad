@@ -214,7 +214,8 @@
         value == "rest" ||
         value == "jump" ||
         value == "walk" ||
-        value == "backflip" ) {
+        value == "backflip" ||
+        value == "balance") {
       // We always send this command out.
       var command = {
         "mode" : value,

@@ -240,6 +240,19 @@ struct QuadrupedConfig {
 
   Backflip backflip;
 
+  struct Balance {
+    double velocity_mm_s = 400.0;
+    double height_mm = 150;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(velocity_mm_s));
+      a->Visit(MJ_NVP(height_mm));
+    }
+  };
+
+  Balance balance;
+
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(joints));
@@ -257,6 +270,7 @@ struct QuadrupedConfig {
     a->Visit(MJ_NVP(jump));
     a->Visit(MJ_NVP(walk));
     a->Visit(MJ_NVP(backflip));
+    a->Visit(MJ_NVP(balance));
   }
 };
 

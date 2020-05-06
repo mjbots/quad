@@ -692,6 +692,10 @@ class QuadrupedControl::Impl {
         DoControl_Backflip();
         break;
       }
+      case QM::kBalance: {
+        DoControl_Balance();
+        break;
+      }
       case QM::kNumModes: {
         mjlib::base::AssertNotReached();
       }
@@ -743,7 +747,8 @@ class QuadrupedControl::Impl {
       case QM::kRest:
       case QM::kJump:
       case QM::kWalk:
-      case QM::kBackflip: {
+      case QM::kBackflip:
+      case QM::kBalance: {
         // This can only be done from certain configurations, where we
         // know all four legs are on the ground.  Modify our command
         // to try and get into that state.
@@ -759,7 +764,8 @@ class QuadrupedControl::Impl {
                     status_.state.rest.done) ||
                    (status_.mode == QM::kStandUp &&
                     status_.state.stand_up.mode ==
-                    QuadrupedState::StandUp::Mode::kDone)) {
+                    QuadrupedState::StandUp::Mode::kDone) ||
+                   status_.mode == QM::kBalance) {
           status_.mode = current_command_.mode;
 
           status_.state.jump.command = current_command_.jump.value_or(
@@ -815,6 +821,9 @@ class QuadrupedControl::Impl {
         }
         case QM::kRest: {
           status_.state.rest = {};
+        }
+        case QM::kBalance: {
+          status_.state.robot.pose_mm_RB = Sophus::SE3d();
         }
         case QM::kConfiguring:
         case QM::kStopped:
@@ -1868,6 +1877,46 @@ class QuadrupedControl::Impl {
 
     // TODO: have an RB rate of change so that we can properly
     // command velocities of the joints.
+  }
+
+  void DoControl_Balance() {
+    ClearDesiredMotion();
+
+    MJ_ASSERT(!old_control_log_->legs_R.empty());
+    auto legs_R = old_control_log_->legs_R;
+
+    auto is_stance = [](auto leg_id) {
+      return leg_id == 0 || leg_id == 3;
+    };
+
+    for (auto& leg_R : legs_R) {
+      leg_R.kp_scale = {};
+      leg_R.kd_scale = {};
+      leg_R.landing = false;
+      if (is_stance(leg_R.leg_id)) {
+        leg_R.stance = 1.0;
+      } else {
+        leg_R.stance = 0.0;
+      }
+    }
+
+    MoveLegsFixedSpeed(
+        &legs_R, config_.balance.velocity_mm_s,
+        [&]() {
+          std::vector<std::pair<int, base::Point3D>> result;
+          for (const auto& leg_R : legs_R) {
+            if (!is_stance(leg_R.leg_id)) {
+              base::Point3D point_mm_R = GetLeg(leg_R.leg_id).idle_R;
+              point_mm_R.z() = config_.balance.height_mm;
+              result.push_back(std::make_pair(leg_R.leg_id, point_mm_R));
+            }
+          }
+          return result;
+        }());
+
+    UpdateLegsStanceForce(&legs_R, 0.0);
+
+    ControlLegs_R(std::move(legs_R));
   }
 
   void ClearDesiredMotion() {

@@ -74,6 +74,7 @@ struct QuadrupedCommand {
     kWalk = 9,
 
     kBackflip = 10,
+    kBalance = 11,
 
     kNumModes,
   };
@@ -91,6 +92,7 @@ struct QuadrupedCommand {
         { kJump, "jump" },
         { kWalk, "walk" },
         { kBackflip, "backflip" },
+        { kBalance, "balance" },
       }};
   }
 
