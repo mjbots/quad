@@ -64,6 +64,10 @@ class Quaternion {
     return Quaternion(w_ / n, x_ / n, y_ / n, z_ / n);
   }
 
+  Eigen::Quaterniond eigen() const {
+    return Eigen::Quaterniond(w(), x(), y(), z());
+  }
+
   Eigen::Matrix<double, 3, 3> matrix() const {
     Eigen::Matrix<double, 3, 3> r;
 
