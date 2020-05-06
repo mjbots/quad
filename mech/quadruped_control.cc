@@ -444,16 +444,17 @@ class QuadrupedControl::Impl {
     };
 
     for (const auto& reply : status_reply_.replies) {
+      const auto maybe_sign = MaybeGetSign(reply.id);
+      if (!maybe_sign) {
+        log_.warn(fmt::format("Reply from unknown servo {}", reply.id));
+        return false;
+      }
+
       QuadrupedState::Joint& out_joint = find_or_make_joint(reply.id);
       QuadrupedState::Link out_link;
 
       out_joint.id = out_link.id = reply.id;
 
-      const auto maybe_sign = MaybeGetSign(reply.id);
-      if (!maybe_sign) {
-        log_.warn(fmt::format("Reply from unknown servo {}", reply.id));
-        continue;
-      }
       const double sign = *maybe_sign;
 
       for (const auto& pair : reply.reply) {
