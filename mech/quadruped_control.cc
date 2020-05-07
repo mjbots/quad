@@ -821,9 +821,11 @@ class QuadrupedControl::Impl {
         }
         case QM::kRest: {
           status_.state.rest = {};
+          break;
         }
         case QM::kBalance: {
-          status_.state.robot.pose_mm_RB = Sophus::SE3d();
+          status_.state.balance = {};
+          break;
         }
         case QM::kConfiguring:
         case QM::kStopped:
@@ -832,6 +834,17 @@ class QuadrupedControl::Impl {
         case QM::kJoint:
         case QM::kLeg:
         case QM::kNumModes: {
+          break;
+        }
+      }
+      switch (status_.mode) {
+        case QM::kBalance: {
+          status_.state.balance.shoulder_distance_mm =
+              (legs_[0].pose_mm_BG.inverse() *
+               old_control_log_->legs_B[0].position_mm).norm();
+          break;
+        }
+        default: {
           break;
         }
       }
@@ -1890,13 +1903,17 @@ class QuadrupedControl::Impl {
     };
 
     for (auto& leg_R : legs_R) {
-      leg_R.kp_scale = {};
-      leg_R.kd_scale = {};
       leg_R.landing = false;
       if (is_stance(leg_R.leg_id)) {
+        // We are going to be controlling force directly.
+        leg_R.kp_scale = base::Point3D(0., 0., 0.);
+        leg_R.kd_scale = base::Point3D(0., 0., 0.);
         leg_R.stance = 1.0;
       } else {
+        leg_R.kp_scale = {};
+        leg_R.kd_scale = {};
         leg_R.stance = 0.0;
+        leg_R.force_N = base::Point3D(0., 0., 0.);
       }
     }
 
@@ -1914,7 +1931,41 @@ class QuadrupedControl::Impl {
           return result;
         }());
 
-    UpdateLegsStanceForce(&legs_R, 0.0);
+    const double feedforward_force_N = config_.mass_kg * kGravity * 0.5;
+
+    // Now do the control for the stance legs.  For now, we will fix
+    // them at a given distance away from the shoulder, but leave them
+    // otherwise unconstrained.
+    for (const int id : {0, 3}) {
+      auto& s = status_.state.balance;
+
+      const auto& status_B = status_.state.legs_B[id];
+      const auto& leg = legs_[id];
+      auto& leg_R = legs_R[id];
+
+      const Sophus::SE3d pose_mm_GB = leg.pose_mm_BG.inverse();
+      s.position_mm_G =
+          pose_mm_GB * status_B.position_mm;
+      s.velocity_mm_s_G =
+          pose_mm_GB * status_B.velocity_mm_s;
+      s.cur_dist_mm = s.position_mm_G.norm();
+      s.unit = s.position_mm_G.normalized();
+
+      s.norm_velocity_mm_s = s.velocity_mm_s_G.dot(s.unit);
+      s.position_error_mm =
+          s.cur_dist_mm - status_.state.balance.shoulder_distance_mm;
+
+      s.force_N =
+          mjlib::base::Limit(
+              s.position_error_mm * -config_.balance.kp_N_mm +
+              s.norm_velocity_mm_s * -config_.balance.kd_N_mm_s,
+              -config_.balance.max_force_N,
+              config_.balance.max_force_N);
+
+      leg_R.force_N = s.force_N * s.unit +
+          base::Point3D(0, 0, feedforward_force_N);
+    }
+
 
     ControlLegs_R(std::move(legs_R));
   }

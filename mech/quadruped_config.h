@@ -244,10 +244,17 @@ struct QuadrupedConfig {
     double velocity_mm_s = 400.0;
     double height_mm = 150;
 
+    double kp_N_mm = 1.0;
+    double kd_N_mm_s = 0.1;
+    double max_force_N = 20.0;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(velocity_mm_s));
       a->Visit(MJ_NVP(height_mm));
+      a->Visit(MJ_NVP(kp_N_mm));
+      a->Visit(MJ_NVP(kd_N_mm_s));
+      a->Visit(MJ_NVP(max_force_N));
     }
   };
 
