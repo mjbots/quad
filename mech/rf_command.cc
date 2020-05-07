@@ -14,13 +14,17 @@
 
 #include <boost/asio/io_context.hpp>
 
+#include <sophus/se2.hpp>
+
 #include "mjlib/base/buffer_stream.h"
 #include "mjlib/base/clipp.h"
 #include "mjlib/base/clipp_archive.h"
+#include "mjlib/base/limit.h"
 #include "mjlib/io/now.h"
 #include "mjlib/io/stream_factory.h"
 #include "mjlib/telemetry/format.h"
 
+#include "base/interpolate.h"
 #include "base/point3d.h"
 #include "base/saturate.h"
 #include "base/sophus.h"
@@ -52,7 +56,7 @@ namespace mech {
 const int kRemoteRobot = 0;
 const int kRemoteTurret = 1;
 
-constexpr double kMaxForwardVelocity_mm_s = 300.0;
+constexpr double kMaxForwardVelocity_mm_s = 200.0;
 constexpr double kMaxLateralVelocity_mm_s = 100.0;
 constexpr double kMaxRotation_rad_s = (30.0 / 180.0) * M_PI;
 
@@ -700,6 +704,22 @@ int do_main(int argc, char** argv) {
       return options;
     }()};
 
+  ExpoMap turret_walk_expo{[]() {
+      ExpoMap::Options options;
+      options.deadband = 0.0;
+      options.slow_range = 0.30;
+      options.slow_value = 0.50;
+      return options;
+    }()};
+
+  ExpoMap lateral_walk_expo{[]() {
+      ExpoMap::Options options;
+      options.deadband = 0.15;
+      options.slow_range = 0.30;
+      options.slow_value = 0.15;
+      return options;
+    }()};
+
   while (!window.should_close()) {
     context.poll(); context.reset();
     window.PollEvents();
@@ -742,15 +762,46 @@ int do_main(int argc, char** argv) {
       v_mm_s_R.x() = -kMaxForwardVelocity_mm_s *
           gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_Y];
       v_mm_s_R.y() = kMaxLateralVelocity_mm_s *
-          gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_X];
+          lateral_walk_expo(gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_X]);
 
       w_LR.z() = kMaxRotation_rad_s * gamepad.axes[GLFW_GAMEPAD_AXIS_RIGHT_X];
     } else {
-      v_mm_s_R.x() = -kMaxForwardVelocity_mm_s *
-          gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_Y];
-      w_LR.z() = kMaxRotation_rad_s *
-          gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_X];
+      const Eigen::Vector2d cmd_turret = Eigen::Vector2d(
+          lateral_walk_expo(gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_X]),
+          -gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_Y]);
 
+      const double turret_rad =
+          base::WrapNegPiToPi(
+              base::Radians(-slot_command->data().turret.servo_yaw_deg));
+      const Sophus::SE2d pose_robot_turret = Sophus::SE2d(turret_rad, {});
+
+      // Rotate this to be relative to the robot instead of the turret.
+      const Eigen::Vector2d cmd_robot = pose_robot_turret * cmd_turret;
+
+      // Now we use some heuristics to make things drive better.  If
+      // we are trying to mostly turn, then we scale back the forward
+      // velocity so that we get our turn done before moving.
+      const double turn_ratio = cmd_robot.x() / cmd_robot.norm();
+      const double kTurnThreshold = 0.5;
+      const double forward_scale =
+          mjlib::base::Limit(
+              base::Interpolate(
+                  1.0, 0.0,
+                  (turn_ratio - kTurnThreshold) /
+                  (1.0 - kTurnThreshold)),
+              0.0, 1.0);
+
+      v_mm_s_R.x() = kMaxForwardVelocity_mm_s * forward_scale * cmd_robot.y();
+      // We pick the sign of our rotation to get closest to a forward
+      // or backward configuration as possible.
+      const double rotation_sign = 1.0;
+          // (std::abs(turret_rad) > 0.5 * M_PI) ?
+          // -1.0 : 1.0;
+      w_LR.z() =
+          std::copysign(1.0, v_mm_s_R.x()) * rotation_sign *
+          kMaxRotation_rad_s * turret_walk_expo(cmd_robot.x());
+
+      // Finally, do the turret rates.
       turret_rate_dps.pitch = -kMaxTurretPitch_dps *
           expo(gamepad.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y]);
       turret_rate_dps.yaw = kMaxTurretYaw_dps *
