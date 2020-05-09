@@ -15,11 +15,9 @@
 
 // TODO:
 
-// * data fields obscure end of field names and are themselves truncated
+// * Dragging the time bar is totally unresponsive
 // * Need to show things to expand when there is no data yet. (or at
 //   least the top level if nothing else)
-// * Arrays
-// * Dragging the time bar is totally unresponsive
 // * Plots
 // * Video
 // * 3D mech
@@ -65,7 +63,7 @@ class TreeView {
 
   void Render() {
     ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(300, 620), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(400, 620), ImGuiCond_FirstUseEver);
     gl::ImGuiWindow file_window("Data");
 
     std::vector<const FileReader::Record*> records;
@@ -81,14 +79,18 @@ class TreeView {
         ImGui::TreeNodeEx(record, ImGuiTreeNodeFlags_Leaf,
                           "%s", record->name.c_str());
       } else {
+        ImGui::Columns(2, nullptr, true);
+        // ImGui::SetColumnWidth(0, ImGui::GetWindowContentRegionWidth() - 150);
         const auto& data = it->second;
         mjlib::base::BufferReadStream stream{data};
         VisitElement(record->schema->root(), stream);
+        ImGui::Columns(1);
       }
     }
   }
 
-  void VisitElement(const Element* element, mjlib::base::ReadStream& stream) {
+  void VisitElement(const Element* element, mjlib::base::ReadStream& stream,
+                    const char* name_override = nullptr) {
     using FT = Format::Type;
 
     // Union types we just forward through to the appropriate typed
@@ -104,9 +106,10 @@ class TreeView {
     if (!children) {
       flags |= ImGuiTreeNodeFlags_Leaf;
     }
-    ImGui::Columns(3, nullptr, false);
     const bool expanded = ImGui::TreeNodeEx(
-        element, flags, "%s", element->name.c_str());
+        element, flags, "%s",
+        name_override ? name_override : element->name.c_str());
+    ImGui::NextColumn();
 
     // Read the scalar data to display.
     const auto value = [&]() -> std::string {
@@ -156,9 +159,8 @@ class TreeView {
       return "";
     }();
 
-    ImGui::NextColumn();
     ImGui::Text("%s", value.c_str());
-    ImGui::Columns(1);
+    ImGui::NextColumn();
 
     if (expanded) {
       switch (element->type) {
@@ -168,7 +170,16 @@ class TreeView {
           }
           break;
         }
-        case FT::kArray:
+        case FT::kArray: {
+          const auto nelements = element->ReadArraySize(stream);
+          for (uint64_t i = 0; i < nelements; i++) {
+            ImGui::PushID(i);
+            VisitElement(element->children.front(), stream,
+                         fmt::format("{}", i).c_str());
+            ImGui::PopID();
+          }
+          break;
+        }
         case FT::kMap: {
           // TODO
           element->Ignore(stream);
