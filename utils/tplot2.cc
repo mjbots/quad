@@ -15,7 +15,6 @@
 
 // TODO:
 
-// * Dragging the time bar is totally unresponsive
 // * Plots
 // * Video
 // * 3D mech
@@ -225,7 +224,7 @@ class TreeView {
           return options;
         }()).begin());
       if (item.index > last_index_) { last_index_ = item.index; }
-      data_.insert(std::make_pair(pair.first, item.data));
+      data_[pair.first] = item.data;
     }
   }
 
