@@ -20,6 +20,7 @@ load("//tools/workspace/glfw:repository.bzl", "glfw_repository")
 load("//tools/workspace/gst-rpicamsrc:repository.bzl", "gst_rpicamsrc_repository")
 load("//tools/workspace/i2c-tools:repository.bzl", "i2c_tools_repository")
 load("//tools/workspace/imgui:repository.bzl", "imgui_repository")
+load("//tools/workspace/implot:repository.bzl", "implot_repository")
 load("//tools/workspace/mjlib:repository.bzl", "mjlib_repository")
 load("//tools/workspace/moteus:repository.bzl", "moteus_repository")
 load("//tools/workspace/raspicam:repository.bzl", "raspicam_repository")
@@ -41,6 +42,8 @@ def add_default_repositories(excludes = []):
         i2c_tools_repository(name = "i2c-tools")
     if "imgui" not in excludes:
         imgui_repository(name = "imgui")
+    if "implot" not in excludes:
+        implot_repository(name = "implot")
     if "mjlib" not in excludes:
         mjlib_repository(name = "com_github_mjbots_mjlib")
     if "moteus" not in excludes:
