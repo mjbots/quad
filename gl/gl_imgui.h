@@ -30,13 +30,20 @@ namespace gl {
 
 class GlImGui {
  public:
-  GlImGui(const Window& window) {
+  struct Options {
+    bool persist_settings = true;
+
+    Options() {}
+  };
+  GlImGui(const Window& window, const Options& options = {}) {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
 
     // We don't want to persist settings.
-    io.IniFilename = nullptr;
+    if (!options.persist_settings) {
+      io.IniFilename = nullptr;
+    }
 
     ImGui::StyleColorsDark();
 

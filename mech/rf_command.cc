@@ -674,7 +674,11 @@ int do_main(int argc, char** argv) {
     });
 
   gl::Window window(1280, 720, "quad RF command");
-  gl::GlImGui imgui(window);
+  gl::GlImGui imgui(window, []() {
+      GlImGui::Options options;
+      options.persist_settings = false;
+      return options;
+    }());
 
   std::optional<VideoRender> video_render;
   try {

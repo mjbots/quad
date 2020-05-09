@@ -20,3 +20,4 @@ logs
 .#*
 _bazelrc_generated
 /bazel-*
+imgui.ini
