@@ -62,5 +62,16 @@ class GlImGui {
   }
 };
 
+class ImGuiWindow {
+ public:
+  ImGuiWindow(const char* name) {
+    ImGui::Begin(name);
+  }
+
+  ~ImGuiWindow() {
+    ImGui::End();
+  }
+};
+
 }
 }
