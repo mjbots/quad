@@ -12,6 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
+// TODO:
+
+// * data fields obscure end of field names and are themselves truncated
+// * Need to show things to expand when there is no data yet. (or at
+//   least the top level if nothing else)
+// * Arrays
+// * Dragging the time bar is totally unresponsive
+// * Plots
+// * Video
+// * 3D mech
+
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/lexical_cast.hpp>
 
@@ -77,6 +89,16 @@ class TreeView {
   }
 
   void VisitElement(const Element* element, mjlib::base::ReadStream& stream) {
+    using FT = Format::Type;
+
+    // Union types we just forward through to the appropriate typed
+    // child.
+    if (element->type == FT::kUnion) {
+      const auto index = element->ReadUnionIndex(stream);
+      VisitElement(element->children[index], stream);
+      return;
+    }
+
     const bool children = !element->children.empty() || !element->fields.empty();
     int flags = 0;
     if (!children) {
@@ -87,7 +109,6 @@ class TreeView {
         element, flags, "%s", element->name.c_str());
 
     // Read the scalar data to display.
-    using FT = Format::Type;
     const auto value = [&]() -> std::string {
       switch (element->type) {
         case FT::kBoolean: {
@@ -148,11 +169,13 @@ class TreeView {
           break;
         }
         case FT::kArray:
-        case FT::kMap:
-        case FT::kUnion: {
+        case FT::kMap: {
           // TODO
           element->Ignore(stream);
           break;
+        }
+        case FT::kUnion: {
+          mjlib::base::AssertNotReached();
         }
         default: {
           break;
@@ -165,9 +188,12 @@ class TreeView {
       switch (element->type) {
         case FT::kObject:
         case FT::kArray:
-        case FT::kMap:
-        case FT::kUnion: {
+        case FT::kMap: {
           element->Ignore(stream);
+          break;
+        }
+        case FT::kUnion: {
+          mjlib::base::AssertNotReached();
         }
         default: {
           break;
