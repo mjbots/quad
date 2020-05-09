@@ -20,7 +20,7 @@ def imgui_repository(name):
     github_archive(
         name = name,
         repo = "ocornut/imgui",
-        commit = "68c5d030cdb7c5f928bd961ac7081cdac7009b17",
-        sha256 = "b9e35143b92548a53657be2a3933bde5bad8365359fb5459efb4aa11aaf52848",
+        commit = "538d28e29ed177f1bde0ad0f1c6293f001298647",
+        sha256 = "1189d1ad2fad351f06866da8b2aa94a12d16b95493ea2d84bf7584290cc0f99a",
         build_file = Label("//tools/workspace/imgui:package.BUILD"),
     )
