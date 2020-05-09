@@ -16,8 +16,6 @@
 // TODO:
 
 // * Dragging the time bar is totally unresponsive
-// * Need to show things to expand when there is no data yet. (or at
-//   least the top level if nothing else)
 // * Plots
 // * Video
 // * 3D mech
@@ -73,15 +71,16 @@ class TreeView {
       });
 
     for (auto record : records) {
-      const auto it = data_.find(record);
-      if (it == data_.end()) {
+      const auto data = data_.at(record);
+      if (data.empty()) {
         // No data... for now we won't even let you expand it.
-        ImGui::TreeNodeEx(record, ImGuiTreeNodeFlags_Leaf,
-                          "%s", record->name.c_str());
+        if (ImGui::TreeNodeEx(record, ImGuiTreeNodeFlags_Leaf,
+                              "%s", record->name.c_str())) {
+          ImGui::TreePop();
+        }
       } else {
         ImGui::Columns(2, nullptr, true);
         // ImGui::SetColumnWidth(0, ImGui::GetWindowContentRegionWidth() - 150);
-        const auto& data = it->second;
         mjlib::base::BufferReadStream stream{data};
         VisitElement(record->schema->root(), stream);
         ImGui::Columns(1);
@@ -215,6 +214,7 @@ class TreeView {
 
   void Seek(boost::posix_time::ptime timestamp) {
     data_ = {};
+    for (auto record : reader_->records()) { data_[record] = ""; }
     last_index_ = {};
 
     const auto records = reader_->Seek(timestamp);
