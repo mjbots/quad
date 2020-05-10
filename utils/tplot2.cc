@@ -15,7 +15,7 @@
 
 // TODO:
 // * Plots
-//  * ability to remove plots
+//  * don't crash plotting optionals
 //  * show marker with current time
 //  * turn on/off markers
 //  * multiple y axes
@@ -675,7 +675,7 @@ class PlotView {
       ImGui::SetNextPlotRange(p.min_x, p.max_x, p.min_y, p.max_y, ImGuiCond_Always);
       fit_contents_ = false;
     }
-    if (ImGui::BeginPlot("Plot", "time", nullptr, ImVec2(-1, -1),
+    if (ImGui::BeginPlot("Plot", "time", nullptr, ImVec2(-1, -25),
                          ImPlotFlags_Default)) {  // | ImPlotFlags_Y2Axis
       for (const auto& plot : plots_) {
         ImGui::Plot(plot.legend.c_str(), plot.xvals.data(), plot.yvals.data(),
@@ -693,9 +693,33 @@ class PlotView {
       }
       ImGui::EndDragDropTarget();
     }
+
+    if (ImGui::BeginCombo("Plots", current_plot_name().c_str())) {
+      for (size_t i = 0; i < plots_.size(); i++) {
+        if (ImGui::Selectable(
+                plots_[i].legend.c_str(), i == current_plot_index_)) {
+          current_plot_index_ = i;
+        }
+      }
+      ImGui::EndCombo();
+    }
+    ImGui::SameLine(0, 40.0);
+    if (ImGui::Button("Remove")) {
+      plots_.erase(plots_.begin() + current_plot_index_);
+      if (current_plot_index_ > 0 && current_plot_index_ >= plots_.size()) {
+        current_plot_index_--;
+      }
+    }
   }
 
  private:
+  std::string current_plot_name() const {
+    if (current_plot_index_ >= plots_.size()) {
+      return "";
+    }
+    return plots_[current_plot_index_].legend;
+  }
+
   std::string MakeLegend(const std::string& x, const std::string& y) {
     if (!x.empty() && !y.empty()) {
       return fmt::format("{} vs {}", y, x);
@@ -762,6 +786,7 @@ class PlotView {
 
   std::vector<Plot> plots_;
   bool fit_contents_ = false;
+  size_t current_plot_index_ = 0;
 };
 }
 
