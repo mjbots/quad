@@ -16,7 +16,6 @@
 // TODO:
 // * Plots
 //  * I get crazy artifacts when some things are off the bottom
-//  * unset optionals should render as disconnected
 //  * show marker with current time
 //  * turn on/off markers
 //  * multiple y axes
@@ -498,7 +497,7 @@ class ValueRetrieve {
       switch (element->type) {
         case FT::kFinal:
         case FT::kNull: {
-          return 0.0f;
+          return std::numeric_limits<float>::quiet_NaN();
         }
         case FT::kBoolean: {
           return element->ReadBoolean(stream) ? 1.0f : 0.0f;
