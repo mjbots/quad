@@ -15,7 +15,8 @@
 
 // TODO:
 // * Plots
-//  * don't crash plotting optionals
+//  * I get crazy artifacts when some things are off the bottom
+//  * unset optionals should render as disconnected
 //  * show marker with current time
 //  * turn on/off markers
 //  * multiple y axes
@@ -413,9 +414,9 @@ class ValueRetrieve {
 
     mjlib::base::Tokenizer tokenizer(name, ".");
     auto* element = root;
+    auto next = tokenizer.next();
     valid_ = [&]() {
       while (true) {
-        const auto next = tokenizer.next();
         switch (element->type) {
           case FT::kFinal:
           case FT::kNull:
@@ -470,9 +471,11 @@ class ValueRetrieve {
             MJ_ASSERT(element->children.size() == 2 &&
                       element->children.front()->type == FT::kNull);
             element = element->children[1];
-            break;
+            // We don't want to consume any of our text string here.
+            continue;
           }
         }
+        next = tokenizer.next();
       }
     }();
   }
@@ -489,7 +492,9 @@ class ValueRetrieve {
     mjlib::base::BufferReadStream stream{item.data};
 
     const Element* element = item.record->schema->root();
-    for (const auto& link : chain_) {
+    auto it = chain_.begin();
+    while (it != chain_.end()) {
+      const auto& link = *it;
       switch (element->type) {
         case FT::kFinal:
         case FT::kNull: {
@@ -539,7 +544,7 @@ class ValueRetrieve {
             }
             field.element->Ignore(stream);
           }
-          continue;
+          break;
         }
         case FT::kArray: {
           const uint64_t size = element->ReadArraySize(stream);
@@ -560,13 +565,14 @@ class ValueRetrieve {
           }
 
           element = element->children.front();
-          continue;
+          break;
         }
         case FT::kMap: {
           // TODO
           return 0.0f;
         }
       }
+      ++it;
     }
     mjlib::base::AssertNotReached();
   }
