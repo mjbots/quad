@@ -16,10 +16,11 @@
 // TODO:
 // * Plots
 //  * I get crazy artifacts when non-first plots are entirely off screen
-//  * turn on/off markers
 //  * multiple y axes
 // * Video
 // * 3D mech
+// * Save/restore plot configuration
+// * Derived/scripted fields
 
 #include <string>
 #include <variant>
@@ -682,8 +683,15 @@ class PlotView {
     if (ImGui::BeginPlot("Plot", "time", nullptr, ImVec2(-1, -25),
                          ImPlotFlags_Default)) {  // | ImPlotFlags_Y2Axis
       for (const auto& plot : plots_) {
+        for (const auto& pair : plot.float_styles) {
+          ImGui::PushPlotStyleVar(pair.first, pair.second);
+        }
+        for (const auto& pair : plot.int_styles) {
+          ImGui::PushPlotStyleVar(pair.first, pair.second);
+        }
         ImGui::Plot(plot.legend.c_str(), plot.xvals.data(), plot.yvals.data(),
                     plot.xvals.size());
+        ImGui::PopPlotStyleVar(plot.float_styles.size() + plot.int_styles.size());
 
         const auto it = std::lower_bound(
             plot.timestamps.begin(), plot.timestamps.end(), timestamp);
@@ -718,11 +726,43 @@ class PlotView {
       }
       ImGui::EndCombo();
     }
-    ImGui::SameLine(0, 40.0);
+    ImGui::SameLine(0, 20.0);
     if (ImGui::Button("Remove")) {
       plots_.erase(plots_.begin() + current_plot_index_);
       if (current_plot_index_ > 0 && current_plot_index_ >= plots_.size()) {
         current_plot_index_--;
+      }
+    }
+    ImGui::SameLine(0, 10.0);
+    if (ImGui::Button("Properties")) {
+      ImGui::OpenPopup("Plot Properties");
+    }
+
+    if (ImGui::BeginPopup("Plot Properties")) {
+      if (current_plot_index_ < plots_.size()) {
+        auto& plot = plots_[current_plot_index_];
+
+        ImGui::Text("%s", current_plot_name().c_str());
+        float step1 = 1.0f;
+        ImGui::InputScalar("Width", ImGuiDataType_Float, &plot.float_styles[ImPlotStyleVar_LineWeight], &step1);
+        ImGui::InputScalar("Marker Size", ImGuiDataType_Float, &plot.float_styles[ImPlotStyleVar_MarkerSize], &step1);
+        constexpr const char* marker_types[] = {
+            "none",
+            "circle",
+            "square",
+            "diamond",
+            "up",
+            "down",
+            "left",
+            "right",
+            "cross",
+            "plus",
+            "asterisk",
+        };
+
+        ImGui::Combo("Marker", &plot.marker_type, marker_types, IM_ARRAYSIZE(marker_types));
+        plot.int_styles[ImPlotStyleVar_Marker] = 1 << plot.marker_type;
+        ImGui::EndPopup();
       }
     }
   }
@@ -799,6 +839,15 @@ class PlotView {
     float max_x = {};
     float min_y = {};
     float max_y = {};
+
+    std::map<int, float> float_styles {
+      {ImPlotStyleVar_LineWeight, 1.0f },
+      {ImPlotStyleVar_MarkerSize, 5.0f },
+    };
+    int marker_type = 0;
+    std::map<int, int> int_styles {
+      {ImPlotStyleVar_Marker, ImMarker_None},
+    };
   };
 
   std::vector<Plot> plots_;
