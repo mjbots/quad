@@ -15,8 +15,7 @@
 
 // TODO:
 // * Plots
-//  * I get crazy artifacts when some things are off the bottom
-//  * show marker with current time
+//  * I get crazy artifacts when non-first plots are entirely off screen
 //  * turn on/off markers
 //  * multiple y axes
 // * Video
@@ -685,6 +684,17 @@ class PlotView {
       for (const auto& plot : plots_) {
         ImGui::Plot(plot.legend.c_str(), plot.xvals.data(), plot.yvals.data(),
                     plot.xvals.size());
+
+        const auto it = std::lower_bound(
+            plot.timestamps.begin(), plot.timestamps.end(), timestamp);
+        if (it != plot.timestamps.end()) {
+          const auto index = it - plot.timestamps.begin();
+          ImGui::PushPlotStyleVar(ImPlotStyleVar_Marker, ImMarker_Diamond);
+          ImGui::Plot((plot.legend + "_mrk").c_str(),
+                      plot.xvals.data() + index, plot.yvals.data() + index,
+                      1);
+          ImGui::PopPlotStyleVar();
+        }
       }
 
       ImGui::EndPlot();
@@ -748,6 +758,7 @@ class PlotView {
     plot.legend = MakeLegend(x_token, y_token);
 
     for (auto item : reader_->items(getter.items())) {
+      plot.timestamps.push_back(item.timestamp);
       plot.xvals.push_back(getter.x(item));
       plot.yvals.push_back(getter.y(item));
     }
@@ -780,6 +791,7 @@ class PlotView {
 
     std::string legend;
 
+    std::vector<boost::posix_time::ptime> timestamps;
     std::vector<float> xvals;
     std::vector<float> yvals;
 
