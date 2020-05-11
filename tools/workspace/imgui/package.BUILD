@@ -37,5 +37,8 @@ cc_library(
     ],
     includes = ["."],
     deps = ["@glfw", "@gl3w"],
-    defines = ["IMGUI_DISABLE_INCLUDE_IMCONFIG_H"],
+    defines = [
+        "IMGUI_DISABLE_INCLUDE_IMCONFIG_H",
+        'ImDrawIdx="unsigned int"',
+    ],
 )
