@@ -24,6 +24,7 @@
 #include "mjlib/io/stream_factory.h"
 #include "mjlib/telemetry/format.h"
 
+#include "base/aspect_ratio.h"
 #include "base/interpolate.h"
 #include "base/point3d.h"
 #include "base/saturate.h"
@@ -519,32 +520,10 @@ class VideoRender {
   }
 
   void SetViewport(const Eigen::Vector2i& window_size) {
-    int x = 0;
-    int y = 0;
-    int display_w = window_size.x();
-    int display_h = window_size.y();
+    auto result = base::MaintainAspectRatio(Rotate(codec_.size()), window_size);
 
-    Eigen::Vector2i codec_size = Rotate(codec_.size());
-    // Enforce an aspect ratio.
-    const double desired_aspect_ratio =
-        static_cast<double>(std::abs(codec_size.x())) /
-        static_cast<double>(std::abs(codec_size.y()));
-    const double actual_ratio =
-        static_cast<double>(display_w) /
-        static_cast<double>(display_h);
-    if (actual_ratio > desired_aspect_ratio) {
-      const int w = display_h * desired_aspect_ratio;
-      const int remaining = display_w - w;
-      x = remaining / 2;
-      display_w = w;
-    } else if (actual_ratio < desired_aspect_ratio) {
-      const int h = display_w / desired_aspect_ratio;
-      const int remaining = display_h - h;
-      y = remaining / 2;
-      display_h = h;
-    }
-
-    glViewport(x, y, display_w, display_h);
+    glViewport(result.min().x(), result.min().y(),
+               result.sizes().x(), result.sizes().y());
   }
 
   void Update() {

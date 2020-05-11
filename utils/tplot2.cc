@@ -33,6 +33,8 @@
 
 #include <implot.h>
 
+#include "base/aspect_ratio.h"
+
 #include "ffmpeg/codec.h"
 #include "ffmpeg/file.h"
 #include "ffmpeg/ffmpeg.h"
@@ -960,8 +962,11 @@ class Video {
 
       last_timestamp_ = timestamp;
 
+      const auto ws = ImGui::GetWindowSize();
+      const auto p = base::MaintainAspectRatio(codec_.size(), {ws.x, ws.y});
+      ImGui::SameLine(p.min().x());
       ImGui::Image(reinterpret_cast<ImTextureID>(texture_.id()),
-                   ImVec2(1920 / 4, 1080 / 4));
+                   ImVec2(p.sizes().x(), p.sizes().y()));
     }
   }
 
