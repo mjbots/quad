@@ -71,13 +71,24 @@ class GlImGui {
 
 class ImGuiWindow {
  public:
-  ImGuiWindow(const char* name) {
-    ImGui::Begin(name);
+  ImGuiWindow(const char* name)
+      : open_{ImGui::Begin(name)} {
   }
 
   ~ImGuiWindow() {
     ImGui::End();
   }
+
+  bool open() const {
+    return open_;
+  }
+
+  operator bool() const {
+    return open_;
+  }
+
+ private:
+  const bool open_;
 };
 
 }
