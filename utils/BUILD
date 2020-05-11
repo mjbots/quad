@@ -37,6 +37,14 @@ py_binary(
     ],
 )
 
+py_binary(
+    name = "video_aligner",
+    srcs = ["video_aligner.py"],
+    deps = [
+        "@com_github_mjbots_mjlib//mjlib/telemetry:py_file_reader",
+    ],
+)
+
 cc_binary(
     name = "tplot2",
     srcs = ["tplot2.cc"],
