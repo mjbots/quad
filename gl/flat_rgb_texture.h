@@ -53,6 +53,8 @@ class FlatRgbTexture {
     texture_.bind(GL_TEXTURE_2D);
   }
 
+  GLuint id() const { return texture_.id(); }
+
  private:
   Texture texture_;
   const Eigen::Vector2i size_;

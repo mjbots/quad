@@ -37,6 +37,8 @@ class Texture {
     glBindTexture(target, tex_);
   }
 
+  GLuint id() const { return tex_; }
+
  private:
   GLuint tex_ = 0;
 };
