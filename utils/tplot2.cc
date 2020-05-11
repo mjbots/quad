@@ -289,6 +289,7 @@ class TreeView {
         case FT::kNull:
         case FT::kObject:
         case FT::kArray:
+        case FT::kFixedArray:
         case FT::kMap:
         case FT::kUnion: {
           break;
@@ -299,6 +300,19 @@ class TreeView {
 
     ImGui::Text("%s", value.c_str());
     ImGui::NextColumn();
+
+    auto do_array = [&](uint64_t nelements) {
+      for (uint64_t i = 0; i < nelements; i++) {
+        ImGui::PushID(i);
+        Parent new_parent;
+        new_parent.parent = parent;
+        new_parent.element = element;
+        new_parent.array_index = i;
+        VisitElement(element->children.front(), stream, &new_parent,
+                     fmt::format("{}", i).c_str());
+        ImGui::PopID();
+      }
+    };
 
     if (expanded) {
       switch (element->type) {
@@ -313,16 +327,11 @@ class TreeView {
         }
         case FT::kArray: {
           const auto nelements = element->ReadArraySize(stream);
-          for (uint64_t i = 0; i < nelements; i++) {
-            ImGui::PushID(i);
-            Parent new_parent;
-            new_parent.parent = parent;
-            new_parent.element = element;
-            new_parent.array_index = i;
-            VisitElement(element->children.front(), stream, &new_parent,
-                         fmt::format("{}", i).c_str());
-            ImGui::PopID();
-          }
+          do_array(nelements);
+          break;
+        }
+        case FT::kFixedArray: {
+          do_array(element->array_size);
           break;
         }
         case FT::kMap: {
@@ -344,6 +353,7 @@ class TreeView {
       switch (element->type) {
         case FT::kObject:
         case FT::kArray:
+        case FT::kFixedArray:
         case FT::kMap: {
           element->Ignore(stream);
           break;
@@ -455,7 +465,8 @@ class ValueRetrieve {
             if (!success) { return false; }
             break;
           }
-          case FT::kArray: {
+          case FT::kArray:
+          case FT::kFixedArray: {
             chain_.push_back(static_cast<uint64_t>(
                                  std::stoull(std::string(next))));
             element = element->children.front();
@@ -546,8 +557,11 @@ class ValueRetrieve {
           }
           break;
         }
-        case FT::kArray: {
-          const uint64_t size = element->ReadArraySize(stream);
+        case FT::kArray:
+        case FT::kFixedArray: {
+          const uint64_t size =
+              (element->type == FT::kArray) ?
+              element->ReadArraySize(stream) : element->array_size;
           const uint64_t array_index = std::get<uint64_t>(link);
 
           if (array_index >= size) {
