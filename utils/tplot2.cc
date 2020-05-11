@@ -17,6 +17,7 @@
 // * Plots
 //  * I get crazy artifacts when non-first plots are entirely off screen
 //  * multiple y axes
+//  * save window size in imgui.ini
 // * Video
 // * 3D mech
 // * Save/restore plot configuration
@@ -674,15 +675,33 @@ class PlotView {
     ImGui::SetNextWindowSize(ImVec2(800, 620), ImGuiCond_FirstUseEver);
     gl::ImGuiWindow file_window("Plot");
 
-    if (fit_contents_) {
-      MJ_ASSERT(!plots_.empty());
-      const auto& p = plots_.front();
-      ImGui::SetNextPlotRange(p.min_x, p.max_x, p.min_y, p.max_y, ImGuiCond_Always);
-      fit_contents_ = false;
-    }
-    if (ImGui::BeginPlot("Plot", "time", nullptr, ImVec2(-1, -25),
-                         ImPlotFlags_Default)) {  // | ImPlotFlags_Y2Axis
+    if (fit_plot_) {
+      const auto& p = **fit_plot_;
+      float xmin = std::numeric_limits<float>::infinity();
+      float xmax = -std::numeric_limits<float>::infinity();
       for (const auto& plot : plots_) {
+        xmin = std::min(xmin, plot.min_x);
+        xmax = std::max(xmax, plot.max_x);
+      }
+      ImGui::SetNextPlotLimitsX(xmin, xmax, ImGuiCond_Always);
+      ImGui::SetNextPlotLimitsY(p.min_y, p.max_y, ImGuiCond_Always, p.axis);
+      fit_plot_ = {};
+    }
+    const int extra_flags = [&]() {
+      int result = 0;
+      for (const auto& plot : plots_) {
+        if (plot.axis == 1) {
+          result |= ImPlotFlags_YAxis2;
+        } else if (plot.axis == 2) {
+          result |= ImPlotFlags_YAxis3;
+        }
+      }
+      return result;
+    }();
+    if (ImGui::BeginPlot("Plot", "time", nullptr, ImVec2(-1, -25),
+                         ImPlotFlags_Default | extra_flags)) {
+      for (const auto& plot : plots_) {
+        ImGui::SetPlotYAxis(plot.axis);
         for (const auto& pair : plot.float_styles) {
           ImGui::PushPlotStyleVar(pair.first, pair.second);
         }
@@ -717,14 +736,12 @@ class PlotView {
       ImGui::EndDragDropTarget();
     }
 
-    if (ImGui::BeginCombo("Plots", current_plot_name().c_str())) {
-      for (size_t i = 0; i < plots_.size(); i++) {
-        if (ImGui::Selectable(
-                plots_[i].legend.c_str(), i == current_plot_index_)) {
-          current_plot_index_ = i;
-        }
-      }
-      ImGui::EndCombo();
+    ImGui::PushItemWidth(60);
+    ImGui::Combo("Axis", &current_axis_, kAxisNames, IM_ARRAYSIZE(kAxisNames));
+    ImGui::PopItemWidth();
+    ImGui::SameLine(0, 10.0);
+    if (ImGui::Button("Properties")) {
+      ImGui::OpenPopup("Plot Properties");
     }
     ImGui::SameLine(0, 20.0);
     if (ImGui::Button("Remove")) {
@@ -733,9 +750,15 @@ class PlotView {
         current_plot_index_--;
       }
     }
-    ImGui::SameLine(0, 10.0);
-    if (ImGui::Button("Properties")) {
-      ImGui::OpenPopup("Plot Properties");
+    ImGui::SameLine(0, 10);
+    if (ImGui::BeginCombo("Plots", current_plot_name().c_str())) {
+      for (size_t i = 0; i < plots_.size(); i++) {
+        if (ImGui::Selectable(
+                plots_[i].legend.c_str(), i == current_plot_index_)) {
+          current_plot_index_ = i;
+        }
+      }
+      ImGui::EndCombo();
     }
 
     if (ImGui::BeginPopup("Plot Properties")) {
@@ -819,7 +842,14 @@ class PlotView {
       plot.max_x = plot.max_x + 1.0f;
     }
 
-    fit_contents_ = plots_.size() == 1;
+    plot.axis = current_axis_;
+
+    // If this is the only plot on this axis, then re-fit things.
+    if (1 == std::count_if(
+            plots_.begin(), plots_.end(),
+            [&](const auto& plt) { return plt.axis == current_axis_; })) {
+      fit_plot_ = &plot;
+    }
   }
 
   FileReader* const reader_;
@@ -848,11 +878,20 @@ class PlotView {
     std::map<int, int> int_styles {
       {ImPlotStyleVar_Marker, ImMarker_None},
     };
+
+    int axis = 0;
+  };
+
+  static inline constexpr const char * kAxisNames[] = {
+    "Left",
+    "Right",
+    "Aux",
   };
 
   std::vector<Plot> plots_;
-  bool fit_contents_ = false;
+  std::optional<Plot*> fit_plot_;
   size_t current_plot_index_ = 0;
+  int current_axis_ = 0;
 };
 }
 
