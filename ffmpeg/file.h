@@ -109,6 +109,18 @@ class File {
     return Packet::Ref::MakeInternal(packet->get());
   }
 
+  struct SeekOptions {
+    // non-keyframes are treated as keyframes
+    bool any = false;
+  };
+  void Seek(Stream stream, int64_t min_ts, int64_t ts, int64_t max_ts,
+            const SeekOptions& options) {
+    const int ret = avformat_seek_file(
+        context_, stream.av_stream()->index, min_ts, ts, max_ts,
+        options.any ? AVSEEK_FLAG_ANY : 0);
+    ErrorCheck(ret);
+  }
+
  private:
   AVFormatContext* context_;
 };
