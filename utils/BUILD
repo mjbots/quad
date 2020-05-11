@@ -41,6 +41,7 @@ cc_binary(
     name = "tplot2",
     srcs = ["tplot2.cc"],
     deps = [
+        "//ffmpeg",
         "//gl",
         "@com_github_mjbots_mjlib//mjlib/base:buffer_stream",
         "@com_github_mjbots_mjlib//mjlib/base:clipp",

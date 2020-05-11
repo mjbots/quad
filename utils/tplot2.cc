@@ -33,6 +33,14 @@
 
 #include <implot.h>
 
+#include "ffmpeg/codec.h"
+#include "ffmpeg/file.h"
+#include "ffmpeg/ffmpeg.h"
+#include "ffmpeg/frame.h"
+#include "ffmpeg/packet.h"
+#include "ffmpeg/swscale.h"
+
+#include "gl/flat_rgb_texture.h"
 #include "gl/gl_imgui.h"
 
 #include "mjlib/base/buffer_stream.h"
@@ -679,9 +687,9 @@ class PlotRetrieve {
 
 class PlotView {
  public:
-  PlotView(FileReader* reader)
+  PlotView(FileReader* reader, boost::posix_time::ptime log_start)
       : reader_(reader),
-        log_start_((*reader->items().begin()).timestamp) {
+        log_start_(log_start) {
   }
 
   void Update(boost::posix_time::ptime timestamp) {
@@ -907,14 +915,146 @@ class PlotView {
   size_t current_plot_index_ = 0;
   int current_axis_ = 0;
 };
+
+class Video {
+ public:
+  Video(boost::posix_time::ptime log_start, std::string_view filename,
+        double time_offset_s)
+      : log_start_(log_start),
+        time_offset_s_(time_offset_s),
+        file_(filename),
+        stream_(file_.FindBestStream(ffmpeg::File::kVideo)),
+        codec_(stream_) {
+    // Read until we get the first frame, so we know what the first
+    // timestamp is.
+    while (true) {
+      auto maybe_packet_ref = file_.Read(&packet_);
+      if (!maybe_packet_ref) {
+        mjlib::base::system_error::einval(
+            "Could not find frames in video");
+      }
+      if ((*maybe_packet_ref)->stream_index !=
+          stream_.av_stream()->index) { continue; }
+
+      codec_.SendPacket(*maybe_packet_ref);
+
+      auto maybe_frame_ref = codec_.GetFrame(&frame_);
+      if (maybe_frame_ref) {
+        start_pts_ = (*maybe_frame_ref)->pts;
+        break;
+      }
+    }
+  }
+
+  void Update(boost::posix_time::ptime timestamp) {
+    gl::ImGuiWindow video("Video");
+
+    if (video) {
+      if (last_timestamp_.is_not_a_date_time() ||
+          timestamp < last_timestamp_ ||
+          (timestamp - last_timestamp_) > boost::posix_time::seconds(1)) {
+        Seek(timestamp);
+      } else if (timestamp >= last_video_timestamp_) {
+        Step(timestamp);
+      }
+
+      last_timestamp_ = timestamp;
+
+      ImGui::Image(reinterpret_cast<ImTextureID>(texture_.id()),
+                   ImVec2(1920 / 4, 1080 / 4));
+    }
+  }
+
+  void Step(boost::posix_time::ptime timestamp) {
+    ReadUntil(timestamp);
+  }
+
+  void Seek(boost::posix_time::ptime timestamp) {
+    last_video_timestamp_ = {};
+
+    const auto delta_s = mjlib::base::ConvertDurationToSeconds(
+        timestamp - log_start_) - time_offset_s_;
+    const int pts = delta_s * time_base_.den / time_base_.num;
+    const int delta_pts = 1.0 * time_base_.den / time_base_.num;
+    ffmpeg::File::SeekOptions seek_options;
+    seek_options.any = false;
+    file_.Seek(stream_, pts - delta_pts, pts, pts + delta_pts, seek_options);
+
+    ReadUntil(timestamp);
+  }
+
+  void ReadUntil(boost::posix_time::ptime timestamp) {
+    while (true) {
+      auto maybe_pref = file_.Read(&packet_);
+      if (!maybe_pref) {
+        // EOF?
+        return;
+      }
+
+      if ((*maybe_pref)->stream_index !=
+          stream_.av_stream()->index) { continue; }
+
+      codec_.SendPacket(*maybe_pref);
+
+      auto maybe_fref = codec_.GetFrame(&frame_);
+      if (!maybe_fref) { continue; }
+
+      if (!swscale_) {
+        swscale_.emplace(codec_, dest_frame_.size(), dest_frame_.format(),
+                         ffmpeg::Swscale::kBicubic);
+      }
+
+      swscale_->Scale(*maybe_fref, dest_frame_ptr_);
+
+      texture_.Store(dest_frame_ptr_->data[0]);
+
+      last_video_timestamp_ =
+          log_start_ +
+          mjlib::base::ConvertSecondsToDuration(
+              time_offset_s_ +
+              static_cast<double>((*maybe_fref)->pts) *
+              time_base_.num / time_base_.den);
+
+      if (last_video_timestamp_ >= timestamp) {
+        break;
+      }
+    }
+  }
+
+  boost::posix_time::ptime log_start_;
+  double time_offset_s_ = 0.0;
+  ffmpeg::File file_;
+  ffmpeg::Stream stream_;
+  ffmpeg::Codec codec_;
+  std::optional<ffmpeg::Swscale> swscale_;
+  ffmpeg::Packet packet_;
+  ffmpeg::Frame frame_;
+  ffmpeg::Frame dest_frame_;
+  ffmpeg::Frame::Ref dest_frame_ptr_{dest_frame_.Allocate(
+        AV_PIX_FMT_RGB24, codec_.size(), 1)};
+
+  gl::FlatRgbTexture texture_{codec_.size()};
+
+  AVRational time_base_ = stream_.av_stream()->time_base;
+  int64_t start_pts_ = 0;
+
+  boost::posix_time::ptime last_timestamp_;
+  boost::posix_time::ptime last_video_timestamp_;
+};
 }
 
 int do_main(int argc, char** argv) {
+  ffmpeg::Ffmpeg::Register();
+
   std::string log_filename;
+  std::string video_filename;
+  double video_time_offset_s = 0.0;
 
   auto group = clipp::group(
-      clipp::value("log file", log_filename)
-                            );
+      clipp::value("log file", log_filename),
+      clipp::option("v", "video") & clipp::value("video", video_filename),
+      clipp::option("voffset") & clipp::value("OFF", video_time_offset_s)
+  );
 
   mjlib::base::ClippParse(argc, argv, group);
 
@@ -927,9 +1067,15 @@ int do_main(int argc, char** argv) {
   ImGui::GetIO().ConfigFlags |=
       ImGuiConfigFlags_DockingEnable;
 
+  auto log_start = (*file_reader.items().begin()).timestamp;
   Timeline timeline{&file_reader};
   TreeView tree_view{&file_reader};
-  PlotView plot_view{&file_reader};
+  PlotView plot_view{&file_reader, log_start};
+  std::optional<Video> video;
+
+  if (!video_filename.empty()) {
+    video.emplace(log_start, video_filename, video_time_offset_s);
+  }
 
   while (!window.should_close()) {
     window.PollEvents();
@@ -939,8 +1085,12 @@ int do_main(int argc, char** argv) {
     glClear(GL_COLOR_BUFFER_BIT);
 
     timeline.Update();
-    tree_view.Update(timeline.current());
-    plot_view.Update(timeline.current());
+    const auto current = timeline.current();
+    tree_view.Update(current);
+    plot_view.Update(current);
+    if (video) {
+      video->Update(current);
+    }
 
     ImGui::ShowDemoWindow();
     ImGui::ShowImPlotDemoWindow();
