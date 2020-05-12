@@ -38,6 +38,9 @@ cc_library(
         "@glfw",
         "@imgui",
     ],
+    defines = [
+        "MJMECH_ENABLE_TRACE_GL_ERROR",
+    ],
 )
 
 cc_test(

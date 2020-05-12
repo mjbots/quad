@@ -24,8 +24,9 @@ namespace gl {
 /// A GL texture which can have RGB data sent into it.
 class FlatRgbTexture {
  public:
-  FlatRgbTexture(Eigen::Vector2i size)
-      : size_(size) {
+  FlatRgbTexture(Eigen::Vector2i size, GLenum format = GL_RGB)
+      : size_(size),
+        format_(format) {
     texture_.bind(GL_TEXTURE_2D);
 
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
@@ -35,7 +36,7 @@ class FlatRgbTexture {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB,
+    glTexImage2D(GL_TEXTURE_2D, 0, format_,
                  size.x(), size.y(),
                  0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
   }
@@ -45,7 +46,7 @@ class FlatRgbTexture {
     glTexSubImage2D(
         GL_TEXTURE_2D, 0, 0, 0,
         size_.x(), size_.y(),
-        GL_RGB, GL_UNSIGNED_BYTE,
+        format_, GL_UNSIGNED_BYTE,
         data);
   }
 
@@ -59,6 +60,7 @@ class FlatRgbTexture {
  private:
   Texture texture_;
   const Eigen::Vector2i size_;
+  const GLenum format_;
 };
 
 }

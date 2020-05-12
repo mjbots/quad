@@ -1053,15 +1053,16 @@ class Video {
 class RenderTest {
  public:
   RenderTest() {
+    program_.use();
     vao_.bind();
 
     vertices_.bind(GL_ARRAY_BUFFER);
 
     static const float triangle_data[] = {
-      // vertex (x, y, z), texture (u, v)
-      -1.0f, 1.0f, 0.0f, 0.0, 0.0,
-      1.0f, -1.0f, 0.0f, 0.0, 0.0,
-      0.0f, 1.0f, 0.0f, 0.0, 0.0,
+      // vertex (x, y, z), texture (u, v), color (r, g, b, a)
+      -1.0f, 1.0f, 0.0f,   0.0f, 0.0f,   1.0f, 0.0f, 0.0f, 1.0f,
+      1.0f, 1.0f, 0.0f,    0.0f, 0.0f,   1.0f, 0.0f, 0.0f, 1.0f,
+      0.0f, -1.0f, 0.0f,   0.0f, 0.0f,   1.0f, 0.0f, 0.0f, 1.0f,
     };
 
     vertices_.set_data_array(GL_ARRAY_BUFFER, triangle_data, GL_STATIC_DRAW);
@@ -1072,21 +1073,37 @@ class RenderTest {
         GL_ELEMENT_ARRAY_BUFFER, elements, GL_STATIC_DRAW);
 
     program_.VertexAttribPointer(
-        program_.attribute("vertex"), 3, GL_FLOAT, GL_FALSE, 20, 0);
+        program_.attribute("inVertex"), 3, GL_FLOAT, GL_FALSE, 36, 0);
+    program_.VertexAttribPointer(
+        program_.attribute("inUv"), 2, GL_FLOAT, GL_FALSE, 36, 12);
+    program_.VertexAttribPointer(
+        program_.attribute("inColor"), 4, GL_FLOAT, GL_FALSE, 36, 20);
 
     vao_.unbind();
+
+    program_.SetUniform(program_.uniform("currentTexture"), 0);
+    program_.SetUniform(program_.uniform("projMatrix"),
+                        Eigen::Matrix4f(Eigen::Matrix4f::Identity()));
+
+    // For now, our rendering texture will consist of a single white
+    // pixel, which will just let us use the passed in color.
+    const uint8_t white[4] = {255, 255, 255, 255};
+    texture_.Store(white);
   }
 
   void Update() {
     {
       gl::Framebuffer::Bind binder(framebuffer_);
       glViewport(0, 0, size_.x(), size_.y());
+      glEnable(GL_DEPTH_TEST);
+      glDepthFunc(GL_LESS);
       glClearColor(0.45f, 0.55f, 0.60f, 1.0f);
-      glClear(GL_COLOR_BUFFER_BIT);
+      glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
       program_.use();
 
       vao_.bind();
 
+      texture_.bind();
       glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_INT, 0);
       vao_.unbind();
     }
@@ -1095,14 +1112,14 @@ class RenderTest {
     const auto ws = ImGui::GetWindowSize();
     const auto p = base::MaintainAspectRatio(size_, {ws.x, ws.y});
     ImGui::Image(reinterpret_cast<ImTextureID>(
-                     texture_.id()), ImVec2(p.sizes().x(), p.sizes().y()));
+                     imgui_texture_.id()), ImVec2(p.sizes().x(), p.sizes().y()));
   }
 
   Eigen::Vector2i size_{1024, 768};
   gl::Framebuffer framebuffer_;
-  gl::FlatRgbTexture texture_{size_};
+  gl::FlatRgbTexture imgui_texture_{size_};
   const bool attach_ = [&]() {
-    framebuffer_.attach(texture_.texture());
+    framebuffer_.attach(imgui_texture_.texture());
     return true;
   }();
 
@@ -1111,23 +1128,33 @@ class RenderTest {
 
   static constexpr const char* kVertexShaderSource =
       "#version 330 core\n"
-      "layout(location = 0) in vec3 vertex;\n"
+      "in vec3 inVertex;\n"
+      "in vec2 inUv;\n"
+      "in vec4 inColor;\n"
+      "uniform mat4 projMatrix;\n"
+      "out vec2 fragUv;\n"
+      "out vec4 fragColor;\n"
       "void main(){\n"
-      "  gl_Position.xyz = vertex;\n"
-      "  gl_Position.w = 1.0;\n"
+      "  fragUv = inUv;\n"
+      "  fragColor = inColor;\n"
+      "  gl_Position = projMatrix * vec4(inVertex.xyz, 1);\n"
       "}\n"
       ;
 
   static constexpr const char* kFragShaderSource =
       "#version 330 core\n"
-      "out vec3 color;\n"
+      "in vec2 fragUv;\n"
+      "in vec4 fragColor;\n"
+      "uniform sampler2D currentTexture;\n"
+      "layout (location = 0) out vec4 color;\n"
       "void main() {\n"
-      "  color = vec3(1, 0, 0);\n"
+      "  color = fragColor * texture(currentTexture, fragUv);\n"
       "}\n"
       ;
 
   gl::Program program_{vertex_shader_, fragment_shader_};
 
+  gl::FlatRgbTexture texture_{Eigen::Vector2i(1, 1), GL_RGBA};
   gl::VertexArrayObject vao_;
   gl::VertexBufferObject vertices_;
   gl::VertexBufferObject elements_;

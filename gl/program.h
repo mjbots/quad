@@ -61,11 +61,11 @@ class Program {
   Program& operator=(const Program&) = delete;
 
   Uniform uniform(std::string_view name) {
-    return Uniform(glGetUniformLocation(program_, name.data()));
+    return Uniform(VerifyNonNegative(glGetUniformLocation(program_, name.data())));
   }
 
   Attribute attribute(std::string_view name) {
-    return Attribute(glGetAttribLocation(program_, name.data()));
+    return Attribute(VerifyNonNegative(glGetAttribLocation(program_, name.data())));
   }
 
   void SetUniform(Uniform uniform, int value) {
@@ -102,12 +102,20 @@ class Program {
   void VertexAttribPointer(
       Attribute attribute, GLint size, GLenum type,
       GLboolean normalized, GLsizei stride, int offset) {
+    glEnableVertexAttribArray(attribute.get());
     glVertexAttribPointer(attribute.get(), size, type, normalized, stride,
                           reinterpret_cast<void*>(offset));
-    glEnableVertexAttribArray(attribute.get());
   }
 
  private:
+  GLint VerifyNonNegative(GLint value) {
+    if (value < 0) {
+      TRACE_GL_ERROR();
+      mjlib::base::Fail("Invalid uniform or attribute name");
+    }
+    return value;
+  }
+
   const GLuint program_;
 };
 

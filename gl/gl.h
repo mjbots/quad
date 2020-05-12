@@ -25,7 +25,7 @@ namespace gl {
 
 constexpr int kGlVersionMajor = 3;
 constexpr int kGlVersionMinor = 0;
-constexpr const char* kGlslVersion = "#version 130";
+constexpr const char* kGlslVersion = "#version 330";
 
 inline void TraceGlError(const char* file, int line) {
   const auto v = glGetError();
@@ -36,7 +36,7 @@ inline void TraceGlError(const char* file, int line) {
 }
 
 #ifdef MJMECH_ENABLE_TRACE_GL_ERROR
-#define TRACE_GL_ERROR() TraceGlError(__FILE__, __LINE__)
+#define TRACE_GL_ERROR() ::mjmech::gl::TraceGlError(__FILE__, __LINE__)
 #else
 #define TRACE_GL_ERROR()
 #endif
