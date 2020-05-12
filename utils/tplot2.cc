@@ -965,7 +965,7 @@ class Video {
 
       last_timestamp_ = timestamp;
 
-      const auto ws = ImGui::GetWindowSize();
+      const auto ws = ImGui::GetContentRegionAvail();
       const auto p = base::MaintainAspectRatio(codec_.size(), {ws.x, ws.y});
       ImGui::SameLine(p.min().x());
       ImGui::Image(reinterpret_cast<ImTextureID>(texture_.id()),
@@ -1109,7 +1109,7 @@ class RenderTest {
     }
 
     gl::ImGuiWindow render("Render");
-    const auto ws = ImGui::GetWindowSize();
+    const auto ws = ImGui::GetContentRegionAvail();
     const auto p = base::MaintainAspectRatio(size_, {ws.x, ws.y});
     ImGui::Image(reinterpret_cast<ImTextureID>(
                      imgui_texture_.id()), ImVec2(p.sizes().x(), p.sizes().y()));
