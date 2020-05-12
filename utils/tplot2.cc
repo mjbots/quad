@@ -16,9 +16,7 @@
 // TODO:
 // * Plots
 //  * I get crazy artifacts when non-first plots are entirely off screen
-//  * multiple y axes
 //  * save window size in imgui.ini
-// * Video
 // * 3D mech
 // * Save/restore plot configuration
 // * Derived/scripted fields
@@ -43,7 +41,12 @@
 #include "ffmpeg/swscale.h"
 
 #include "gl/flat_rgb_texture.h"
+#include "gl/framebuffer.h"
 #include "gl/gl_imgui.h"
+#include "gl/program.h"
+#include "gl/shader.h"
+#include "gl/vertex_array_object.h"
+#include "gl/vertex_buffer_object.h"
 
 #include "mjlib/base/buffer_stream.h"
 #include "mjlib/base/clipp.h"
@@ -1046,6 +1049,89 @@ class Video {
   boost::posix_time::ptime last_timestamp_;
   boost::posix_time::ptime last_video_timestamp_;
 };
+
+class RenderTest {
+ public:
+  RenderTest() {
+    vao_.bind();
+
+    vertices_.bind(GL_ARRAY_BUFFER);
+
+    static const float triangle_data[] = {
+      // vertex (x, y, z), texture (u, v)
+      -1.0f, 1.0f, 0.0f, 0.0, 0.0,
+      1.0f, -1.0f, 0.0f, 0.0, 0.0,
+      0.0f, 1.0f, 0.0f, 0.0, 0.0,
+    };
+
+    vertices_.set_data_array(GL_ARRAY_BUFFER, triangle_data, GL_STATIC_DRAW);
+    const uint32_t elements[] = {
+      0, 1, 2,
+    };
+    elements_.set_data_array(
+        GL_ELEMENT_ARRAY_BUFFER, elements, GL_STATIC_DRAW);
+
+    program_.VertexAttribPointer(
+        program_.attribute("vertex"), 3, GL_FLOAT, GL_FALSE, 20, 0);
+
+    vao_.unbind();
+  }
+
+  void Update() {
+    {
+      gl::Framebuffer::Bind binder(framebuffer_);
+      glViewport(0, 0, size_.x(), size_.y());
+      glClearColor(0.45f, 0.55f, 0.60f, 1.0f);
+      glClear(GL_COLOR_BUFFER_BIT);
+      program_.use();
+
+      vao_.bind();
+
+      glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_INT, 0);
+      vao_.unbind();
+    }
+
+    gl::ImGuiWindow render("Render");
+    const auto ws = ImGui::GetWindowSize();
+    const auto p = base::MaintainAspectRatio(size_, {ws.x, ws.y});
+    ImGui::Image(reinterpret_cast<ImTextureID>(
+                     texture_.id()), ImVec2(p.sizes().x(), p.sizes().y()));
+  }
+
+  Eigen::Vector2i size_{1024, 768};
+  gl::Framebuffer framebuffer_;
+  gl::FlatRgbTexture texture_{size_};
+  const bool attach_ = [&]() {
+    framebuffer_.attach(texture_.texture());
+    return true;
+  }();
+
+  gl::Shader vertex_shader_{kVertexShaderSource, GL_VERTEX_SHADER};
+  gl::Shader fragment_shader_{kFragShaderSource, GL_FRAGMENT_SHADER};
+
+  static constexpr const char* kVertexShaderSource =
+      "#version 330 core\n"
+      "layout(location = 0) in vec3 vertex;\n"
+      "void main(){\n"
+      "  gl_Position.xyz = vertex;\n"
+      "  gl_Position.w = 1.0;\n"
+      "}\n"
+      ;
+
+  static constexpr const char* kFragShaderSource =
+      "#version 330 core\n"
+      "out vec3 color;\n"
+      "void main() {\n"
+      "  color = vec3(1, 0, 0);\n"
+      "}\n"
+      ;
+
+  gl::Program program_{vertex_shader_, fragment_shader_};
+
+  gl::VertexArrayObject vao_;
+  gl::VertexBufferObject vertices_;
+  gl::VertexBufferObject elements_;
+};
 }
 
 int do_main(int argc, char** argv) {
@@ -1077,6 +1163,7 @@ int do_main(int argc, char** argv) {
   TreeView tree_view{&file_reader};
   PlotView plot_view{&file_reader, log_start};
   std::optional<Video> video;
+  RenderTest render_test;
 
   if (!video_filename.empty()) {
     video.emplace(log_start, video_filename, video_time_offset_s);
@@ -1096,6 +1183,7 @@ int do_main(int argc, char** argv) {
     if (video) {
       video->Update(current);
     }
+    render_test.Update();
 
     ImGui::ShowDemoWindow();
     ImGui::ShowImPlotDemoWindow();

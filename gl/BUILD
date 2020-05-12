@@ -20,6 +20,7 @@ cc_library(
     name = "gl",
     hdrs = [
         "flat_rgb_texture.h",
+        "framebuffer.h",
         "gl.h",
         "gl_imgui.h",
         "program.h",

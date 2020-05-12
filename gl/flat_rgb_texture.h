@@ -54,6 +54,7 @@ class FlatRgbTexture {
   }
 
   GLuint id() const { return texture_.id(); }
+  Texture& texture() { return texture_; }
 
  private:
   Texture texture_;
