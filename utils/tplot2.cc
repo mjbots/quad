@@ -43,8 +43,10 @@
 #include "gl/flat_rgb_texture.h"
 #include "gl/framebuffer.h"
 #include "gl/gl_imgui.h"
+#include "gl/perspective_camera.h"
 #include "gl/program.h"
 #include "gl/shader.h"
+#include "gl/trackball.h"
 #include "gl/vertex_array_object.h"
 #include "gl/vertex_buffer_object.h"
 
@@ -1083,7 +1085,7 @@ class RenderTest {
 
     program_.SetUniform(program_.uniform("currentTexture"), 0);
     program_.SetUniform(program_.uniform("projMatrix"),
-                        Eigen::Matrix4f(Eigen::Matrix4f::Identity()));
+                        camera_.matrix());
 
     // For now, our rendering texture will consist of a single white
     // pixel, which will just let us use the passed in color.
@@ -1100,6 +1102,8 @@ class RenderTest {
       glClearColor(0.45f, 0.55f, 0.60f, 1.0f);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
       program_.use();
+      program_.SetUniform(program_.uniform("modelViewMatrix"),
+                          trackball_.matrix());
 
       vao_.bind();
 
@@ -1109,13 +1113,57 @@ class RenderTest {
     }
 
     gl::ImGuiWindow render("Render");
+
     const auto ws = ImGui::GetContentRegionAvail();
     const auto p = base::MaintainAspectRatio(size_, {ws.x, ws.y});
-    ImGui::Image(reinterpret_cast<ImTextureID>(
-                     imgui_texture_.id()), ImVec2(p.sizes().x(), p.sizes().y()));
+    ImGui::BeginChild("##ignored", ws);
+
+    const auto& IO = ImGui::GetIO();
+    auto window_pos = ImGui::GetWindowPos();
+    auto mouse_pos = ImGui::GetMousePos();
+    auto pos_pixel = ImVec2(mouse_pos.x - window_pos.x,
+                            mouse_pos.y - window_pos.y);
+    Eigen::Vector2f pos_norm = Eigen::Vector2f(
+        pos_pixel.x / p.sizes().x(), pos_pixel.y / p.sizes().y());
+    if (ImGui::IsWindowHovered()) {
+      for (int i = 0; i < 3; i++) {
+        if (IO.MouseClicked[i]) {
+          trackball_.MouseDown(pos_norm, i);
+        }
+      }
+    }
+    if (ImGui::IsWindowHovered() || trackball_.active()) {
+      trackball_.MouseMove(pos_norm);
+    }
+    {
+      for (int i = 0; i < 3; i++) {
+        if (IO.MouseReleased[i]) {
+          trackball_.MouseUp(pos_norm);
+        }
+      }
+    }
+
+    ImGui::ImageButton(reinterpret_cast<ImTextureID>(
+                           imgui_texture_.id()),
+                       ImVec2(p.sizes().x(), p.sizes().y()),
+                       ImVec2(0, 0),
+                       ImVec2(1, 1),
+                       0);
+
+    ImGui::EndChild();
   }
 
   Eigen::Vector2i size_{1024, 768};
+
+  gl::PerspectiveCamera camera_{[&]() {
+      gl::PerspectiveCamera::Options options;
+      options.aspect = static_cast<double>(size_.x()) /
+                       static_cast<double>(size_.y());
+      return options;
+    }()};
+
+  gl::Trackball trackball_{{0.f, 0.f, 10.f}, {0.f, 0.f, 0.f}};
+
   gl::Framebuffer framebuffer_;
   gl::FlatRgbTexture imgui_texture_{size_};
   const bool attach_ = [&]() {
@@ -1132,12 +1180,13 @@ class RenderTest {
       "in vec2 inUv;\n"
       "in vec4 inColor;\n"
       "uniform mat4 projMatrix;\n"
+      "uniform mat4 modelViewMatrix;\n"
       "out vec2 fragUv;\n"
       "out vec4 fragColor;\n"
       "void main(){\n"
       "  fragUv = inUv;\n"
       "  fragColor = inColor;\n"
-      "  gl_Position = projMatrix * vec4(inVertex.xyz, 1);\n"
+      "  gl_Position = projMatrix * modelViewMatrix * vec4(inVertex.xyz, 1);\n"
       "}\n"
       ;
 
