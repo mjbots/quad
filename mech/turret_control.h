@@ -109,14 +109,6 @@ class TurretControl : boost::noncopyable {
     kFault = 2,
   };
 
-  static inline std::map<Mode, const char*> ModeMapper() {
-    return {
-      { Mode::kStop, "stop" },
-      { Mode::kActive, "active" },
-      { Mode::kFault, "fault" },
-          };
-  };
-
   struct Status {
     boost::posix_time::ptime timestamp;
     Mode mode = Mode::kStop;
@@ -201,7 +193,7 @@ class TurretControl : boost::noncopyable {
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(timestamp));
-      a->Visit(MJ_ENUM(mode, ModeMapper));
+      a->Visit(MJ_NVP(mode));
       a->Visit(MJ_NVP(fault));
       a->Visit(MJ_NVP(missing_replies));
       a->Visit(MJ_NVP(timing));
@@ -225,7 +217,7 @@ class TurretControl : boost::noncopyable {
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(priority));
-      a->Visit(MJ_ENUM(mode, ModeMapper));
+      a->Visit(MJ_NVP(mode));
       a->Visit(MJ_NVP(pitch_rate_dps));
       a->Visit(MJ_NVP(yaw_rate_dps));
       a->Visit(MJ_NVP(track_target));
@@ -264,6 +256,25 @@ class TurretControl : boost::noncopyable {
   std::unique_ptr<Impl> impl_;
 };
 
+}
+}
+
+namespace mjlib {
+namespace base {
+
+template <>
+struct IsEnum<mjmech::mech::TurretControl::Mode> {
+  static constexpr bool value = true;
+
+  using M = mjmech::mech::TurretControl::Mode;
+  static inline std::map<M, const char*> map() {
+    return {
+      { M::kStop, "stop" },
+      { M::kActive, "active" },
+      { M::kFault, "fault" },
+    };
+  }
+};
 
 }
 }

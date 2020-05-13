@@ -80,7 +80,7 @@ class QuadrupedControl : boost::noncopyable {
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(timestamp));
-      a->Visit(MJ_ENUM(mode, QuadrupedCommand::ModeMapper));
+      a->Visit(MJ_NVP(mode));
       a->Visit(MJ_NVP(mode_start));
       a->Visit(MJ_NVP(fault));
       a->Visit(MJ_NVP(state));

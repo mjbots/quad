@@ -20,6 +20,8 @@
 
 #include <fmt/format.h>
 
+#include "gl/texture.h"
+
 namespace mjmech {
 namespace gl {
 

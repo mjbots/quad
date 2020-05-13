@@ -281,7 +281,7 @@ void DrawTelemetry(const SlotCommand* slot_command, bool turret) {
     const auto& d = slot_command->data();
 
     ImGui::Text("Mode: %s",
-                get(QuadrupedCommand::ModeMapper(), d.mode));
+                get(mjlib::base::IsEnum<QuadrupedCommand::Mode>::map(), d.mode));
     ImGui::Text("tx/rx: %d/%d",
                 d.tx_count, d.rx_count);
     ImGui::Text("cmd: (%4.0f, %4.0f, %4.0f)",
@@ -303,7 +303,7 @@ void DrawTelemetry(const SlotCommand* slot_command, bool turret) {
     if (slot_command) {
       const auto& t = slot_command->data().turret;
       ImGui::Text("Mode: %s",
-                  get(TurretControl::ModeMapper(), t.mode));
+                  get(mjlib::base::IsEnum<TurretControl::Mode>::map(), t.mode));
       ImGui::Text("tx: %d", t.rx_count);
       ImGui::Text("pitch/yaw: (%6.1f, %6.1f)",
                   t.imu_pitch_deg, t.imu_yaw_deg);
@@ -809,9 +809,9 @@ int do_main(int argc, char** argv) {
     {
       ImGui::Begin("Command");
       ImGui::SetWindowPos({50, 400}, ImGuiCond_FirstUseEver);
-      ImGui::Text("Mode  : %14s", get(QuadrupedCommand::ModeMapper(), command_mode));
-      ImGui::Text("Actual: %14s",
-                  get(QuadrupedCommand::ModeMapper(), actual_command_mode));
+      auto mapper = mjlib::base::IsEnum<QuadrupedCommand::Mode>::map;
+      ImGui::Text("Mode  : %14s", get(mapper(), command_mode));
+      ImGui::Text("Actual: %14s", get(mapper(), actual_command_mode));
       ImGui::Text("cmd: (%4.0f, %4.0f, %6.3f)",
                   v_mm_s_R.x(),
                   v_mm_s_R.y(),

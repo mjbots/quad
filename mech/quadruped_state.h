@@ -140,14 +140,6 @@ struct QuadrupedState {
       kDone,
     };
 
-    static inline std::map<Mode, const char*> ModeMapper() {
-      return {
-        { kPrepositioning, "prepositioning" },
-        { kStanding, "standing" },
-        { kDone, "done" },
-      };
-    };
-
     Mode mode = kPrepositioning;
 
     struct Leg {
@@ -167,7 +159,7 @@ struct QuadrupedState {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(MJ_ENUM(mode, ModeMapper));
+      a->Visit(MJ_NVP(mode));
       a->Visit(MJ_NVP(legs));
     }
   };
@@ -195,17 +187,6 @@ struct QuadrupedState {
       kDone = 5,
     };
 
-    static inline std::map<Mode, const char*> ModeMapper() {
-      return {
-        { kLowering, "lowering" },
-        { kPushing, "pushing" },
-        { kRetracting, "retracting" },
-        { kFalling, "falling" },
-        { kLanding, "landing" },
-        { kDone, "done" },
-      };
-    }
-
     Mode mode = kLowering;
     double velocity_mm_s = 0.0;
     double acceleration_mm_s2 = 0.0;
@@ -214,7 +195,7 @@ struct QuadrupedState {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(MJ_ENUM(mode, ModeMapper));
+      a->Visit(MJ_NVP(mode));
       a->Visit(MJ_NVP(velocity_mm_s));
       a->Visit(MJ_NVP(acceleration_mm_s2));
       a->Visit(MJ_NVP(command));
@@ -247,16 +228,6 @@ struct QuadrupedState {
       kDone = 4,
     };
 
-    static inline std::map<Mode, const char*> ModeMapper() {
-      return {
-        { kLowering, "lowering" },
-        { kFrontPush, "front_push" },
-        { kBackPush, "back_push" },
-        { kFlight, "flight" },
-        { kDone, "done" },
-      };
-    }
-
     Mode mode = kLowering;
     double pitch_deg = 0.0;
     double pitch_rate_dps = 0.0;
@@ -265,7 +236,7 @@ struct QuadrupedState {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(MJ_ENUM(mode, ModeMapper));
+      a->Visit(MJ_NVP(mode));
       a->Visit(MJ_NVP(pitch_deg));
       a->Visit(MJ_NVP(pitch_rate_dps));
       a->Visit(MJ_NVP(pitch_accel_dps2));
@@ -325,6 +296,61 @@ inline QuadrupedState::Leg operator*(const Sophus::SE3d& pose_AB,
   result_A.force_N = pose_AB.so3() * rhs_B.force_N;
   return result_A;
 }
+
+}
+}
+
+namespace mjlib {
+namespace base {
+
+template <>
+struct IsEnum<mjmech::mech::QuadrupedState::StandUp::Mode> {
+  static constexpr bool value = true;
+
+  using M = mjmech::mech::QuadrupedState::StandUp::Mode;
+  static inline std::map<M, const char*> map() {
+    return {
+      { M::kPrepositioning, "prepositioning" },
+      { M::kStanding, "standing" },
+      { M::kDone, "done" },
+    };
+  }
+};
+
+template <>
+struct IsEnum<mjmech::mech::QuadrupedState::Jump::Mode> {
+  static constexpr bool value = true;
+
+  using M = mjmech::mech::QuadrupedState::Jump::Mode;
+
+  static inline std::map<M, const char*> map() {
+    return {
+      { M::kLowering, "lowering" },
+      { M::kPushing, "pushing" },
+      { M::kRetracting, "retracting" },
+      { M::kFalling, "falling" },
+      { M::kLanding, "landing" },
+      { M::kDone, "done" },
+    };
+  }
+};
+
+template <>
+struct IsEnum<mjmech::mech::QuadrupedState::Backflip::Mode> {
+  static constexpr bool value = true;
+
+  using M = mjmech::mech::QuadrupedState::Backflip::Mode;
+
+  static inline std::map<M, const char*> map() {
+    return {
+      { M::kLowering, "lowering" },
+      { M::kFrontPush, "front_push" },
+      { M::kBackPush, "back_push" },
+      { M::kFlight, "flight" },
+      { M::kDone, "done" },
+    };
+  }
+};
 
 }
 }

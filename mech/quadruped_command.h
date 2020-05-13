@@ -79,23 +79,6 @@ struct QuadrupedCommand {
     kNumModes,
   };
 
-  static std::map<Mode, const char*> ModeMapper() {
-    return { {
-        { kConfiguring, "configuring" },
-        { kStopped, "stopped" },
-        { kFault, "fault" },
-        { kZeroVelocity, "zero_velocity" },
-        { kJoint, "joint" },
-        { kLeg, "leg" },
-        { kStandUp, "stand_up" },
-        { kRest, "rest" },
-        { kJump, "jump" },
-        { kWalk, "walk" },
-        { kBackflip, "backflip" },
-        { kBalance, "balance" },
-      }};
-  }
-
   Mode mode = kStopped;
 
   struct Joint {
@@ -206,7 +189,7 @@ struct QuadrupedCommand {
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(priority));
-    a->Visit(MJ_ENUM(mode, ModeMapper));
+    a->Visit(MJ_NVP(mode));
     a->Visit(MJ_NVP(joints));
     a->Visit(MJ_NVP(legs_B));
     a->Visit(MJ_NVP(jump));
@@ -232,6 +215,35 @@ inline QuadrupedCommand::Leg operator*(const Sophus::SE3d& pose_mm_AB,
 
   return result_A;
 }
+
+}
+}
+
+namespace mjlib {
+namespace base {
+template <>
+struct IsEnum<mjmech::mech::QuadrupedCommand::Mode> {
+  static constexpr bool value = true;
+
+  using M = mjmech::mech::QuadrupedCommand::Mode;
+
+  static std::map<M, const char*> map() {
+    return { {
+        { M::kConfiguring, "configuring" },
+        { M::kStopped, "stopped" },
+        { M::kFault, "fault" },
+        { M::kZeroVelocity, "zero_velocity" },
+        { M::kJoint, "joint" },
+        { M::kLeg, "leg" },
+        { M::kStandUp, "stand_up" },
+        { M::kRest, "rest" },
+        { M::kJump, "jump" },
+        { M::kWalk, "walk" },
+        { M::kBackflip, "backflip" },
+        { M::kBalance, "balance" },
+      }};
+  }
+};
 
 }
 }
