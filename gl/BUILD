@@ -25,6 +25,7 @@ cc_library(
         "gl_imgui.h",
         "perspective_camera.h",
         "program.h",
+        "renderbuffer.h",
         "shader.h",
         "texture.h",
         "trackball.h",

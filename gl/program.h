@@ -61,11 +61,23 @@ class Program {
   Program& operator=(const Program&) = delete;
 
   Uniform uniform(std::string_view name) {
-    return Uniform(VerifyNonNegative(glGetUniformLocation(program_, name.data())));
+    try {
+      return Uniform(
+          VerifyNonNegative(glGetUniformLocation(program_, name.data())));
+    } catch (mjlib::base::system_error& se) {
+      se.code().Append("Name: " + std::string(name));
+      throw;
+    }
   }
 
   Attribute attribute(std::string_view name) {
-    return Attribute(VerifyNonNegative(glGetAttribLocation(program_, name.data())));
+    try {
+      return Attribute(
+          VerifyNonNegative(glGetAttribLocation(program_, name.data())));
+    } catch (mjlib::base::system_error& se) {
+      se.code().Append("Name: " + std::string(name));
+      throw;
+    }
   }
 
   void SetUniform(Uniform uniform, int value) {
@@ -86,6 +98,8 @@ class Program {
 
     if constexpr (RowsAtCompileTime == 4 && ColsAtCompileTime == 4) {
       glUniformMatrix4fv(uniform.get(), 1, GL_FALSE, matrix.data());
+    } else if constexpr (RowsAtCompileTime == 3 && ColsAtCompileTime == 1) {
+      glUniform3fv(uniform.get(), 1, matrix.data());
     } else {
       mjlib::base::Fail("Unsupported uniform matrix type");
     }
@@ -111,7 +125,8 @@ class Program {
   GLint VerifyNonNegative(GLint value) {
     if (value < 0) {
       TRACE_GL_ERROR();
-      mjlib::base::Fail("Invalid uniform or attribute name");
+      throw mjlib::base::system_error::einval(
+          "Invalid uniform or attribute name");
     }
     return value;
   }

@@ -25,7 +25,8 @@ namespace gl {
 class FlatRgbTexture {
  public:
   FlatRgbTexture(Eigen::Vector2i size, GLenum format = GL_RGB)
-      : size_(size),
+      : texture_(size),
+        size_(size),
         format_(format) {
     texture_.bind(GL_TEXTURE_2D);
 

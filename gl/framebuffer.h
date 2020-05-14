@@ -20,6 +20,7 @@
 
 #include <fmt/format.h>
 
+#include "gl/renderbuffer.h"
 #include "gl/texture.h"
 
 namespace mjmech {
@@ -46,10 +47,18 @@ class Framebuffer {
     }
   };
 
-  void attach(const Texture& texture) {
+  void attach(const Texture& texture, const Renderbuffer& rbo) {
     Bind binder(*this);
 
     glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texture.id(), 0);
+
+    rbo.bind();
+
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8,
+                          texture.size().x(), texture.size().y());
+
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
+                              GL_RENDERBUFFER, rbo.id());
 
     GLenum draw_buffers[] = { GL_COLOR_ATTACHMENT0 };
     glDrawBuffers(1, draw_buffers);

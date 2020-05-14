@@ -14,36 +14,29 @@
 
 #pragma once
 
-#include "gl/gl.h"
+#include <GL/gl3w.h>
 
 namespace mjmech {
 namespace gl {
 
-class Texture {
+class Renderbuffer {
  public:
-  Texture(Eigen::Vector2i size = {}) : size_(size) {
-    glGenTextures(1, &tex_);
+  Renderbuffer() {
+    glGenRenderbuffers(1, &rbo_);
   }
 
-  ~Texture() {
-    glDeleteTextures(1, &tex_);
+  ~Renderbuffer() {
+    glDeleteRenderbuffers(1, &rbo_);
   }
 
-  Texture(const Texture&) = delete;
-  Texture& operator=(const Texture&) = delete;
-
-  void bind(GLenum target, GLenum texture = GL_TEXTURE0) {
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(target, tex_);
+  void bind() const {
+    glBindRenderbuffer(GL_RENDERBUFFER, rbo_);
   }
 
-  GLuint id() const { return tex_; }
-
-  Eigen::Vector2i size() const { return size_; }
+  GLuint id() const { return rbo_; }
 
  private:
-  Eigen::Vector2i size_;
-  GLuint tex_ = 0;
+  GLuint rbo_ = 0;
 };
 
 }

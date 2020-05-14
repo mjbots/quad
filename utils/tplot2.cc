@@ -45,6 +45,7 @@
 #include "gl/gl_imgui.h"
 #include "gl/perspective_camera.h"
 #include "gl/program.h"
+#include "gl/renderbuffer.h"
 #include "gl/shader.h"
 #include "gl/trackball.h"
 #include "gl/vertex_array_object.h"
@@ -1073,15 +1074,21 @@ class MechRender {
     vertices_.bind(GL_ARRAY_BUFFER);
 
     program_.VertexAttribPointer(
-        program_.attribute("inVertex"), 3, GL_FLOAT, GL_FALSE, 36, 0);
+        program_.attribute("inVertex"), 3, GL_FLOAT, GL_FALSE, 48, 0);
     program_.VertexAttribPointer(
-        program_.attribute("inUv"), 2, GL_FLOAT, GL_FALSE, 36, 12);
+        program_.attribute("inNormal"), 3, GL_FLOAT, GL_FALSE, 48, 12);
     program_.VertexAttribPointer(
-        program_.attribute("inColor"), 4, GL_FLOAT, GL_FALSE, 36, 20);
+        program_.attribute("inUv"), 2, GL_FLOAT, GL_FALSE, 48, 24);
+    program_.VertexAttribPointer(
+        program_.attribute("inColor"), 4, GL_FLOAT, GL_FALSE, 48, 32);
 
     vao_.unbind();
 
+    program_.SetUniform(program_.uniform("lightPos"),
+                        Eigen::Vector3f({-1000, 0, 3000}));
     program_.SetUniform(program_.uniform("currentTexture"), 0);
+    program_.SetUniform(program_.uniform("modelMatrix"),
+                        Eigen::Matrix4f(Eigen::Matrix4f::Identity()));
     program_.SetUniform(program_.uniform("projMatrix"),
                         camera_.matrix());
 
@@ -1105,7 +1112,7 @@ class MechRender {
            {230, 0, 0},
            {0, 240, 0},
            {0, 0, 125},
-           {255, 0, 0, 255});
+           {1.0, 0, 0, 1.0});
   }
 
   void AddBox(const Eigen::Vector3f& center,
@@ -1123,10 +1130,10 @@ class MechRender {
             center - hh + hw - hl,
             rgba);
     // Top
-    AddQuad(center + hh - hw - hl,
-            center + hh - hw + hl,
+    AddQuad(center + hh + hw - hl,
             center + hh + hw + hl,
-            center + hh + hw - hl,
+            center + hh - hw + hl,
+            center + hh - hw - hl,
             rgba);
   }
 
@@ -1136,10 +1143,11 @@ class MechRender {
                const Eigen::Vector3f& p4,
                const Eigen::Vector4f& rgba) {
     const Eigen::Vector2f uv{0, 0};
-    auto index1 = AddVertex(p1, uv, rgba);
-    auto index2 = AddVertex(p2, uv, rgba);
-    auto index3 = AddVertex(p3, uv, rgba);
-    auto index4 = AddVertex(p4, uv, rgba);
+    const Eigen::Vector3f normal = (p3 - p1).cross(p2 - p1).normalized();
+    auto index1 = AddVertex(p1, normal, uv, rgba);
+    auto index2 = AddVertex(p2, normal, uv, rgba);
+    auto index3 = AddVertex(p3, normal, uv, rgba);
+    auto index4 = AddVertex(p4, normal, uv, rgba);
     indices_.push_back(index1);
     indices_.push_back(index2);
     indices_.push_back(index3);
@@ -1153,29 +1161,34 @@ class MechRender {
                    const Eigen::Vector3f& p2,
                    const Eigen::Vector3f& p3,
                    const Eigen::Vector4f& rgba) {
-    auto index1 = AddVertex(p1, {0, 0}, rgba);
-    auto index2 = AddVertex(p2, {0, 0}, rgba);
-    auto index3 = AddVertex(p3, {0, 0}, rgba);
+    const Eigen::Vector3f normal = (p3 - p1).cross(p2 - p1);
+    auto index1 = AddVertex(p1, normal, {0, 0}, rgba);
+    auto index2 = AddVertex(p2, normal, {0, 0}, rgba);
+    auto index3 = AddVertex(p3, normal, {0, 0}, rgba);
     indices_.push_back(index1);
     indices_.push_back(index2);
     indices_.push_back(index3);
   }
 
   uint32_t AddVertex(const Eigen::Vector3f& p1,
+                     const Eigen::Vector3f& normal,
                      const Eigen::Vector2f& uv,
                      const Eigen::Vector4f& rgba) {
     const auto i = gpu_data_.size();
-    gpu_data_.resize(i + 9);
+    gpu_data_.resize(i + 12);
     gpu_data_[i + 0] = p1.x();
     gpu_data_[i + 1] = p1.y();
     gpu_data_[i + 2] = p1.z();
-    gpu_data_[i + 3] = uv.x();
-    gpu_data_[i + 4] = uv.y();
-    gpu_data_[i + 5] = rgba(0);
-    gpu_data_[i + 6] = rgba(1);
-    gpu_data_[i + 7] = rgba(2);
-    gpu_data_[i + 8] = rgba(3);
-    return i / 9;
+    gpu_data_[i + 3] = normal.x();
+    gpu_data_[i + 4] = normal.y();
+    gpu_data_[i + 5] = normal.z();
+    gpu_data_[i + 6] = uv.x();
+    gpu_data_[i + 7] = uv.y();
+    gpu_data_[i + 8] = rgba(0);
+    gpu_data_[i + 9] = rgba(1);
+    gpu_data_[i + 10] = rgba(2);
+    gpu_data_[i + 11] = rgba(3);
+    return i / 12;
   }
 
   void Update() {
@@ -1187,11 +1200,10 @@ class MechRender {
       gl::Framebuffer::Bind binder(framebuffer_);
       glViewport(0, 0, size_.x(), size_.y());
       glEnable(GL_DEPTH_TEST);
-      glDepthFunc(GL_LESS);
       glClearColor(0.45f, 0.55f, 0.60f, 1.0f);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
       program_.use();
-      program_.SetUniform(program_.uniform("modelViewMatrix"),
+      program_.SetUniform(program_.uniform("viewMatrix"),
                           trackball_.matrix());
 
       vao_.bind();
@@ -1255,6 +1267,8 @@ class MechRender {
       gl::PerspectiveCamera::Options options;
       options.aspect = static_cast<double>(size_.x()) /
                        static_cast<double>(size_.y());
+      options.near = 100;
+      options.far = 10000;
       return options;
     }()};
 
@@ -1262,8 +1276,9 @@ class MechRender {
 
   gl::Framebuffer framebuffer_;
   gl::FlatRgbTexture imgui_texture_{size_};
+  gl::Renderbuffer renderbuffer_;
   const bool attach_ = [&]() {
-    framebuffer_.attach(imgui_texture_.texture());
+    framebuffer_.attach(imgui_texture_.texture(), renderbuffer_);
     return true;
   }();
 
@@ -1273,16 +1288,22 @@ class MechRender {
   static constexpr const char* kVertexShaderSource =
       "#version 330 core\n"
       "in vec3 inVertex;\n"
+      "in vec3 inNormal;\n"
       "in vec2 inUv;\n"
       "in vec4 inColor;\n"
       "uniform mat4 projMatrix;\n"
-      "uniform mat4 modelViewMatrix;\n"
+      "uniform mat4 viewMatrix;\n"
+      "uniform mat4 modelMatrix;\n"
       "out vec2 fragUv;\n"
       "out vec4 fragColor;\n"
+      "out vec3 fragNormal;\n"
+      "out vec3 fragPos;\n"
       "void main(){\n"
       "  fragUv = inUv;\n"
       "  fragColor = inColor;\n"
-      "  gl_Position = projMatrix * modelViewMatrix * vec4(inVertex.xyz, 1);\n"
+      "  fragNormal = inNormal;\n"
+      "  fragPos = vec3(viewMatrix * modelMatrix * vec4(inVertex.xyz, 1.0));\n"
+      "  gl_Position = projMatrix * viewMatrix * modelMatrix * vec4(inVertex.xyz, 1);\n"
       "}\n"
       ;
 
@@ -1290,10 +1311,16 @@ class MechRender {
       "#version 330 core\n"
       "in vec2 fragUv;\n"
       "in vec4 fragColor;\n"
+      "in vec3 fragNormal;\n"
+      "in vec3 fragPos;\n"
+      "uniform vec3 lightPos;\n"
       "uniform sampler2D currentTexture;\n"
-      "layout (location = 0) out vec4 color;\n"
       "void main() {\n"
-      "  color = fragColor * texture(currentTexture, fragUv);\n"
+      "  vec3 lightDir = normalize(lightPos - fragPos);\n"
+      "  float ambient = 0.3;\n"
+      "  float diff = max(dot(fragNormal, lightDir), 0);\n"
+      "  vec4 lightModel = vec4((diff + ambient) * vec3(1.0, 1.0, 1.0), 1.0);\n"
+      "  gl_FragColor = lightModel * fragColor * texture(currentTexture, fragUv);\n"
       "}\n"
       ;
 
