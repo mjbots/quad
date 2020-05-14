@@ -22,6 +22,8 @@
 
 #include "base/point3d.h"
 
+#include "mech/quadruped_command.h"
+
 namespace mjmech {
 namespace mech {
 

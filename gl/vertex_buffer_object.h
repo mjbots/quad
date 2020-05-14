@@ -36,6 +36,12 @@ class VertexBufferObject {
     glBindBuffer(target, vbo_);
   }
 
+  template <typename Vector>
+  void set_vector(GLenum target, const Vector& vector, GLenum usage) {
+    bind(target);
+    glBufferData(target, vector.size() * sizeof(vector[0]), &vector[0], usage);
+  }
+
   template <typename Array>
   void set_data_array(GLenum target, const Array& array, GLenum usage) {
     bind(target);

@@ -25,7 +25,8 @@ namespace base {
 template <typename Scalar>
 struct ExternalSerializer<Sophus::SO3<Scalar>> {
   struct Wrapper {
-    Wrapper(Sophus::SO3<Scalar>* wrapped) : wrapped_(wrapped) {}
+    Wrapper(Sophus::SO3<Scalar>* wrapped = nullptr)
+        : wrapped_(wrapped ? wrapped : &g_static_wrapped_) {}
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -37,6 +38,7 @@ struct ExternalSerializer<Sophus::SO3<Scalar>> {
     }
 
     Sophus::SO3<Scalar>* wrapped_;
+    static inline Sophus::SO3<Scalar> g_static_wrapped_;
   };
 
   template <typename PairReceiver>
@@ -49,7 +51,8 @@ struct ExternalSerializer<Sophus::SO3<Scalar>> {
 template <typename Scalar>
 struct ExternalSerializer<Sophus::SE3<Scalar>> {
   struct Wrapper {
-    Wrapper(Sophus::SE3<Scalar>* wrapped) : wrapped_(wrapped) {}
+    Wrapper(Sophus::SE3<Scalar>* wrapped = nullptr)
+        : wrapped_(wrapped ? wrapped : &g_static_wrapped_) {}
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -60,6 +63,7 @@ struct ExternalSerializer<Sophus::SE3<Scalar>> {
     }
 
     Sophus::SE3<Scalar>* wrapped_;
+    static inline Sophus::SE3<Scalar> g_static_wrapped_;
   };
 
   template <typename PairReceiver>

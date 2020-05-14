@@ -55,6 +55,9 @@
 #include "mjlib/base/time_conversions.h"
 #include "mjlib/base/tokenizer.h"
 #include "mjlib/telemetry/file_reader.h"
+#include "mjlib/telemetry/mapped_binary_reader.h"
+
+#include "mech/quadruped_control.h"
 
 using mjlib::telemetry::FileReader;
 using Element = mjlib::telemetry::BinarySchemaParser::Element;
@@ -175,6 +178,13 @@ class Timeline {
 class TreeView {
  public:
   TreeView(FileReader* reader) : reader_(reader) {
+  }
+
+  std::optional<std::string> data(const std::string& name) {
+    for (const auto& pair : data_) {
+      if (pair.first->name == name) { return pair.second; }
+    }
+    return {};
   }
 
   void Update(boost::posix_time::ptime timestamp) {
@@ -1052,27 +1062,15 @@ class Video {
   boost::posix_time::ptime last_video_timestamp_;
 };
 
-class RenderTest {
+class MechRender {
  public:
-  RenderTest() {
+  MechRender(FileReader* reader, TreeView* tree_view)
+      : reader_(reader->record("qc_status")->schema->root()),
+        tree_view_(tree_view) {
     program_.use();
     vao_.bind();
 
     vertices_.bind(GL_ARRAY_BUFFER);
-
-    static const float triangle_data[] = {
-      // vertex (x, y, z), texture (u, v), color (r, g, b, a)
-      -1.0f, 1.0f, 0.0f,   0.0f, 0.0f,   1.0f, 0.0f, 0.0f, 1.0f,
-      1.0f, 1.0f, 0.0f,    0.0f, 0.0f,   1.0f, 0.0f, 0.0f, 1.0f,
-      0.0f, -1.0f, 0.0f,   0.0f, 0.0f,   1.0f, 0.0f, 0.0f, 1.0f,
-    };
-
-    vertices_.set_data_array(GL_ARRAY_BUFFER, triangle_data, GL_STATIC_DRAW);
-    const uint32_t elements[] = {
-      0, 1, 2,
-    };
-    elements_.set_data_array(
-        GL_ELEMENT_ARRAY_BUFFER, elements, GL_STATIC_DRAW);
 
     program_.VertexAttribPointer(
         program_.attribute("inVertex"), 3, GL_FLOAT, GL_FALSE, 36, 0);
@@ -1093,7 +1091,53 @@ class RenderTest {
     texture_.Store(white);
   }
 
+  void Render() {
+    const auto maybe_qc_status = tree_view_->data("qc_status");
+    if (maybe_qc_status) {
+      DrawMech(reader_.Read(*maybe_qc_status));
+    }
+
+    AddTriangle({-1, 1, 0}, {1, 1, 0}, {0, -1, 0}, {1, 0, 0, 0});
+  }
+
+  void DrawMech(const mech::QuadrupedControl::Status& qs) {
+    std::cout << "got ts: " << qs.timestamp << "\n";
+  }
+
+  void AddTriangle(const Eigen::Vector3f& p1,
+                   const Eigen::Vector3f& p2,
+                   const Eigen::Vector3f& p3,
+                   const Eigen::Vector4f& rgba) {
+    auto index1 = AddVertex(p1, {0, 0}, rgba);
+    auto index2 = AddVertex(p2, {0, 0}, rgba);
+    auto index3 = AddVertex(p3, {0, 0}, rgba);
+    indices_.push_back(index1);
+    indices_.push_back(index2);
+    indices_.push_back(index3);
+  }
+
+  uint32_t AddVertex(const Eigen::Vector3f& p1,
+                     const Eigen::Vector2f& uv,
+                     const Eigen::Vector4f& rgba) {
+    const auto i = gpu_data_.size();
+    gpu_data_.resize(i + 9);
+    gpu_data_[i + 0] = p1.x();
+    gpu_data_[i + 1] = p1.y();
+    gpu_data_[i + 2] = p1.z();
+    gpu_data_[i + 3] = uv.x();
+    gpu_data_[i + 4] = uv.y();
+    gpu_data_[i + 5] = rgba(0);
+    gpu_data_[i + 6] = rgba(1);
+    gpu_data_[i + 7] = rgba(2);
+    gpu_data_[i + 8] = rgba(3);
+    return i / 9;
+  }
+
   void Update() {
+    gpu_data_.clear();
+
+    Render();
+
     {
       gl::Framebuffer::Bind binder(framebuffer_);
       glViewport(0, 0, size_.x(), size_.y());
@@ -1107,8 +1151,12 @@ class RenderTest {
 
       vao_.bind();
 
+      vertices_.set_vector(GL_ARRAY_BUFFER, gpu_data_, GL_STATIC_DRAW);
+      elements_.set_vector(
+          GL_ELEMENT_ARRAY_BUFFER, indices_, GL_STATIC_DRAW);
+
       texture_.bind();
-      glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_INT, 0);
+      glDrawElements(GL_TRIANGLES, indices_.size(), GL_UNSIGNED_INT, 0);
       vao_.unbind();
     }
 
@@ -1152,6 +1200,9 @@ class RenderTest {
 
     ImGui::EndChild();
   }
+
+  mjlib::telemetry::MappedBinaryReader<mech::QuadrupedControl::Status> reader_;
+  TreeView* const tree_view_;
 
   Eigen::Vector2i size_{1024, 768};
 
@@ -1207,6 +1258,9 @@ class RenderTest {
   gl::VertexArrayObject vao_;
   gl::VertexBufferObject vertices_;
   gl::VertexBufferObject elements_;
+
+  std::vector<float> gpu_data_;
+  std::vector<uint32_t> indices_;
 };
 }
 
@@ -1239,7 +1293,7 @@ int do_main(int argc, char** argv) {
   TreeView tree_view{&file_reader};
   PlotView plot_view{&file_reader, log_start};
   std::optional<Video> video;
-  RenderTest render_test;
+  MechRender mech_render{&file_reader, &tree_view};
 
   if (!video_filename.empty()) {
     video.emplace(log_start, video_filename, video_time_offset_s);
@@ -1259,7 +1313,7 @@ int do_main(int argc, char** argv) {
     if (video) {
       video->Update(current);
     }
-    render_test.Update();
+    mech_render.Update();
 
     ImGui::ShowDemoWindow();
     ImGui::ShowImPlotDemoWindow();
