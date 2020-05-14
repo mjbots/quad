@@ -1100,8 +1100,53 @@ class MechRender {
     AddTriangle({-1, 1, 0}, {1, 1, 0}, {0, -1, 0}, {1, 0, 0, 0});
   }
 
-  void DrawMech(const mech::QuadrupedControl::Status& qs) {
-    std::cout << "got ts: " << qs.timestamp << "\n";
+  void DrawMech(const mech::QuadrupedControl::Status&) {
+    AddBox({0, 0, 0},
+           {230, 0, 0},
+           {0, 240, 0},
+           {0, 0, 125},
+           {255, 0, 0, 255});
+  }
+
+  void AddBox(const Eigen::Vector3f& center,
+              const Eigen::Vector3f& length,
+              const Eigen::Vector3f& width,
+              const Eigen::Vector3f& height,
+              const Eigen::Vector4f& rgba) {
+    const Eigen::Vector3f hl = 0.5 * length;
+    const Eigen::Vector3f hw = 0.5 * width;
+    const Eigen::Vector3f hh = 0.5 * height;
+    // Bottom
+    AddQuad(center - hh - hw - hl,
+            center - hh - hw + hl,
+            center - hh + hw + hl,
+            center - hh + hw - hl,
+            rgba);
+    // Top
+    AddQuad(center + hh - hw - hl,
+            center + hh - hw + hl,
+            center + hh + hw + hl,
+            center + hh + hw - hl,
+            rgba);
+  }
+
+  void AddQuad(const Eigen::Vector3f& p1,
+               const Eigen::Vector3f& p2,
+               const Eigen::Vector3f& p3,
+               const Eigen::Vector3f& p4,
+               const Eigen::Vector4f& rgba) {
+    const Eigen::Vector2f uv{0, 0};
+    auto index1 = AddVertex(p1, uv, rgba);
+    auto index2 = AddVertex(p2, uv, rgba);
+    auto index3 = AddVertex(p3, uv, rgba);
+    auto index4 = AddVertex(p4, uv, rgba);
+    indices_.push_back(index1);
+    indices_.push_back(index2);
+    indices_.push_back(index3);
+
+    indices_.push_back(index3);
+    indices_.push_back(index4);
+    indices_.push_back(index1);
   }
 
   void AddTriangle(const Eigen::Vector3f& p1,
@@ -1213,7 +1258,7 @@ class MechRender {
       return options;
     }()};
 
-  gl::Trackball trackball_{{0.f, 0.f, 10.f}, {0.f, 0.f, 0.f}};
+  gl::Trackball trackball_{{0.f, 0.f, 1000.f}, {0.f, 0.f, 0.f}};
 
   gl::Framebuffer framebuffer_;
   gl::FlatRgbTexture imgui_texture_{size_};
