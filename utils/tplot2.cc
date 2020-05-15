@@ -15,23 +15,28 @@
 
 // TODO:
 // * 3D mech
-//  * render a guess of the ground based on attitude and lowest foot
-//    when some foot is marked as being in stance
 //  * render feet shadows on ground to give an idea of height off
-//  * render a grid with units in 3d
+//  * render a grid on ground (with units)
 //  * render text velocities/forces near the arrows
 //  * it would be nice to start with legs down
 //  * plot time trajectories over a time window, or perhaps just
 //    resettable trailers
 //  * make line rendering be anti-aliased and support line width
+//  * show exaggerated pitch and roll
+//  * show some indication of foot slip
 // * Video
 //  * after rewinding, video sometimes doesn't start playing for a
 //    good while
+//  * pan / zoom
+//  * hw accelerated decoding or color xform
 // * Plots
 //  * I get crazy artifacts when non-first plots are entirely off screen
 //  * save window size in imgui.ini
 // * Save/restore plot configuration
+// * Save/restore tree view expansion state
+// * Save/restore render check boxes
 // * Derived/scripted fields
+
 
 #include <string>
 #include <variant>
@@ -82,6 +87,13 @@ using FT = Format::Type;
 namespace mjmech {
 namespace util {
 namespace {
+
+Eigen::Vector3f Transform(const Eigen::Matrix4f& matrix, const Eigen::Vector3f& p) {
+  Eigen::Vector4f q(p.x(), p.y(), p.z(), 1.0);
+  Eigen::Vector4f r = matrix * q;
+  r = r / (r(3));
+  return r.head<3>();
+}
 
 class Timeline {
  public:
@@ -1210,22 +1222,24 @@ class MechRender {
     }
   }
 
-  base::Quaternion MirrorZ(const base::Quaternion& value) {
-    auto aa = value.axis_angle();
-    aa.axis.z() *= -1;
-    return base::Quaternion::FromAxisAngle(aa);
+  Eigen::Matrix3d AttitudeMatrix(const base::Quaternion& attitude) const {
+    return attitude.matrix();
   }
 
   void DrawMech(const mech::QuadrupedControl::Status& qs,
                 const mech::QuadrupedControl::ControlLog& qc,
                 const mech::AttitudeData& attitude) {
+    if (ground_) {
+      DrawGround(qs, attitude);
+    }
+
     if (attitude_) {
-      model_matrix_ = Eigen::Matrix4f::Identity();
+      transform_ = Eigen::Matrix4f::Identity();
       // I haven't figured out why yaw is inverted here..
-      model_matrix_.topLeftCorner<3, 3>() =
-          MirrorZ(attitude.attitude.conjugated()).matrix().cast<float>();
+      transform_.topLeftCorner<3, 3>() =
+          AttitudeMatrix(attitude.attitude).cast<float>();
     } else {
-      model_matrix_ = Eigen::Matrix4f::Identity();
+      transform_ = Eigen::Matrix4f::Identity();
     }
 
     AddBox({0, 0, 0},
@@ -1272,6 +1286,51 @@ class MechRender {
               Eigen::Vector4f(0, 0, 1, 1));
         }
       }
+    }
+
+    transform_ = Eigen::Matrix4f::Identity();
+  }
+
+  void DrawGround(const mech::QuadrupedControl::Status& qs,
+                  const mech::AttitudeData& attitude) {
+    Eigen::Matrix3d tf_LB = AttitudeMatrix(attitude.attitude);
+
+    // Stick the ground perpendicular to gravity at the location of
+    // the lowest leg.
+    double max_z_L = 0.0;
+
+    for (const auto& leg_B : qs.state.legs_B) {
+      Eigen::Vector3d position_mm_L = tf_LB * leg_B.position_mm;
+      max_z_L = std::max(max_z_L, position_mm_L.z());
+    }
+
+    const double l = kGroundSize_mm;
+    Eigen::Vector3f normal = Eigen::Vector3f(0, 0, -1);
+    Eigen::Vector2f uv(0, 0);
+    Eigen::Vector4f rgba(0.3, 0.3, 0.3, 1.0);
+
+    if (!attitude_) {
+      // We are rendering into the B frame.
+      transform_ = Eigen::Matrix4f::Identity();
+      transform_.topLeftCorner<3, 3>() = tf_LB.inverse().cast<float>();
+    }
+
+    auto ic = AddVertex(Eigen::Vector3f(0, 0, max_z_L), normal, uv, rgba);
+    for (int i = 0; i < 16; i++) {
+      const double t1 = 2 * M_PI * (static_cast<double>(i) / 16);
+      Eigen::Vector3f p1_L(l * std::cos(t1), l * std::sin(t1), max_z_L);
+
+      // This could be more optimal and re-use edge indices as well.
+      const double t2 = 2 * M_PI * (static_cast<double>((i + 1) % 16) / 16);
+      Eigen::Vector3f p2_L(l * std::cos(t2), l * std::sin(t2), max_z_L);
+
+      auto i1 = AddVertex(p1_L, normal, uv, rgba);
+      auto i2 = AddVertex(p2_L, normal, uv, rgba);
+
+      auto& ti = triangle_indices_;
+      ti.push_back(i1);
+      ti.push_back(i2);
+      ti.push_back(ic);
     }
   }
 
@@ -1364,10 +1423,11 @@ class MechRender {
     ti.push_back(index3);
   }
 
-  uint32_t AddVertex(const Eigen::Vector3f& p1,
+  uint32_t AddVertex(const Eigen::Vector3f& p1_in,
                      const Eigen::Vector3f& normal,
                      const Eigen::Vector2f& uv,
                      const Eigen::Vector4f& rgba) {
+    Eigen::Vector3f p1 = Transform(transform_, p1_in);
     auto& d = triangle_data_;
     const auto i = d.size();
     d.resize(i + 12);
@@ -1396,8 +1456,9 @@ class MechRender {
     li.push_back(index2);
   }
 
-  uint32_t AddLineVertex(const Eigen::Vector3f& p1,
+  uint32_t AddLineVertex(const Eigen::Vector3f& p1_in,
                          const Eigen::Vector4f& rgba) {
+    Eigen::Vector3f p1 = Transform(transform_, p1_in);
     auto& d = line_data_;
     const auto i = d.size();
     d.resize(i + 7);
@@ -1508,6 +1569,7 @@ class MechRender {
     ImGui::Checkbox("command", &leg_command_);
     ImGui::Checkbox("force", &leg_force_);
     ImGui::Checkbox("attitude", &attitude_);
+    ImGui::Checkbox("ground", &ground_);
 
     ImGui::EndChild();
   }
@@ -1527,6 +1589,7 @@ class MechRender {
   Eigen::Vector2i size_{1024, 768};
 
   Eigen::Matrix4f model_matrix_{Eigen::Matrix4f::Identity()};
+  Eigen::Matrix4f transform_{Eigen::Matrix4f::Identity()};
   gl::PerspectiveCamera camera_{[&]() {
       gl::PerspectiveCamera::Options options;
       options.aspect = static_cast<double>(size_.x()) /
@@ -1644,9 +1707,11 @@ class MechRender {
   bool leg_command_ = true;
   bool leg_force_ = false;
   bool attitude_ = true;
+  bool ground_ = true;
 
   const double kVelocityDrawScale = 0.1;
   const double kForceDrawScale = 2.0;
+  const double kGroundSize_mm = 500.0;
 };
 }
 
