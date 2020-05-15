@@ -15,8 +15,6 @@
 
 // TODO:
 // * 3D mech
-//  * there is some kind of resource leak that gets worse just running
-//    over time causing CPU usage to go up
 //  * need view reset
 //  * need toggles to render different things like actual/commanded
 //  * render lines and arrows in 3d
@@ -29,6 +27,9 @@
 //  * light should be on the actual top (negative Z), or behind the
 //    camera
 //  * optionally rotate by roll/pitch, double optionally by yaw
+//  * plot time trajectories over a time window, or perhaps just
+//    resettable trailers
+
 // * Plots
 //  * I get crazy artifacts when non-first plots are entirely off screen
 //  * save window size in imgui.ini
@@ -1312,6 +1313,7 @@ class MechRender {
 
   void Update() {
     gpu_data_.clear();
+    indices_.clear();
 
     Render();
 
