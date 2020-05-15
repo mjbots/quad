@@ -14,10 +14,23 @@
 
 
 // TODO:
+// * 3D mech
+//  * need view reset
+//  * translation is busted at this scale
+//  * need toggles to render different things like actual/commanded
+//  * render lines and arrows in 3d
+//  * render velocities and forces
+//  * render a grid with units in 3d
+//  * it would be nice to start with legs down
+//  * should render an arrow on the top and sides of the mech so I
+//    know which way is forward
+//  * it is mirrored left/right
+//  * light should be on the actual top (negative Z), or behind the
+//    camera
+//  * optionally rotate by roll/pitch, double optionally by yaw
 // * Plots
 //  * I get crazy artifacts when non-first plots are entirely off screen
 //  * save window size in imgui.ini
-// * 3D mech
 // * Save/restore plot configuration
 // * Derived/scripted fields
 
@@ -1063,6 +1076,75 @@ class Video {
   boost::posix_time::ptime last_video_timestamp_;
 };
 
+class SphereModel {
+ public:
+  SphereModel(int levels = 1) {
+    for (auto tindex : tindicies_) {
+      Subdivide(vdata_[tindex[0]],
+                vdata_[tindex[1]],
+                vdata_[tindex[2]],
+                levels);
+    }
+  }
+
+  struct Triangle {
+    Eigen::Vector3f p1;
+    Eigen::Vector3f p2;
+    Eigen::Vector3f p3;
+  };
+
+  std::vector<Triangle> operator()(const Eigen::Vector3f& center, float radius) {
+    std::vector<Triangle> result;
+    for (const auto& triangle : unit_) {
+      result.push_back(
+          {triangle.p1 * radius + center,
+                triangle.p2 * radius + center,
+                triangle.p3 * radius + center});
+    }
+    return result;
+  }
+
+ private:
+  void Subdivide(const Eigen::Vector3f& v1,
+                 const Eigen::Vector3f& v2,
+                 const Eigen::Vector3f& v3,
+                 int depth) {
+    if (depth == 0) {
+      unit_.push_back({v1, v2, v3});
+      return;
+    }
+
+    // Calculate midpoints of each side.
+    const Eigen::Vector3f v12 = (0.5 * (v1 + v2)).normalized();
+    const Eigen::Vector3f v23 = (0.5 * (v2 + v3)).normalized();
+    const Eigen::Vector3f v13 = (0.5 * (v1 + v3)).normalized();
+
+    const int next_depth = depth - 1;
+    Subdivide(v1, v12, v13, next_depth);
+    Subdivide(v2, v23, v12, next_depth);
+    Subdivide(v3, v13, v23, next_depth);
+    Subdivide(v12, v23, v13, next_depth);
+  }
+
+  std::vector<Triangle> unit_;
+
+  const float X = 0.525731112119133696f;
+  const float Z = 0.850650808352039932f;
+
+  const Eigen::Vector3f vdata_[12] = {
+    {-X, 0.0f, Z}, {X, 0.0f, Z}, {-X, 0.0f, -Z}, {X, 0.0f, -Z},
+    {0.0f, Z, X}, {0.0f, Z, -X}, {0.0f, -Z, X}, {0.0f, -Z, -X},
+    {Z, X, 0.0f}, {-Z, X, 0.0f}, {Z, -X, 0.0f}, {-Z, -X, 0.0f}
+  };
+
+  const Eigen::Vector3i tindicies_[20] = {
+    {1,4,0}, {4,9,0}, {4,5,9}, {8,5,4}, {1,8,4},
+    {1,10,8}, {10,3,8}, {8,3,5}, {3,2,5}, {3,7,2},
+    {3,10,7}, {10,6,7}, {6,11,7}, {6,0,11}, {6,1,0},
+    {10,1,6}, {11,0,9}, {2,11,9}, {5,2,9}, {11,2,7}
+  };
+};
+
 class MechRender {
  public:
   MechRender(FileReader* reader, TreeView* tree_view)
@@ -1107,12 +1189,24 @@ class MechRender {
     AddTriangle({-1, 1, 0}, {1, 1, 0}, {0, -1, 0}, {1, 0, 0, 0});
   }
 
-  void DrawMech(const mech::QuadrupedControl::Status&) {
+  void DrawMech(const mech::QuadrupedControl::Status& qs) {
     AddBox({0, 0, 0},
            {230, 0, 0},
            {0, 240, 0},
            {0, 0, 125},
            {1.0, 0, 0, 1.0});
+
+    for (const auto& leg_B : qs.state.legs_B) {
+      AddBall(leg_B.position_mm.cast<float>(), 20, Eigen::Vector4f(0, 1, 0, 1));
+    }
+  }
+
+  void AddBall(const Eigen::Vector3f& center,
+               float radius,
+               const Eigen::Vector4f& rgba) {
+    for (const auto& t : sphere_(center, radius)) {
+      AddTriangle(t.p1, t.p2, t.p3, rgba);
+    }
   }
 
   void AddBox(const Eigen::Vector3f& center,
@@ -1134,6 +1228,30 @@ class MechRender {
             center + hh + hw + hl,
             center + hh - hw + hl,
             center + hh - hw - hl,
+            rgba);
+    // Back
+    AddQuad(center - hl - hh - hw,
+            center - hl - hh + hw,
+            center - hl + hh + hw,
+            center - hl + hh - hw,
+            rgba);
+    // Front
+    AddQuad(center + hl + hh - hw,
+            center + hl + hh + hw,
+            center + hl - hh + hw,
+            center + hl - hh - hw,
+            rgba);
+    // Left
+    AddQuad(center - hw - hh - hl,
+            center - hw - hh + hl,
+            center - hw + hh + hl,
+            center - hw + hh - hl,
+            rgba);
+    // Right
+    AddQuad(center + hw + hh - hl,
+            center + hw + hh + hl,
+            center + hw - hh + hl,
+            center + hw - hh - hl,
             rgba);
   }
 
@@ -1257,6 +1375,8 @@ class MechRender {
 
     ImGui::EndChild();
   }
+
+  SphereModel sphere_;
 
   mjlib::telemetry::MappedBinaryReader<mech::QuadrupedControl::Status> reader_;
   TreeView* const tree_view_;
@@ -1386,9 +1506,6 @@ int do_main(int argc, char** argv) {
       video->Update(current);
     }
     mech_render.Update();
-
-    ImGui::ShowDemoWindow();
-    ImGui::ShowImPlotDemoWindow();
 
     imgui.Render();
     window.SwapBuffers();
