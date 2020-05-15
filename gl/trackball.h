@@ -198,7 +198,7 @@ class Trackball {
     if (static_moving) {
       pan_start_ = pan_end_;
     } else {
-      pan_start_ += mouse_change * options_.dynamic_damping_factor;
+      pan_start_ += (pan_end_ - pan_start_) * options_.dynamic_damping_factor;
     }
   }
 

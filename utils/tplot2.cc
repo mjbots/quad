@@ -15,8 +15,9 @@
 
 // TODO:
 // * 3D mech
+//  * there is some kind of resource leak that gets worse just running
+//    over time causing CPU usage to go up
 //  * need view reset
-//  * translation is busted at this scale
 //  * need toggles to render different things like actual/commanded
 //  * render lines and arrows in 3d
 //  * render velocities and forces
@@ -1347,7 +1348,8 @@ class MechRender {
     auto pos_pixel = ImVec2(mouse_pos.x - window_pos.x,
                             mouse_pos.y - window_pos.y);
     Eigen::Vector2f pos_norm = Eigen::Vector2f(
-        pos_pixel.x / p.sizes().x(), pos_pixel.y / p.sizes().y());
+        std::max(-1.0f, std::min(2.0f, pos_pixel.x / p.sizes().x())),
+        std::max(-1.0f, std::min(2.0f, pos_pixel.y / p.sizes().y())));
     if (ImGui::IsWindowHovered()) {
       for (int i = 0; i < 3; i++) {
         if (IO.MouseClicked[i]) {
