@@ -29,6 +29,8 @@
 //  * optionally rotate by roll/pitch, double optionally by yaw
 //  * plot time trajectories over a time window, or perhaps just
 //    resettable trailers
+//  * render a guess of the ground based on attitude and lowest foot
+//    when some foot is marked as being in stance
 
 // * Plots
 //  * I get crazy artifacts when non-first plots are entirely off screen
