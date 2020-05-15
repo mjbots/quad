@@ -15,14 +15,12 @@
 
 // TODO:
 // * 3D mech
-//  * optionally rotate by roll/pitch, double optionally by yaw
 //  * render a guess of the ground based on attitude and lowest foot
 //    when some foot is marked as being in stance
 //  * render feet shadows on ground to give an idea of height off
 //  * render a grid with units in 3d
+//  * render text velocities/forces near the arrows
 //  * it would be nice to start with legs down
-//  * light should be on the actual top (negative Z), or behind the
-//    camera
 //  * plot time trajectories over a time window, or perhaps just
 //    resettable trailers
 //  * make line rendering be anti-aliased and support line width
@@ -72,6 +70,7 @@
 #include "mjlib/telemetry/file_reader.h"
 #include "mjlib/telemetry/mapped_binary_reader.h"
 
+#include "mech/attitude_data.h"
 #include "mech/quadruped_control.h"
 
 using mjlib::telemetry::FileReader;
@@ -1151,6 +1150,7 @@ class MechRender {
   MechRender(FileReader* reader, TreeView* tree_view)
       : reader_(reader->record("qc_status")->schema->root()),
         control_reader_(reader->record("qc_control")->schema->root()),
+        imu_reader_(reader->record("imu")->schema->root()),
         tree_view_(tree_view) {
     // TRIANGLES
     triangle_program_.use();
@@ -1175,8 +1175,6 @@ class MechRender {
     triangle_program_.SetUniform(
         triangle_program_.uniform("currentTexture"), 0);
     triangle_program_.SetUniform(
-        triangle_program_.uniform("modelMatrix"), model_matrix_);
-    triangle_program_.SetUniform(
         triangle_program_.uniform("projMatrix"), camera_.matrix());
 
     // LINES
@@ -1193,8 +1191,6 @@ class MechRender {
     line_vao_.unbind();
 
     line_program_.SetUniform(
-        line_program_.uniform("modelMatrix"), model_matrix_);
-    line_program_.SetUniform(
         line_program_.uniform("projMatrix"), camera_.matrix());
 
     // For now, our rendering texture will consist of a single white
@@ -1206,16 +1202,32 @@ class MechRender {
   void Render() {
     const auto maybe_qc_status = tree_view_->data("qc_status");
     const auto maybe_qc_control = tree_view_->data("qc_control");
-    if (maybe_qc_status && maybe_qc_control) {
+    const auto maybe_imu = tree_view_->data("imu");
+    if (maybe_qc_status && maybe_qc_control && maybe_imu) {
       DrawMech(reader_.Read(*maybe_qc_status),
-               control_reader_.Read(*maybe_qc_control));
+               control_reader_.Read(*maybe_qc_control),
+               imu_reader_.Read(*maybe_imu));
     }
+  }
 
-    AddTriangle({-1, 1, 0}, {1, 1, 0}, {0, -1, 0}, {1, 0, 0, 0});
+  base::Quaternion MirrorZ(const base::Quaternion& value) {
+    auto aa = value.axis_angle();
+    aa.axis.z() *= -1;
+    return base::Quaternion::FromAxisAngle(aa);
   }
 
   void DrawMech(const mech::QuadrupedControl::Status& qs,
-                const mech::QuadrupedControl::ControlLog& qc) {
+                const mech::QuadrupedControl::ControlLog& qc,
+                const mech::AttitudeData& attitude) {
+    if (attitude_) {
+      model_matrix_ = Eigen::Matrix4f::Identity();
+      // I haven't figured out why yaw is inverted here..
+      model_matrix_.topLeftCorner<3, 3>() =
+          MirrorZ(attitude.attitude.conjugated()).matrix().cast<float>();
+    } else {
+      model_matrix_ = Eigen::Matrix4f::Identity();
+    }
+
     AddBox({0, 0, 0},
            {230, 0, 0},
            {0, 240, 0},
@@ -1416,8 +1428,10 @@ class MechRender {
 
       // TRIANGLES
       triangle_program_.use();
-      triangle_program_.SetUniform(triangle_program_.uniform("viewMatrix"),
-                          trackball_.matrix());
+      triangle_program_.SetUniform(
+          triangle_program_.uniform("viewMatrix"), trackball_.matrix());
+      triangle_program_.SetUniform(
+          triangle_program_.uniform("modelMatrix"), model_matrix_);
 
       triangle_vao_.bind();
 
@@ -1432,8 +1446,10 @@ class MechRender {
 
       // LINES
       line_program_.use();
-      line_program_.SetUniform(line_program_.uniform("viewMatrix"),
-                               trackball_.matrix());
+      line_program_.SetUniform(
+          line_program_.uniform("viewMatrix"), trackball_.matrix());
+      line_program_.SetUniform(
+          line_program_.uniform("modelMatrix"), model_matrix_);
       line_vao_.bind();
 
       line_vertices_.set_vector(GL_ARRAY_BUFFER, line_data_, GL_STATIC_DRAW);
@@ -1491,6 +1507,7 @@ class MechRender {
     ImGui::Checkbox("actual", &leg_actual_);
     ImGui::Checkbox("command", &leg_command_);
     ImGui::Checkbox("force", &leg_force_);
+    ImGui::Checkbox("attitude", &attitude_);
 
     ImGui::EndChild();
   }
@@ -1504,6 +1521,7 @@ class MechRender {
   mjlib::telemetry::MappedBinaryReader<mech::QuadrupedControl::Status> reader_;
   mjlib::telemetry::MappedBinaryReader<
     mech::QuadrupedControl::ControlLog> control_reader_;
+  mjlib::telemetry::MappedBinaryReader<mech::AttitudeData> imu_reader_;
   TreeView* const tree_view_;
 
   Eigen::Vector2i size_{1024, 768};
@@ -1625,6 +1643,7 @@ class MechRender {
   bool leg_actual_ = true;
   bool leg_command_ = true;
   bool leg_force_ = false;
+  bool attitude_ = true;
 
   const double kVelocityDrawScale = 0.1;
   const double kForceDrawScale = 2.0;

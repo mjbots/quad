@@ -132,6 +132,29 @@ class Quaternion {
     return Quaternion(c, x * s, y * s, z * s);
   }
 
+  struct AxisAngle {
+    double angle_rad = 0;
+    base::Point3D axis;
+  };
+
+  static Quaternion FromAxisAngle(const AxisAngle& axis_angle) {
+    return FromAxisAngle(
+        axis_angle.angle_rad,
+        axis_angle.axis.x(),
+        axis_angle.axis.y(),
+        axis_angle.axis.z());
+  }
+
+  AxisAngle axis_angle() const {
+    AxisAngle result;
+    result.angle_rad = 2.0 * std::acos(w_);
+    const double denom = std::sqrt(1.0 - w_ * w_);
+    result.axis.x() = x_ / denom;
+    result.axis.y() = y_ / denom;
+    result.axis.z() = z_ / denom;
+    return result;
+  }
+
   static Quaternion IntegrateRotationRate(
       const Point3D& rate_rps,
       double dt_s) {
