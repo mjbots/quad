@@ -15,18 +15,17 @@
 
 // TODO:
 // * 3D mech
-//  * render lines and arrows in 3d
-//  * render velocities and forces
+//  * optionally rotate by roll/pitch, double optionally by yaw
+//  * render a guess of the ground based on attitude and lowest foot
+//    when some foot is marked as being in stance
+//  * render feet shadows on ground to give an idea of height off
 //  * render a grid with units in 3d
 //  * it would be nice to start with legs down
 //  * light should be on the actual top (negative Z), or behind the
 //    camera
-//  * optionally rotate by roll/pitch, double optionally by yaw
 //  * plot time trajectories over a time window, or perhaps just
 //    resettable trailers
-//  * render a guess of the ground based on attitude and lowest foot
-//    when some foot is marked as being in stance
-//  * render feet shadows on ground to give an idea of height off
+//  * make line rendering be anti-aliased and support line width
 // * Video
 //  * after rewinding, video sometimes doesn't start playing for a
 //    good while
@@ -1227,9 +1226,19 @@ class MechRender {
       for (const auto& leg_B : qs.state.legs_B) {
         AddBall(leg_B.position_mm.cast<float>(),
                 10, Eigen::Vector4f(0, 1, 0, 1));
-        AddLineSegment(leg_B.position_mm.cast<float>(),
-                       (leg_B.position_mm + 0.1 * leg_B.velocity_mm_s).cast<float>(),
-                       Eigen::Vector4f(0, 1, 0, 1));
+        if (!leg_force_) {
+          AddLineSegment(
+              leg_B.position_mm.cast<float>(),
+              (leg_B.position_mm +
+               kVelocityDrawScale * leg_B.velocity_mm_s).cast<float>(),
+              Eigen::Vector4f(0, 1, 0, 1));
+        } else {
+          AddLineSegment(
+              leg_B.position_mm.cast<float>(),
+              (leg_B.position_mm +
+               kForceDrawScale * leg_B.force_N).cast<float>(),
+              Eigen::Vector4f(0, 1, 0, 1));
+        }
       }
     }
 
@@ -1237,9 +1246,19 @@ class MechRender {
       for (const auto& leg_B : qc.legs_B) {
         AddBall(leg_B.position_mm.cast<float>(),
                 8, Eigen::Vector4f(0, 0, 1, 1));
-        AddLineSegment(leg_B.position_mm.cast<float>(),
-                       (leg_B.position_mm + 0.1 * leg_B.velocity_mm_s).cast<float>(),
-                       Eigen::Vector4f(0, 0, 1, 1));
+        if (!leg_force_) {
+          AddLineSegment(
+              leg_B.position_mm.cast<float>(),
+              (leg_B.position_mm +
+               kVelocityDrawScale * leg_B.velocity_mm_s).cast<float>(),
+              Eigen::Vector4f(0, 0, 1, 1));
+        } else {
+          AddLineSegment(
+              leg_B.position_mm.cast<float>(),
+              (leg_B.position_mm +
+               kForceDrawScale * leg_B.force_N).cast<float>(),
+              Eigen::Vector4f(0, 0, 1, 1));
+        }
       }
     }
   }
@@ -1471,6 +1490,7 @@ class MechRender {
     }
     ImGui::Checkbox("actual", &leg_actual_);
     ImGui::Checkbox("command", &leg_command_);
+    ImGui::Checkbox("force", &leg_force_);
 
     ImGui::EndChild();
   }
@@ -1604,6 +1624,10 @@ class MechRender {
 
   bool leg_actual_ = true;
   bool leg_command_ = true;
+  bool leg_force_ = false;
+
+  const double kVelocityDrawScale = 0.1;
+  const double kForceDrawScale = 2.0;
 };
 }
 
