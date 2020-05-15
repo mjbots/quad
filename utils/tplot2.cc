@@ -15,7 +15,6 @@
 
 // TODO:
 // * 3D mech
-//  * need toggles to render different things like actual/commanded
 //  * render lines and arrows in 3d
 //  * render velocities and forces
 //  * render a grid with units in 3d
@@ -1203,14 +1202,18 @@ class MechRender {
            {0, 0, 125},
            {1.0, 0, 0, 1.0});
 
-    for (const auto& leg_B : qs.state.legs_B) {
-      AddBall(leg_B.position_mm.cast<float>(),
-              10, Eigen::Vector4f(0, 1, 0, 1));
+    if (leg_actual_) {
+      for (const auto& leg_B : qs.state.legs_B) {
+        AddBall(leg_B.position_mm.cast<float>(),
+                10, Eigen::Vector4f(0, 1, 0, 1));
+      }
     }
 
-    for (const auto& leg_B : qc.legs_B) {
-      AddBall(leg_B.position_mm.cast<float>(),
-              8, Eigen::Vector4f(0, 0, 1, 1));
+    if (leg_command_) {
+      for (const auto& leg_B : qc.legs_B) {
+        AddBall(leg_B.position_mm.cast<float>(),
+                8, Eigen::Vector4f(0, 0, 1, 1));
+      }
     }
   }
 
@@ -1394,6 +1397,8 @@ class MechRender {
     if (ImGui::Button("reset view")) {
       trackball_ = MakeTrackball();
     }
+    ImGui::Checkbox("actual", &leg_actual_);
+    ImGui::Checkbox("command", &leg_command_);
 
     ImGui::EndChild();
   }
@@ -1483,6 +1488,9 @@ class MechRender {
 
   std::vector<float> gpu_data_;
   std::vector<uint32_t> indices_;
+
+  bool leg_actual_ = true;
+  bool leg_command_ = true;
 };
 }
 
