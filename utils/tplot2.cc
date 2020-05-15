@@ -185,8 +185,8 @@ class Timeline {
 
   float float_range_ = 0.0;
   float float_time_ = 0.0;
-  float step_ = 0.1;
-  float fast_speed_ = 5.0;
+  float step_ = 0.01;
+  float fast_speed_ = 0.1;
 
   boost::posix_time::ptime last_update_;
 };
@@ -1153,29 +1153,50 @@ class MechRender {
       : reader_(reader->record("qc_status")->schema->root()),
         control_reader_(reader->record("qc_control")->schema->root()),
         tree_view_(tree_view) {
-    program_.use();
-    vao_.bind();
+    // TRIANGLES
+    triangle_program_.use();
+    triangle_vao_.bind();
 
-    vertices_.bind(GL_ARRAY_BUFFER);
+    triangle_vertices_.bind(GL_ARRAY_BUFFER);
 
-    program_.VertexAttribPointer(
-        program_.attribute("inVertex"), 3, GL_FLOAT, GL_FALSE, 48, 0);
-    program_.VertexAttribPointer(
-        program_.attribute("inNormal"), 3, GL_FLOAT, GL_FALSE, 48, 12);
-    program_.VertexAttribPointer(
-        program_.attribute("inUv"), 2, GL_FLOAT, GL_FALSE, 48, 24);
-    program_.VertexAttribPointer(
-        program_.attribute("inColor"), 4, GL_FLOAT, GL_FALSE, 48, 32);
+    triangle_program_.VertexAttribPointer(
+        triangle_program_.attribute("inVertex"), 3, GL_FLOAT, GL_FALSE, 48, 0);
+    triangle_program_.VertexAttribPointer(
+        triangle_program_.attribute("inNormal"), 3, GL_FLOAT, GL_FALSE, 48, 12);
+    triangle_program_.VertexAttribPointer(
+        triangle_program_.attribute("inUv"), 2, GL_FLOAT, GL_FALSE, 48, 24);
+    triangle_program_.VertexAttribPointer(
+        triangle_program_.attribute("inColor"), 4, GL_FLOAT, GL_FALSE, 48, 32);
 
-    vao_.unbind();
+    triangle_vao_.unbind();
 
-    program_.SetUniform(program_.uniform("lightPos"),
-                        Eigen::Vector3f({-1000, 0, -3000}));
-    program_.SetUniform(program_.uniform("currentTexture"), 0);
-    program_.SetUniform(program_.uniform("modelMatrix"),
-                        Eigen::Matrix4f(Eigen::Matrix4f::Identity()));
-    program_.SetUniform(program_.uniform("projMatrix"),
-                        camera_.matrix());
+    triangle_program_.SetUniform(
+        triangle_program_.uniform("lightPos"),
+        Eigen::Vector3f({-1000, 0, -3000}));
+    triangle_program_.SetUniform(
+        triangle_program_.uniform("currentTexture"), 0);
+    triangle_program_.SetUniform(
+        triangle_program_.uniform("modelMatrix"), model_matrix_);
+    triangle_program_.SetUniform(
+        triangle_program_.uniform("projMatrix"), camera_.matrix());
+
+    // LINES
+    line_program_.use();
+    line_vao_.bind();
+
+    line_vertices_.bind(GL_ARRAY_BUFFER);
+
+    line_program_.VertexAttribPointer(
+        line_program_.attribute("inVertex"), 3, GL_FLOAT, GL_FALSE, 28, 0);
+    line_program_.VertexAttribPointer(
+        line_program_.attribute("inColor"), 4, GL_FLOAT, GL_FALSE, 28, 12);
+
+    line_vao_.unbind();
+
+    line_program_.SetUniform(
+        line_program_.uniform("modelMatrix"), model_matrix_);
+    line_program_.SetUniform(
+        line_program_.uniform("projMatrix"), camera_.matrix());
 
     // For now, our rendering texture will consist of a single white
     // pixel, which will just let us use the passed in color.
@@ -1206,6 +1227,9 @@ class MechRender {
       for (const auto& leg_B : qs.state.legs_B) {
         AddBall(leg_B.position_mm.cast<float>(),
                 10, Eigen::Vector4f(0, 1, 0, 1));
+        AddLineSegment(leg_B.position_mm.cast<float>(),
+                       (leg_B.position_mm + 0.1 * leg_B.velocity_mm_s).cast<float>(),
+                       Eigen::Vector4f(0, 1, 0, 1));
       }
     }
 
@@ -1213,6 +1237,9 @@ class MechRender {
       for (const auto& leg_B : qc.legs_B) {
         AddBall(leg_B.position_mm.cast<float>(),
                 8, Eigen::Vector4f(0, 0, 1, 1));
+        AddLineSegment(leg_B.position_mm.cast<float>(),
+                       (leg_B.position_mm + 0.1 * leg_B.velocity_mm_s).cast<float>(),
+                       Eigen::Vector4f(0, 0, 1, 1));
       }
     }
   }
@@ -1282,13 +1309,14 @@ class MechRender {
     auto index2 = AddVertex(p2, normal, uv, rgba);
     auto index3 = AddVertex(p3, normal, uv, rgba);
     auto index4 = AddVertex(p4, normal, uv, rgba);
-    indices_.push_back(index1);
-    indices_.push_back(index2);
-    indices_.push_back(index3);
+    auto& ti = triangle_indices_;
+    ti.push_back(index1);
+    ti.push_back(index2);
+    ti.push_back(index3);
 
-    indices_.push_back(index3);
-    indices_.push_back(index4);
-    indices_.push_back(index1);
+    ti.push_back(index3);
+    ti.push_back(index4);
+    ti.push_back(index1);
   }
 
   void AddTriangle(const Eigen::Vector3f& p1,
@@ -1299,35 +1327,64 @@ class MechRender {
     auto index1 = AddVertex(p1, normal, {0, 0}, rgba);
     auto index2 = AddVertex(p2, normal, {0, 0}, rgba);
     auto index3 = AddVertex(p3, normal, {0, 0}, rgba);
-    indices_.push_back(index1);
-    indices_.push_back(index2);
-    indices_.push_back(index3);
+    auto& ti = triangle_indices_;
+    ti.push_back(index1);
+    ti.push_back(index2);
+    ti.push_back(index3);
   }
 
   uint32_t AddVertex(const Eigen::Vector3f& p1,
                      const Eigen::Vector3f& normal,
                      const Eigen::Vector2f& uv,
                      const Eigen::Vector4f& rgba) {
-    const auto i = gpu_data_.size();
-    gpu_data_.resize(i + 12);
-    gpu_data_[i + 0] = p1.x();
-    gpu_data_[i + 1] = p1.y();
-    gpu_data_[i + 2] = p1.z();
-    gpu_data_[i + 3] = normal.x();
-    gpu_data_[i + 4] = normal.y();
-    gpu_data_[i + 5] = normal.z();
-    gpu_data_[i + 6] = uv.x();
-    gpu_data_[i + 7] = uv.y();
-    gpu_data_[i + 8] = rgba(0);
-    gpu_data_[i + 9] = rgba(1);
-    gpu_data_[i + 10] = rgba(2);
-    gpu_data_[i + 11] = rgba(3);
+    auto& d = triangle_data_;
+    const auto i = d.size();
+    d.resize(i + 12);
+    d[i + 0] = p1.x();
+    d[i + 1] = p1.y();
+    d[i + 2] = p1.z();
+    d[i + 3] = normal.x();
+    d[i + 4] = normal.y();
+    d[i + 5] = normal.z();
+    d[i + 6] = uv.x();
+    d[i + 7] = uv.y();
+    d[i + 8] = rgba(0);
+    d[i + 9] = rgba(1);
+    d[i + 10] = rgba(2);
+    d[i + 11] = rgba(3);
     return i / 12;
   }
 
+  void AddLineSegment(const Eigen::Vector3f& p1,
+                      const Eigen::Vector3f& p2,
+                      const Eigen::Vector4f& rgba) {
+    auto index1 = AddLineVertex(p1, rgba);
+    auto index2 = AddLineVertex(p2, rgba);
+    auto& li = line_indices_;
+    li.push_back(index1);
+    li.push_back(index2);
+  }
+
+  uint32_t AddLineVertex(const Eigen::Vector3f& p1,
+                         const Eigen::Vector4f& rgba) {
+    auto& d = line_data_;
+    const auto i = d.size();
+    d.resize(i + 7);
+    d[i + 0] = p1.x();
+    d[i + 1] = p1.y();
+    d[i + 2] = p1.z();
+    d[i + 3] = rgba(0);
+    d[i + 4] = rgba(1);
+    d[i + 5] = rgba(2);
+    d[i + 6] = rgba(3);
+    return i / 7;
+  }
+
   void Update() {
-    gpu_data_.clear();
-    indices_.clear();
+    triangle_data_.clear();
+    triangle_indices_.clear();
+    line_data_.clear();
+    line_indices_.clear();
 
     Render();
 
@@ -1337,19 +1394,34 @@ class MechRender {
       glEnable(GL_DEPTH_TEST);
       glClearColor(0.45f, 0.55f, 0.60f, 1.0f);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-      program_.use();
-      program_.SetUniform(program_.uniform("viewMatrix"),
+
+      // TRIANGLES
+      triangle_program_.use();
+      triangle_program_.SetUniform(triangle_program_.uniform("viewMatrix"),
                           trackball_.matrix());
 
-      vao_.bind();
+      triangle_vao_.bind();
 
-      vertices_.set_vector(GL_ARRAY_BUFFER, gpu_data_, GL_STATIC_DRAW);
-      elements_.set_vector(
-          GL_ELEMENT_ARRAY_BUFFER, indices_, GL_STATIC_DRAW);
+      triangle_vertices_.set_vector(
+          GL_ARRAY_BUFFER, triangle_data_, GL_STATIC_DRAW);
+      triangle_elements_.set_vector(
+          GL_ELEMENT_ARRAY_BUFFER, triangle_indices_, GL_STATIC_DRAW);
 
       texture_.bind();
-      glDrawElements(GL_TRIANGLES, indices_.size(), GL_UNSIGNED_INT, 0);
-      vao_.unbind();
+      glDrawElements(GL_TRIANGLES, triangle_indices_.size(), GL_UNSIGNED_INT, 0);
+      triangle_vao_.unbind();
+
+      // LINES
+      line_program_.use();
+      line_program_.SetUniform(line_program_.uniform("viewMatrix"),
+                               trackball_.matrix());
+      line_vao_.bind();
+
+      line_vertices_.set_vector(GL_ARRAY_BUFFER, line_data_, GL_STATIC_DRAW);
+      line_elements_.set_vector(
+          GL_ELEMENT_ARRAY_BUFFER, line_indices_, GL_STATIC_DRAW);
+      glDrawElements(GL_LINES, line_indices_.size(), GL_UNSIGNED_INT, 0);
+      line_vao_.unbind();
     }
 
     gl::ImGuiWindow render("Render");
@@ -1416,6 +1488,7 @@ class MechRender {
 
   Eigen::Vector2i size_{1024, 768};
 
+  Eigen::Matrix4f model_matrix_{Eigen::Matrix4f::Identity()};
   gl::PerspectiveCamera camera_{[&]() {
       gl::PerspectiveCamera::Options options;
       options.aspect = static_cast<double>(size_.x()) /
@@ -1435,10 +1508,12 @@ class MechRender {
     return true;
   }();
 
-  gl::Shader vertex_shader_{kVertexShaderSource, GL_VERTEX_SHADER};
-  gl::Shader fragment_shader_{kFragShaderSource, GL_FRAGMENT_SHADER};
+  gl::Shader triangle_vertex_shader_{
+    kTriangleVertexShaderSource, GL_VERTEX_SHADER};
+  gl::Shader triangle_fragment_shader_{
+    kTriangleFragShaderSource, GL_FRAGMENT_SHADER};
 
-  static constexpr const char* kVertexShaderSource =
+  static constexpr const char* kTriangleVertexShaderSource =
       "#version 330 core\n"
       "in vec3 inVertex;\n"
       "in vec3 inNormal;\n"
@@ -1462,7 +1537,7 @@ class MechRender {
       "}\n"
       ;
 
-  static constexpr const char* kFragShaderSource =
+  static constexpr const char* kTriangleFragShaderSource =
       "#version 330 core\n"
       "in vec2 fragUv;\n"
       "in vec4 fragColor;\n"
@@ -1479,15 +1554,53 @@ class MechRender {
       "}\n"
       ;
 
-  gl::Program program_{vertex_shader_, fragment_shader_};
+  gl::Program triangle_program_{
+    triangle_vertex_shader_,
+        triangle_fragment_shader_};
 
   gl::FlatRgbTexture texture_{Eigen::Vector2i(1, 1), GL_RGBA};
-  gl::VertexArrayObject vao_;
-  gl::VertexBufferObject vertices_;
-  gl::VertexBufferObject elements_;
+  gl::VertexArrayObject triangle_vao_;
+  gl::VertexBufferObject triangle_vertices_;
+  gl::VertexBufferObject triangle_elements_;
 
-  std::vector<float> gpu_data_;
-  std::vector<uint32_t> indices_;
+
+  gl::Shader line_vertex_shader_{kLineVertexShaderSource, GL_VERTEX_SHADER};
+  gl::Shader line_fragment_shader_{kLineFragShaderSource, GL_FRAGMENT_SHADER};
+
+  static constexpr const char* kLineVertexShaderSource =
+      "#version 330 core\n"
+      "in vec3 inVertex;\n"
+      "in vec4 inColor;\n"
+      "uniform mat4 projMatrix;\n"
+      "uniform mat4 viewMatrix;\n"
+      "uniform mat4 modelMatrix;\n"
+      "out vec4 fragColor;\n"
+      "void main() {\n"
+      "  fragColor = inColor;\n"
+      "  vec4 vertex = vec4(inVertex.x, inVertex.y, -inVertex.z, 1.0);\n"
+      "  gl_Position = projMatrix * viewMatrix * modelMatrix * vertex;\n"
+      "}\n"
+      ;
+
+  static constexpr const char* kLineFragShaderSource =
+      "#version 330 core\n"
+      "in vec4 fragColor;\n"
+      "void main() {\n"
+      "  gl_FragColor = fragColor;\n"
+      "}\n"
+      ;
+
+  gl::Program line_program_{line_vertex_shader_, line_fragment_shader_};
+  gl::VertexArrayObject line_vao_;
+  gl::VertexBufferObject line_vertices_;
+  gl::VertexBufferObject line_elements_;
+
+
+  std::vector<float> triangle_data_;
+  std::vector<uint32_t> triangle_indices_;
+
+  std::vector<float> line_data_;
+  std::vector<uint32_t> line_indices_;
 
   bool leg_actual_ = true;
   bool leg_command_ = true;
