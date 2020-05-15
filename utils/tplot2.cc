@@ -16,14 +16,12 @@
 // TODO:
 // * 3D mech
 //  * need view reset
+//  * fix left/right mirror globally
 //  * need toggles to render different things like actual/commanded
 //  * render lines and arrows in 3d
 //  * render velocities and forces
 //  * render a grid with units in 3d
 //  * it would be nice to start with legs down
-//  * should render an arrow on the top and sides of the mech so I
-//    know which way is forward
-//  * it is mirrored left/right
 //  * light should be on the actual top (negative Z), or behind the
 //    camera
 //  * optionally rotate by roll/pitch, double optionally by yaw
@@ -31,7 +29,10 @@
 //    resettable trailers
 //  * render a guess of the ground based on attitude and lowest foot
 //    when some foot is marked as being in stance
-
+//  * render feet shadows on ground to give an idea of height off
+// * Video
+//  * after rewinding, video sometimes doesn't start playing for a
+//    good while
 // * Plots
 //  * I get crazy artifacts when non-first plots are entirely off screen
 //  * save window size in imgui.ini
@@ -740,8 +741,8 @@ class PlotView {
         xmin = std::min(xmin, plot.min_x);
         xmax = std::max(xmax, plot.max_x);
       }
-      ImGui::SetNextPlotLimitsX(xmin, xmax, ImGuiCond_Always);
-      ImGui::SetNextPlotLimitsY(p.min_y, p.max_y, ImGuiCond_Always, p.axis);
+      ImPlot::SetNextPlotLimitsX(xmin, xmax, ImGuiCond_Always);
+      ImPlot::SetNextPlotLimitsY(p.min_y, p.max_y, ImGuiCond_Always, p.axis);
       fit_plot_ = {};
     }
     const int extra_flags = [&]() {
@@ -755,33 +756,33 @@ class PlotView {
       }
       return result;
     }();
-    if (ImGui::BeginPlot("Plot", "time", nullptr, ImVec2(-1, -25),
+    if (ImPlot::BeginPlot("Plot", "time", nullptr, ImVec2(-1, -25),
                          ImPlotFlags_Default | extra_flags)) {
       for (const auto& plot : plots_) {
-        ImGui::SetPlotYAxis(plot.axis);
+        ImPlot::SetPlotYAxis(plot.axis);
         for (const auto& pair : plot.float_styles) {
-          ImGui::PushPlotStyleVar(pair.first, pair.second);
+          ImPlot::PushStyleVar(pair.first, pair.second);
         }
         for (const auto& pair : plot.int_styles) {
-          ImGui::PushPlotStyleVar(pair.first, pair.second);
+          ImPlot::PushStyleVar(pair.first, pair.second);
         }
-        ImGui::Plot(plot.legend.c_str(), plot.xvals.data(), plot.yvals.data(),
+        ImPlot::Plot(plot.legend.c_str(), plot.xvals.data(), plot.yvals.data(),
                     plot.xvals.size());
-        ImGui::PopPlotStyleVar(plot.float_styles.size() + plot.int_styles.size());
+        ImPlot::PopStyleVar(plot.float_styles.size() + plot.int_styles.size());
 
         const auto it = std::lower_bound(
             plot.timestamps.begin(), plot.timestamps.end(), timestamp);
         if (it != plot.timestamps.end()) {
           const auto index = it - plot.timestamps.begin();
-          ImGui::PushPlotStyleVar(ImPlotStyleVar_Marker, ImMarker_Diamond);
-          ImGui::Plot((plot.legend + "_mrk").c_str(),
-                      plot.xvals.data() + index, plot.yvals.data() + index,
-                      1);
-          ImGui::PopPlotStyleVar();
+          ImPlot::PushStyleVar(ImPlotStyleVar_Marker, ImPlotMarker_Diamond);
+          ImPlot::Plot((plot.legend + "_mrk").c_str(),
+                       plot.xvals.data() + index, plot.yvals.data() + index,
+                       1);
+          ImPlot::PopStyleVar();
         }
       }
 
-      ImGui::EndPlot();
+      ImPlot::EndPlot();
     }
 
     if (ImGui::BeginDragDropTarget()) {
@@ -933,7 +934,7 @@ class PlotView {
     };
     int marker_type = 0;
     std::map<int, int> int_styles {
-      {ImPlotStyleVar_Marker, ImMarker_None},
+      {ImPlotStyleVar_Marker, ImPlotMarker_None},
     };
 
     int axis = 0;
@@ -1013,10 +1014,10 @@ class Video {
     const auto delta_s = mjlib::base::ConvertDurationToSeconds(
         timestamp - log_start_) - time_offset_s_;
     const int pts = delta_s * time_base_.den / time_base_.num;
-    const int delta_pts = 1.0 * time_base_.den / time_base_.num;
+    const int delta_pts = 0.5 * time_base_.den / time_base_.num;
     ffmpeg::File::SeekOptions seek_options;
     seek_options.any = false;
-    file_.Seek(stream_, pts - delta_pts, pts, pts + delta_pts, seek_options);
+    file_.Seek(stream_, pts - delta_pts, pts, pts, seek_options);
 
     ReadUntil(timestamp);
   }
@@ -1171,7 +1172,7 @@ class MechRender {
     vao_.unbind();
 
     program_.SetUniform(program_.uniform("lightPos"),
-                        Eigen::Vector3f({-1000, 0, 3000}));
+                        Eigen::Vector3f({-1000, 0, -3000}));
     program_.SetUniform(program_.uniform("currentTexture"), 0);
     program_.SetUniform(program_.uniform("modelMatrix"),
                         Eigen::Matrix4f(Eigen::Matrix4f::Identity()));
@@ -1201,7 +1202,9 @@ class MechRender {
            {1.0, 0, 0, 1.0});
 
     for (const auto& leg_B : qs.state.legs_B) {
-      AddBall(leg_B.position_mm.cast<float>(), 20, Eigen::Vector4f(0, 1, 0, 1));
+      AddBall((leg_B.position_mm.cast<float>().array() *
+               Eigen::Array3f(1.f, -1.f, 1.f)).matrix(),
+              20, Eigen::Vector4f(0, 1, 0, 1));
     }
   }
 
@@ -1238,13 +1241,13 @@ class MechRender {
             center - hl - hh + hw,
             center - hl + hh + hw,
             center - hl + hh - hw,
-            rgba);
+            Eigen::Vector4f(0.f, 0.f, 1.f, 1.f));
     // Front
     AddQuad(center + hl + hh - hw,
             center + hl + hh + hw,
             center + hl - hh + hw,
             center + hl - hh - hw,
-            rgba);
+            Eigen::Vector4f(0.f, 1.f, 0.f, 1.f));
     // Left
     AddQuad(center - hw - hh - hl,
             center - hw - hh + hl,
