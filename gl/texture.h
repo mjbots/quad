@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <Eigen/Core>
+
 #include "gl/gl.h"
 
 namespace mjmech {

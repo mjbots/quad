@@ -20,6 +20,7 @@
 #include <Eigen/Core>
 
 #include "mjlib/base/fail.h"
+#include "mjlib/base/system_error.h"
 
 #include "base/named_type.h"
 #include "gl/gl.h"
