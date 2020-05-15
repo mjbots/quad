@@ -246,7 +246,7 @@ class Trackball {
     return result.transpose();
   }
 
-  const Options options_;
+  Options options_;
 
   struct State {
     Eigen::Vector3f target;

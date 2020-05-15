@@ -15,7 +15,6 @@
 
 // TODO:
 // * 3D mech
-//  * need view reset
 //  * need toggles to render different things like actual/commanded
 //  * render lines and arrows in 3d
 //  * render velocities and forces
@@ -1355,6 +1354,8 @@ class MechRender {
     const auto ws = ImGui::GetContentRegionAvail();
     const auto p = base::MaintainAspectRatio(size_, {ws.x, ws.y});
     ImGui::BeginChild("##ignored", ws);
+    ImGui::Columns(2);
+    ImGui::SetColumnWidth(0, ws.x - 100);
 
     const auto& IO = ImGui::GetIO();
     auto window_pos = ImGui::GetWindowPos();
@@ -1389,7 +1390,16 @@ class MechRender {
                        ImVec2(1, 1),
                        0);
 
+    ImGui::NextColumn();
+    if (ImGui::Button("reset view")) {
+      trackball_ = MakeTrackball();
+    }
+
     ImGui::EndChild();
+  }
+
+  gl::Trackball MakeTrackball() {
+    return gl::Trackball{{0.f, 0.f, 1000.f}, {0.f, 0.f, 0.f}};
   }
 
   SphereModel sphere_;
@@ -1410,7 +1420,7 @@ class MechRender {
       return options;
     }()};
 
-  gl::Trackball trackball_{{0.f, 0.f, 1000.f}, {0.f, 0.f, 0.f}};
+  gl::Trackball trackball_ = MakeTrackball();
 
   gl::Framebuffer framebuffer_;
   gl::FlatRgbTexture imgui_texture_{size_};
