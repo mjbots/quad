@@ -89,6 +89,23 @@ class QuadrupedControl : boost::noncopyable {
     }
   };
 
+  struct ControlLog {
+    using QC = QuadrupedCommand;
+
+    boost::posix_time::ptime timestamp;
+    std::vector<QC::Joint> joints;
+    std::vector<QC::Leg> legs_B;
+    std::vector<QC::Leg> legs_R;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(timestamp));
+      a->Visit(MJ_NVP(joints));
+      a->Visit(MJ_NVP(legs_B));
+      a->Visit(MJ_NVP(legs_R));
+    }
+  };
+
   void Command(const QuadrupedCommand&);
   const Status& status() const;
 

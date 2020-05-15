@@ -1154,6 +1154,7 @@ class MechRender {
  public:
   MechRender(FileReader* reader, TreeView* tree_view)
       : reader_(reader->record("qc_status")->schema->root()),
+        control_reader_(reader->record("qc_control")->schema->root()),
         tree_view_(tree_view) {
     program_.use();
     vao_.bind();
@@ -1187,14 +1188,17 @@ class MechRender {
 
   void Render() {
     const auto maybe_qc_status = tree_view_->data("qc_status");
-    if (maybe_qc_status) {
-      DrawMech(reader_.Read(*maybe_qc_status));
+    const auto maybe_qc_control = tree_view_->data("qc_control");
+    if (maybe_qc_status && maybe_qc_control) {
+      DrawMech(reader_.Read(*maybe_qc_status),
+               control_reader_.Read(*maybe_qc_control));
     }
 
     AddTriangle({-1, 1, 0}, {1, 1, 0}, {0, -1, 0}, {1, 0, 0, 0});
   }
 
-  void DrawMech(const mech::QuadrupedControl::Status& qs) {
+  void DrawMech(const mech::QuadrupedControl::Status& qs,
+                const mech::QuadrupedControl::ControlLog& qc) {
     AddBox({0, 0, 0},
            {230, 0, 0},
            {0, 240, 0},
@@ -1204,7 +1208,13 @@ class MechRender {
     for (const auto& leg_B : qs.state.legs_B) {
       AddBall((leg_B.position_mm.cast<float>().array() *
                Eigen::Array3f(1.f, -1.f, 1.f)).matrix(),
-              20, Eigen::Vector4f(0, 1, 0, 1));
+              10, Eigen::Vector4f(0, 1, 0, 1));
+    }
+
+    for (const auto& leg_B : qc.legs_B) {
+      AddBall((leg_B.position_mm.cast<float>().array() *
+               Eigen::Array3f(1.f, -1.f, 1.f)).matrix(),
+              8, Eigen::Vector4f(0, 0, 1, 1));
     }
   }
 
@@ -1388,6 +1398,8 @@ class MechRender {
   SphereModel sphere_;
 
   mjlib::telemetry::MappedBinaryReader<mech::QuadrupedControl::Status> reader_;
+  mjlib::telemetry::MappedBinaryReader<
+    mech::QuadrupedControl::ControlLog> control_reader_;
   TreeView* const tree_view_;
 
   Eigen::Vector2i size_{1024, 768};

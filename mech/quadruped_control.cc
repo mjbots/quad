@@ -201,22 +201,6 @@ struct CommandLog {
 };
 
 QC CommandLog::ignored_command;
-
-struct ControlLog {
-  boost::posix_time::ptime timestamp;
-  std::vector<QC::Joint> joints;
-  std::vector<QC::Leg> legs_B;
-  std::vector<QC::Leg> legs_R;
-
-  template <typename Archive>
-  void Serialize(Archive* a) {
-    a->Visit(MJ_NVP(timestamp));
-    a->Visit(MJ_NVP(joints));
-    a->Visit(MJ_NVP(legs_B));
-    a->Visit(MJ_NVP(legs_R));
-  }
-};
-
 }
 
 class QuadrupedControl::Impl {
