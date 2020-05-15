@@ -1212,7 +1212,7 @@ class MechRender {
                float radius,
                const Eigen::Vector4f& rgba) {
     for (const auto& t : sphere_(center, radius)) {
-      AddTriangle(t.p1, t.p2, t.p3, rgba);
+      AddTriangle(t.p3, t.p2, t.p1, rgba);
     }
   }
 
