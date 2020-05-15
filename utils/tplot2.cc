@@ -16,7 +16,6 @@
 // TODO:
 // * 3D mech
 //  * need view reset
-//  * fix left/right mirror globally
 //  * need toggles to render different things like actual/commanded
 //  * render lines and arrows in 3d
 //  * render velocities and forces
@@ -1206,14 +1205,12 @@ class MechRender {
            {1.0, 0, 0, 1.0});
 
     for (const auto& leg_B : qs.state.legs_B) {
-      AddBall((leg_B.position_mm.cast<float>().array() *
-               Eigen::Array3f(1.f, -1.f, 1.f)).matrix(),
+      AddBall(leg_B.position_mm.cast<float>(),
               10, Eigen::Vector4f(0, 1, 0, 1));
     }
 
     for (const auto& leg_B : qc.legs_B) {
-      AddBall((leg_B.position_mm.cast<float>().array() *
-               Eigen::Array3f(1.f, -1.f, 1.f)).matrix(),
+      AddBall(leg_B.position_mm.cast<float>(),
               8, Eigen::Vector4f(0, 0, 1, 1));
     }
   }
@@ -1443,8 +1440,10 @@ class MechRender {
       "  fragUv = inUv;\n"
       "  fragColor = inColor;\n"
       "  fragNormal = inNormal;\n"
-      "  fragPos = vec3(viewMatrix * modelMatrix * vec4(inVertex.xyz, 1.0));\n"
-      "  gl_Position = projMatrix * viewMatrix * modelMatrix * vec4(inVertex.xyz, 1);\n"
+      // Switch things to a right handed view coordinate system.
+      "  vec4 vertex = vec4(inVertex.x, inVertex.y, -inVertex.z, 1.0);\n"
+      "  fragPos = vec3(viewMatrix * modelMatrix * vertex);\n"
+      "  gl_Position = projMatrix * viewMatrix * modelMatrix * vertex;\n"
       "}\n"
       ;
 
