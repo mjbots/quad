@@ -96,8 +96,9 @@ def main():
     actual_offset_s = offset_s + args.fudge + args.distance / sound_speed_in_air_mps
     print("actual_offset_s", actual_offset_s)
 
-    pylab.plot(imu_x, scaled_imu_y, label='imu')
     pylab.plot(clip_audio_x, clip_audio_y, label='audio')
+    pylab.plot(imu_x, scaled_imu_y, linewidth=2, label='imu')
+    pylab.legend()
     pylab.show()
 
 
