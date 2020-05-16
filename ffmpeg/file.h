@@ -112,12 +112,15 @@ class File {
   struct SeekOptions {
     // non-keyframes are treated as keyframes
     bool any = false;
+
+    // seek backwards to the nearest keyframe
+    bool backward = false;
   };
-  void Seek(Stream stream, int64_t min_ts, int64_t ts, int64_t max_ts,
-            const SeekOptions& options) {
-    const int ret = avformat_seek_file(
-        context_, stream.av_stream()->index, min_ts, ts, max_ts,
-        options.any ? AVSEEK_FLAG_ANY : 0);
+  void Seek(Stream stream, int64_t ts, const SeekOptions& options) {
+    const int ret = av_seek_frame(
+        context_, stream.av_stream()->index, ts,
+        (options.any ? AVSEEK_FLAG_ANY :
+         options.backward ? AVSEEK_FLAG_BACKWARD : 0));
     ErrorCheck(ret);
   }
 

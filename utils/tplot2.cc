@@ -454,7 +454,6 @@ class TreeView {
     }
   }
 
-
   FileReader* const reader_;
   boost::posix_time::ptime last_timestamp_;
   FileReader::Index last_index_ = {};
@@ -1012,7 +1011,7 @@ class Video {
   }
 
   void Step(boost::posix_time::ptime timestamp) {
-    ReadUntil(timestamp);
+    ReadUntil(timestamp, false);
   }
 
   void Seek(boost::posix_time::ptime timestamp) {
@@ -1020,16 +1019,17 @@ class Video {
 
     const auto delta_s = mjlib::base::ConvertDurationToSeconds(
         timestamp - log_start_) - time_offset_s_;
-    const int pts = delta_s * time_base_.den / time_base_.num;
-    const int delta_pts = 0.5 * time_base_.den / time_base_.num;
+    const int pts = std::max<int>(
+        0, delta_s * time_base_.den / time_base_.num);
     ffmpeg::File::SeekOptions seek_options;
-    seek_options.any = false;
-    file_.Seek(stream_, pts - delta_pts, pts, pts, seek_options);
+    seek_options.backward = true;
+    file_.Seek(stream_, pts, seek_options);
 
-    ReadUntil(timestamp);
+    ReadUntil(timestamp, true);
   }
 
-  void ReadUntil(boost::posix_time::ptime timestamp) {
+  void ReadUntil(boost::posix_time::ptime timestamp, bool discard_first) {
+    int discard_count = discard_first ? 1 : 0;
     while (true) {
       auto maybe_pref = file_.Read(&packet_);
       if (!maybe_pref) {
@@ -1044,6 +1044,11 @@ class Video {
 
       auto maybe_fref = codec_.GetFrame(&frame_);
       if (!maybe_fref) { continue; }
+
+      if (discard_count) {
+        discard_count--;
+        continue;
+      }
 
       if (!swscale_) {
         swscale_.emplace(codec_, dest_frame_.size(), dest_frame_.format(),
