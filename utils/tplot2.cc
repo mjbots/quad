@@ -1723,6 +1723,7 @@ class MechRender {
 int do_main(int argc, char** argv) {
   ffmpeg::Ffmpeg::Register();
 
+  bool mech = false;
   std::string log_filename;
   std::string video_filename;
   double video_time_offset_s = 0.0;
@@ -1730,6 +1731,7 @@ int do_main(int argc, char** argv) {
   auto group = clipp::group(
       clipp::value("log file", log_filename),
       clipp::option("v", "video") & clipp::value("video", video_filename),
+      clipp::option("m", "mech").set(mech),
       clipp::option("voffset") & clipp::value("OFF", video_time_offset_s)
   );
 
@@ -1749,7 +1751,10 @@ int do_main(int argc, char** argv) {
   TreeView tree_view{&file_reader};
   PlotView plot_view{&file_reader, log_start};
   std::optional<Video> video;
-  MechRender mech_render{&file_reader, &tree_view};
+  std::optional<MechRender> mech_render;
+  if (mech) {
+    mech_render.emplace(&file_reader, &tree_view);
+  }
 
   if (!video_filename.empty()) {
     video.emplace(log_start, video_filename, video_time_offset_s);
@@ -1769,7 +1774,9 @@ int do_main(int argc, char** argv) {
     if (video) {
       video->Update(current);
     }
-    mech_render.Update();
+    if (mech_render) {
+      mech_render->Update();
+    }
 
     imgui.Render();
     window.SwapBuffers();
