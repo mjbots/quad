@@ -539,8 +539,6 @@ class VideoRender {
     vao_.unbind();
 
     program_.SetUniform(program_.uniform("frameTex"), 0);
-    program_.SetUniform(program_.uniform("mvpMatrix"),
-                        Ortho(-1, 1, -1, 1, -1, 1));
   }
 
   void SetViewport(const Eigen::Vector2i& window_size) {
@@ -550,7 +548,9 @@ class VideoRender {
                result.sizes().x(), result.sizes().y());
   }
 
-  void Update() {
+  void Update(double zoom = 1.0) {
+    program_.SetUniform(program_.uniform("mvpMatrix"),
+                        Ortho(-1 / zoom, 1 / zoom, -1 / zoom, 1 / zoom, -1, 1));
     UpdateVideo();
     Draw();
   }
@@ -738,6 +738,8 @@ int do_main(int argc, char** argv) {
     GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER,
   };
 
+  double zoom = 1.0;
+
   while (!window.should_close()) {
     context.poll(); context.reset();
     window.PollEvents();
@@ -765,6 +767,15 @@ int do_main(int argc, char** argv) {
       old_trigger_down[i] = trigger_down[i];
     }
 
+    {
+      const double desired_zoom =
+          gamepad.buttons[GLFW_GAMEPAD_BUTTON_LEFT_BUMPER] ? 2.0 : 1.0;
+      constexpr double zoom_time_constant_s = 0.2;
+      constexpr double alpha = (1.0 / 60.0) / zoom_time_constant_s;
+
+      zoom = alpha * desired_zoom + (1.0 - alpha) * zoom;
+    }
+
     imgui.NewFrame();
 
     if (video_render) {
@@ -776,7 +787,7 @@ int do_main(int argc, char** argv) {
     TRACE_GL_ERROR();
 
     if (video_render) {
-      video_render->Update();
+      video_render->Update(zoom);
     }
 
     TRACE_GL_ERROR();
@@ -835,11 +846,11 @@ int do_main(int argc, char** argv) {
           kMaxRotation_rad_s * turret_walk_expo(cmd_robot.x());
 
       // Finally, do the turret rates.
-      turret_rate_dps.pitch = -kMaxTurretPitch_dps *
+      turret_rate_dps.pitch = (1.0 / zoom) * -kMaxTurretPitch_dps *
           expo(gamepad.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y]);
-      turret_rate_dps.yaw = kMaxTurretYaw_dps *
+      turret_rate_dps.yaw = (1.0 / zoom) * kMaxTurretYaw_dps *
           expo(gamepad.axes[GLFW_GAMEPAD_AXIS_RIGHT_X]);
-      turret_track = gamepad.buttons[GLFW_GAMEPAD_BUTTON_LEFT_BUMPER] != 0;
+      turret_track = gamepad.buttons[GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER] != 0;
       if (gamepad_pressed[GLFW_GAMEPAD_BUTTON_B]) {
         turret_laser = !turret_laser;
       }
