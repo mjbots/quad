@@ -31,6 +31,11 @@
 ///  * int16 pitch_deg_s (scaled to -400/400)
 ///  * int16 yaw_deg_s (scaled to -400/400)
 ///
+/// ## Slot 2 - weapon ##
+///
+///  # int8 laser
+///  # int16 trigger_sequence
+///
 /// # Transmitted telemetry #
 ///
 /// The following protocol is used to transmit telemetry.
@@ -51,6 +56,12 @@
 ///
 ///  * int16_t pitch_deg (-180/180)
 ///  * int16_t yaw_deg (-180/180)
+///
+/// ## Slot 3 - Weapon ##
+///
+///  * int8_t armed
+///  * int8_t laser status
+///  * int16_t shot count
 ///
 /// ## Slot 8 - Servo Summary ##
 ///
@@ -219,6 +230,9 @@ class TurretRfControl::Impl {
     command.yaw_rate_dps = 400.0 * read_int16(1, 2) / 32767.0;
     command.track_target = slot_data_.rx[1].data[4] != 0;
 
+    command.laser_enable = slot_data_.rx[2].data[0] ? true : false;
+    command.trigger_sequence = read_int16(2, 1);
+
     // RF control takes precendence over everything if we're seeing
     // it.
     command.priority = 99;
@@ -235,6 +249,7 @@ class TurretRfControl::Impl {
     last_telemetry_ = now;
 
     const auto& s = turret_control_->status();
+    const auto& w = turret_control_->weapon();
 
     const bool fault = s.mode == TurretControl::Mode::kFault;
 
@@ -268,6 +283,17 @@ class TurretRfControl::Impl {
       ts.Write(base::Saturate<int16_t>(s.pitch_servo.angle_deg / 180.0 * 32767.0));
       ts.Write(base::Saturate<int16_t>(base::WrapNegPiToPi(base::Radians(s.yaw_servo.angle_deg)) / M_PI * 32767.0));
       rf_->tx_slot(kOnlyRemote, 2, slot2);
+    }
+    {
+      Slot slot3;
+      slot3.size = 4;
+      slot3.priority = fault ? 0x02020202 : 0xffffffff;
+      mjlib::base::BufferWriteStream bs({slot3.data, slot3.size});
+      mjlib::telemetry::WriteStream ts{bs};
+      ts.Write(static_cast<int8_t>(w.armed ? 1 : 0));
+      ts.Write(static_cast<int8_t>(w.laser_time_10ms ? 1 : 0));
+      ts.Write(static_cast<int16_t>(w.shot_count));
+      rf_->tx_slot(kOnlyRemote, 3, slot3);
     }
 
     {

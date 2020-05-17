@@ -68,6 +68,14 @@ class TurretControl : boost::noncopyable {
     double target_gain_dps = 10.0;
     double target_timeout_s = 0.3;
 
+    int laser_time_10ms = 100;  // 1s
+    double fire_voltage = 6.0;
+    double loader_voltage = 6.0;
+    int fire_time_10ms = 11;
+    int loader_time_10ms = 4;
+
+    double voltage_filter_s = 1.0;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(period_s));
@@ -84,6 +92,12 @@ class TurretControl : boost::noncopyable {
       a->Visit(MJ_NVP(max_rate_accel_dps2));
       a->Visit(MJ_NVP(target_gain_dps));
       a->Visit(MJ_NVP(target_timeout_s));
+      a->Visit(MJ_NVP(laser_time_10ms));
+      a->Visit(MJ_NVP(fire_voltage));
+      a->Visit(MJ_NVP(loader_voltage));
+      a->Visit(MJ_NVP(fire_time_10ms));
+      a->Visit(MJ_NVP(loader_time_10ms));
+      a->Visit(MJ_NVP(voltage_filter_s));
     }
 
     Parameters() {
@@ -189,6 +203,7 @@ class TurretControl : boost::noncopyable {
     Imu imu;
 
     double imu_servo_pitch_deg = 0.0;
+    double filtered_bus_V = 0.0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -202,6 +217,31 @@ class TurretControl : boost::noncopyable {
       a->Visit(MJ_NVP(control));
       a->Visit(MJ_NVP(imu));
       a->Visit(MJ_NVP(imu_servo_pitch_deg));
+      a->Visit(MJ_NVP(filtered_bus_V));
+    }
+  };
+
+  struct Weapon {
+    boost::posix_time::ptime timestamp;
+
+    int16_t fire_pwm = 0;
+    int16_t fire_time_10ms = 0;
+    int16_t loader_pwm = 0;
+    int16_t loader_time_10ms = 0;
+    int16_t laser_time_10ms = 0;
+    int16_t shot_count = 0;
+    int8_t armed = 0;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(timestamp));
+      a->Visit(MJ_NVP(fire_pwm));
+      a->Visit(MJ_NVP(fire_time_10ms));
+      a->Visit(MJ_NVP(loader_pwm));
+      a->Visit(MJ_NVP(loader_time_10ms));
+      a->Visit(MJ_NVP(laser_time_10ms));
+      a->Visit(MJ_NVP(shot_count));
+      a->Visit(MJ_NVP(armed));
     }
   };
 
@@ -214,6 +254,12 @@ class TurretControl : boost::noncopyable {
     double yaw_rate_dps = 0.0;
     bool track_target = false;
 
+    bool laser_enable = false;
+    // To request a shot, this value must be between 1024 and 2048 and
+    // different from the previous sequence number which triggered a
+    // shot.
+    int16_t trigger_sequence = 0;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(priority));
@@ -221,6 +267,8 @@ class TurretControl : boost::noncopyable {
       a->Visit(MJ_NVP(pitch_rate_dps));
       a->Visit(MJ_NVP(yaw_rate_dps));
       a->Visit(MJ_NVP(track_target));
+      a->Visit(MJ_NVP(laser_enable));
+      a->Visit(MJ_NVP(trigger_sequence));
     }
   };
 
@@ -247,6 +295,7 @@ class TurretControl : boost::noncopyable {
   };
 
   const Status& status() const;
+  const Weapon& weapon() const;
   void Command(const CommandData&);
 
   clipp::group program_options();

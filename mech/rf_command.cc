@@ -94,7 +94,9 @@ class SlotCommand {
                double jump_accel_mm_s2,
                TurretControl::Mode turret_mode,
                const base::Euler& turret_rate_dps,
-               bool turret_track) {
+               bool turret_track,
+               bool turret_laser,
+               int16_t turret_fire_sequence) {
     {
       Slot slot0;
       slot0.priority = 0xffffffff;
@@ -144,6 +146,17 @@ class SlotCommand {
       tstream.Write(static_cast<int8_t>(turret_track ? 1 : 0));
       nrfusb_.tx_slot(kRemoteTurret, 1, slot1);
     }
+
+    {
+      Slot slot2;
+      slot2.priority = 0xffffffff;
+      slot2.size = 3;
+      mjlib::base::BufferWriteStream bstream({slot2.data, slot2.size});
+      mjlib::telemetry::WriteStream tstream{bstream};
+      tstream.Write(static_cast<int8_t>(turret_laser ? 1 : 0));
+      tstream.Write(static_cast<int16_t>(turret_fire_sequence));
+      nrfusb_.tx_slot(kRemoteTurret, 2, slot2);
+    }
   }
 
   struct Turret {
@@ -160,6 +173,9 @@ class SlotCommand {
     double min_temp_C = 0.0;
     double max_temp_C = 0.0;
     int fault = 0;
+    int8_t armed = 0;
+    int8_t laser = 0;
+    int16_t shot_count = 0;
   };
 
   struct Data {
@@ -255,6 +271,10 @@ class SlotCommand {
       } else if (i == 2) {
         t.servo_pitch_deg = *ts.Read<int16_t>() / 32767.0 * 180.0;
         t.servo_yaw_deg = *ts.Read<int16_t>() / 32767.0 * 180.0;
+      } else if (i == 3) {
+        t.armed = *ts.Read<int8_t>();
+        t.laser = *ts.Read<int8_t>();
+        t.shot_count = *ts.Read<int16_t>();
       } else if (i == 8) {
         t.min_voltage = slot.data[0] * 0.25;
         t.max_voltage = slot.data[1] * 0.25;
@@ -276,6 +296,7 @@ class SlotCommand {
 
 void DrawTelemetry(const SlotCommand* slot_command, bool turret) {
   ImGui::Begin("Telemetry");
+  ImGui::SetWindowPos({50, 50}, ImGuiCond_FirstUseEver);
 
   if (slot_command) {
     const auto& d = slot_command->data();
@@ -314,6 +335,9 @@ void DrawTelemetry(const SlotCommand* slot_command, bool turret) {
       ImGui::Text("V: %.2f/%.2f", t.min_voltage, t.max_voltage);
       ImGui::Text("T: %.0f/%.0f", t.min_temp_C, t.max_temp_C);
       ImGui::Text("flt: %d", t.fault);
+      ImGui::Text("armed: %d", t.armed);
+      ImGui::Text("laser: %d", t.laser);
+      ImGui::Text("shot cnt: %d", t.shot_count);
     } else {
       ImGui::Text("N/A");
     }
@@ -383,7 +407,7 @@ void DrawGait(const GLFWgamepadstate& gamepad,
     const bool was_collapsed = ImGui::IsWindowCollapsed();
 
     ImGui::SetWindowCollapsed(!gait_select_mode);
-    ImGui::SetWindowPos({800, 50}, ImGuiCond_FirstUseEver);
+    ImGui::SetWindowPos({900, 50}, ImGuiCond_FirstUseEver);
 
     ImGui::RadioButton("Stop", pending_gait_mode, kStop);
     ImGui::RadioButton("Rest", pending_gait_mode, kRest);
@@ -434,7 +458,7 @@ void DrawTurret(const GLFWgamepadstate& gamepad,
     const bool was_collapsed = ImGui::IsWindowCollapsed();
 
     ImGui::SetWindowCollapsed(!turret_select_mode);
-    ImGui::SetWindowPos({800, 200}, ImGuiCond_FirstUseEver);
+    ImGui::SetWindowPos({900, 200}, ImGuiCond_FirstUseEver);
 
     ImGui::RadioButton("Stop", pending_turret_mode, 0);
     ImGui::RadioButton("Active", pending_turret_mode, 1);
@@ -703,16 +727,42 @@ int do_main(int argc, char** argv) {
       return options;
     }()};
 
+  bool turret_laser = false;
+  int16_t turret_fire_sequence = 0;
+
+  std::map<int, bool> trigger_down;
+  std::map<int, bool> old_trigger_down;
+
+  const int kTriggers[] = {
+    GLFW_GAMEPAD_AXIS_LEFT_TRIGGER,
+    GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER,
+  };
+
   while (!window.should_close()) {
     context.poll(); context.reset();
     window.PollEvents();
     GLFWgamepadstate gamepad;
     glfwGetGamepadState(GLFW_JOYSTICK_1, &gamepad);
 
+    for (auto x : kTriggers) {
+      if (gamepad.axes[x] > 0.0) {
+        trigger_down[x] = true;
+      } else if (gamepad.axes[x] < -.5) {
+        // Some amount of hysteresis.
+        trigger_down[x] = false;
+      }
+    }
+
     std::vector<bool> gamepad_pressed;
     for (int i = 0; i <= GLFW_GAMEPAD_BUTTON_LAST; i++) {
       gamepad_pressed.push_back(gamepad.buttons[i] && !old_gamepad_buttons[i]);
       old_gamepad_buttons[i] = gamepad.buttons[i];
+    }
+
+    std::map<int, bool> trigger_pressed;
+    for (auto i : kTriggers) {
+      trigger_pressed[i] = trigger_down[i] && !old_trigger_down[i];
+      old_trigger_down[i] = trigger_down[i];
     }
 
     imgui.NewFrame();
@@ -790,6 +840,15 @@ int do_main(int argc, char** argv) {
       turret_rate_dps.yaw = kMaxTurretYaw_dps *
           expo(gamepad.axes[GLFW_GAMEPAD_AXIS_RIGHT_X]);
       turret_track = gamepad.buttons[GLFW_GAMEPAD_BUTTON_LEFT_BUMPER] != 0;
+      if (gamepad_pressed[GLFW_GAMEPAD_BUTTON_B]) {
+        turret_laser = !turret_laser;
+      }
+      if (trigger_pressed[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER]) {
+        turret_fire_sequence = std::max(1024, turret_fire_sequence + 1);
+        if (turret_fire_sequence > 2048) {
+          turret_fire_sequence = 1024;
+        }
+      }
     }
 
     Sophus::SE3d pose_mm_RB;
@@ -808,7 +867,7 @@ int do_main(int argc, char** argv) {
 
     {
       ImGui::Begin("Command");
-      ImGui::SetWindowPos({50, 400}, ImGuiCond_FirstUseEver);
+      ImGui::SetWindowPos({50, 450}, ImGuiCond_FirstUseEver);
       auto mapper = mjlib::base::IsEnum<QuadrupedCommand::Mode>::map;
       ImGui::Text("Mode  : %14s", get(mapper(), command_mode));
       ImGui::Text("Actual: %14s", get(mapper(), actual_command_mode));
@@ -819,6 +878,8 @@ int do_main(int argc, char** argv) {
       ImGui::Text("pose x/y: (%3.0f, %3.0f)",
                   pose_mm_RB.translation().x(),
                   pose_mm_RB.translation().y());
+      ImGui::Text("laser: %d", turret_laser);
+      ImGui::Text("fire: %d", turret_fire_sequence);
       ImGui::End();
     }
 
@@ -826,7 +887,8 @@ int do_main(int argc, char** argv) {
       slot_command->Command(
           actual_command_mode, pose_mm_RB, v_mm_s_R, w_LR,
           jump_accel_mm_s2,
-          turret_mode, turret_rate_dps, turret_track);
+          turret_mode, turret_rate_dps, turret_track,
+          turret_laser, turret_fire_sequence);
     }
 
     imgui.Render();

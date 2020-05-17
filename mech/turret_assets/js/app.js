@@ -40,6 +40,15 @@
   var PITCH_RATE_MAX_DPS = 30.0;
   var YAW_RATE_MAX_DPS = 100.0;
 
+  var last_fire_sequence = 1024;
+
+  var fire = function() {
+    last_fire_sequence = last_fire_sequence + 1;
+    if (last_fire_sequence > 2048) {
+      last_fire_sequence = 1024;
+    }
+  };
+
   var handleEvent = function(e) {
     var state = document.getElementById('status');
     state.innerHTML = "<p>Status:</p><pre>" + e.data + "</pre>";
@@ -164,9 +173,10 @@
       }
     }
 
+    var cmd = {};
+
     var value = mode_selector.value;
 
-    var cmd = {};
     if (value == "stop" ||
         value == "active") {
       // We always send this command out.
@@ -174,6 +184,12 @@
         "mode" : value,
       };
       cmd['command'] = command;
+    }
+
+    if ('command' in cmd) {
+      var laser = document.getElementById("laser");
+      cmd['command']['laser_enable'] = laser.checked;
+      cmd['command']['trigger_sequence'] = last_fire_sequence;
     }
 
     if ('command' in cmd && gp) {
@@ -199,6 +215,9 @@
 
     websocket.send(cmd);
   };
+
+  var fire_input = document.getElementById("fire");
+  fire_input.onclick = function(){fire();};
 
   window.setInterval(step, 1000 / 10);
 }());

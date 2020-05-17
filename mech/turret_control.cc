@@ -31,6 +31,18 @@ namespace mjmech {
 namespace mech {
 
 namespace {
+constexpr int kWeaponDivider = 10;  // 40Hz weapon updates
+
+enum WeaponRegister {
+  kFirePwm = 0x010,
+  kFireTime = 0x011,
+  kLoaderPwm = 0x012,
+  kLoaderTime = 0x013,
+  kLaser = 0x014,
+  kShotCount = 0x015,
+  kArmed = 0x016,
+};
+
 struct CommandLog {
   boost::posix_time::ptime timestamp;
 
@@ -82,6 +94,7 @@ class TurretControl::Impl {
     context.telemetry_registry->Register("command", &command_signal_);
     context.telemetry_registry->Register("control", &control_signal_);
     context.telemetry_registry->Register("image", &image_signal_);
+    context.telemetry_registry->Register("weapon", &weapon_signal_);
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
@@ -153,6 +166,14 @@ class TurretControl::Impl {
       current.request.ReadMultiple(moteus::Register::kMode, 4, 3);
       current.request.ReadMultiple(moteus::Register::kVoltage, 3, 1);
     }
+
+    {
+      status_weapon_request_ = status_request_;
+      status_weapon_request_.push_back({});
+      auto& current = status_weapon_request_.back();
+      current.id = 7;
+      current.request.ReadMultiple(WeaponRegister::kFirePwm, 7, 1);
+    }
   }
 
   void HandleTimer(const mjlib::base::error_code& ec) {
@@ -167,10 +188,14 @@ class TurretControl::Impl {
     outstanding_ = true;
 
     status_outstanding_ = 2;
+    status_count_ = (status_count_ + 1) % kWeaponDivider;
     status_reply_ = {};
 
+    const auto& this_request =
+        (status_count_ == 0) ? status_weapon_request_ : status_request_;
+
     client_->AsyncRegisterMultiple(
-        status_request_, &status_reply_,
+        this_request, &status_reply_,
         std::bind(&Impl::HandleStatus, this, pl::_1));
 
     imu_client_->ReadImu(
@@ -186,19 +211,114 @@ class TurretControl::Impl {
     imu_signal_(&imu_data_);
 
     UpdateStatus();
+
+    if (status_count_ == 0) {
+      weapon_signal_(&weapon_);
+    }
+
     timing_.finish_status();
 
     RunControl();
     timing_.finish_control();
   }
 
+  void UpdateServo(const mjlib::multiplex::AsioClient::SingleReply& reply,
+                   Status::GimbalServo* servo) {
+    servo->id = reply.id;
+    const double sign = servo_sign_.at(reply.id);
+
+    for (const auto& pair : reply.reply) {
+      const auto* maybe_value = std::get_if<moteus::Value>(&pair.second);
+      if (!maybe_value) { continue; }
+      const auto& value = *maybe_value;
+      switch (static_cast<moteus::Register>(pair.first)) {
+        case moteus::kMode: {
+          servo->mode = moteus::ReadInt(value);
+          break;
+        }
+        case moteus::kPosition: {
+          servo->angle_deg = sign * moteus::ReadPosition(value);
+          break;
+        }
+        case moteus::kVelocity: {
+          servo->velocity_dps = sign * moteus::ReadPosition(value);
+          break;
+        }
+        case moteus::kTorque: {
+          servo->torque_Nm = sign * moteus::ReadTorque(value);
+          break;
+        }
+        case moteus::kVoltage: {
+          servo->voltage = moteus::ReadVoltage(value);
+          break;
+        }
+        case moteus::kTemperature: {
+          servo->temperature_C = moteus::ReadTemperature(value);
+          break;
+        }
+        case moteus::kFault: {
+          servo->fault = moteus::ReadInt(value);
+          break;
+        }
+        default: {
+          break;
+        }
+      }
+    }
+  }
+
+  void UpdateWeapon(const mjlib::multiplex::AsioClient::SingleReply& reply,
+                    Weapon* weapon) {
+    weapon->timestamp = Now();
+
+    // NOTE: These won't be correct for int8_t values, but we're not
+    // requesting them so it shouldn't be a problem for now.
+    for (const auto& pair : reply.reply) {
+      const auto* maybe_value = std::get_if<moteus::Value>(&pair.second);
+      if (!maybe_value) { continue; }
+      const auto& value = *maybe_value;
+      switch (static_cast<WeaponRegister>(pair.first)) {
+        case WeaponRegister::kFirePwm: {
+          weapon->fire_pwm = moteus::ReadInt(value);
+          break;
+        }
+        case WeaponRegister::kFireTime: {
+          weapon->fire_time_10ms = moteus::ReadInt(value);
+          break;
+        }
+        case WeaponRegister::kLoaderPwm: {
+          weapon->loader_pwm = moteus::ReadInt(value);
+          break;
+        }
+        case WeaponRegister::kLoaderTime: {
+          weapon->loader_time_10ms = moteus::ReadInt(value);
+          break;
+        }
+        case WeaponRegister::kLaser: {
+          weapon->laser_time_10ms = moteus::ReadInt(value);
+          break;
+        }
+        case WeaponRegister::kShotCount: {
+          weapon->shot_count = moteus::ReadInt(value);
+          break;
+        }
+        case WeaponRegister::kArmed: {
+          weapon->armed = moteus::ReadInt(value);
+          break;
+        }
+      }
+    }
+  }
+
   void UpdateStatus() {
     const double imu_servo_pitch_deg =
         imu_data_.euler_deg.pitch - status_.pitch_servo.angle_deg;
-    const double alpha = parameters_.period_s / parameters_.imu_servo_filter_s;
-    status_.imu_servo_pitch_deg =
-        (1.0 - alpha) * status_.imu_servo_pitch_deg +
-        alpha * imu_servo_pitch_deg;
+    {
+      const double alpha = parameters_.period_s / parameters_.imu_servo_filter_s;
+      status_.imu_servo_pitch_deg =
+          (1.0 - alpha) * status_.imu_servo_pitch_deg +
+          alpha * imu_servo_pitch_deg;
+    }
 
     for (const auto& reply : status_reply_.replies) {
       auto* const servo = [&]() -> Status::GimbalServo* {
@@ -206,48 +326,14 @@ class TurretControl::Impl {
         if (reply.id == 2) { return &status_.yaw_servo; }
         return nullptr;
       }();
-      if (!servo) { continue; }
-
-      servo->id = reply.id;
-      const double sign = servo_sign_.at(reply.id);
-
-      for (const auto& pair : reply.reply) {
-        const auto* maybe_value = std::get_if<moteus::Value>(&pair.second);
-        if (!maybe_value) { continue; }
-        const auto& value = *maybe_value;
-        switch (static_cast<moteus::Register>(pair.first)) {
-          case moteus::kMode: {
-            servo->mode = moteus::ReadInt(value);
-            break;
-          }
-          case moteus::kPosition: {
-            servo->angle_deg = sign * moteus::ReadPosition(value);
-            break;
-          }
-          case moteus::kVelocity: {
-            servo->velocity_dps = sign * moteus::ReadPosition(value);
-            break;
-          }
-          case moteus::kTorque: {
-            servo->torque_Nm = sign * moteus::ReadTorque(value);
-            break;
-          }
-          case moteus::kVoltage: {
-            servo->voltage = moteus::ReadVoltage(value);
-            break;
-          }
-          case moteus::kTemperature: {
-            servo->temperature_C = moteus::ReadTemperature(value);
-            break;
-          }
-          case moteus::kFault: {
-            servo->fault = moteus::ReadInt(value);
-            break;
-          }
-          default: {
-            break;
-          }
-        }
+      auto* const weapon = [&]() -> Weapon* {
+        if (reply.id == 7) { return &weapon_; }
+        return nullptr;
+      }();
+      if (servo) {
+        UpdateServo(reply, servo);
+      } else if (weapon) {
+        UpdateWeapon(reply, weapon);
       }
     }
 
@@ -255,6 +341,12 @@ class TurretControl::Impl {
     status_.imu.pitch_rate_dps = imu_data_.rate_dps.y();
     status_.imu.yaw_deg = imu_data_.euler_deg.yaw;
     status_.imu.yaw_rate_dps = imu_data_.rate_dps.z();
+
+    {
+      const double alpha = parameters_.period_s / parameters_.voltage_filter_s;
+      status_.filtered_bus_V = alpha * status_.pitch_servo.voltage +
+                               (1.0 - alpha) * status_.filtered_bus_V;
+    }
 
     if (status_.mode != Mode::kFault) {
       std::string fault;
@@ -462,6 +554,45 @@ class TurretControl::Impl {
     return *it;
   }
 
+  void AddWeapon() {
+    // Do our weapon.
+    client_command_.push_back({});
+    auto& request = client_command_.back();
+    request.id = 7;
+
+    request.request.WriteSingle(
+        WeaponRegister::kLaser,
+        current_command_.laser_enable ?
+        static_cast<int16_t>(parameters_.laser_time_10ms) : 0);
+
+    if (current_command_.trigger_sequence >= 1024 &&
+        current_command_.trigger_sequence <= 2048 &&
+        current_command_.trigger_sequence != last_trigger_sequence_) {
+      auto old = last_trigger_sequence_;
+
+      last_trigger_sequence_ = current_command_.trigger_sequence;
+
+      // We don't want to fire just when starting up.
+      if (old != 0) {
+        // Static just to save allocations.
+        static std::vector<moteus::Value> values;
+        values.clear();
+        values.push_back(
+            static_cast<int16_t>(
+                1000.0 * parameters_.fire_voltage / status_.filtered_bus_V));
+        values.push_back(
+            static_cast<int16_t>(parameters_.fire_time_10ms));
+        values.push_back(
+            static_cast<int16_t>(
+                1000.0 * parameters_.loader_voltage / status_.filtered_bus_V));
+        values.push_back(
+            static_cast<int16_t>(parameters_.loader_time_10ms));
+
+        request.request.WriteMultiple(WeaponRegister::kFirePwm, values);
+      }
+    }
+  }
+
   void Control(const ControlData& control) {
     ControlLog control_log;
     control_log.timestamp = Now();
@@ -471,6 +602,10 @@ class TurretControl::Impl {
     client_command_ = {};
     AddServoCommand(1, control.pitch);
     AddServoCommand(2, control.yaw);
+
+    if (status_count_ == 0) {
+      AddWeapon();
+    }
 
     client_command_reply_ = {};
     client_->AsyncRegisterMultiple(
@@ -490,6 +625,9 @@ class TurretControl::Impl {
   base::LogRef log_ = base::GetLogInstance("QuadrupedControl");
 
   Status status_;
+  Weapon weapon_;
+
+  int16_t last_trigger_sequence_ = 0;
   CommandData current_command_;
   boost::posix_time::ptime current_command_timestamp_;
   Parameters parameters_;
@@ -504,7 +642,9 @@ class TurretControl::Impl {
 
   using Request = std::vector<Client::IdRequest>;
   Request status_request_;
+  Request status_weapon_request_;
   Client::Reply status_reply_;
+  int status_count_ = 0;
 
   Request client_command_;
   Client::Reply client_command_reply_;
@@ -516,6 +656,7 @@ class TurretControl::Impl {
   boost::signals2::signal<void (const CommandLog*)> command_signal_;
   boost::signals2::signal<void (const ControlLog*)> control_signal_;
   boost::signals2::signal<void (const ImageLog*)> image_signal_;
+  boost::signals2::signal<void (const Weapon*)> weapon_signal_;
 
   ControlTiming timing_{executor_, {}};
 
@@ -544,6 +685,10 @@ void TurretControl::AsyncStart(mjlib::io::ErrorCallback callback) {
 
 const TurretControl::Status& TurretControl::status() const {
   return impl_->status_;
+}
+
+const TurretControl::Weapon& TurretControl::weapon() const {
+  return impl_->weapon_;
 }
 
 void TurretControl::Command(const CommandData& command) {
