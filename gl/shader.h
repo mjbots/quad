@@ -37,10 +37,10 @@ class Shader {
     glGetShaderiv(shader_, GL_COMPILE_STATUS, &status);
     if (status != GL_TRUE) {
       GLint log_length = 0;
-      glGetShaderiv(shader_, GL_INFO_LOG_LENGTH, &length);
+      glGetShaderiv(shader_, GL_INFO_LOG_LENGTH, &log_length);
       std::vector<char> log;
       log.resize(log_length);
-      glGetShaderInfoLog(shader_, log_length, &log_length, log.data());
+      glGetShaderInfoLog(shader_, log.size(), &log_length, log.data());
 
       mjlib::base::Fail("Error compiling shader: " +
                         std::string(log.data(), log_length));
