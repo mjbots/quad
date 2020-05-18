@@ -23,9 +23,9 @@
 namespace mjmech {
 namespace gl {
 
-constexpr int kGlVersionMajor = 3;
+constexpr int kGlVersionMajor = 4;
 constexpr int kGlVersionMinor = 0;
-constexpr const char* kGlslVersion = "#version 330";
+constexpr const char* kGlslVersion = "#version 400";
 
 inline void TraceGlError(const char* file, int line) {
   const auto v = glGetError();

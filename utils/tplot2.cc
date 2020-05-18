@@ -1620,7 +1620,7 @@ class MechRender {
     kTriangleFragShaderSource, GL_FRAGMENT_SHADER};
 
   static constexpr const char* kTriangleVertexShaderSource =
-      "#version 330 core\n"
+      "#version 400\n"
       "in vec3 inVertex;\n"
       "in vec3 inNormal;\n"
       "in vec2 inUv;\n"
@@ -1644,7 +1644,7 @@ class MechRender {
       ;
 
   static constexpr const char* kTriangleFragShaderSource =
-      "#version 330 core\n"
+      "#version 400\n"
       "in vec2 fragUv;\n"
       "in vec4 fragColor;\n"
       "in vec3 fragNormal;\n"
@@ -1674,7 +1674,7 @@ class MechRender {
   gl::Shader line_fragment_shader_{kLineFragShaderSource, GL_FRAGMENT_SHADER};
 
   static constexpr const char* kLineVertexShaderSource =
-      "#version 330 core\n"
+      "#version 400\n"
       "in vec3 inVertex;\n"
       "in vec4 inColor;\n"
       "uniform mat4 projMatrix;\n"
@@ -1689,7 +1689,7 @@ class MechRender {
       ;
 
   static constexpr const char* kLineFragShaderSource =
-      "#version 330 core\n"
+      "#version 400\n"
       "in vec4 fragColor;\n"
       "void main() {\n"
       "  gl_FragColor = fragColor;\n"

@@ -614,23 +614,22 @@ class VideoRender {
         AV_PIX_FMT_RGB24, codec_.size(), 1)};
 
   static constexpr const char* kVertexShaderSource =
-        "#version 150\n"
+        "#version 400\n"
 	"in vec3 vertex;\n"
 	"in vec2 texCoord0;\n"
 	"uniform mat4 mvpMatrix;\n"
 	"out vec2 texCoord;\n"
 	"void main() {\n"
-	"	gl_Position = mvpMatrix * vec4(vertex, 1.0);\n"
 	"	texCoord = texCoord0;\n"
+	"	gl_Position = mvpMatrix * vec4(vertex, 1.0);\n"
 	"}\n";
 
   static constexpr const char* kFragShaderSource =
-        "#version 150\n"
+        "#version 400\n"
 	"uniform sampler2D frameTex;\n"
 	"in vec2 texCoord;\n"
-	"out vec4 fragColor;\n"
 	"void main() {\n"
-	"	fragColor = texture(frameTex, texCoord);\n"
+	"	gl_FragColor = texture2D(frameTex, texCoord);\n"
 	"}\n";
 
   gl::Shader vertex_shader_{kVertexShaderSource, GL_VERTEX_SHADER};
