@@ -16,8 +16,11 @@
 
 #include <thread>
 
+#include <boost/date_time/posix_time/posix_time.hpp>
+
 #include <opencv2/core/core.hpp>
 #include <opencv2/videoio/videoio.hpp>
+#include <opencv2/imgcodecs/imgcodecs.hpp>
 
 #ifdef COM_GITHUB_MJBOTS_RASPBERRYPI
 #include <raspicam_cv.h>
@@ -49,11 +52,25 @@ class CameraDriver::Impl {
     camera.open();
 
     cv::Mat image;
+    uint16_t count = 0;
     while (!done_.load()) {
       camera.grab();
       camera.retrieve(image);
+      if (options.record_every >= 1) {
+        if (count == 0) {
+          cv::imwrite(MakePath(options), image);
+          count = options.record_every - 1;
+        } else {
+          count--;
+        }
+      }
       image_signal_(image);
     }
+  }
+
+  std::string MakePath(const Options& options) const {
+    const auto now = boost::posix_time::microsec_clock::universal_time();
+    return options.record_path + to_iso_string(now) + ".png";
   }
 
   std::thread thread_;

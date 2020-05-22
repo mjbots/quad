@@ -34,6 +34,9 @@ class CameraDriver {
     int fps = 60;
     int rotation = 270;
 
+    std::string record_path = "/tmp/mjbots-camera";
+    int record_every = -1;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(width));
@@ -41,6 +44,8 @@ class CameraDriver {
       a->Visit(MJ_NVP(mode));
       a->Visit(MJ_NVP(fps));
       a->Visit(MJ_NVP(rotation));
+      a->Visit(MJ_NVP(record_path));
+      a->Visit(MJ_NVP(record_every));
     }
   };
 
