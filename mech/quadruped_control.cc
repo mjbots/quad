@@ -1329,10 +1329,7 @@ class QuadrupedControl::Impl {
               continue;
             } else {
               js.mode = JM::kDone;
-
-              // Switch our top level command back to rest to make life
-              // more convenient.
-              current_command_.mode = QM::kRest;
+              break;
             }
           }
           break;
