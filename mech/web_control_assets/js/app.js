@@ -234,9 +234,10 @@
         cmd['command']['w_LR'] = w_LR;
       }
       if (value == 'jump') {
+        var repeat = document.getElementById("jump_repeat");
         cmd['command']['jump'] = {
           "acceleration_mm_s2" : Number(jump_acceleration.value),
-          "repeat" : true,
+          "repeat" : repeat.checked,
         };
       }
     }
