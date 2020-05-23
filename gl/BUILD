@@ -27,11 +27,15 @@ cc_library(
         "program.h",
         "renderbuffer.h",
         "shader.h",
+        "simple_texture_render_list.h",
         "texture.h",
         "trackball.h",
         "vertex_array_object.h",
         "vertex_buffer_object.h",
         "window.h",
+    ],
+    srcs = [
+        "simple_texture_render_list.cc",
     ],
     deps = [
         "//base",

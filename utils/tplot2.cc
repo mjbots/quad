@@ -64,6 +64,7 @@
 #include "gl/program.h"
 #include "gl/renderbuffer.h"
 #include "gl/shader.h"
+#include "gl/simple_texture_render_list.h"
 #include "gl/trackball.h"
 #include "gl/vertex_array_object.h"
 #include "gl/vertex_buffer_object.h"
@@ -1169,30 +1170,8 @@ class MechRender {
         control_reader_(reader->record("qc_control")->schema->root()),
         imu_reader_(reader->record("imu")->schema->root()),
         tree_view_(tree_view) {
-    // TRIANGLES
-    triangle_program_.use();
-    triangle_vao_.bind();
-
-    triangle_vertices_.bind(GL_ARRAY_BUFFER);
-
-    triangle_program_.VertexAttribPointer(
-        triangle_program_.attribute("inVertex"), 3, GL_FLOAT, GL_FALSE, 48, 0);
-    triangle_program_.VertexAttribPointer(
-        triangle_program_.attribute("inNormal"), 3, GL_FLOAT, GL_FALSE, 48, 12);
-    triangle_program_.VertexAttribPointer(
-        triangle_program_.attribute("inUv"), 2, GL_FLOAT, GL_FALSE, 48, 24);
-    triangle_program_.VertexAttribPointer(
-        triangle_program_.attribute("inColor"), 4, GL_FLOAT, GL_FALSE, 48, 32);
-
-    triangle_vao_.unbind();
-
-    triangle_program_.SetUniform(
-        triangle_program_.uniform("lightPos"),
-        Eigen::Vector3f({-1000, 0, -3000}));
-    triangle_program_.SetUniform(
-        triangle_program_.uniform("currentTexture"), 0);
-    triangle_program_.SetUniform(
-        triangle_program_.uniform("projMatrix"), camera_.matrix());
+    triangle_.SetProjMatrix(camera_.matrix());
+    triangle_.SetLightPos({-1000, 0, -3000});
 
     // LINES
     line_program_.use();
@@ -1246,6 +1225,7 @@ class MechRender {
     } else {
       transform_ = Eigen::Matrix4f::Identity();
     }
+    triangle_.SetTransform(transform_);
 
     AddBox({0, 0, 0},
            {230, 0, 0},
@@ -1294,6 +1274,7 @@ class MechRender {
     }
 
     transform_ = Eigen::Matrix4f::Identity();
+    triangle_.SetTransform(transform_);
   }
 
   void DrawGround(const mech::QuadrupedControl::Status& qs,
@@ -1318,9 +1299,10 @@ class MechRender {
       // We are rendering into the B frame.
       transform_ = Eigen::Matrix4f::Identity();
       transform_.topLeftCorner<3, 3>() = tf_LB.inverse().cast<float>();
+      triangle_.SetTransform(transform_);
     }
 
-    auto ic = AddVertex(Eigen::Vector3f(0, 0, max_z_L), normal, uv, rgba);
+    auto ic = triangle_.AddVertex(Eigen::Vector3f(0, 0, max_z_L), normal, uv, rgba);
     for (int i = 0; i < 16; i++) {
       const double t1 = 2 * M_PI * (static_cast<double>(i) / 16);
       Eigen::Vector3f p1_L(l * std::cos(t1), l * std::sin(t1), max_z_L);
@@ -1329,21 +1311,19 @@ class MechRender {
       const double t2 = 2 * M_PI * (static_cast<double>((i + 1) % 16) / 16);
       Eigen::Vector3f p2_L(l * std::cos(t2), l * std::sin(t2), max_z_L);
 
-      auto i1 = AddVertex(p1_L, normal, uv, rgba);
-      auto i2 = AddVertex(p2_L, normal, uv, rgba);
+      auto i1 = triangle_.AddVertex(p1_L, normal, uv, rgba);
+      auto i2 = triangle_.AddVertex(p2_L, normal, uv, rgba);
 
-      auto& ti = triangle_indices_;
-      ti.push_back(i1);
-      ti.push_back(i2);
-      ti.push_back(ic);
+      triangle_.AddTriangle(i1, i2, ic);
     }
   }
 
   void AddBall(const Eigen::Vector3f& center,
                float radius,
                const Eigen::Vector4f& rgba) {
+    const Eigen::Vector2f uv(0.f, 0.f);
     for (const auto& t : sphere_(center, radius)) {
-      AddTriangle(t.p3, t.p2, t.p1, rgba);
+      triangle_.AddTriangle(t.p3, uv, t.p2, uv, t.p1, uv, rgba);
     }
   }
 
@@ -1355,100 +1335,43 @@ class MechRender {
     const Eigen::Vector3f hl = 0.5 * length;
     const Eigen::Vector3f hw = 0.5 * width;
     const Eigen::Vector3f hh = 0.5 * height;
+    const Eigen::Vector2f uv(0.f, 0.f);
     // Bottom
-    AddQuad(center - hh - hw - hl,
-            center - hh - hw + hl,
-            center - hh + hw + hl,
-            center - hh + hw - hl,
-            rgba);
+    triangle_.AddQuad(center - hh - hw - hl, uv,
+                      center - hh - hw + hl, uv,
+                      center - hh + hw + hl, uv,
+                      center - hh + hw - hl, uv,
+                      rgba);
     // Top
-    AddQuad(center + hh + hw - hl,
-            center + hh + hw + hl,
-            center + hh - hw + hl,
-            center + hh - hw - hl,
-            rgba);
+    triangle_.AddQuad(center + hh + hw - hl, uv,
+                      center + hh + hw + hl, uv,
+                      center + hh - hw + hl, uv,
+                      center + hh - hw - hl, uv,
+                      rgba);
     // Back
-    AddQuad(center - hl - hh - hw,
-            center - hl - hh + hw,
-            center - hl + hh + hw,
-            center - hl + hh - hw,
-            Eigen::Vector4f(0.f, 0.f, 1.f, 1.f));
+    triangle_.AddQuad(center - hl - hh - hw, uv,
+                      center - hl - hh + hw, uv,
+                      center - hl + hh + hw, uv,
+                      center - hl + hh - hw, uv,
+                      Eigen::Vector4f(0.f, 0.f, 1.f, 1.f));
     // Front
-    AddQuad(center + hl + hh - hw,
-            center + hl + hh + hw,
-            center + hl - hh + hw,
-            center + hl - hh - hw,
-            Eigen::Vector4f(0.f, 1.f, 0.f, 1.f));
+    triangle_.AddQuad(center + hl + hh - hw, uv,
+                      center + hl + hh + hw, uv,
+                      center + hl - hh + hw, uv,
+                      center + hl - hh - hw, uv,
+                      Eigen::Vector4f(0.f, 1.f, 0.f, 1.f));
     // Left
-    AddQuad(center - hw - hh - hl,
-            center - hw - hh + hl,
-            center - hw + hh + hl,
-            center - hw + hh - hl,
-            rgba);
+    triangle_.AddQuad(center - hw - hh - hl, uv,
+                      center - hw - hh + hl, uv,
+                      center - hw + hh + hl, uv,
+                      center - hw + hh - hl, uv,
+                      rgba);
     // Right
-    AddQuad(center + hw + hh - hl,
-            center + hw + hh + hl,
-            center + hw - hh + hl,
-            center + hw - hh - hl,
-            rgba);
-  }
-
-  void AddQuad(const Eigen::Vector3f& p1,
-               const Eigen::Vector3f& p2,
-               const Eigen::Vector3f& p3,
-               const Eigen::Vector3f& p4,
-               const Eigen::Vector4f& rgba) {
-    const Eigen::Vector2f uv{0, 0};
-    const Eigen::Vector3f normal = (p3 - p1).cross(p2 - p1).normalized();
-    auto index1 = AddVertex(p1, normal, uv, rgba);
-    auto index2 = AddVertex(p2, normal, uv, rgba);
-    auto index3 = AddVertex(p3, normal, uv, rgba);
-    auto index4 = AddVertex(p4, normal, uv, rgba);
-    auto& ti = triangle_indices_;
-    ti.push_back(index1);
-    ti.push_back(index2);
-    ti.push_back(index3);
-
-    ti.push_back(index3);
-    ti.push_back(index4);
-    ti.push_back(index1);
-  }
-
-  void AddTriangle(const Eigen::Vector3f& p1,
-                   const Eigen::Vector3f& p2,
-                   const Eigen::Vector3f& p3,
-                   const Eigen::Vector4f& rgba) {
-    const Eigen::Vector3f normal = (p3 - p1).cross(p2 - p1);
-    auto index1 = AddVertex(p1, normal, {0, 0}, rgba);
-    auto index2 = AddVertex(p2, normal, {0, 0}, rgba);
-    auto index3 = AddVertex(p3, normal, {0, 0}, rgba);
-    auto& ti = triangle_indices_;
-    ti.push_back(index1);
-    ti.push_back(index2);
-    ti.push_back(index3);
-  }
-
-  uint32_t AddVertex(const Eigen::Vector3f& p1_in,
-                     const Eigen::Vector3f& normal,
-                     const Eigen::Vector2f& uv,
-                     const Eigen::Vector4f& rgba) {
-    Eigen::Vector3f p1 = Transform(transform_, p1_in);
-    auto& d = triangle_data_;
-    const auto i = d.size();
-    d.resize(i + 12);
-    d[i + 0] = p1.x();
-    d[i + 1] = p1.y();
-    d[i + 2] = p1.z();
-    d[i + 3] = normal.x();
-    d[i + 4] = normal.y();
-    d[i + 5] = normal.z();
-    d[i + 6] = uv.x();
-    d[i + 7] = uv.y();
-    d[i + 8] = rgba(0);
-    d[i + 9] = rgba(1);
-    d[i + 10] = rgba(2);
-    d[i + 11] = rgba(3);
-    return i / 12;
+    triangle_.AddQuad(center + hw + hh - hl, uv,
+                      center + hw + hh + hl, uv,
+                      center + hw - hh + hl, uv,
+                      center + hw - hh - hl, uv,
+                      rgba);
   }
 
   void AddLineSegment(const Eigen::Vector3f& p1,
@@ -1478,8 +1401,8 @@ class MechRender {
   }
 
   void Update() {
-    triangle_data_.clear();
-    triangle_indices_.clear();
+    triangle_.Reset();
+
     line_data_.clear();
     line_indices_.clear();
 
@@ -1493,22 +1416,10 @@ class MechRender {
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
       // TRIANGLES
-      triangle_program_.use();
-      triangle_program_.SetUniform(
-          triangle_program_.uniform("viewMatrix"), trackball_.matrix());
-      triangle_program_.SetUniform(
-          triangle_program_.uniform("modelMatrix"), model_matrix_);
-
-      triangle_vao_.bind();
-
-      triangle_vertices_.set_vector(
-          GL_ARRAY_BUFFER, triangle_data_, GL_STATIC_DRAW);
-      triangle_elements_.set_vector(
-          GL_ELEMENT_ARRAY_BUFFER, triangle_indices_, GL_STATIC_DRAW);
-
-      texture_.bind();
-      glDrawElements(GL_TRIANGLES, triangle_indices_.size(), GL_UNSIGNED_INT, 0);
-      triangle_vao_.unbind();
+      triangle_.Upload();
+      triangle_.SetViewMatrix(trackball_.matrix());
+      triangle_.SetModelMatrix(model_matrix_);
+      triangle_.Render();
 
       // LINES
       line_program_.use();
@@ -1614,61 +1525,8 @@ class MechRender {
     return true;
   }();
 
-  gl::Shader triangle_vertex_shader_{
-    kTriangleVertexShaderSource, GL_VERTEX_SHADER};
-  gl::Shader triangle_fragment_shader_{
-    kTriangleFragShaderSource, GL_FRAGMENT_SHADER};
-
-  static constexpr const char* kTriangleVertexShaderSource =
-      "#version 400\n"
-      "in vec3 inVertex;\n"
-      "in vec3 inNormal;\n"
-      "in vec2 inUv;\n"
-      "in vec4 inColor;\n"
-      "uniform mat4 projMatrix;\n"
-      "uniform mat4 viewMatrix;\n"
-      "uniform mat4 modelMatrix;\n"
-      "out vec2 fragUv;\n"
-      "out vec4 fragColor;\n"
-      "out vec3 fragNormal;\n"
-      "out vec3 fragPos;\n"
-      "void main(){\n"
-      "  fragUv = inUv;\n"
-      "  fragColor = inColor;\n"
-      "  fragNormal = inNormal;\n"
-      // Switch things to a right handed view coordinate system.
-      "  vec4 vertex = vec4(inVertex.x, inVertex.y, -inVertex.z, 1.0);\n"
-      "  fragPos = vec3(viewMatrix * modelMatrix * vertex);\n"
-      "  gl_Position = projMatrix * viewMatrix * modelMatrix * vertex;\n"
-      "}\n"
-      ;
-
-  static constexpr const char* kTriangleFragShaderSource =
-      "#version 400\n"
-      "in vec2 fragUv;\n"
-      "in vec4 fragColor;\n"
-      "in vec3 fragNormal;\n"
-      "in vec3 fragPos;\n"
-      "uniform vec3 lightPos;\n"
-      "uniform sampler2D currentTexture;\n"
-      "void main() {\n"
-      "  vec3 lightDir = normalize(lightPos - fragPos);\n"
-      "  float ambient = 0.3;\n"
-      "  float diff = max(dot(fragNormal, lightDir), 0);\n"
-      "  vec4 lightModel = vec4((diff + ambient) * vec3(1.0, 1.0, 1.0), 1.0);\n"
-      "  gl_FragColor = lightModel * fragColor * texture(currentTexture, fragUv);\n"
-      "}\n"
-      ;
-
-  gl::Program triangle_program_{
-    triangle_vertex_shader_,
-        triangle_fragment_shader_};
-
   gl::FlatRgbTexture texture_{Eigen::Vector2i(1, 1), GL_RGBA};
-  gl::VertexArrayObject triangle_vao_;
-  gl::VertexBufferObject triangle_vertices_;
-  gl::VertexBufferObject triangle_elements_;
-
+  gl::SimpleTextureRenderList triangle_{&texture_.texture()};
 
   gl::Shader line_vertex_shader_{kLineVertexShaderSource, GL_VERTEX_SHADER};
   gl::Shader line_fragment_shader_{kLineFragShaderSource, GL_FRAGMENT_SHADER};
@@ -1701,9 +1559,6 @@ class MechRender {
   gl::VertexBufferObject line_vertices_;
   gl::VertexBufferObject line_elements_;
 
-
-  std::vector<float> triangle_data_;
-  std::vector<uint32_t> triangle_indices_;
 
   std::vector<float> line_data_;
   std::vector<uint32_t> line_indices_;
