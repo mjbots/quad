@@ -823,9 +823,6 @@ class QuadrupedControl::Impl {
       }
       switch (status_.mode) {
         case QM::kBalance: {
-          status_.state.balance.shoulder_distance_mm =
-              (legs_[0].pose_mm_BG.inverse() *
-               old_control_log_->legs_B[0].position_mm).norm();
           break;
         }
         default: {
@@ -1883,28 +1880,63 @@ class QuadrupedControl::Impl {
       return leg_id == 0 || leg_id == 3;
     };
 
+    const double feedforward_force_N = config_.mass_kg * kGravity * 0.5;
+
+    std::array<base::Point3D, 2> stance_leg_R = {};
+
+    int stance_count = 0;
     for (auto& leg_R : legs_R) {
+      leg_R.kp_scale = {};
+      leg_R.kd_scale = {};
       leg_R.landing = false;
+
       if (is_stance(leg_R.leg_id)) {
-        // We are going to be controlling force directly.
-        leg_R.kp_scale = base::Point3D(0., 0., 0.);
-        leg_R.kd_scale = base::Point3D(0., 0., 0.);
         leg_R.stance = 1.0;
+        leg_R.velocity_mm_s = base::Point3D(0., 0., 0.);
+        leg_R.force_N = base::Point3D(0., 0., feedforward_force_N);
+        stance_leg_R[stance_count] = leg_R.position_mm;
+        stance_count++;
       } else {
-        leg_R.kp_scale = {};
-        leg_R.kd_scale = {};
         leg_R.stance = 0.0;
         leg_R.force_N = base::Point3D(0., 0., 0.);
+        leg_R.B_frame = true;
       }
     }
 
-    MoveLegsFixedSpeed(
+    MJ_ASSERT(stance_count == 2);
+    const base::Point3D stance_direction_mm_R = stance_leg_R[1] - stance_leg_R[0];
+    // The Z value should be basically zero here.
+    MJ_ASSERT(std::abs(stance_direction_mm_R.z()) < 1.0);
+    const base::Point3D stance_direction_R = stance_direction_mm_R.normalized();
+
+    const double error_rad =
+        imu_data_.attitude.axis_angle().magnitude_vector().dot(stance_direction_R);
+
+    const double stance_rate_dps =
+        imu_data_.rate_dps.dot(stance_direction_R.normalized());
+
+    auto& b = status_.state.balance;
+
+    if (!b.contact) {
+      status_.state.robot.pose_mm_RB  =
+          status_.state.robot.pose_mm_RB *
+          Sophus::SE3d(Sophus::SO3d(
+                           base::Quaternion::FromAxisAngle(
+                               (config_.balance.error_scale *
+                                error_rad +
+                                config_.balance.rate_scale *
+                                base::Radians(stance_rate_dps)) * parameters_.period_s,
+                               stance_direction_R).eigen()),
+                       base::Point3D());
+    }
+
+    const bool done = MoveLegsFixedSpeed(
         &legs_R, config_.balance.velocity_mm_s,
         [&]() {
           std::vector<std::pair<int, base::Point3D>> result;
           for (const auto& leg_R : legs_R) {
+            base::Point3D point_mm_R = GetLeg(leg_R.leg_id).idle_R;
             if (!is_stance(leg_R.leg_id)) {
-              base::Point3D point_mm_R = GetLeg(leg_R.leg_id).idle_R;
               point_mm_R.z() = config_.balance.height_mm;
               result.push_back(std::make_pair(leg_R.leg_id, point_mm_R));
             }
@@ -1912,41 +1944,20 @@ class QuadrupedControl::Impl {
           return result;
         }());
 
-    const double feedforward_force_N = config_.mass_kg * kGravity * 0.5;
-
-    // Now do the control for the stance legs.  For now, we will fix
-    // them at a given distance away from the shoulder, but leave them
-    // otherwise unconstrained.
-    for (const int id : {0, 3}) {
-      auto& s = status_.state.balance;
-
-      const auto& status_B = status_.state.legs_B[id];
-      const auto& leg = legs_[id];
-      auto& leg_R = legs_R[id];
-
-      const Sophus::SE3d pose_mm_GB = leg.pose_mm_BG.inverse();
-      s.position_mm_G =
-          pose_mm_GB * status_B.position_mm;
-      s.velocity_mm_s_G =
-          pose_mm_GB * status_B.velocity_mm_s;
-      s.cur_dist_mm = s.position_mm_G.norm();
-      s.unit = s.position_mm_G.normalized();
-
-      s.norm_velocity_mm_s = s.velocity_mm_s_G.dot(s.unit);
-      s.position_error_mm =
-          s.cur_dist_mm - status_.state.balance.shoulder_distance_mm;
-
-      s.force_N =
-          mjlib::base::Limit(
-              s.position_error_mm * -config_.balance.kp_N_mm +
-              s.norm_velocity_mm_s * -config_.balance.kd_N_mm_s,
-              -config_.balance.max_force_N,
-              config_.balance.max_force_N);
-
-      leg_R.force_N = s.force_N * s.unit +
-          base::Point3D(0, 0, feedforward_force_N);
+    if (done && !b.contact) {
+      // Look at our non-stance legs to see if they are moving more
+      // than a threshold.
+      for (const auto& leg_B : status_.state.legs_B) {
+        if (is_stance(leg_B.leg)) { continue; }
+        if (leg_B.velocity_mm_s.norm() > config_.balance.contact_threshold_mm_s) {
+          b.contact = true;
+        }
+      }
     }
 
+    b.stance_direction_R = stance_direction_R;
+    b.error_rad = error_rad;
+    b.stance_rate_dps = stance_rate_dps;
 
     ControlLegs_R(std::move(legs_R));
   }
@@ -2070,7 +2081,7 @@ class QuadrupedControl::Impl {
 
     std::vector<QC::Leg> legs_B;
     for (const auto& leg_R : control_log_->legs_R) {
-      legs_B.push_back(pose_mm_BR * leg_R);
+      legs_B.push_back(leg_R.B_frame ? leg_R : (pose_mm_BR * leg_R));
     }
 
     ControlLegs_B(std::move(legs_B));

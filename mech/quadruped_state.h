@@ -249,27 +249,17 @@ struct QuadrupedState {
   Backflip backflip;
 
   struct Balance {
-    double shoulder_distance_mm = 0.0;
-
-    base::Point3D position_mm_G;
-    base::Point3D velocity_mm_s_G;
-    double cur_dist_mm = 0.0;
-    base::Point3D unit;
-    double norm_velocity_mm_s = 0.0;
-    double position_error_mm = 0.0;
-    double force_N = 0.0;
+    base::Point3D stance_direction_R;
+    double error_rad = 0.0;
+    double stance_rate_dps = 0.0;
+    bool contact = false;
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(shoulder_distance_mm));
-
-      a->Visit(MJ_NVP(position_mm_G));
-      a->Visit(MJ_NVP(velocity_mm_s_G));
-      a->Visit(MJ_NVP(cur_dist_mm));
-      a->Visit(MJ_NVP(unit));
-      a->Visit(MJ_NVP(norm_velocity_mm_s));
-      a->Visit(MJ_NVP(position_error_mm));
-      a->Visit(MJ_NVP(force_N));
+      a->Visit(MJ_NVP(stance_direction_R));
+      a->Visit(MJ_NVP(error_rad));
+      a->Visit(MJ_NVP(stance_rate_dps));
+      a->Visit(MJ_NVP(contact));
     }
   };
 
