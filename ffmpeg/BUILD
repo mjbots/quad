@@ -53,6 +53,7 @@ cc_test(
     ]],
     deps = [
         ":ffmpeg",
+        "//base",
         "@bazel_tools//tools/cpp/runfiles",
         "@boost//:test",
         "@org_llvm_libcxx//:libcxx",

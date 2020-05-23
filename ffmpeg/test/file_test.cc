@@ -18,8 +18,7 @@
 
 #include <boost/test/auto_unit_test.hpp>
 
-#include "tools/cpp/runfiles/runfiles.h"
-
+#include "base/runfiles.h"
 #include "ffmpeg/codec.h"
 #include "ffmpeg/swscale.h"
 
@@ -27,19 +26,10 @@ using namespace mjmech::ffmpeg;
 using bazel::tools::cpp::runfiles::Runfiles;
 
 BOOST_AUTO_TEST_CASE(FileTest) {
-  std::string error;
-  std::unique_ptr<Runfiles> runfiles{Runfiles::CreateForTest(&error)};
+  mjmech::base::TestRunfiles runfiles;
 
   const std::string path = "ffmpeg/test/data/sample_log.mp4";
-
-  const std::string qualified_path = [&]() {
-    if (!!runfiles) {
-      return runfiles->Rlocation("com_github_mjbots_mech/" + path);
-    }
-    return path;
-  }();
-
-  File dut{qualified_path};
+  File dut{runfiles.Rlocation(path)};
 
   auto stream = dut.FindBestStream(File::kVideo);
   BOOST_TEST(stream.codec_parameters()->width == 1920);

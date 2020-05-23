@@ -34,6 +34,7 @@ cc_library(
         "*.h",
     ]),
     deps = [
+        "@bazel_tools//tools/cpp/runfiles",
         "@boost",
         "@boost//:system",
         "@eigen",
