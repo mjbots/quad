@@ -132,9 +132,18 @@ class Quaternion {
     return Quaternion(c, x * s, y * s, z * s);
   }
 
+  static Quaternion FromAxisAngle(
+      double angle_rad, const base::Point3D& axis) {
+    return FromAxisAngle(angle_rad, axis.x(), axis.y(), axis.z());
+  }
+
   struct AxisAngle {
     double angle_rad = 0;
     base::Point3D axis;
+
+    base::Point3D magnitude_vector() const {
+      return angle_rad * axis;
+    }
   };
 
   static Quaternion FromAxisAngle(const AxisAngle& axis_angle) {
