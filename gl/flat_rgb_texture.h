@@ -39,7 +39,7 @@ class FlatRgbTexture {
 
     glTexImage2D(GL_TEXTURE_2D, 0, format_,
                  size.x(), size.y(),
-                 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+                 0, format_, GL_UNSIGNED_BYTE, NULL);
   }
 
   void Store(const void* data) {

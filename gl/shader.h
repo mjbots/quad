@@ -29,6 +29,7 @@ class Shader {
  public:
   Shader(std::string_view source, GLenum type)
       : shader_(glCreateShader(type)) {
+    TRACE_GL_ERROR();
     const char* data  = source.data();
     GLint length = source.size();
     glShaderSource(shader_, 1, static_cast<GLchar const**>(&data), &length);

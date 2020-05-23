@@ -40,7 +40,8 @@ class SimpleTextureRenderList {
   /// Upload all geometry to the GPU.
   void Upload();
 
-  /// Set the various matrices.
+  /// Set the various uniforms.
+  void SetAmbient(float value);
   void SetProjMatrix(const Eigen::Matrix4f&);
   void SetViewMatrix(const Eigen::Matrix4f&);
   void SetModelMatrix(const Eigen::Matrix4f&);
@@ -78,7 +79,7 @@ class SimpleTextureRenderList {
   std::vector<float> data_;
   std::vector<uint32_t> indices_;
 
-  Eigen::Matrix4f transform_;
+  Eigen::Matrix4f transform_{Eigen::Matrix4f::Identity()};
 
   Shader vertex_shader_;
   Shader fragment_shader_;

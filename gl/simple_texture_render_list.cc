@@ -62,14 +62,18 @@ in vec2 fragUv;
 in vec4 fragColor;
 in vec3 fragNormal;
 in vec3 fragPos;
+uniform float ambient;
 uniform vec3 lightPos;
 uniform sampler2D currentTexture;
 void main() {
   vec3 lightDir = normalize(lightPos - fragPos);
-  float ambient = 0.3;
   float diff = max(dot(fragNormal, lightDir), 0);
-  vec4 lightModel = vec4((diff + ambient) * vec3(1.0, 1.0, 1.0), 1.0);
-  gl_FragColor = lightModel * fragColor * texture(currentTexture, fragUv);
+  float light = min(diff + ambient, 1.0);
+  vec4 lightModel = vec4(light * vec3(1.0, 1.0, 1.0), 1.0);
+  vec4 texColor = texture(currentTexture, fragUv);
+  if (texColor.a == 0.0)
+    discard;
+  gl_FragColor = lightModel * fragColor * texColor;
 }
 
 )XX";
@@ -99,6 +103,7 @@ SimpleTextureRenderList::SimpleTextureRenderList(Texture* texture)
     program_.SetUniform(program_.uniform("lightPos"),
                         Eigen::Vector3f({-1000, 0, -3000}));
     program_.SetUniform(program_.uniform("currentTexture"), 0);
+    SetAmbient(0.3f);
 }
 
 void SimpleTextureRenderList::Reset() {
@@ -110,6 +115,10 @@ void SimpleTextureRenderList::Upload() {
   vao_.bind();
   vertices_.set_vector(GL_ARRAY_BUFFER, data_, GL_STATIC_DRAW);
   elements_.set_vector(GL_ELEMENT_ARRAY_BUFFER, indices_, GL_STATIC_DRAW);
+}
+
+void SimpleTextureRenderList::SetAmbient(float value) {
+    program_.SetUniform(program_.uniform("ambient"), value);
 }
 
 void SimpleTextureRenderList::SetProjMatrix(const Eigen::Matrix4f& matrix) {

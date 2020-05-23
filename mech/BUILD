@@ -277,4 +277,7 @@ cc_binary(
         "@com_github_mjbots_mjlib//mjlib/base:clipp",
         "@org_llvm_libcxx//:libcxx",
     ],
+    data = [
+        "reticle.png",
+    ],
 )

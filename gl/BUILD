@@ -23,6 +23,7 @@ cc_library(
         "framebuffer.h",
         "gl.h",
         "gl_imgui.h",
+        "image_texture.h",
         "perspective_camera.h",
         "program.h",
         "renderbuffer.h",
@@ -44,6 +45,7 @@ cc_library(
         "@gl3w",
         "@glfw",
         "@imgui",
+        "@opencv//:imgcodecs",
     ],
     defines = [
         "MJMECH_ENABLE_TRACE_GL_ERROR",

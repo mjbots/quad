@@ -38,8 +38,10 @@
 
 #include "gl/flat_rgb_texture.h"
 #include "gl/gl_imgui.h"
+#include "gl/image_texture.h"
 #include "gl/program.h"
 #include "gl/shader.h"
+#include "gl/simple_texture_render_list.h"
 #include "gl/vertex_array_object.h"
 #include "gl/vertex_buffer_object.h"
 #include "gl/window.h"
@@ -68,6 +70,18 @@ constexpr double kMovementEpsilon_mm_s = 25.0;
 constexpr double kMovementEpsilon_rad_s = (7.0 / 180.0) * M_PI;
 
 namespace {
+Eigen::Matrix4f Ortho(float left, float right, float bottom, float top,
+                      float zNear, float zFar) {
+  Eigen::Matrix4f result = Eigen::Matrix4f::Identity();
+  result(0, 0) = 2.0f / (right - left);
+  result(1, 1) = 2.0f / (top - bottom);
+  result(2, 2) = 1.0f / (zFar - zNear);
+  result(3, 0) = - (right + left) / (right - left);
+  result(3, 1) = - (top + bottom) / (top - bottom);
+  result(3, 2) = - zNear / (zFar - zNear);
+  return result;
+}
+
 template <typename Container, typename Key>
 typename Container::mapped_type get(const Container& c, const Key& key) {
   auto it = c.find(key);
@@ -549,6 +563,7 @@ class VideoRender {
   }
 
   void Update(double zoom = 1.0) {
+    program_.use();
     program_.SetUniform(program_.uniform("mvpMatrix"),
                         Ortho(-1 / zoom, 1 / zoom, -1 / zoom, 1 / zoom, -1, 1));
     UpdateVideo();
@@ -586,18 +601,6 @@ class VideoRender {
     base::Point3D p(value.x(), value.y(), 0.0);
     const auto result = rotate_.Rotate(p);
     return {static_cast<int>(result.x()), static_cast<int>(result.y())};
-  }
-
-  static Eigen::Matrix4f Ortho(float left, float right, float bottom, float top,
-                               float zNear, float zFar) {
-    Eigen::Matrix4f result = Eigen::Matrix4f::Identity();
-    result(0, 0) = 2.0f / (right - left);
-    result(1, 1) = 2.0f / (top - bottom);
-    result(2, 2) = 1.0f / (zFar - zNear);
-    result(3, 0) = - (right + left) / (right - left);
-    result(3, 1) = - (top + bottom) / (top - bottom);
-    result(3, 2) = - zNear / (zFar - zNear);
-    return result;
   }
 
   ffmpeg::File file_;
@@ -640,6 +643,36 @@ class VideoRender {
   gl::VertexBufferObject vertices_;
   gl::VertexBufferObject elements_;
   gl::FlatRgbTexture texture_{codec_.size()};
+};
+
+class Reticle {
+ public:
+  Reticle() {
+    triangles_.SetProjMatrix(Ortho(-1, 1, -1, 1, -1, 1));
+    triangles_.SetViewMatrix(Eigen::Matrix4f::Identity());
+    triangles_.SetModelMatrix(Eigen::Matrix4f::Identity());
+    triangles_.SetAmbient(1.0f);
+
+    const float s = 0.3;
+    triangles_.AddQuad(
+        {-s, s, 0.0f}, {0.f, 0.f},
+        {s, s, 0.0f}, {1.f, 0.f},
+        {s, -s, 0.0f}, {1.f, 1.f},
+        {-s, -s, 0.0f}, {0.f, 1.f},
+        {1.f, 1.f, 1.f, 1.f});
+
+    triangles_.Upload();
+  }
+
+  void Render() {
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    triangles_.Render();
+  }
+
+ private:
+  gl::ImageTexture texture_{"mech/reticle.png"};
+  gl::SimpleTextureRenderList triangles_{&texture_.texture()};
 };
 
 int do_main(int argc, char** argv) {
@@ -694,6 +727,11 @@ int do_main(int argc, char** argv) {
         std::string::npos) {
       throw;
     }
+  }
+
+  std::optional<Reticle> reticle;
+  if (turret) {
+    reticle.emplace();
   }
 
   QuadrupedCommand::Mode command_mode = QuadrupedCommand::Mode::kStopped;
@@ -792,6 +830,10 @@ int do_main(int argc, char** argv) {
     }
 
     TRACE_GL_ERROR();
+
+    if (reticle) {
+      reticle->Render();
+    }
 
     DrawTelemetry(slot_command.get(), turret);
     DrawGamepad(gamepad);
