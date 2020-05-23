@@ -647,6 +647,7 @@ int do_main(int argc, char** argv) {
   bool turret = false;
   double rotate_deg = 180.0;
   double jump_accel_mm_s2 = 2000.0;
+  double zoom_in = 3.0;
 
   mjlib::io::StreamFactory::Options stream;
   stream.type = mjlib::io::StreamFactory::Type::kSerial;
@@ -657,6 +658,7 @@ int do_main(int argc, char** argv) {
       (clipp::option("stuff")),
       (clipp::option("t", "turret").set(turret)),
       (clipp::option("r", "rotate") & clipp::value("", rotate_deg)),
+      (clipp::option("z", "zoom") & clipp::value("", zoom_in)),
       (clipp::option("jump-accel") & clipp::value("", jump_accel_mm_s2)),
       mjlib::base::ClippArchive("stream.").Accept(&stream).release()
   );
@@ -768,7 +770,7 @@ int do_main(int argc, char** argv) {
 
     {
       const double desired_zoom =
-          gamepad.buttons[GLFW_GAMEPAD_BUTTON_LEFT_BUMPER] ? 2.0 : 1.0;
+          gamepad.buttons[GLFW_GAMEPAD_BUTTON_LEFT_BUMPER] ? zoom_in : 1.0;
       constexpr double zoom_time_constant_s = 0.2;
       constexpr double alpha = (1.0 / 60.0) / zoom_time_constant_s;
 
