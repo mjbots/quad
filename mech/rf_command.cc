@@ -78,8 +78,8 @@ Eigen::Matrix4f Ortho(float left, float right, float bottom, float top,
   result(2, 2) = 1.0f / (zFar - zNear);
   result(3, 0) = - (right + left) / (right - left);
   result(3, 1) = - (top + bottom) / (top - bottom);
-  result(3, 2) = - zNear / (zFar - zNear);
-  return result;
+  result(3, 2) = - (zFar + zNear) / (zFar - zNear);
+  return result.transpose();
 }
 
 template <typename Container, typename Key>
@@ -562,10 +562,17 @@ class VideoRender {
                result.sizes().x(), result.sizes().y());
   }
 
-  void Update(double zoom = 1.0) {
+  void Update(float zoom, const Eigen::Vector3f& zoom_offset) {
     program_.use();
+    const float z = 2.0 / zoom;
+    const float rx = (zoom_offset.x() + 1.0f) / 2.0;
+    const float ry = (zoom_offset.y() + 1.0f) / 2.0;
+    const float xmin = zoom_offset.x() - rx * z;
+    const float ymin = zoom_offset.y() - ry * z;
+    const float xmax = xmin + z;
+    const float ymax = ymin + z;
     program_.SetUniform(program_.uniform("mvpMatrix"),
-                        Ortho(-1 / zoom, 1 / zoom, -1 / zoom, 1 / zoom, -1, 1));
+                        Ortho(xmin, xmax, ymin, ymax, -1, 1));
     UpdateVideo();
     Draw();
   }
@@ -647,11 +654,15 @@ class VideoRender {
 
 class Reticle {
  public:
-  Reticle() {
+  Reticle(float x, float y) {
     triangles_.SetProjMatrix(Ortho(-1, 1, -1, 1, -1, 1));
     triangles_.SetViewMatrix(Eigen::Matrix4f::Identity());
     triangles_.SetModelMatrix(Eigen::Matrix4f::Identity());
     triangles_.SetAmbient(1.0f);
+
+    triangles_.SetTransform(
+        Eigen::Affine3f(Eigen::Translation3f(
+                            Eigen::Vector3f(x, y, 0.))).matrix());
 
     const float s = 0.3;
     triangles_.AddQuad(
@@ -681,6 +692,9 @@ int do_main(int argc, char** argv) {
   double rotate_deg = 180.0;
   double jump_accel_mm_s2 = 2000.0;
   double zoom_in = 3.0;
+  double reticle_x = 0.0;
+  double reticle_y = 0.0;
+  double derate_scale = 2.0;
 
   mjlib::io::StreamFactory::Options stream;
   stream.type = mjlib::io::StreamFactory::Type::kSerial;
@@ -692,6 +706,9 @@ int do_main(int argc, char** argv) {
       (clipp::option("t", "turret").set(turret)),
       (clipp::option("r", "rotate") & clipp::value("", rotate_deg)),
       (clipp::option("z", "zoom") & clipp::value("", zoom_in)),
+      (clipp::option("x", "reticle-x") & clipp::value("", reticle_x)),
+      (clipp::option("y", "reticle-y") & clipp::value("", reticle_y)),
+      (clipp::option("derate-scale") & clipp::value("", derate_scale)),
       (clipp::option("jump-accel") & clipp::value("", jump_accel_mm_s2)),
       mjlib::base::ClippArchive("stream.").Accept(&stream).release()
   );
@@ -731,7 +748,7 @@ int do_main(int argc, char** argv) {
 
   std::optional<Reticle> reticle;
   if (turret) {
-    reticle.emplace();
+    reticle.emplace(reticle_x, reticle_y);
   }
 
   QuadrupedCommand::Mode command_mode = QuadrupedCommand::Mode::kStopped;
@@ -826,7 +843,7 @@ int do_main(int argc, char** argv) {
     TRACE_GL_ERROR();
 
     if (video_render) {
-      video_render->Update(zoom);
+      video_render->Update(zoom, Eigen::Vector3f(reticle_x, reticle_y, 0.f));
     }
 
     TRACE_GL_ERROR();
@@ -889,9 +906,10 @@ int do_main(int argc, char** argv) {
           kMaxRotation_rad_s * turret_walk_expo(cmd_robot.x());
 
       // Finally, do the turret rates.
-      turret_rate_dps.pitch = (1.0 / zoom) * -kMaxTurretPitch_dps *
+      const double derate = 1.0 / ((zoom - 1.0) * derate_scale + 1.0);
+      turret_rate_dps.pitch = derate * -kMaxTurretPitch_dps *
           expo(gamepad.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y]);
-      turret_rate_dps.yaw = (1.0 / zoom) * kMaxTurretYaw_dps *
+      turret_rate_dps.yaw = derate * kMaxTurretYaw_dps *
           expo(gamepad.axes[GLFW_GAMEPAD_AXIS_RIGHT_X]);
       turret_track = gamepad.buttons[GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER] != 0;
       if (gamepad_pressed[GLFW_GAMEPAD_BUTTON_B]) {
