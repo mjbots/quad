@@ -15,6 +15,10 @@
 
 // TODO:
 // * 3D mech
+//  * be able to plot sum total of down ground reaction force
+//     * initially just for stance feet
+//     * eventually also for things that are close to the ground
+//  * render target foot placement, and target next support
 //  * render feet shadows on ground to give an idea of height off
 //  * render a grid on ground (with units)
 //  * render text velocities/forces near the arrows
@@ -1286,6 +1290,15 @@ class MechRender {
             points[(i + 1) % points.size()].cast<float>(),
             Eigen::Vector4f(1, 0, 0, 1));
       }
+      if (points.size() == 4) {
+        // Render putative "next" supports.
+        AddLineSegment(
+            points[0].cast<float>(), points[2].cast<float>(),
+            Eigen::Vector4f(1, 0.2, 0, 1));
+        AddLineSegment(
+            points[1].cast<float>(), points[3].cast<float>(),
+            Eigen::Vector4f(1, 0, 0.2, 1));
+      }
     }
 
     transform_ = Eigen::Matrix4f::Identity();
@@ -1598,7 +1611,6 @@ class MechRender {
 int do_main(int argc, char** argv) {
   ffmpeg::Ffmpeg::Register();
 
-  bool mech = false;
   std::string log_filename;
   std::string video_filename;
   double video_time_offset_s = 0.0;
@@ -1606,14 +1618,13 @@ int do_main(int argc, char** argv) {
   auto group = clipp::group(
       clipp::value("log file", log_filename),
       clipp::option("v", "video") & clipp::value("video", video_filename),
-      clipp::option("m", "mech").set(mech),
       clipp::option("voffset") & clipp::value("OFF", video_time_offset_s)
   );
 
   mjlib::base::ClippParse(argc, argv, group);
 
   mjlib::telemetry::FileReader file_reader(log_filename);
-  const auto records = file_reader.records();
+  const bool mech = (file_reader.record("qc_status") != nullptr);
 
   gl::Window window(1280, 720, "tplot2");
   gl::GlImGui imgui(window);
