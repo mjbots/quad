@@ -1219,7 +1219,6 @@ class MechRender {
 
     if (attitude_) {
       transform_ = Eigen::Matrix4f::Identity();
-      // I haven't figured out why yaw is inverted here..
       transform_.topLeftCorner<3, 3>() =
           AttitudeMatrix(attitude.attitude).cast<float>();
     } else {
@@ -1273,6 +1272,22 @@ class MechRender {
       }
     }
 
+    if (support_ && !qs.state.legs_B.empty() && !qc.legs_B.empty()) {
+      std::vector<base::Point3D> points;
+      for (int i : {0, 1, 3, 2}) {
+        const auto& leg_B = qc.legs_B[i];
+        if (leg_B.stance != 0) {
+          points.push_back(qs.state.legs_B[i].position_mm);
+        }
+      }
+      for (size_t i = 0; i < points.size(); i++) {
+        AddLineSegment(
+            points[i].cast<float>(),
+            points[(i + 1) % points.size()].cast<float>(),
+            Eigen::Vector4f(1, 0, 0, 1));
+      }
+    }
+
     transform_ = Eigen::Matrix4f::Identity();
     triangle_.SetTransform(transform_);
   }
@@ -1301,6 +1316,9 @@ class MechRender {
       transform_.topLeftCorner<3, 3>() = tf_LB.inverse().cast<float>();
       triangle_.SetTransform(transform_);
     }
+
+    // Render our CoM projected onto the ground.
+    AddBall(Eigen::Vector3f(0, 0, max_z_L), 6, Eigen::Vector4f(1, 0, 0, 1));
 
     auto ic = triangle_.AddVertex(Eigen::Vector3f(0, 0, max_z_L), normal, uv, rgba);
     for (int i = 0; i < 16; i++) {
@@ -1486,6 +1504,7 @@ class MechRender {
     ImGui::Checkbox("force", &leg_force_);
     ImGui::Checkbox("attitude", &attitude_);
     ImGui::Checkbox("ground", &ground_);
+    ImGui::Checkbox("support", &support_);
 
     ImGui::EndChild();
   }
@@ -1568,6 +1587,7 @@ class MechRender {
   bool leg_force_ = false;
   bool attitude_ = true;
   bool ground_ = true;
+  bool support_ = true;
 
   const double kVelocityDrawScale = 0.1;
   const double kForceDrawScale = 2.0;
