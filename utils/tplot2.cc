@@ -884,8 +884,6 @@ class PlotView {
 
     plots_.push_back({});
     auto& plot = plots_.back();
-    plot.x_token = x_token;
-    plot.y_token = y_token;
 
     plot.legend = MakeLegend(x_token, y_token);
 
@@ -925,9 +923,6 @@ class PlotView {
   boost::posix_time::ptime log_start_;
 
   struct Plot {
-    std::string x_token;
-    std::string y_token;
-
     std::string legend;
 
     std::vector<boost::posix_time::ptime> timestamps;
