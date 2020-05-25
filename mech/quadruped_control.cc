@@ -1949,7 +1949,9 @@ class QuadrupedControl::Impl {
       // than a threshold.
       for (const auto& leg_B : status_.state.legs_B) {
         if (is_stance(leg_B.leg)) { continue; }
-        if (leg_B.velocity_mm_s.norm() > config_.balance.contact_threshold_mm_s) {
+        if (leg_B.velocity_mm_s.norm() > config_.balance.contact_threshold_mm_s ||
+            leg_B.position_mm.z() < (config_.balance.height_mm -
+                                     config_.balance.contact_threshold_mm)) {
           b.contact = true;
         }
       }

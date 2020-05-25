@@ -244,6 +244,7 @@ struct QuadrupedConfig {
     double velocity_mm_s = 400.0;
     double height_mm = 150;
     double contact_threshold_mm_s = 50.0;
+    double contact_threshold_mm = 10.0;
 
     double error_scale = 0.0;
     double rate_scale = 2.0;
@@ -253,6 +254,7 @@ struct QuadrupedConfig {
       a->Visit(MJ_NVP(velocity_mm_s));
       a->Visit(MJ_NVP(height_mm));
       a->Visit(MJ_NVP(contact_threshold_mm_s));
+      a->Visit(MJ_NVP(contact_threshold_mm));
 
       a->Visit(MJ_NVP(error_scale));
       a->Visit(MJ_NVP(rate_scale));
