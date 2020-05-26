@@ -16,7 +16,6 @@
 // TODO:
 // * 3D mech
 //  * be able to plot sum total of down ground reaction force
-//     * initially just for stance feet
 //     * eventually also for things that are close to the ground
 //  * render target foot placement, and target next support
 //  * render feet shadows on ground to give an idea of height off
