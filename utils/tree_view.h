@@ -23,6 +23,7 @@
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 
 #include "mjlib/base/buffer_stream.h"
+#include "mjlib/micro/serializable_handler.h"
 #include "mjlib/telemetry/file_reader.h"
 
 #include "gl/gl_imgui.h"
@@ -52,7 +53,9 @@ class TreeView {
   using Format = mjlib::telemetry::Format;
   using FT = Format::Type;
 
-  TreeView(FileReader* reader) : reader_(reader) {
+  TreeView(FileReader* reader, boost::posix_time::ptime log_start)
+      : reader_(reader),
+        log_start_(log_start) {
     for (const auto* record : reader->records()) {
       data_.names.insert(std::make_pair(record->name, record));
     }
@@ -325,6 +328,34 @@ class TreeView {
     }
   }
 
+  struct ExtractResult {
+    std::vector<boost::posix_time::ptime> timestamps;
+    std::vector<float> xvals;
+    std::vector<float> yvals;
+  };
+
+  ExtractResult ExtractDeriv(const std::string& token) {
+    mjlib::base::Tokenizer tokenizer(token, ".");
+    auto prefix = tokenizer.next();
+    for (const auto& derived : derived_) {
+      if (derived->name() != prefix) { continue; }
+
+      ExtractResult result;
+      auto current_data = data_;
+      current_data.data = {};
+      for (const auto& item : reader_->items()) {
+        current_data.data[item.record] = item.data;
+        result.timestamps.push_back(item.timestamp);
+        result.xvals.push_back(
+            mjlib::base::ConvertDurationToSeconds(item.timestamp - log_start_));
+        result.yvals.push_back(
+            derived->Extract(tokenizer.remaining(), current_data));
+      }
+      return result;
+    }
+    return {};
+  }
+
  private:
   class DerivedBase {
    public:
@@ -332,6 +363,22 @@ class TreeView {
     virtual std::string_view name() const = 0;
 
     virtual void Visit(const CurrentLogData&) const = 0;
+    virtual double Extract(std::string_view token,
+                           const CurrentLogData& log_data) const = 0;
+  };
+
+  class StringStream : public mjlib::micro::AsyncWriteStream {
+   public:
+    void AsyncWriteSome(const std::string_view& data,
+                        const mjlib::micro::SizeCallback& cbk) {
+      ostr_.write(data.data(), data.size());
+      cbk({}, data.size());
+    }
+
+    std::string str() const { return ostr_.str(); }
+
+   private:
+    std::ostringstream ostr_;
   };
 
   template <typename DerivedOperator>
@@ -345,14 +392,32 @@ class TreeView {
 
     void Visit(const CurrentLogData& log_data) const override {
       auto result = derived_operator_(log_data);
-      ImGuiTreeArchive().Value(name_, result);
+      const bool expanded = ImGui::TreeNode(name_.c_str());
+      ImGui::NextColumn();
+      ImGui::NextColumn();
+
+      if (expanded) {
+        ImGuiTreeArchive(name_ + ".").Accept(&result);
+        ImGui::TreePop();
+      }
     }
+
+    double Extract(std::string_view token,
+                   const CurrentLogData& log_data) const override {
+      auto result = derived_operator_(log_data);
+      char buf[256] = {};
+      StringStream streambuf;
+      mjlib::micro::SerializableHandler handler(&result);
+      handler.Read(token, buf, streambuf, [](auto&&) {});
+      return std::stod(streambuf.str());
+    };
 
     const std::string name_;
     DerivedOperator derived_operator_;
   };
 
   FileReader* const reader_;
+  boost::posix_time::ptime log_start_;
   boost::posix_time::ptime last_timestamp_;
   FileReader::Index last_index_ = {};
   CurrentLogData data_;

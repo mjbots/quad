@@ -23,6 +23,17 @@
 namespace mjmech {
 namespace utils {
 
+namespace {
+struct Force {
+  Eigen::Vector3d force_N;
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(MJ_NVP(force_N));
+  }
+};
+}
+
 void AddQuadrupedDerived(mjlib::telemetry::FileReader* file_reader,
                          TreeView* tree_view) {
   auto qc_reader = std::make_shared<mjlib::telemetry::MappedBinaryReader<
@@ -32,10 +43,10 @@ void AddQuadrupedDerived(mjlib::telemetry::FileReader* file_reader,
     mech::QuadrupedControl::Status>>(
         file_reader->record("qc_status")->schema->root());
   tree_view->AddDerived(
-      "Command CoM Force",
+      "control_CoM_N",
       [qc_reader](const CurrentLogData& data) {
         const auto maybe_d = data.get("qc_control");
-        if (!maybe_d) { return Eigen::Vector3d(); }
+        if (!maybe_d) { return Force(); }
 
         auto qc = qc_reader->Read(*maybe_d);
         Eigen::Vector3d result_N;
@@ -45,19 +56,21 @@ void AddQuadrupedDerived(mjlib::telemetry::FileReader* file_reader,
           }
         }
 
-        return result_N;
+        Force result;
+        result.force_N = result_N;
+        return result;
       });
   tree_view->AddDerived(
-      "Status CoM Force",
+      "status_CoM_N",
       [qc_reader, qs_reader](const CurrentLogData& data) {
         const auto maybe_c = data.get("qc_control");
         const auto maybe_s = data.get("qc_status");
-        if (!maybe_c || !maybe_s) { return Eigen::Vector3d(); }
+        if (!maybe_c || !maybe_s) { return Force(); }
 
         auto qc = qc_reader->Read(*maybe_c);
         auto qs = qs_reader->Read(*maybe_s);
         if (qc.legs_B.size() != qs.state.legs_B.size()) {
-          return Eigen::Vector3d();
+          return Force();
         }
 
         Eigen::Vector3d result_N;
@@ -65,7 +78,10 @@ void AddQuadrupedDerived(mjlib::telemetry::FileReader* file_reader,
           if (qc.legs_B[i].stance == 0.0) { continue; }
           result_N += qs.state.legs_B[i].force_N;
         }
-        return result_N;
+
+        Force result;
+        result.force_N = result_N;
+        return result;
       });
 }
 

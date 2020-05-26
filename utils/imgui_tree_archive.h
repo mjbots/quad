@@ -28,6 +28,8 @@ namespace utils {
 
 class ImGuiTreeArchive : public mjlib::base::VisitArchive<ImGuiTreeArchive> {
  public:
+  ImGuiTreeArchive(const std::string& prefix = "") : prefix_(prefix) {}
+
   template <typename Serializable>
   ImGuiTreeArchive& Accept(const Serializable* serializable) {
     mjlib::base::VisitArchive<ImGuiTreeArchive>::Accept(
@@ -47,6 +49,14 @@ class ImGuiTreeArchive : public mjlib::base::VisitArchive<ImGuiTreeArchive> {
   void VisitScalar(const NameValuePair& nvp) {
     const bool expanded =
         ImGui::TreeNodeEx(nvp.name(), ImGuiTreeNodeFlags_Leaf);
+
+    if (ImGui::BeginDragDropSource()) {
+      const std::string token = prefix_ + nvp.name();
+      ImGui::SetDragDropPayload("DND_DERIV", token.data(), token.size());
+      ImGui::TextUnformatted(token.c_str());
+      ImGui::EndDragDropSource();
+    }
+
     ImGui::NextColumn();
     ImGui::Text("%s", fmt::format("{}", nvp.get_value()).c_str());
     ImGui::NextColumn();
@@ -58,12 +68,13 @@ class ImGuiTreeArchive : public mjlib::base::VisitArchive<ImGuiTreeArchive> {
 
   template <typename NameValuePair>
   void VisitSerializable(const NameValuePair& nvp) {
-    const bool expanded = ImGui::TreeNode(nvp.name().c_str());
+    const bool expanded = ImGui::TreeNode(nvp.name());
     ImGui::NextColumn();
     ImGui::NextColumn();
 
     if (expanded) {
-      Accept(nvp.value());
+      ImGuiTreeArchive sub_archive(prefix_ + nvp.name() + ".");
+      sub_archive.Accept(nvp.value());
       ImGui::TreePop();
     }
   }
@@ -78,12 +89,17 @@ class ImGuiTreeArchive : public mjlib::base::VisitArchive<ImGuiTreeArchive> {
       const auto& value = *nvp.value();
       int i = 0;
       for (const auto& item : value) {
-        Value(fmt::format("{}", i), item);
+        auto istr = fmt::format("{}", i);
+        ImGuiTreeArchive sub_archive (prefix_ + nvp.name() + ".");
+        sub_archive.Value(istr, item);
         i++;
       }
       ImGui::TreePop();
     }
   }
+
+ private:
+  std::string prefix_;
 };
 
 }

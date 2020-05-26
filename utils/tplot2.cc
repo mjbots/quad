@@ -478,8 +478,11 @@ class PlotRetrieve {
 
 class PlotView {
  public:
-  PlotView(FileReader* reader, boost::posix_time::ptime log_start)
+  PlotView(FileReader* reader,
+           TreeView* tree_view,
+           boost::posix_time::ptime log_start)
       : reader_(reader),
+        tree_view_(tree_view),
         log_start_(log_start) {
   }
 
@@ -541,10 +544,17 @@ class PlotView {
     }
 
     if (ImGui::BeginDragDropTarget()) {
-      const auto* payload = ImGui::AcceptDragDropPayload("DND_TLOG");
-      if (payload) {
-        std::string token(static_cast<char*>(payload->Data), payload->DataSize);
-        AddPlot("", token);
+      const auto* tlog_payload = ImGui::AcceptDragDropPayload("DND_TLOG");
+      if (tlog_payload) {
+        std::string token(static_cast<char*>(tlog_payload->Data),
+                          tlog_payload->DataSize);
+        AddLogPlot("", token);
+      }
+      const auto* deriv_payload = ImGui::AcceptDragDropPayload("DND_DERIV");
+      if (deriv_payload) {
+        std::string token(static_cast<char*>(deriv_payload->Data),
+                          deriv_payload->DataSize);
+        AddDerivPlot(token);
       }
       ImGui::EndDragDropTarget();
     }
@@ -604,68 +614,6 @@ class PlotView {
   }
 
  private:
-  std::string current_plot_name() const {
-    if (current_plot_index_ >= plots_.size()) {
-      return "";
-    }
-    return plots_[current_plot_index_].legend;
-  }
-
-  std::string MakeLegend(const std::string& x, const std::string& y) {
-    if (!x.empty() && !y.empty()) {
-      return fmt::format("{} vs {}", y, x);
-    } else if (x.empty()) {
-      return y;
-    }
-    return fmt::format("time vs {}", x);
-  }
-
-  void AddPlot(const std::string& x_token, const std::string& y_token) {
-    PlotRetrieve getter(reader_, log_start_, x_token, y_token);
-    if (!getter.valid()) {
-      return;
-    }
-
-    plots_.push_back({});
-    auto& plot = plots_.back();
-
-    plot.legend = MakeLegend(x_token, y_token);
-
-    for (auto item : reader_->items(getter.items())) {
-      plot.timestamps.push_back(item.timestamp);
-      plot.xvals.push_back(getter.x(item));
-      plot.yvals.push_back(getter.y(item));
-    }
-
-    if (plot.xvals.empty()) {
-      plots_.pop_back();
-      return;
-    }
-
-    plot.min_x = *std::min_element(plot.xvals.begin(), plot.xvals.end());
-    plot.max_x = *std::max_element(plot.xvals.begin(), plot.xvals.end());
-    plot.min_y = *std::min_element(plot.yvals.begin(), plot.yvals.end());
-    plot.max_y = *std::max_element(plot.yvals.begin(), plot.yvals.end());
-    if (plot.max_y <= plot.min_y) {
-      plot.max_y = plot.min_y + 1.0f;
-    }
-    if (plot.max_x <= plot.min_x) {
-      plot.max_x = plot.max_x + 1.0f;
-    }
-
-    plot.axis = current_axis_;
-
-    // If this is the only plot on this axis, then re-fit things.
-    if (1 == std::count_if(
-            plots_.begin(), plots_.end(),
-            [&](const auto& plt) { return plt.axis == current_axis_; })) {
-      fit_plot_ = &plot;
-    }
-  }
-
-  FileReader* const reader_;
-  boost::posix_time::ptime log_start_;
-
   struct Plot {
     std::string legend;
 
@@ -689,6 +637,91 @@ class PlotView {
 
     int axis = 0;
   };
+
+  std::string current_plot_name() const {
+    if (current_plot_index_ >= plots_.size()) {
+      return "";
+    }
+    return plots_[current_plot_index_].legend;
+  }
+
+  std::string MakeLegend(const std::string& x, const std::string& y) {
+    if (!x.empty() && !y.empty()) {
+      return fmt::format("{} vs {}", y, x);
+    } else if (x.empty()) {
+      return y;
+    }
+    return fmt::format("time vs {}", x);
+  }
+
+  void AddLogPlot(const std::string& x_token, const std::string& y_token) {
+    PlotRetrieve getter(reader_, log_start_, x_token, y_token);
+    if (!getter.valid()) {
+      return;
+    }
+
+    plots_.push_back({});
+    auto& plot = plots_.back();
+
+    plot.legend = MakeLegend(x_token, y_token);
+
+    for (auto item : reader_->items(getter.items())) {
+      plot.timestamps.push_back(item.timestamp);
+      plot.xvals.push_back(getter.x(item));
+      plot.yvals.push_back(getter.y(item));
+    }
+
+    if (plot.xvals.empty()) {
+      plots_.pop_back();
+      return;
+    }
+
+    FinishPlot(&plot);
+  }
+
+  void AddDerivPlot(const std::string& token) {
+    plots_.push_back({});
+    auto& plot = plots_.back();
+    plot.legend = MakeLegend("", token);
+
+    auto data = tree_view_->ExtractDeriv(token);
+    plot.timestamps = std::move(data.timestamps);
+    plot.xvals = std::move(data.xvals);
+    plot.yvals = std::move(data.yvals);
+
+    if (plot.xvals.empty()) {
+      plots_.pop_back();
+      return;
+    }
+
+    FinishPlot(&plot);
+  }
+
+  void FinishPlot(Plot* plot) {
+    plot->min_x = *std::min_element(plot->xvals.begin(), plot->xvals.end());
+    plot->max_x = *std::max_element(plot->xvals.begin(), plot->xvals.end());
+    plot->min_y = *std::min_element(plot->yvals.begin(), plot->yvals.end());
+    plot->max_y = *std::max_element(plot->yvals.begin(), plot->yvals.end());
+    if (plot->max_y <= plot->min_y) {
+      plot->max_y = plot->min_y + 1.0f;
+    }
+    if (plot->max_x <= plot->min_x) {
+      plot->max_x = plot->max_x + 1.0f;
+    }
+
+    plot->axis = current_axis_;
+
+    // If this is the only plot on this axis, then re-fit things.
+    if (1 == std::count_if(
+            plots_.begin(), plots_.end(),
+            [&](const auto& plt) { return plt.axis == current_axis_; })) {
+      fit_plot_ = plot;
+    }
+  }
+
+  FileReader* const reader_;
+  TreeView* const tree_view_;
+  boost::posix_time::ptime log_start_;
 
   static inline constexpr const char * kAxisNames[] = {
     "Left",
@@ -1373,8 +1406,8 @@ int do_main(int argc, char** argv) {
 
   auto log_start = (*file_reader.items().begin()).timestamp;
   Timeline timeline{&file_reader};
-  TreeView tree_view{&file_reader};
-  PlotView plot_view{&file_reader, log_start};
+  TreeView tree_view{&file_reader, log_start};
+  PlotView plot_view{&file_reader, &tree_view, log_start};
   std::optional<Video> video;
   std::optional<MechRender> mech_render;
   if (mech) {

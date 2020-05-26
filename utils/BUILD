@@ -61,6 +61,7 @@ cc_binary(
         "@com_github_mjbots_mjlib//mjlib/base:buffer_stream",
         "@com_github_mjbots_mjlib//mjlib/base:clipp",
         "@com_github_mjbots_mjlib//mjlib/base:tokenizer",
+        "@com_github_mjbots_mjlib//mjlib/micro:serializable_handler",
         "@com_github_mjbots_mjlib//mjlib/telemetry:file_reader",
         "@com_github_mjbots_mjlib//mjlib/telemetry:mapped_binary_reader",
         "@implot",
