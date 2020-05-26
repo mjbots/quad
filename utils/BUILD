@@ -47,7 +47,13 @@ py_binary(
 
 cc_binary(
     name = "tplot2",
-    srcs = ["tplot2.cc"],
+    srcs = [
+        "imgui_tree_archive.h",
+        "quadruped_tplot2.h",
+        "quadruped_tplot2.cc",
+        "tplot2.cc",
+        "tree_view.h",
+    ],
     deps = [
         "//ffmpeg",
         "//gl",
