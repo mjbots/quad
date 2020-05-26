@@ -50,6 +50,7 @@ cc_library(
         "rpi3_raw_spi.cc",
         "rpi3_raw_uart.cc",
         "rpi3_threaded_client.cc",
+        "swing_trajectory.cc",
         "target_tracker.cc",
         "turret.cc",
         "turret_control.cc",
@@ -96,6 +97,7 @@ cc_test(
     srcs = ["test/" + x for x in [
         "expo_map_test.cc",
         "mammal_ik_test.cc",
+        "swing_trajectory_test.cc",
         "trajectory_test.cc",
         "test_main.cc",
     ]],
