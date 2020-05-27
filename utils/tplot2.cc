@@ -974,7 +974,10 @@ class MechRender {
     const auto maybe_qc_status = tree_view_->data("qc_status");
     const auto maybe_qc_control = tree_view_->data("qc_control");
     const auto maybe_imu = tree_view_->data("imu");
-    if (maybe_qc_status && maybe_qc_control && maybe_imu) {
+    if (maybe_qc_status && maybe_qc_control && maybe_imu &&
+        !maybe_qc_status->empty() &&
+        !maybe_qc_control->empty() &&
+        !maybe_imu->empty()) {
       DrawMech(reader_.Read(*maybe_qc_status),
                control_reader_.Read(*maybe_qc_control),
                imu_reader_.Read(*maybe_imu));
