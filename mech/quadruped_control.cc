@@ -1443,6 +1443,7 @@ class QuadrupedControl::Impl {
   }
 
   void DoControl_Walk() {
+    UpdateCommandedRB();
     // We always have some legs on the ground, so can nominally always
     // accelerate.
     UpdateCommandedLR();

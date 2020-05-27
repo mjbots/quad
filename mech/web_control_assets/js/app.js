@@ -16,7 +16,7 @@
 
 (function () {
   var websocket = null;
-  var active = false;
+  var pose_mm_RB = null;
 
   var BUTTON_START = 9;
   var BUTTON_SELECT = 8;
@@ -179,8 +179,6 @@
         mode_selector.value = "rest";
       }
     }
-
-    var pose_mm_RB = null;
 
     var v_mm_s_R = null;
     var w_LR = null;
