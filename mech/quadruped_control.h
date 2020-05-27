@@ -47,7 +47,6 @@ class QuadrupedControl : boost::noncopyable {
   void AsyncStart(mjlib::io::ErrorCallback handler);
 
   struct Parameters {
-    double period_s = 0.01;
     double max_torque_Nm = -1.0;
     std::string config;
 
@@ -57,7 +56,6 @@ class QuadrupedControl : boost::noncopyable {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(period_s));
       a->Visit(MJ_NVP(max_torque_Nm));
       a->Visit(MJ_NVP(config));
       a->Visit(MJ_NVP(enable_imu));

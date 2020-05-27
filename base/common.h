@@ -25,6 +25,7 @@ namespace mjmech {
 namespace base {
 const double kNaN = std::numeric_limits<double>::signaling_NaN();
 const double kPi = 3.14159265358979323846;
+const double kGravity = 9.81;
 
 inline double Degrees(double radians) {
   return 180.0 * radians / kPi;

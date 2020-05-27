@@ -28,6 +28,8 @@ namespace mech {
 // This represents the JSON used to configure the geometry of the
 // robot.
 struct QuadrupedConfig {
+  double period_s = 0.0025;
+
   struct Joint {
     int id = 0;
     double sign = 1.0;
@@ -254,6 +256,7 @@ struct QuadrupedConfig {
 
   template <typename Archive>
   void Serialize(Archive* a) {
+    a->Visit(MJ_NVP(period_s));
     a->Visit(MJ_NVP(joints));
     a->Visit(MJ_NVP(legs));
     a->Visit(MJ_NVP(bounds));

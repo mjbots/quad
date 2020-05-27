@@ -43,6 +43,7 @@ cc_library(
         "quadruped.cc",
         "quadruped_control.cc",
         "quadruped_debug.cc",
+        "quadruped_2leg_walk.cc",
         "rf_control.cc",
         "rpi3_hat_aux_stm32.cc",
         "rpi3_hat_raw_spi.cc",
