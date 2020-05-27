@@ -73,11 +73,12 @@ SwingTrajectory::Result SwingTrajectory::Advance(
         (start_ + time_s * start_velocity_ +
          0.5 * result.acceleration_s2 * time_s * time_s).head<2>();
   } else if (phase_ < 1.0 - world_blend_) {
+    const double xytime_s = swing_time_s_ * (1.0 - 2.0 * world_blend_);
     const double xyphase = (phase_ - world_blend_) / (1.0 - 2.0 * world_blend_);
 
     result.position.head<2>() = xymove_.position(xyphase);
-    result.velocity_s.head<2>() = xymove_.velocity(xyphase);
-    result.acceleration_s2.head<2>() = xymove_.acceleration(xyphase);
+    result.velocity_s.head<2>() = xymove_.velocity(xyphase) / xytime_s;
+    result.acceleration_s2.head<2>() = xymove_.acceleration(xyphase) / xytime_s;
   } else {
     // Lower.
     const double blend_s = swing_time_s_ * world_blend_;

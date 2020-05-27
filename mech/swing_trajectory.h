@@ -32,6 +32,9 @@ namespace mech {
 /// of the world velocity
 class SwingTrajectory {
  public:
+  SwingTrajectory()
+      : SwingTrajectory({}, {}, {}, 1.0, 0.1, 1.0) {}
+
   SwingTrajectory(const Eigen::Vector3d& start,
                   const Eigen::Vector3d& start_velocity,
                   const Eigen::Vector3d& end,

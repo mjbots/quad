@@ -55,13 +55,13 @@ BOOST_AUTO_TEST_CASE(SwingTrajectoryTest,
     const auto r = dut.Advance(0.05, {0., 0., 0.});
     Compare(r.position, Eigen::Vector3d(0, 0, -0.208));
     Compare(r.velocity_s, Eigen::Vector3d(0, 0, -3.84));
-    Compare(r.acceleration_s2, Eigen::Vector3d(60, 0, -14.4));
+    Compare(r.acceleration_s2, Eigen::Vector3d(75, 0, -14.4));
   }
   {
     // Halfway through the move cycle.
     const auto r = dut.Advance(0.4, {0., 0., 0.});
     Compare(r.position, Eigen::Vector3d(5.0, 0.0, -2.0));
-    Compare(r.velocity_s, Eigen::Vector3d(15.0, 0.0, 0.0));
+    Compare(r.velocity_s, Eigen::Vector3d(18.75, 0.0, 0.0));
     Compare(r.acceleration_s2, Eigen::Vector3d(0.0, 0.0, 24.0));
   }
   {
@@ -112,14 +112,14 @@ BOOST_AUTO_TEST_CASE(SwingTrajectoryTest2,
     BOOST_TEST(r.phase == 0.1);
     Compare(r.position, Eigen::Vector3d(-2.5, -4, 0.792));
     Compare(r.velocity_s, Eigen::Vector3d(0.0, 0.0, -1.92));
-    Compare(r.acceleration_s2, Eigen::Vector3d(63, -6, -7.2));
+    Compare(r.acceleration_s2, Eigen::Vector3d(39.375, -3.75, -7.2));
   }
   {
     // halfway through move
     const auto r = dut.Advance(0.8, {-10, 0, 0});
     BOOST_TEST(r.phase == 0.5);
     Compare(r.position, Eigen::Vector3d(2.75, -4.5, -1));
-    Compare(r.velocity_s, Eigen::Vector3d(15.75, -1.5, 0.0));
+    Compare(r.velocity_s, Eigen::Vector3d(9.844, -0.9375, 0.0));
     Compare(r.acceleration_s2, Eigen::Vector3d(0.0, 0.0, 12));
   }
   {
