@@ -54,6 +54,7 @@ class Robot:
         self.velocity_command = 0.0
         self.next_step_leg_id = 0
         self.start_stance_s = 0.0
+        self.last_nonzero_velocity = 0.0
 
         # Just for logging
         self.time = 0.0
@@ -73,7 +74,13 @@ class Robot:
                 self.start_stance_s = self.time
             max_dv = MAX_ACCELERATION * dt_s
             dv = max(-max_dv, min(max_dv, self.velocity_command - self.velocity))
+            if self.velocity != 0.0:
+                self.last_nonzero_velocity = self.velocity
             self.velocity += dv
+            if self.velocity != 0.0:
+                change = self.velocity * self.last_nonzero_velocity
+                if change < 0.0:
+                    self.next_step_leg_id = (self.next_step_leg_id + 1) % 2
         else:
             self.start_stance_s = None
 
@@ -100,8 +107,11 @@ class Robot:
             next_stance_leg = self.legs[next_stance_leg_id]
             next_step_leg = self.legs[self.next_step_leg_id]
 
-            self.first_half_time = ((next_stance_leg.pos - 0.0) /
-                                    max(0.01, self.velocity))
+            if self.velocity == 0.0:
+                self.first_half_time = 0.0
+            else:
+                self.first_half_time = ((next_stance_leg.pos - 0.0) /
+                                        self.velocity)
             self.second_half_time = (SWING_PERIOD_S - self.first_half_time)
 
             stance_time = self.time - self.start_stance_s
@@ -138,7 +148,7 @@ def main():
 
     def update(frame):
         if robot.time > 8.0:
-            robot.velocity_command = 0.0
+            robot.velocity_command = -1.0
         robot.advance(0.01)
 
         def height(leg):
