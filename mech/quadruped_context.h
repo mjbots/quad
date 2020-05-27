@@ -117,8 +117,10 @@ struct QuadrupedContext : boost::noncopyable {
   }
 
   void UpdateCommandedRB() {
+    Sophus::SE3d command_mm_RB =
+        command->pose_mm_RB * config.command_offset_mm_RB;
     const base::Point3D translation =
-        command->pose_mm_RB.translation() -
+        command_mm_RB.translation() -
         state->robot.pose_mm_RB.translation();
     state->robot.pose_mm_RB.translation() +=
         config.rb_filter_constant_Hz * config.period_s * translation;
@@ -126,7 +128,7 @@ struct QuadrupedContext : boost::noncopyable {
         Sophus::SO3d(
             state->robot.pose_mm_RB.so3().unit_quaternion().slerp(
                 config.rb_filter_constant_Hz * config.period_s,
-                command->pose_mm_RB.so3().unit_quaternion()));
+                command_mm_RB.so3().unit_quaternion()));
   }
 
   void UpdateCommandedLR() {

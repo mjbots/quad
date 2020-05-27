@@ -78,6 +78,7 @@ struct QuadrupedConfig {
   Bounds bounds;
 
   double mass_kg = 10.0;
+  Sophus::SE3d command_offset_mm_RB;
 
   struct StandUp {
     // This pose is referenced to the leg in the front right and the
@@ -261,6 +262,7 @@ struct QuadrupedConfig {
     a->Visit(MJ_NVP(legs));
     a->Visit(MJ_NVP(bounds));
     a->Visit(MJ_NVP(mass_kg));
+    a->Visit(MJ_NVP(command_offset_mm_RB));
     a->Visit(MJ_NVP(stand_up));
     a->Visit(MJ_NVP(rest));
     a->Visit(MJ_NVP(stand_height_mm));
