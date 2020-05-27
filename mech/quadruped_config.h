@@ -179,23 +179,12 @@ struct QuadrupedConfig {
       double release_time = 0.05;
 
       // The length of time spent lifting the leg to the step height.
-      double lift_time = 0.20;
-
-      // The length of time spent lowering the leg to the walk height.
-      double lower_time = 0.35;
-
-      // The length of time spent putting weight back on the leg.
-      // Measured in fraction of a step.  Note: This time can start
-      // sooner or later than scheduled due to when the leg actually
-      // makes contact with the ground.
-      double load_time = 0.05;
+      double lift_lower_time = 0.15;
 
       template <typename Archive>
       void Serialize(Archive* a) {
         a->Visit(MJ_NVP(release_time));
-        a->Visit(MJ_NVP(lift_time));
-        a->Visit(MJ_NVP(lower_time));
-        a->Visit(MJ_NVP(load_time));
+        a->Visit(MJ_NVP(lift_lower_time));
       }
     };
 

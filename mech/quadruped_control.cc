@@ -36,6 +36,7 @@
 #include "mech/mammal_ik.h"
 #include "mech/moteus.h"
 #include "mech/quadruped_config.h"
+#include "mech/swing_trajectory.h"
 #include "mech/trajectory.h"
 
 namespace pl = std::placeholders;
@@ -1489,125 +1490,46 @@ class QuadrupedControl::Impl {
       leg_R.stance = 1.0;
     }
 
-    std::vector<std::pair<int, base::Point3D>> moving_legs_R;
-    ws.moving_target_remaining_s = 0.0;
-
     // Accumulate our various control times.
     const auto step_time_s =
         config_.walk.cycle_time_s * config_.walk.step_phase;
-
-    const auto start = 0.0;
-    const auto release_end = start + config_.walk.step.release_time;
-    const auto lift_end = release_end + config_.walk.step.lift_time;
-    const auto lift_time_s = step_time_s * config_.walk.step.lift_time;
-    const auto move_end =
-        1.0 - (config_.walk.step.lower_time + config_.walk.step.load_time);
-    const auto move_time = move_end - lift_end;
-    const auto move_time_s = step_time_s * move_time;
-    const auto lower_end = 1.0 - config_.walk.step.load_time;
-    const auto lower_time_s = step_time_s * config_.walk.step.lower_time;
 
     const auto swing_targets_R = GetSwingTarget_R(
         (1.0 - config_.walk.step_phase) * config_.walk.cycle_time_s);
 
     // Move our legs that are in step.
     for (int step_leg_id : step_legs) {
-      const auto sp = step_phase.value();
-
       auto& leg_R = GetLeg_R(&legs_R, step_leg_id);
+      auto& state_leg = ws.legs[step_leg_id];
 
-      if (sp < release_end) {
-        // Here, we are still in stance, but decreasing it.
-        leg_R.stance = 1.0 - sp / config_.walk.step.release_time;
-        leg_R.landing = false;
-      } else if (sp < lift_end) {
-        // We are lifting.
-        leg_R.stance = 0.0;
+      leg_R.landing = false;
+      leg_R.kp_scale = {};
+      leg_R.kd_scale = {};
+      leg_R.stance = 0.0;
 
-        // We mark ourselves as landing so that we will keep
-        // stationary w.r.t. the ground.
-        leg_R.landing = true;
-
-        leg_R.force_N = base::Point3D(0, 0, 0);
-
-        // Use MoveLegsFixedSpeedZ to get a controlled deceleration
-        // profile.
-        const double speed = -0.5 * (
-            std::sqrt(
-                std::pow(config_.bounds.max_acceleration_mm_s2, 2.0) *
-                std::pow(lift_time_s, 2.0) -
-                4 * config_.bounds.max_acceleration_mm_s2 *
-                config_.walk.lift_height_mm) -
-            config_.bounds.max_acceleration_mm_s2 * lift_time_s);
-
-        // If the speed isn't finite, then we cannot lift this far in
-        // the time allotted. :(  Instead, lift as far as we can.
-        if (!std::isfinite(speed)) {
-          const double achievable_lift_height_mm =
-              std::pow(0.5 * lift_time_s, 2) *
-              config_.bounds.max_acceleration_mm_s2;
-          MJ_ASSERT(achievable_lift_height_mm <= config_.walk.lift_height_mm);
-          MoveLegsFixedSpeedZ(
-              {step_leg_id},
-              &legs_R,
-              .5 * lift_time_s * config_.bounds.max_acceleration_mm_s2,
-              config_.stand_height_mm - achievable_lift_height_mm);
-        } else {
-          MoveLegsFixedSpeedZ(
-              {step_leg_id},
-              &legs_R,
-              speed,
-              config_.stand_height_mm - config_.walk.lift_height_mm);
-        }
-      } else if (sp < move_end) {
-        // Move to the target position (for now the idle position),
-        // with an infinite acceleration profile attempting to reach
-        // it exactly at the end of our travel time.
-        ws.moving_target_remaining_s =
-            move_time_s - (sp - lift_end) * step_time_s;
-        auto target_R = [&]() {
+      if (!state_leg.in_flight) {
+        // Configure our swing calculation.
+        state_leg.target_mm_R = [&]() {
           for (const auto& pair : swing_targets_R) {
             if (pair.first == step_leg_id) { return pair.second; }
           }
           mjlib::base::AssertNotReached();
         }();
 
-        // We are moving to our end point at the lift height.
-        target_R.z() =
-            config_.stand_height_mm - config_.walk.lift_height_mm;
-
-        moving_legs_R.push_back(std::make_pair(step_leg_id, target_R));
-
-        leg_R.stance = 0.0;
-        leg_R.landing = false;
-      } else if (sp < lower_end) {
-        leg_R.stance = 0.0;
-        leg_R.landing = true;
-        const auto kp = config_.walk.lower_kp;
-        leg_R.kp_scale = base::Point3D(kp, kp, kp);
-        const auto kd = config_.walk.lower_kd;
-        leg_R.kd_scale = base::Point3D(kd, kd, kd);
-
-        // TODO: Use the speed calculation from above instead of a fudge.
-        constexpr double kSpeedFudge = 2.0;
-        MoveLegsFixedSpeedZ(
-            {step_leg_id}, &legs_R,
-            kSpeedFudge * config_.walk.lift_height_mm / lower_time_s,
-            config_.stand_height_mm);
-      } else {
-        const double load_fraction =
-            (sp - lower_end) / config_.walk.step.load_time;
-        leg_R.landing = false;
-        leg_R.stance = std::max(0.001, load_fraction);
-        leg_R.velocity_mm_s.z() = 0.0;
-
-        const auto kp =
-            (1.0 - config_.walk.lower_kp) * load_fraction + config_.walk.lower_kp;
-        leg_R.kp_scale = base::Point3D(kp, kp, kp);
-        const auto kd =
-            (1.0 - config_.walk.lower_kd) * load_fraction + config_.walk.lower_kd;
-        leg_R.kd_scale = base::Point3D(kd, kd, kd);
+        swing_trajectory_[step_leg_id] = SwingTrajectory(
+            leg_R.position_mm, leg_R.velocity_mm_s,
+            state_leg.target_mm_R,
+            config_.walk.lift_height_mm,
+            config_.walk.step.lift_lower_time,
+            step_time_s);
+        state_leg.in_flight = true;
       }
+
+      const auto swing = swing_trajectory_[step_leg_id].Advance(
+          period_s_, -status_.state.robot.desired_v_mm_s_R -
+          status_.state.robot.desired_w_LR.cross(state_leg.target_mm_R));
+      leg_R.position_mm = swing.position;
+      leg_R.velocity_mm_s = swing.velocity_s;
     }
 
     // Reset the kp_scale of anything on the ground.
@@ -1615,18 +1537,13 @@ class QuadrupedControl::Impl {
       auto& leg_R = GetLeg_R(&legs_R, step_leg_id);
       leg_R.kp_scale = {};
       leg_R.kd_scale = {};
+
+      auto& state_leg = ws.legs[step_leg_id];
+      state_leg.in_flight = false;
     }
 
     // Advance the legs which are landing or on the ground.
     MoveLegsForLR(&legs_R);
-
-    // Update all the legs that are in flight.
-    if (!moving_legs_R.empty()) {
-      MoveLegsTargetTime(
-          &legs_R,
-          ws.moving_target_remaining_s,
-          moving_legs_R);
-    }
 
     // Update the other legs.
     MoveLegsFixedSpeedZ(
@@ -2480,6 +2397,8 @@ class QuadrupedControl::Impl {
   std::vector<moteus::Value> values_cache_;
 
   std::vector<int> all_leg_ids_{0, 1, 2, 3};
+
+  std::array<SwingTrajectory, 4> swing_trajectory_ = {};
 };
 
 QuadrupedControl::QuadrupedControl(base::Context& context,

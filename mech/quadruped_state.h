@@ -208,14 +208,26 @@ struct QuadrupedState {
 
   struct Walk {
     double phase = 0.0;
-    double moving_target_remaining_s = 0.0;
     int idle_count = 0;
+
+    struct Leg {
+      bool in_flight = false;
+      base::Point3D target_mm_R;
+
+      template <typename Archive>
+      void Serialize(Archive* a) {
+        a->Visit(MJ_NVP(in_flight));
+        a->Visit(MJ_NVP(target_mm_R));
+      }
+    };
+
+    std::array<Leg, 4> legs;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(phase));
-      a->Visit(MJ_NVP(moving_target_remaining_s));
       a->Visit(MJ_NVP(idle_count));
+      a->Visit(MJ_NVP(legs));
     }
   };
 
