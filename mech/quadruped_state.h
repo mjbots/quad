@@ -207,27 +207,49 @@ struct QuadrupedState {
   Jump jump;
 
   struct Walk {
-    double phase = 0.0;
     int idle_count = 0;
 
     struct Leg {
-      bool in_flight = false;
       base::Point3D target_mm_R;
 
       template <typename Archive>
       void Serialize(Archive* a) {
-        a->Visit(MJ_NVP(in_flight));
         a->Visit(MJ_NVP(target_mm_R));
       }
     };
 
     std::array<Leg, 4> legs;
 
+    struct VLeg {
+      double remaining_s = 0.0;
+      enum Mode {
+        kStance,
+        kSwing,
+      };
+      Mode mode = kStance;
+      double swing_elapsed_s = 0.0;
+
+      template <typename Archive>
+      void Serialize(Archive* a) {
+        a->Visit(MJ_NVP(remaining_s));
+        a->Visit(MJ_NVP(mode));
+        a->Visit(MJ_NVP(swing_elapsed_s));
+      }
+    };
+
+    std::array<VLeg, 2> vlegs;
+    int next_step_vleg = 0;
+    double stance_elapsed_s = 0.0;
+    base::Point3D last_swing_v_mm_s_R;
+
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(phase));
       a->Visit(MJ_NVP(idle_count));
       a->Visit(MJ_NVP(legs));
+      a->Visit(MJ_NVP(vlegs));
+      a->Visit(MJ_NVP(next_step_vleg));
+      a->Visit(MJ_NVP(stance_elapsed_s));
+      a->Visit(MJ_NVP(last_swing_v_mm_s_R));
     }
   };
 
@@ -352,6 +374,20 @@ struct IsEnum<mjmech::mech::QuadrupedState::Backflip::Mode> {
       { M::kBackPush, "back_push" },
       { M::kFlight, "flight" },
       { M::kDone, "done" },
+    };
+  }
+};
+
+template <>
+struct IsEnum<mjmech::mech::QuadrupedState::Walk::VLeg::Mode> {
+  static constexpr bool value = true;
+
+  using M = mjmech::mech::QuadrupedState::Walk::VLeg::Mode;
+
+  static inline std::map<M, const char*> map() {
+    return {
+      { M::kStance, "stance" },
+      { M::kSwing, "swing" },
     };
   }
 };

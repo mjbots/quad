@@ -697,6 +697,18 @@ class PlotView {
   }
 
   void FinishPlot(Plot* plot) {
+    // Switch all non-finite numbers to NaN.
+    for (auto& value : plot->xvals) {
+      if (!std::isfinite(value)) {
+        value = std::numeric_limits<float>::quiet_NaN();
+      }
+    }
+    for (auto& value : plot->yvals) {
+      if (!std::isfinite(value)) {
+        value = std::numeric_limits<float>::quiet_NaN();
+      }
+    }
+
     plot->min_x = *std::min_element(plot->xvals.begin(), plot->xvals.end());
     plot->max_x = *std::max_element(plot->xvals.begin(), plot->xvals.end());
     plot->min_y = *std::min_element(plot->yvals.begin(), plot->yvals.end());
@@ -1050,6 +1062,15 @@ class MechRender {
       }
     }
 
+    if (target_) {
+      for (const auto& leg : qs.state.walk.legs) {
+        Eigen::Vector3d target_mm_B =
+            qs.state.robot.pose_mm_RB.inverse() * leg.target_mm_R;
+        AddBall(target_mm_B.cast<float>(),
+                6, Eigen::Vector4f(0, 1, 1, 1));
+      }
+    }
+
     if (support_ && !qs.state.legs_B.empty() && !qc.legs_B.empty()) {
       std::vector<base::Point3D> points;
       for (int i : {0, 1, 3, 2}) {
@@ -1292,6 +1313,7 @@ class MechRender {
     ImGui::Checkbox("attitude", &attitude_);
     ImGui::Checkbox("ground", &ground_);
     ImGui::Checkbox("support", &support_);
+    ImGui::Checkbox("target", &target_);
 
     ImGui::EndChild();
   }
@@ -1375,6 +1397,7 @@ class MechRender {
   bool attitude_ = true;
   bool ground_ = true;
   bool support_ = true;
+  bool target_ = true;
 
   const double kVelocityDrawScale = 0.1;
   const double kForceDrawScale = 2.0;

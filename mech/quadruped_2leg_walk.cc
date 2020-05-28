@@ -15,163 +15,220 @@
 #include "mech/quadruped_2leg_walk.h"
 
 #include "mech/quadruped_util.h"
+#include "mech/trajectory_line_intersect.h"
 
 namespace mjmech {
 namespace mech {
 
 namespace {
-/// Return a good target location for each leg during the swing
-/// phase.  We just aim to spend half the time reaching the idle
-/// position and half the time going past it.
-///
-/// @p stance_time_s is how long we expect the leg to be in contact
-/// with the ground.
-std::vector<std::pair<int, base::Point3D>>
-GetSwingTarget_R(const QuadrupedContext* context,
-                 double stance_time_s) {
+using QC = QuadrupedCommand;
+using Walk = QuadrupedState::Walk;
+using VLeg = Walk::VLeg;
 
-  auto* state = context->state;
+constexpr int kVlegMapping[][2] = {
+  {0, 3}, {1, 2},
+};
 
-  const auto& desired_w_LR = state->robot.desired_w_LR;
-  const auto& desired_v_mm_s_R = state->robot.desired_v_mm_s_R;
-  const double dt = 0.5 * stance_time_s;
-  const auto& v_mm_s = desired_v_mm_s_R;
+/// This object exists to hold a bunch of state variables and make it
+/// relatively easy to split up the calculation into multiple pieces.
+class WalkContext {
+ public:
+  WalkContext(QuadrupedContext* context)
+      : context_(context),
+        state_(context->state),
+        config_(context->config),
+        ws_(state_->walk),
+        wc_(config_.walk) {}
 
-  const Sophus::SE3d pose_T2_T1(
-      Sophus::SO3d(
-          Eigen::AngleAxisd(dt * desired_w_LR.z(), Eigen::Vector3d::UnitZ())
-          .toRotationMatrix()),
-      v_mm_s * dt);
+  std::vector<QC::Leg> Run(const std::vector<QC::Leg>& old_legs_R) {
+    context_->UpdateCommandedRB();
 
-  std::vector<std::pair<int, base::Point3D>> result;
+    auto legs_R = old_legs_R;
 
-  for (const auto& leg : context->legs) {
-    base::Point3D position_mm_R = pose_T2_T1 * leg.idle_R;
-    result.push_back(std::make_pair(leg.leg, position_mm_R));
+    UpdateGlobal();
+    UpdateSwingTime(legs_R);
+    MaybeLift(&legs_R);
+    PropagateLegs(&legs_R);
+    context_->UpdateLegsStanceForce(&legs_R, 0.0);
+
+    return legs_R;
   }
-  return result;
-}
+
+  void UpdateGlobal() {
+    context_->UpdateCommandedRB();
+
+    if (all_stance()) {
+      // We are allowed to accelerate when all legs are in stance.
+      context_->UpdateCommandedLR();
+      ws_.stance_elapsed_s += config_.period_s;
+    } else {
+      ws_.stance_elapsed_s = 0.0;
+    }
+  }
+
+  void UpdateSwingTime(const std::vector<QC::Leg>& legs_R) {
+    for (int vleg_idx = 0; vleg_idx < 2; vleg_idx++) {
+      const int leg1 = kVlegMapping[vleg_idx][0];
+      const int leg2 = kVlegMapping[vleg_idx][1];
+
+      Eigen::Vector3d p1_R = legs_R[leg1].position_mm;
+      Eigen::Vector3d p2_R = legs_R[leg2].position_mm;
+      // TODO: We actually need the leg positions in the L frame, not
+      // the R frame.  This will mostly matter for walking on hills and
+      // side slopes, but anytime we are tipped.  For now, we'll just
+      // use R to avoid a dependence on the IMU which needs more
+      // validation.
+      ws_.vlegs[vleg_idx].remaining_s = TrajectoryLineIntersectTime(
+          state_->robot.desired_v_mm_s_R.head<2>(),
+          state_->robot.desired_w_LR.z(),
+          p1_R.head<2>(),
+          p2_R.head<2>());
+    }
+  }
+
+  void MaybeLift(std::vector<QC::Leg>* legs_R) {
+    if (!all_stance()) {
+      return;
+    }
+
+    // Check to see if we are ready to lift.
+    double biggest_remaining_s = -std::numeric_limits<double>::infinity();
+    int biggest_vleg_idx = -1;
+    for (int vleg_idx = 0; vleg_idx < 2; vleg_idx++) {
+      const auto& vleg = ws_.vlegs[vleg_idx];
+      if (vleg.remaining_s > biggest_remaining_s) {
+        biggest_remaining_s = vleg.remaining_s;
+        biggest_vleg_idx = vleg_idx;
+      }
+    }
+    if (!((biggest_remaining_s < 0.5 * wc_.swing_time_s &&
+           ws_.stance_elapsed_s > wc_.min_stance_s) ||
+          (ws_.stance_elapsed_s > wc_.max_stance_s))) {
+      return;
+    }
+
+    // If we have changed direction since the last swing, repeat the
+    // same foot selection.
+    if (state_->robot.desired_v_mm_s_R.dot(ws_.last_swing_v_mm_s_R) < 0.0) {
+      ws_.next_step_vleg = (ws_.next_step_vleg + 1) % 2;
+    }
+
+    LiftVleg(legs_R, ws_.next_step_vleg);
+    ws_.next_step_vleg = (ws_.next_step_vleg + 1) % 2;
+  }
+
+  void LiftVleg(std::vector<QC::Leg>* legs_R, int vleg_idx) {
+    ws_.last_swing_v_mm_s_R = state_->robot.desired_v_mm_s_R;
+
+    // Yes, we are ready to begin a lift.
+    auto& vleg_to_lift = ws_.vlegs[vleg_idx];
+    vleg_to_lift.swing_elapsed_s = 0.0;
+    vleg_to_lift.mode = VLeg::Mode::kSwing;
+
+    // Pick a target and initialize our swing calculators for each
+    // leg about to lift.
+
+    PropagateLeg propagate(
+        state_->robot.desired_v_mm_s_R,
+        state_->robot.desired_w_LR,
+        // We aim for half a swing period beyond the idle point
+        // which would be sufficient if we had zero stance time.  We
+        // then add more so that in steady state we have a non-zero
+        // amount of time spent in stance (and some time to
+        // accelerate/decelerate).
+        -(0.5 + wc_.stance_swing_ratio * 1.0) * wc_.swing_time_s);
+
+    for (int leg_idx : kVlegMapping[vleg_idx]) {
+      auto& leg_R = GetLeg_R(legs_R, leg_idx);
+      leg_R.stance = 0.0;
+
+      const auto& config_leg = context_->GetLeg(leg_idx);
+
+      const auto presult_R = propagate(config_leg.idle_R);
+      ws_.legs[leg_idx].target_mm_R = presult_R.position_mm;
+
+      context_->swing_trajectory[leg_idx] = SwingTrajectory(
+          leg_R.position_mm, leg_R.velocity_mm_s,
+          ws_.legs[leg_idx].target_mm_R,
+          wc_.lift_height_mm,
+          wc_.step.lift_lower_time,
+          wc_.swing_time_s);
+    }
+  }
+
+  void PropagateLegs(std::vector<QC::Leg>* legs_R) {
+    // Update our current leg positions.
+    PropagateLeg propagator(
+        state_->robot.desired_v_mm_s_R,
+        state_->robot.desired_w_LR,
+        config_.period_s);
+    for (int vleg_idx = 0; vleg_idx < 2; vleg_idx++) {
+      auto& vleg = ws_.vlegs[vleg_idx];
+      if (vleg.mode == VLeg::kSwing) {
+        vleg.swing_elapsed_s += config_.period_s;
+      }
+      for (int leg_idx : kVlegMapping[vleg_idx]) {
+        auto& leg_R = GetLeg_R(legs_R, leg_idx);
+        switch (vleg.mode) {
+          case VLeg::Mode::kStance: {
+            const auto result_R = propagator(leg_R.position_mm);
+            leg_R.position_mm = result_R.position_mm;
+            leg_R.velocity_mm_s = result_R.velocity_mm_s;
+            break;
+          }
+          case VLeg::Mode::kSwing: {
+            const auto swing_mm_R =
+                context_->swing_trajectory[leg_idx].Advance(
+                    config_.period_s,
+                    -state_->robot.desired_v_mm_s_R -
+                    state_->robot.desired_w_LR.cross(leg_R.position_mm));
+            leg_R.position_mm = swing_mm_R.position;
+            leg_R.velocity_mm_s = swing_mm_R.velocity_s;
+
+            break;
+          }
+        }
+      }
+      if (vleg.swing_elapsed_s > wc_.swing_time_s) {
+        vleg.mode = VLeg::kStance;
+        vleg.swing_elapsed_s = 0.0;
+
+        if (state_->robot.desired_v_mm_s_R.norm() == 0.0 &&
+            state_->robot.desired_w_LR.norm() == 0.0) {
+          ws_.idle_count++;
+        } else {
+          ws_.idle_count = 0;
+        }
+
+        for (int leg_idx : kVlegMapping[vleg_idx]) {
+          auto& leg_R = GetLeg_R(legs_R, leg_idx);
+          leg_R.stance = 1.0;
+        }
+      }
+    }
+  }
+
+  bool all_stance() const {
+    return std::count_if(
+        std::begin(ws_.vlegs), std::end(ws_.vlegs),
+        [&](const auto& vleg) {
+          return vleg.mode == VLeg::Mode::kSwing;
+        }) == 0;
+  }
+
+  QuadrupedContext* const context_;
+  QuadrupedState* const state_;
+  const QuadrupedConfig& config_;
+  Walk& ws_;
+  const QuadrupedConfig::Walk& wc_;
+};
 }
 
 std::vector<QuadrupedCommand::Leg> Quadruped2LegWalk_R(
     QuadrupedContext* context,
     const std::vector<QuadrupedCommand::Leg>& old_legs_R) {
-  auto* const state = context->state;
-  const auto& config = context->config;
-
-  context->UpdateCommandedRB();
-  // We always have some legs on the ground, so can nominally always
-  // accelerate.
-  context->UpdateCommandedLR();
-
-  auto legs_R = old_legs_R;
-
-  // Update our phase.
-  auto& ws = state->walk;
-  const auto old_phase = ws.phase;
-  auto& phase = ws.phase;
-  phase = std::fmod(
-      phase + config.period_s / config.walk.cycle_time_s, 1.0);
-  if (phase < old_phase) {
-    // We have wrapped around.
-    if (state->robot.desired_v_mm_s_R.norm() == 0.0 &&
-        state->robot.desired_w_LR.norm() == 0.0) {
-      ws.idle_count++;
-    } else {
-      ws.idle_count = 0;
-    }
-  }
-
-  // Check to see if we are in a step or not.
-  const auto step_phase = [&]() -> std::optional<double> {
-    if (phase > 0.0 && phase < config.walk.step_phase) {
-        return phase / config.walk.step_phase;
-    } else if (phase > 0.5 && phase < (0.5 + config.walk.step_phase)) {
-      return (phase - 0.5) / config.walk.step_phase;
-    }
-    return {};
-  }();
-
-  const auto [ground_legs, step_legs] = [&]()
-       -> std::pair<std::vector<int>, std::vector<int>> {
-    if (!step_phase) { return {{0, 1, 2, 3}, {}}; }
-    if (phase < 0.5) { return {{0, 3}, {1, 2}};}
-    return {{1, 2}, {0, 3}};
-  }();
-
-  // All ground legs should be at the correct height and in stance.
-  for (int ground_leg : ground_legs) {
-    auto& leg_R = GetLeg_R(&legs_R, ground_leg);
-    leg_R.stance = 1.0;
-  }
-
-  // Accumulate our various control times.
-  const auto step_time_s =
-      config.walk.cycle_time_s * config.walk.step_phase;
-
-  const auto swing_targets_R = GetSwingTarget_R(
-      context,
-      (1.0 - config.walk.step_phase) * config.walk.cycle_time_s);
-
-  // Move our legs that are in step.
-  for (int step_leg_id : step_legs) {
-    auto& leg_R = GetLeg_R(&legs_R, step_leg_id);
-    auto& state_leg = ws.legs[step_leg_id];
-
-    leg_R.landing = false;
-    leg_R.kp_scale = {};
-    leg_R.kd_scale = {};
-    leg_R.stance = 0.0;
-
-    if (!state_leg.in_flight) {
-      // Configure our swing calculation.
-      state_leg.target_mm_R = [&]() {
-        for (const auto& pair : swing_targets_R) {
-          if (pair.first == step_leg_id) { return pair.second; }
-        }
-        mjlib::base::AssertNotReached();
-      }();
-
-      context->swing_trajectory[step_leg_id] = SwingTrajectory(
-          leg_R.position_mm, leg_R.velocity_mm_s,
-          state_leg.target_mm_R,
-          config.walk.lift_height_mm,
-          config.walk.step.lift_lower_time,
-          step_time_s);
-      state_leg.in_flight = true;
-    }
-
-    const auto swing = context->swing_trajectory[step_leg_id].Advance(
-        config.period_s, -state->robot.desired_v_mm_s_R -
-        state->robot.desired_w_LR.cross(state_leg.target_mm_R));
-    leg_R.position_mm = swing.position;
-    leg_R.velocity_mm_s = swing.velocity_s;
-  }
-
-  // Reset the kp_scale of anything on the ground.
-  for (int step_leg_id : ground_legs) {
-    auto& leg_R = GetLeg_R(&legs_R, step_leg_id);
-    leg_R.kp_scale = {};
-    leg_R.kd_scale = {};
-
-    auto& state_leg = ws.legs[step_leg_id];
-    state_leg.in_flight = false;
-  }
-
-  // Advance the legs which are landing or on the ground.
-  context->MoveLegsForLR(&legs_R);
-
-  // Update the other legs.
-  context->MoveLegsFixedSpeedZ(
-      ground_legs, &legs_R,
-      // we should already be basically at the right height,
-      // so this velocity isn't that meaningful.
-      config.rest.velocity_mm_s,
-      config.stand_height_mm);
-
-  context->UpdateLegsStanceForce(&legs_R, 0.0);
-
-  return legs_R;
+  WalkContext ctx(context);
+  return ctx.Run(old_legs_R);
 }
 
 }

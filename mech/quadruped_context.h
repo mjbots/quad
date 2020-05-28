@@ -20,6 +20,7 @@
 
 #include "mjlib/base/assert.h"
 
+#include "mech/propagate_leg.h"
 #include "mech/quadruped_command.h"
 #include "mech/quadruped_config.h"
 #include "mech/quadruped_state.h"
@@ -163,30 +164,21 @@ struct QuadrupedContext : boost::noncopyable {
   }
 
   void MoveLegsForLR(std::vector<QC::Leg>* legs_R) {
-    const double dt = config.period_s;
-    const auto& desired_w_LR = state->robot.desired_w_LR;
-    const auto& desired_v_mm_s_R = state->robot.desired_v_mm_s_R;
-
-    const auto& v_mm_s = desired_v_mm_s_R;
-
-    // For now, we'll just do the dumb zeroth order integration.
-
-    const Sophus::SE3d pose_T2_T1(
-        Sophus::SO3d(
-            Eigen::AngleAxisd(-dt * desired_w_LR.z(), Eigen::Vector3d::UnitZ())
-            .toRotationMatrix()),
-        -v_mm_s * dt);
+    PropagateLeg propagator(state->robot.desired_v_mm_s_R,
+                            state->robot.desired_w_LR,
+                            config.period_s);
 
     for (auto& leg_R : *legs_R) {
       if (leg_R.stance == 0.0 && !leg_R.landing) { continue; }
 
-      leg_R.position_mm = pose_T2_T1 * leg_R.position_mm;
+      const auto result = propagator(leg_R.position_mm);
+
+      leg_R.position_mm = result.position_mm;
 
       // We don't want to change the Z velocity, but do want to force
       // the X and Y, since the LR frame movement is the only thing
       // that should be happening for a leg in stance configuration.
-      leg_R.velocity_mm_s.head<2>() =
-          -v_mm_s.head<2>() - desired_w_LR.cross(leg_R.position_mm).head<2>();
+      leg_R.velocity_mm_s.head<2>() = result.velocity_mm_s.head<2>();
     }
   }
 

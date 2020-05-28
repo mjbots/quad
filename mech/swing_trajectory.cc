@@ -34,7 +34,6 @@ SwingTrajectory::SwingTrajectory(const Eigen::Vector3d& start,
       xymove_((start.head<2>() +
                0.5 * world_blend * swing_time_s * start_velocity.head<2>()),
               end.head<2>()) {
-  MJ_ASSERT(start.z() == end.z());
 }
 
 SwingTrajectory::Result SwingTrajectory::Advance(

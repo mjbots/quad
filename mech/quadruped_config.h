@@ -125,8 +125,8 @@ struct QuadrupedConfig {
   double idle_y_mm = 140.0;
 
   double rb_filter_constant_Hz = 2.0;
-  double lr_acceleration_mm_s2 = 1000.0;
-  double lr_alpha_rad_s2 = 0.5;
+  double lr_acceleration_mm_s2 = 2000.0;
+  double lr_alpha_rad_s2 = 1.0;
 
   struct Jump {
     double lower_velocity_mm_s = 100.0;
@@ -160,33 +160,30 @@ struct QuadrupedConfig {
   Jump jump;
 
   struct Walk {
-    // The length of a single cycle.
-    double cycle_time_s = 0.75;
+    // The length of a single leg swing.
+    double swing_time_s = 0.25;
 
     double lift_height_mm = 25.0;
 
-    // The length of time allocated for a leg to step forward,
-    // measured in fraction of a phase.
-    double step_phase = 0.30;
+    // The minimum amount of time to spend in stance.
+    double min_stance_s = 0.15;
 
-    // Use a different kp gain when lowering, to hopefully cushion our
-    // landing.
-    double lower_kp = 0.05;
-    double lower_kd = 0.4;
+    // The maximum amount of time to spend in stance.
+    double max_stance_s = 0.40;
+
+    // Ratio of time spent in stance vs swing.  Bigger numbers mean
+    // more time spent in stance.
+    double stance_swing_ratio = 0.75;
+
 
     // The elements of this structure are all measured in fraction of
     // a step.
     struct Step {
-      // The length of time spent taking weight off the leg before
-      // lifting it.
-      double release_time = 0.05;
-
       // The length of time spent lifting the leg to the step height.
       double lift_lower_time = 0.15;
 
       template <typename Archive>
       void Serialize(Archive* a) {
-        a->Visit(MJ_NVP(release_time));
         a->Visit(MJ_NVP(lift_lower_time));
       }
     };
@@ -195,11 +192,11 @@ struct QuadrupedConfig {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(cycle_time_s));
+      a->Visit(MJ_NVP(swing_time_s));
       a->Visit(MJ_NVP(lift_height_mm));
-      a->Visit(MJ_NVP(step_phase));
-      a->Visit(MJ_NVP(lower_kp));
-      a->Visit(MJ_NVP(lower_kd));
+      a->Visit(MJ_NVP(min_stance_s));
+      a->Visit(MJ_NVP(max_stance_s));
+      a->Visit(MJ_NVP(stance_swing_ratio));
       a->Visit(MJ_NVP(step));
     }
   };
