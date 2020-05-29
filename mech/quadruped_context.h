@@ -133,34 +133,14 @@ struct QuadrupedContext : boost::noncopyable {
   }
 
   void UpdateCommandedLR() {
-    const base::Point3D input_delta_mm_s = (
-        command->v_mm_s_R - state->robot.desired_v_mm_s_R);
-    const double input_delta_norm_mm_s = input_delta_mm_s.norm();
-    const double max_delta_mm_s =
-        config.lr_acceleration_mm_s2 * config.period_s;
-    const base::Point3D delta_mm_s =
-        (input_delta_norm_mm_s < max_delta_mm_s) ?
-        input_delta_mm_s :
-        input_delta_mm_s.normalized() * max_delta_mm_s;
-
-    state->robot.desired_v_mm_s_R += delta_mm_s;
-    // We require this.
-    state->robot.desired_v_mm_s_R.z() = 0;
-
-    const base::Point3D input_delta_rad_s = (
-        command->w_LR - state->robot.desired_w_LR);
-    const double input_delta_norm_rad_s = input_delta_rad_s.norm();
-    const double max_delta_rad_s =
-        config.lr_alpha_rad_s2 * config.period_s;
-    const base::Point3D delta_rad_s =
-        (input_delta_norm_rad_s < max_delta_rad_s) ?
-        input_delta_rad_s :
-        input_delta_rad_s.normalized() * max_delta_rad_s;
-
-    state->robot.desired_w_LR += delta_rad_s;
-    // We only allow a z value.
-    state->robot.desired_w_LR.x() =
-        state->robot.desired_w_LR.y() = 0.0;
+    const auto result_R = FilterCommand(
+        {state->robot.desired_v_mm_s_R, state->robot.desired_w_LR},
+        {command->v_mm_s_R, command->w_LR},
+        config.lr_acceleration_mm_s2,
+        config.lr_alpha_rad_s2,
+        config.period_s);
+    state->robot.desired_v_mm_s_R = result_R.v_mm_s;
+    state->robot.desired_w_LR = result_R.w;
   }
 
   void MoveLegsForLR(std::vector<QC::Leg>* legs_R) {

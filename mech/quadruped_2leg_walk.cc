@@ -128,9 +128,20 @@ class WalkContext {
     // Pick a target and initialize our swing calculators for each
     // leg about to lift.
 
+    // We use our "expected next" velocity as the swing target to aim
+    // for.  This assumes constant acceleration, and that the stance
+    // to swing ratio works out accurately, but then gives a better
+    // chance of being ready for the next cycle.
+    const auto predicted_state_R = FilterCommand(
+        {state_->robot.desired_v_mm_s_R, state_->robot.desired_v_mm_s_R},
+        {context_->command->v_mm_s_R, context_->command->w_LR},
+        config_.lr_acceleration_mm_s2,
+        config_.lr_alpha_rad_s2,
+        wc_.swing_time_s * wc_.stance_swing_ratio);
+
     PropagateLeg propagate(
-        state_->robot.desired_v_mm_s_R,
-        state_->robot.desired_w_LR,
+        predicted_state_R.v_mm_s,
+        predicted_state_R.w,
         // We aim for half a swing period beyond the idle point
         // which would be sufficient if we had zero stance time.  We
         // then add more so that in steady state we have a non-zero
