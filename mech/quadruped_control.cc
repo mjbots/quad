@@ -388,7 +388,7 @@ class QuadrupedControl::Impl {
             break;
           }
           case moteus::kVelocity: {
-            out_joint.velocity_dps = sign * moteus::ReadPosition(value);
+            out_joint.velocity_dps = sign * moteus::ReadVelocity(value);
             out_link.velocity_dps = out_joint.velocity_dps;
             break;
           }

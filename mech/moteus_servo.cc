@@ -78,11 +78,11 @@ Value ScaleMapping(double value,
 }
 
 Value write_position(double value, RegisterTypes reg) {
-  return ScaleMapping(value / 360.0, 0.01, 0.001, 0.00001, reg);
+  return ScaleMapping(value / 360.0, 0.01, 0.0001, 0.00001, reg);
 }
 
 Value write_velocity(double value, RegisterTypes reg) {
-  return ScaleMapping(value / 360.0, 0.1, 0.001, 0.00001, reg);
+  return ScaleMapping(value / 360.0, 0.1, 0.00025, 0.00001, reg);
 }
 
 Value write_torque(double value, RegisterTypes reg) {
@@ -135,7 +135,11 @@ double ReadScale(Value value,
 }
 
 double read_position(Value value) {
-  return ReadScale(value, 0.01, 0.001, 0.00001) * 360.0;
+  return ReadScale(value, 0.01, 0.0001, 0.00001) * 360.0;
+}
+
+double read_velocity(Value value) {
+  return ReadScale(value, 0.1, 0.000025, 0.00001) * 360.0;
 }
 
 double read_torque(Value value) {
@@ -417,7 +421,7 @@ class MoteusServo::Impl {
           break;
         }
         case moteus::kVelocity: {
-          joint->velocity_dps = read_position(value);
+          joint->velocity_dps = read_velocity(value);
           break;
         }
         case moteus::kTorque: {

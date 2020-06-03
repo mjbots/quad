@@ -20,7 +20,7 @@ namespace mech {
 namespace moteus {
 
 enum {
-  kCurrentRegisterMapVersion = 3,
+  kCurrentRegisterMapVersion = 4,
 };
 
 enum Ids : uint8_t {
@@ -133,11 +133,11 @@ inline Value WriteInt(int value, RegisterTypes type) {
 }
 
 inline Value WritePosition(double value, RegisterTypes reg) {
-  return ScaleMapping(value / 360.0, 0.01, 0.001, 0.00001, reg);
+  return ScaleMapping(value / 360.0, 0.01, 0.0001, 0.00001, reg);
 }
 
 inline Value WriteVelocity(double value, RegisterTypes reg) {
-  return ScaleMapping(value / 360.0, 0.1, 0.001, 0.00001, reg);
+  return ScaleMapping(value / 360.0, 0.1, 0.00025, 0.00001, reg);
 }
 
 inline Value WriteTorque(double value, RegisterTypes reg) {
@@ -198,11 +198,11 @@ inline double ReadScale(Value value,
 }
 
 inline double ReadPosition(Value value) {
-  return ReadScale(value, 0.01, 0.001, 0.00001) * 360.0;
+  return ReadScale(value, 0.01, 0.0001, 0.00001) * 360.0;
 }
 
 inline double ReadVelocity(Value value) {
-  return ReadScale(value, 0.01, 0.001, 0.00001) * 360.0;
+  return ReadScale(value, 0.01, 0.00025, 0.00001) * 360.0;
 }
 
 inline double ReadTorque(Value value) {
