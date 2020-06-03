@@ -51,6 +51,12 @@ class WalkContext {
     PropagateLegs(&legs_R);
     context_->UpdateLegsStanceForce(&legs_R, 0.0);
 
+    // For now, set all legs pd gains to the default.
+    for (auto& leg_R : legs_R) {
+      leg_R.kp_N_mm = config_.default_kp_N_mm;
+      leg_R.kd_N_mm_s = config_.default_kd_N_mm_s;
+    }
+
     return legs_R;
   }
 

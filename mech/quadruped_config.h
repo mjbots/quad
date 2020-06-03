@@ -124,6 +124,9 @@ struct QuadrupedConfig {
   double idle_x_mm = 190.0;
   double idle_y_mm = 140.0;
 
+  base::Point3D default_kp_N_mm = {1.0, 1.0, 0.2};
+  base::Point3D default_kd_N_mm_s = {0.02, 0.02, 0.02};
+
   double rb_filter_constant_Hz = 2.0;
   double lr_acceleration_mm_s2 = 2000.0;
   double lr_alpha_rad_s2 = 1.0;
@@ -265,6 +268,8 @@ struct QuadrupedConfig {
     a->Visit(MJ_NVP(stand_height_mm));
     a->Visit(MJ_NVP(idle_x_mm));
     a->Visit(MJ_NVP(idle_y_mm));
+    a->Visit(MJ_NVP(default_kp_N_mm));
+    a->Visit(MJ_NVP(default_kd_N_mm_s));
     a->Visit(MJ_NVP(rb_filter_constant_Hz));
     a->Visit(MJ_NVP(lr_acceleration_mm_s2));
     a->Visit(MJ_NVP(lr_alpha_rad_s2));

@@ -121,8 +121,18 @@ struct QuadrupedCommand {
     base::Point3D position_mm;
     base::Point3D velocity_mm_s;
     base::Point3D force_N;
+
+    // Cartesian controller performed at the application update rate.
+    base::Point3D kp_N_mm;
+    base::Point3D kd_N_mm_s;
+
+    // Change the gains in the individual servos.
+    //  x = shoulder
+    //  y = upper leg
+    //  z = knee
     std::optional<base::Point3D> kp_scale;
     std::optional<base::Point3D> kd_scale;
+
     bool B_frame = false;
 
     template <typename Archive>
@@ -135,6 +145,8 @@ struct QuadrupedCommand {
       a->Visit(MJ_NVP(position_mm));
       a->Visit(MJ_NVP(velocity_mm_s));
       a->Visit(MJ_NVP(force_N));
+      a->Visit(MJ_NVP(kp_N_mm));
+      a->Visit(MJ_NVP(kd_N_mm_s));
       a->Visit(MJ_NVP(kp_scale));
       a->Visit(MJ_NVP(kd_scale));
       a->Visit(MJ_NVP(B_frame));
@@ -211,10 +223,10 @@ inline QuadrupedCommand::Leg operator*(const Sophus::SE3d& pose_mm_AB,
   result_A.position_mm = pose_mm_AB * leg_B.position_mm;
   result_A.velocity_mm_s = pose_mm_AB.so3() * leg_B.velocity_mm_s;
   result_A.force_N = pose_mm_AB.so3() * leg_B.force_N;
-  result_A.kp_scale = leg_B.kp_scale ? (pose_mm_AB.so3() * *leg_B.kp_scale) :
-      std::optional<base::Point3D>();
-  result_A.kd_scale = leg_B.kd_scale ? (pose_mm_AB.so3() * *leg_B.kd_scale) :
-      std::optional<base::Point3D>();
+  result_A.kp_N_mm = pose_mm_AB.so3() * leg_B.kp_N_mm;
+  result_A.kd_N_mm_s = pose_mm_AB.so3() * leg_B.kd_N_mm_s;
+  result_A.kp_scale = leg_B.kp_scale;
+  result_A.kd_scale = leg_B.kd_scale;
 
   return result_A;
 }

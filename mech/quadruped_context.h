@@ -117,6 +117,13 @@ struct QuadrupedContext : boost::noncopyable {
     mjlib::base::AssertNotReached();
   }
 
+  const QuadrupedState::Leg& GetLegState_B(int id) const {
+    for (const auto& leg_B : state->legs_B) {
+      if (leg_B.leg == id) { return leg_B; }
+    }
+    mjlib::base::AssertNotReached();
+  }
+
   void UpdateCommandedRB() {
     Sophus::SE3d command_mm_RB =
         command->pose_mm_RB * config.command_offset_mm_RB;

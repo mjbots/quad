@@ -1030,6 +1030,8 @@ class QuadrupedControl::Impl {
       // Ensure all gains are back to their default and that
       // everything is marked as in stance.
       for (auto& leg_R : legs_R) {
+        leg_R.kp_N_mm = config_.default_kp_N_mm;
+        leg_R.kd_N_mm_s = config_.default_kd_N_mm_s;
         leg_R.kp_scale = {};
         leg_R.kd_scale = {};
         leg_R.stance = 1.0;
@@ -1045,6 +1047,9 @@ class QuadrupedControl::Impl {
         QC::Leg leg_R;
         leg_R.leg_id = leg.leg;
         leg_R.power = true;
+        leg_R.kp_N_mm = config_.default_kp_N_mm;
+        leg_R.kd_N_mm_s = config_.default_kd_N_mm_s;
+
         // TODO: This is unlikely to be a good idea.
         leg_R.position_mm = leg.idle_R;
         legs_R.push_back(leg_R);
@@ -1144,17 +1149,11 @@ class QuadrupedControl::Impl {
             js.velocity_mm_s = 0.0;
             js.acceleration_mm_s2 = 0.0;
 
-            auto get_leg_B = [&](int id) -> const QuadrupedState::Leg& {
-              for (auto& leg_B : status_.state.legs_B) {
-                if (leg_B.leg == id) { return leg_B; }
-              }
-              mjlib::base::AssertNotReached();
-            };
             for (auto& leg_R : legs_R) {
               leg_R.stance = 0.0;
               // Latch the current measured position so our retract
               // maneuver is well formed.
-              const auto& cur_leg_B = get_leg_B(leg_R.leg_id);
+              const auto& cur_leg_B = GetLegState_B(leg_R.leg_id);
               leg_R.position_mm =
                   status_.state.robot.pose_mm_RB * cur_leg_B.position_mm;
               leg_R.velocity_mm_s =
@@ -1764,8 +1763,14 @@ class QuadrupedControl::Impl {
       return result;
     }();
 
+    if (control_log_->leg_pds.size() < control_log_->legs_B.size()) {
+      control_log_->leg_pds.resize(control_log_->legs_B.size());
+    }
+
     for (const auto& leg_B : control_log_->legs_B) {
       const auto& qleg = GetLeg(leg_B.leg_id);
+      const auto& leg_state_B = GetLegState_B(leg_B.leg_id);
+      auto& leg_pd = control_log_->leg_pds[leg_B.leg_id];
 
       auto add_joints = [&](auto base) {
         base.id = qleg.config.ik.shoulder.id;
@@ -1791,7 +1796,18 @@ class QuadrupedControl::Impl {
 
         effector_B.pose_mm = leg_B.position_mm;
         effector_B.velocity_mm_s = leg_B.velocity_mm_s;
-        effector_B.force_N = leg_B.force_N;
+
+        // Do the cartesian PD control.
+        leg_pd.in_N = leg_B.force_N;
+        leg_pd.err_mm = leg_state_B.position_mm - leg_B.position_mm;
+        leg_pd.p_N = -1 * (leg_pd.err_mm.array() *
+                           leg_B.kp_N_mm.array()).matrix();
+        leg_pd.err_mm_s = leg_state_B.velocity_mm_s - leg_B.velocity_mm_s;
+        leg_pd.d_N = -1 * (leg_pd.err_mm_s.array() *
+                           leg_B.kd_N_mm_s.array()).matrix();
+        leg_pd.total_N = leg_pd.in_N + leg_pd.p_N + leg_pd.d_N;
+
+        effector_B.force_N = leg_pd.total_N;
 
         const auto effector_G = pose_mm_GB * effector_B;
 
@@ -1814,10 +1830,23 @@ class QuadrupedControl::Impl {
             out_joint.torque_Nm = joint_angle.torque_Nm;
             out_joint.velocity_dps = joint_angle.velocity_dps;
 
-            // TODO: Propagate kp and kd from 3D into joints.
-            out_joint.kp_scale = leg_B.kp_scale ? leg_B.kp_scale->x() :
+            auto get_pd_scale = [&](const auto& value) {
+              if (joint_angle.id == qleg.config.ik.shoulder.id) {
+                return value.x();
+              }
+              if (joint_angle.id == qleg.config.ik.femur.id) {
+                return value.y();
+              }
+              if (joint_angle.id == qleg.config.ik.tibia.id) {
+                return value.z();
+              }
+              return value.x();
+            };
+            out_joint.kp_scale =
+                leg_B.kp_scale ? get_pd_scale(*leg_B.kp_scale) :
                 std::optional<double>();
-            out_joint.kd_scale = leg_B.kd_scale ? leg_B.kd_scale->x() :
+            out_joint.kd_scale =
+                leg_B.kd_scale ? get_pd_scale(*leg_B.kd_scale) :
                 std::optional<double>();
             out_joints.push_back(out_joint);
           }
@@ -1946,6 +1975,10 @@ class QuadrupedControl::Impl {
 
   const QuadrupedContext::Leg& GetLeg(int id) const {
     return context_->GetLeg(id);
+  }
+
+  const QuadrupedState::Leg& GetLegState_B(int id) const {
+    return context_->GetLegState_B(id);
   }
 
   bool all_legs_stance() const {
