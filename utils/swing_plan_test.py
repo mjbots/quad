@@ -15,15 +15,18 @@
 # limitations under the License.
 
 import enum
+import matplotlib
+import matplotlib.animation
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import numpy as np
+import sys
 
 
 SWING_PERIOD_S = 0.5
 STANCE_PERIOD_S = 1.0
-MAX_ACCELERATION = 0.5
-MIN_STANCE_TIME_S = 0.2
+MAX_ACCELERATION = 1.0
+MIN_STANCE_TIME_S = 0.1
 
 
 class LiftState(enum.Enum):
@@ -39,6 +42,9 @@ class Leg:
     swing_time_elapsed = None
     swing_target = None
 
+    def __init__(self, pos):
+        self.pos = pos
+
 
     def __repr__(self):
         result = f"{self.state} pos={self.pos:6.3f}"
@@ -49,7 +55,7 @@ class Leg:
 
 class Robot:
     def __init__(self):
-        self.legs = [Leg(), Leg()]
+        self.legs = [Leg(-.1), Leg(.1)]
         self.velocity = 0.0
         self.velocity_command = 0.0
         self.next_step_leg_id = 0
@@ -60,6 +66,8 @@ class Robot:
         self.time = 0.0
         self.first_half_time = 0.0
         self.second_half_time = 0.0
+        self.left_time = 0.0
+        self.right_time = 0.0
 
     def __repr__(self):
         return f"v={self.velocity:.2f} l={self.legs}  h={self.first_half_time:.3f}/{self.second_half_time:.3f}"
@@ -83,6 +91,11 @@ class Robot:
                     self.next_step_leg_id = (self.next_step_leg_id + 1) % 2
         else:
             self.start_stance_s = None
+            stance_leg = [x for x in self.legs if x.state == LiftState.STANCE][0]
+            if stance_leg.pos > 0.0:
+                self.left_time += dt_s
+            else:
+                self.right_time += dt_s
 
         # First, move all the legs according to their current state.
         for leg in self.legs:
@@ -118,6 +131,10 @@ class Robot:
 
             if (self.first_half_time < self.second_half_time and
                 stance_time > MIN_STANCE_TIME_S):
+
+                self.left_time = 0.0
+                self.right_time = 0.0
+
                 # Yes, we are ready to begin a lift.
                 next_step_leg.swing_start = next_step_leg.pos
                 next_step_leg.swing_time_elapsed = 0
@@ -137,19 +154,23 @@ class Robot:
 
 def main():
     robot = Robot()
-    robot.velocity_command = 1.0
+    robot.velocity_command = 0.5
+    robot.velocity = 0.0
     time = 0
 
     fig, ax = plt.subplots()
-    ax.set_ylim(-.5, 0.8)
+    ax.set_ylim(-.5, 2.5)
     ax.set_xlim(-1, 1)
-    leg1, = plt.plot([], [], 'ro')
-    leg2, = plt.plot([], [], 'go')
+    com, = plt.plot([0],[2.0], 'bo', label="CoM")
+    leg1, = plt.plot([], [], 'ro', label="foot1")
+    leg2, = plt.plot([], [], 'go', label="foot2")
+    text = plt.text(-0.9, 1.0, '')
+    plt.legend()
 
     def update(frame):
-        if robot.time > 8.0:
+        if robot.time > 1.0:
             robot.velocity_command = -1.0
-        robot.advance(0.01)
+        robot.advance(0.02)
 
         def height(leg):
             if leg.state == LiftState.STANCE:
@@ -158,13 +179,26 @@ def main():
         leg1.set_data([robot.legs[0].pos], [height(robot.legs[0])])
         leg2.set_data([robot.legs[1].pos], [height(robot.legs[1])])
 
+        text.set_text(
+            ("velocity={:.2f}\nswing_time:{:.2f}\n" +
+             "left time:{:.2f}\nright time:{:.2f}").format(
+                 robot.velocity,
+                 SWING_PERIOD_S,
+                 robot.left_time,
+                 robot.right_time,
+                ))
+
         print(f"{robot.time:6.3f} {robot}")
 
-        return [leg1, leg2]
+        return [com, leg1, leg2, text]
 
-    animation = FuncAnimation(fig, update, blit=True, interval=20)
-
-    plt.show()
+    animation = FuncAnimation(fig, update, blit=True, interval=30,
+                              frames=np.arange(0, 160))
+    if len(sys.argv) > 1:
+        animation.save(sys.argv[1],
+                       writer=matplotlib.animation.ImageMagickWriter(fps=20))
+    else:
+        plt.show()
 
 
 if __name__ == '__main__':
