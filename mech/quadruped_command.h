@@ -120,6 +120,7 @@ struct QuadrupedCommand {
     double stance = 1.0;
     base::Point3D position_mm;
     base::Point3D velocity_mm_s;
+    base::Point3D acceleration_mm_s2;
     base::Point3D force_N;
 
     // Cartesian controller performed at the application update rate.
@@ -144,6 +145,7 @@ struct QuadrupedCommand {
       a->Visit(MJ_NVP(stance));
       a->Visit(MJ_NVP(position_mm));
       a->Visit(MJ_NVP(velocity_mm_s));
+      a->Visit(MJ_NVP(acceleration_mm_s2));
       a->Visit(MJ_NVP(force_N));
       a->Visit(MJ_NVP(kp_N_mm));
       a->Visit(MJ_NVP(kd_N_mm_s));
@@ -222,6 +224,7 @@ inline QuadrupedCommand::Leg operator*(const Sophus::SE3d& pose_mm_AB,
 
   result_A.position_mm = pose_mm_AB * leg_B.position_mm;
   result_A.velocity_mm_s = pose_mm_AB.so3() * leg_B.velocity_mm_s;
+  result_A.acceleration_mm_s2 = pose_mm_AB.so3() * leg_B.acceleration_mm_s2;
   result_A.force_N = pose_mm_AB.so3() * leg_B.force_N;
   result_A.kp_N_mm = pose_mm_AB.so3() * leg_B.kp_N_mm;
   result_A.kd_N_mm_s = pose_mm_AB.so3() * leg_B.kd_N_mm_s;

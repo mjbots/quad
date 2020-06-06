@@ -49,7 +49,6 @@ class WalkContext {
     UpdateSwingTime(legs_R);
     MaybeLift(&legs_R);
     PropagateLegs(&legs_R);
-    context_->UpdateLegsStanceForce(&legs_R, 0.0);
 
     // For now, set all legs pd gains to the default.
     for (auto& leg_R : legs_R) {
@@ -191,6 +190,9 @@ class WalkContext {
             const auto result_R = propagator(leg_R.position_mm);
             leg_R.position_mm = result_R.position_mm;
             leg_R.velocity_mm_s = result_R.velocity_mm_s;
+            // TODO: We should keep track of our current desired body
+            // acceleration and feed it in here.
+            leg_R.acceleration_mm_s2 = base::Point3D();
             break;
           }
           case VLeg::Mode::kSwing: {
@@ -201,6 +203,7 @@ class WalkContext {
                     state_->robot.desired_w_LR.cross(leg_R.position_mm));
             leg_R.position_mm = swing_mm_R.position;
             leg_R.velocity_mm_s = swing_mm_R.velocity_s;
+            leg_R.acceleration_mm_s2 = swing_mm_R.acceleration_s2;
 
             break;
           }

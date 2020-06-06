@@ -78,6 +78,7 @@ struct QuadrupedConfig {
   Bounds bounds;
 
   double mass_kg = 10.0;
+  double leg_mass_kg = 0.5;
   Sophus::SE3d command_offset_mm_RB;
 
   struct StandUp {
@@ -91,7 +92,7 @@ struct QuadrupedConfig {
     double timeout_s = 10.0;
     double tolerance_deg = 1.0;
     double tolerance_mm = 1;
-    double force_scale_window_mm = 100;
+    double acceleration_mm_s2 = 2000;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -102,7 +103,7 @@ struct QuadrupedConfig {
       a->Visit(MJ_NVP(timeout_s));
       a->Visit(MJ_NVP(tolerance_deg));
       a->Visit(MJ_NVP(tolerance_mm));
-      a->Visit(MJ_NVP(force_scale_window_mm));
+      a->Visit(MJ_NVP(acceleration_mm_s2));
     }
   };
 
@@ -262,6 +263,7 @@ struct QuadrupedConfig {
     a->Visit(MJ_NVP(legs));
     a->Visit(MJ_NVP(bounds));
     a->Visit(MJ_NVP(mass_kg));
+    a->Visit(MJ_NVP(leg_mass_kg));
     a->Visit(MJ_NVP(command_offset_mm_RB));
     a->Visit(MJ_NVP(stand_up));
     a->Visit(MJ_NVP(rest));

@@ -23,9 +23,9 @@ TrajectoryState CalculateAccelerationLimitedTrajectory(
     double target_velocity_l_s,
     double max_acceleration_l_s2,
     double delta_s) {
-  // This merely is a rough approximatin of a controller.  There exist
-  // closed form solutions which are optimal, such as described in:
-  // http://arl.cs.utah.edu/pubs/ICRA2013-1.pdf "Kinodynamic RRT*:
+  // This merely is a rough approximation of a controller.  There
+  // exist closed form solutions which are optimal, such as described
+  // in: http://arl.cs.utah.edu/pubs/ICRA2013-1.pdf "Kinodynamic RRT*:
   // Asymptotically Optimal Motion Planning for Robots with Linear
   // Dynamics", I'm just not going to bother with it for now.
 
@@ -77,6 +77,9 @@ TrajectoryState CalculateAccelerationLimitedTrajectory(
   }();
   result.pose_l = pose_l;
   result.velocity_l_s = velocity_l_s;
+  result.acceleration_l_s2 =
+      (accel_limited_velocity_l_s - start.velocity_l_s) /
+      std::max(0.001, delta_s);
 
   return result;
 }

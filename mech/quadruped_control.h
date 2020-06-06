@@ -94,7 +94,9 @@ class QuadrupedControl : boost::noncopyable {
     std::vector<QC::Joint> joints;
 
     struct LegPD {
-      base::Point3D in_N;
+      base::Point3D cmd_N;
+      base::Point3D gravity_N;
+      base::Point3D accel_N;
       base::Point3D err_mm;
       base::Point3D err_mm_s;
       base::Point3D p_N;
@@ -103,7 +105,9 @@ class QuadrupedControl : boost::noncopyable {
 
       template <typename Archive>
       void Serialize(Archive* a) {
-        a->Visit(MJ_NVP(in_N));
+        a->Visit(MJ_NVP(cmd_N));
+        a->Visit(MJ_NVP(gravity_N));
+        a->Visit(MJ_NVP(accel_N));
         a->Visit(MJ_NVP(err_mm));
         a->Visit(MJ_NVP(err_mm_s));
         a->Visit(MJ_NVP(p_N));

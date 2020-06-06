@@ -169,11 +169,16 @@ struct QuadrupedContext : boost::noncopyable {
     }
   }
 
+  struct MoveOptions {
+    std::optional<double> override_acceleration_mm_s2;
+  };
+
   bool MoveLegsFixedSpeedZ(
       const std::vector<int>& leg_ids,
       std::vector<QC::Leg>* legs_R,
       double desired_velocity_mm_s,
-      double desired_height_mm) const {
+      double desired_height_mm,
+      const MoveOptions& move_options = MoveOptions()) const {
     std::vector<std::pair<int, base::Point3D>> desired_poses_mm_R;
 
     for (int id : leg_ids) {
@@ -187,6 +192,7 @@ struct QuadrupedContext : boost::noncopyable {
         legs_R,
         desired_velocity_mm_s,
         desired_poses_mm_R,
+        move_options,
         base::Point3D(0, 0, 1),
         base::Point3D(1, 1, 0));
   }
@@ -195,10 +201,15 @@ struct QuadrupedContext : boost::noncopyable {
       std::vector<QC::Leg>* legs_R,
       double desired_velocity_mm_s,
       const std::vector<std::pair<int, base::Point3D>>& command_pose_mm_R,
+      const MoveOptions& move_options = MoveOptions(),
       base::Point3D velocity_mask = base::Point3D(1., 1., 1),
       base::Point3D velocity_inverse_mask = base::Point3D(0., 0., 0.)) const {
 
     bool done = true;
+
+    const double acceleration_mm_s2 =
+        move_options.override_acceleration_mm_s2.value_or(
+            config.bounds.max_acceleration_mm_s2);
 
     // We do each leg independently.
     for (const auto& pair : command_pose_mm_R) {
@@ -207,10 +218,13 @@ struct QuadrupedContext : boost::noncopyable {
       TrajectoryState initial{leg_R.position_mm, leg_R.velocity_mm_s};
       const auto result = CalculateAccelerationLimitedTrajectory(
           initial, pair.second, desired_velocity_mm_s,
-          config.bounds.max_acceleration_mm_s2,
+          acceleration_mm_s2,
           config.period_s);
 
       leg_R.position_mm = result.pose_l;
+      leg_R.acceleration_mm_s2 =
+          velocity_inverse_mask.asDiagonal() * leg_R.acceleration_mm_s2 +
+          velocity_mask.asDiagonal() * result.acceleration_l_s2;
       leg_R.velocity_mm_s =
           velocity_inverse_mask.asDiagonal() * leg_R.velocity_mm_s  +
           velocity_mask.asDiagonal() * result.velocity_l_s;
@@ -250,30 +264,6 @@ struct QuadrupedContext : boost::noncopyable {
           error_mm.normalized() * velocity_mm_s;
       // Since we are not in stance.
       leg_R.force_N = base::Point3D(0, 0, 0);
-    }
-  }
-
-  void UpdateLegsStanceForce(
-      std::vector<QC::Leg>* legs_R,
-      double extra_z_N) const {
-    const double stance_legs = [&]() {
-      double result = 0.0;
-      for (const auto& leg_R : *legs_R) {
-        result += leg_R.stance;
-      }
-      return result;
-    }();
-
-    for (auto& leg_R : *legs_R) {
-      const double gravity_N =
-          leg_R.stance ?
-          config.mass_kg * base::kGravity :
-          0.0;
-      const double force_z_N =
-          stance_legs == 0.0 ?
-          0.0 :
-          leg_R.stance * gravity_N / stance_legs + extra_z_N;
-      leg_R.force_N = base::Point3D(0, 0, force_z_N);
     }
   }
 

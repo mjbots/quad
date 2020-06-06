@@ -22,6 +22,7 @@ namespace mech {
 struct TrajectoryState {
   base::Point3D pose_l;
   base::Point3D velocity_l_s;
+  base::Point3D acceleration_l_s2;
 };
 
 TrajectoryState CalculateAccelerationLimitedTrajectory(

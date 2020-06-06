@@ -144,25 +144,9 @@ struct QuadrupedState {
 
     Mode mode = kPrepositioning;
 
-    struct Leg {
-      int leg = 0;
-      base::Point3D pose_mm_R;
-      base::Point3D target_mm_R;
-
-      template <typename Archive>
-      void Serialize(Archive* a) {
-        a->Visit(MJ_NVP(leg));
-        a->Visit(MJ_NVP(pose_mm_R));
-        a->Visit(MJ_NVP(target_mm_R));
-      }
-    };
-
-    std::vector<Leg> legs;
-
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(mode));
-      a->Visit(MJ_NVP(legs));
     }
   };
 
