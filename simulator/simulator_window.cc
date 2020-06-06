@@ -379,7 +379,7 @@ class Servo : public mjlib::multiplex::MicroServer::Server,
 
   mjlib::base::PID::Config pid_position_config_ = []() {
       mjlib::base::PID::Config config;
-      config.kp = 450.0;
+      config.kp = 50.0;
       config.ki = 100.0;
       config.ilimit = 0.0;
       config.kd = 9.0f;
