@@ -136,7 +136,7 @@ struct QuadrupedConfig {
     double retract_velocity_mm_s = 1000.0;
     double land_threshold_mm = 15.0;
     double land_kp = 0.1;
-    double land_kd = 0.1;
+    double land_kd = 0.0;
     double lower_height_mm = 100.0;
     double upper_height_mm = 220.0;
     double retract_height_mm = 190.0;

@@ -999,6 +999,8 @@ class QuadrupedControl::Impl {
       }
 
       QC::Leg leg_cmd_R;
+      leg_cmd_R.kp_N_mm = config_.default_kp_N_mm;
+      leg_cmd_R.kd_N_mm_s = config_.default_kd_N_mm_s;
       leg_cmd_R.leg_id = leg.leg;
       leg_cmd_R.power = true;
       leg_cmd_R.position_mm = leg.pose_mm_R;
@@ -1112,6 +1114,12 @@ class QuadrupedControl::Impl {
       }
       previous_jump_mode = status_.state.jump.mode;
 
+      // Default all our legs to the standard cartesian kp.
+      for (auto& leg_R : legs_R) {
+        leg_R.kp_N_mm = config_.default_kp_N_mm;
+        leg_R.kd_N_mm_s = config_.default_kd_N_mm_s;
+      }
+
       switch (status_.state.jump.mode) {
         case JM::kLowering: {
           // Move legs to take into account LR rates.
@@ -1125,7 +1133,8 @@ class QuadrupedControl::Impl {
               config_.jump.lower_height_mm);
           if (done) {
             status_.state.jump.mode = JM::kPushing;
-            status_.state.jump.velocity_mm_s = 0.0;
+            status_.state.jump.velocity_mm_s =
+                -config_.jump.lower_velocity_mm_s;
             status_.state.jump.acceleration_mm_s2 =
                 js.command.acceleration_mm_s2;
             // Loop around and do the pushing behavior.
@@ -1138,12 +1147,14 @@ class QuadrupedControl::Impl {
 
           status_.state.jump.velocity_mm_s +=
               js.command.acceleration_mm_s2 * period_s_;
-          const bool done = context_->MoveLegsFixedSpeedZ(
+          context_->MoveLegsFixedSpeedZ(
               all_leg_ids_,
               &legs_R,
               js.velocity_mm_s,
-              config_.jump.upper_height_mm);
+              config_.jump.upper_height_mm + 1000.0);
           extra_z_N = config_.mass_kg * js.acceleration_mm_s2 * 0.001;
+          const bool done =
+              legs_R[0].position_mm.z() >= config_.jump.upper_height_mm;
           if (done) {
             js.mode = JM::kRetracting;
             js.velocity_mm_s = 0.0;
@@ -1176,6 +1187,11 @@ class QuadrupedControl::Impl {
               config_.jump.retract_velocity_mm_s,
               MakeIdleLegs());
 
+          for (auto& leg_R : legs_R) {
+            leg_R.kp_N_mm = config_.default_kp_N_mm;
+            leg_R.kd_N_mm_s = config_.default_kd_N_mm_s;
+          }
+
           if (done) {
             js.mode = JM::kFalling;
             for (auto& leg_R : legs_R) {
@@ -1198,9 +1214,9 @@ class QuadrupedControl::Impl {
           // Set our gains to be much lower while falling.
           for (auto& leg_R : legs_R) {
             const auto kp = config_.jump.land_kp;
-            leg_R.kp_scale = base::Point3D(kp, kp, kp);
+            leg_R.kp_N_mm = kp * config_.default_kp_N_mm;
             const auto kd = config_.jump.land_kd;
-            leg_R.kd_scale = base::Point3D(kd, kd, kd);
+            leg_R.kd_scale = config_.default_kd_N_mm_s;
           }
 
           // Wait for our legs to be pushed up by a certain distance,
@@ -1284,25 +1300,6 @@ class QuadrupedControl::Impl {
   };
 
   LandingResult SetLandingParameters(std::vector<QC::Leg>* legs_R) {
-    auto increase_gain = [&](auto& gain) {
-      if (!!gain) {
-        const auto old_value = gain->x();
-        const auto new_value = (
-            old_value + period_s_ * config_.jump.land_gain_increase);
-        if (new_value > 1.0) {
-          gain = {};
-        } else {
-          gain = base::Point3D(new_value, new_value, new_value);
-        }
-      }
-    };
-
-    // Turn our gains back up.
-    for (auto& leg_R : *legs_R) {
-      increase_gain(leg_R.kp_scale);
-      increase_gain(leg_R.kd_scale);
-    }
-
     auto get_vel = [](const auto& leg_B) { return leg_B.velocity_mm_s.z(); };
     auto& js = status_.state.jump;
 
