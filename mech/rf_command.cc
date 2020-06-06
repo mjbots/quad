@@ -59,9 +59,7 @@ namespace mech {
 const int kRemoteRobot = 0;
 const int kRemoteTurret = 1;
 
-constexpr double kMaxForwardVelocity_mm_s = 200.0;
 constexpr double kMaxLateralVelocity_mm_s = 100.0;
-constexpr double kMaxRotation_rad_s = (30.0 / 180.0) * M_PI;
 
 constexpr double kMaxTurretPitch_dps = 50.0;
 constexpr double kMaxTurretYaw_dps = 200.0;
@@ -691,6 +689,8 @@ int do_main(int argc, char** argv) {
   bool turret = false;
   double rotate_deg = 180.0;
   double jump_accel_mm_s2 = 2000.0;
+  double max_forward_velocity_mm_s = 300.0;
+  double max_rotation_deg_s = 30.0;
   double zoom_in = 3.0;
   double reticle_x = 0.0;
   double reticle_y = 0.0;
@@ -710,6 +710,8 @@ int do_main(int argc, char** argv) {
       (clipp::option("y", "reticle-y") & clipp::value("", reticle_y)),
       (clipp::option("derate-scale") & clipp::value("", derate_scale)),
       (clipp::option("jump-accel") & clipp::value("", jump_accel_mm_s2)),
+      (clipp::option("max-forward") & clipp::value("", max_forward_velocity_mm_s)),
+      (clipp::option("max-rotation") & clipp::value("", max_rotation_deg_s)),
       mjlib::base::ClippArchive("stream.").Accept(&stream).release()
   );
 
@@ -863,12 +865,13 @@ int do_main(int argc, char** argv) {
     base::Euler turret_rate_dps;
     bool turret_track = false;
     if (!turret) {
-      v_mm_s_R.x() = -kMaxForwardVelocity_mm_s *
+      v_mm_s_R.x() = -max_forward_velocity_mm_s *
           gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_Y];
       v_mm_s_R.y() = kMaxLateralVelocity_mm_s *
           lateral_walk_expo(gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_X]);
 
-      w_LR.z() = kMaxRotation_rad_s * gamepad.axes[GLFW_GAMEPAD_AXIS_RIGHT_X];
+      w_LR.z() = (max_rotation_deg_s / 180.0) * M_PI *
+                 gamepad.axes[GLFW_GAMEPAD_AXIS_RIGHT_X];
     } else {
       const Eigen::Vector2d cmd_turret = Eigen::Vector2d(
           lateral_walk_expo(gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_X]),
@@ -895,7 +898,7 @@ int do_main(int argc, char** argv) {
                   (1.0 - kTurnThreshold)),
               0.0, 1.0);
 
-      v_mm_s_R.x() = kMaxForwardVelocity_mm_s * forward_scale * cmd_robot.y();
+      v_mm_s_R.x() = max_forward_velocity_mm_s * forward_scale * cmd_robot.y();
       // We pick the sign of our rotation to get closest to a forward
       // or backward configuration as possible.
       const double rotation_sign = 1.0;
@@ -903,7 +906,7 @@ int do_main(int argc, char** argv) {
           // -1.0 : 1.0;
       w_LR.z() =
           std::copysign(1.0, v_mm_s_R.x()) * rotation_sign *
-          kMaxRotation_rad_s * turret_walk_expo(cmd_robot.x());
+          (max_rotation_deg_s / 180.0) * M_PI * turret_walk_expo(cmd_robot.x());
 
       // Finally, do the turret rates.
       const double derate = 1.0 / ((zoom - 1.0) * derate_scale + 1.0);
