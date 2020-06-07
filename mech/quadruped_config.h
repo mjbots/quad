@@ -135,9 +135,12 @@ struct QuadrupedConfig {
   struct Jump {
     double lower_velocity_mm_s = 100.0;
     double retract_velocity_mm_s = 1000.0;
+    double retract_acceleration_mm_s2 = 100000.0;
     double land_threshold_mm = 15.0;
-    double land_kp = 0.1;
-    double land_kd = 0.0;
+    double kp_scale = 10.0;
+    double kd_scale = 1.0;
+    double land_kp = 1.0;
+    double land_kd = 0.1;
     double lower_height_mm = 100.0;
     double upper_height_mm = 220.0;
     double retract_height_mm = 190.0;
@@ -149,7 +152,10 @@ struct QuadrupedConfig {
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(lower_velocity_mm_s));
       a->Visit(MJ_NVP(retract_velocity_mm_s));
+      a->Visit(MJ_NVP(retract_acceleration_mm_s2));
       a->Visit(MJ_NVP(land_threshold_mm));
+      a->Visit(MJ_NVP(kp_scale));
+      a->Visit(MJ_NVP(kd_scale));
       a->Visit(MJ_NVP(land_kp));
       a->Visit(MJ_NVP(land_kd));
       a->Visit(MJ_NVP(lower_height_mm));

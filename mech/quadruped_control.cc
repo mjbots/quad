@@ -1095,6 +1095,16 @@ class QuadrupedControl::Impl {
       for (auto& leg_R : legs_R) {
         leg_R.kp_N_mm = config_.default_kp_N_mm;
         leg_R.kd_N_mm_s = config_.default_kd_N_mm_s;
+
+        // TODO: This is kind of a hack.  Ideally, we wouldn't have to
+        // fiddle with the servo gains during a jump, and could just
+        // use cartesian gains.  However, our current IK model seems
+        // to have a large mismatch with reality for these jumps, and
+        // we rely on the agressive servo controls to compensate.
+        const auto kp = config_.jump.kp_scale;
+        leg_R.kp_scale = base::Point3D(kp, kp, kp);
+        const auto kd = config_.jump.kd_scale;
+        leg_R.kd_scale = base::Point3D(kd, kd, kd);
       }
 
       switch (status_.state.jump.mode) {
@@ -1122,18 +1132,17 @@ class QuadrupedControl::Impl {
         case JM::kPushing: {
           context_->MoveLegsForLR(&legs_R);
 
-          status_.state.jump.velocity_mm_s +=
-              js.command.acceleration_mm_s2 * period_s_;
-          context_->MoveLegsFixedSpeedZ(
-              all_leg_ids_,
-              &legs_R,
-              js.velocity_mm_s,
-              config_.jump.upper_height_mm + 1000.0);
+          auto& velocity_mm_s = status_.state.jump.velocity_mm_s;
+          velocity_mm_s += js.command.acceleration_mm_s2 * period_s_;
+          for (auto& leg_R : legs_R) {
+            leg_R.position_mm.z() += velocity_mm_s * period_s_;
+            leg_R.velocity_mm_s.z() = velocity_mm_s;
+            leg_R.acceleration_mm_s2.z() = js.command.acceleration_mm_s2;
+          }
           const bool done =
               legs_R[0].position_mm.z() >= config_.jump.upper_height_mm;
           if (done) {
             js.mode = JM::kRetracting;
-            js.velocity_mm_s = 0.0;
             js.acceleration_mm_s2 = 0.0;
 
             for (auto& leg_R : legs_R) {
@@ -1158,20 +1167,18 @@ class QuadrupedControl::Impl {
 
           // TODO: This could be updated to reach at a given time (with
           // a configurable time), instead of a fixed speed.
+          QuadrupedContext::MoveOptions move_options;
+          move_options.override_acceleration_mm_s2 =
+              config_.jump.retract_acceleration_mm_s2;
           const bool done = context_->MoveLegsFixedSpeed(
               &legs_R,
               config_.jump.retract_velocity_mm_s,
-              MakeIdleLegs());
-
-          for (auto& leg_R : legs_R) {
-            leg_R.kp_N_mm = config_.default_kp_N_mm;
-            leg_R.kd_N_mm_s = config_.default_kd_N_mm_s;
-          }
+              MakeIdleLegs(),
+              move_options);
 
           if (done) {
             js.mode = JM::kFalling;
             for (auto& leg_R : legs_R) {
-              leg_R.velocity_mm_s = base::Point3D();
               leg_R.landing = true;
             }
             // Loop around and do the falling behavior.
@@ -1191,8 +1198,9 @@ class QuadrupedControl::Impl {
           for (auto& leg_R : legs_R) {
             // We have different gains.
             const auto kp = config_.jump.land_kp;
-            leg_R.kp_N_mm = kp * config_.default_kp_N_mm;
-            leg_R.kd_scale = config_.default_kd_N_mm_s;
+            leg_R.kp_scale = base::Point3D(kp, kp, kp);
+            const auto kd = config_.jump.land_kd;
+            leg_R.kd_scale = base::Point3D(kd, kd, kd);
 
             // And no velocity or acceleration.
             leg_R.velocity_mm_s = base::Point3D();
@@ -1222,6 +1230,8 @@ class QuadrupedControl::Impl {
           if (average_error_mm < -config_.jump.land_threshold_mm &&
               max_error_mm < -0.5 * config_.jump.land_threshold_mm) {
             js.mode = JM::kLanding;
+            js.acceleration_mm_s2 = 0.0;
+            js.velocity_mm_s = std::numeric_limits<double>::quiet_NaN();
             // Loop around and start landing.
             continue;
           }
@@ -1282,7 +1292,7 @@ class QuadrupedControl::Impl {
         status_.state.legs_B.begin(),
         status_.state.legs_B.end(),
         get_vel);
-    js.velocity_mm_s = average_velocity_mm_s;
+
     // Pick an acceleration that will ensure we reach stopped
     // before hitting our lower height.
     const double average_height_mm = Average(
@@ -1303,11 +1313,23 @@ class QuadrupedControl::Impl {
             std::min(
                 config_.bounds.max_acceleration_mm_s2,
                 kFudge * 0.5 * std::pow(average_velocity_mm_s, 2) / error_mm));
+    if (!std::isfinite(js.velocity_mm_s)) {
+      js.velocity_mm_s = average_velocity_mm_s;
+    } else {
+      // Blend in the ramped rate and the observed rate with an
+      // exponential filter.
+      const double propagated =
+          js.velocity_mm_s + config_.period_s * js.acceleration_mm_s2;
+      const double filter_s = 0.1;
+      const double alpha = std::pow(0.5, config_.period_s / filter_s);
+      js.velocity_mm_s =
+          alpha * propagated + (1.0 - alpha) * average_velocity_mm_s;
+    }
 
     const double command_height_mm =
         std::max(average_height_mm, config_.jump.lower_height_mm);
     const double limited_velocity_mm_s =
-        std::min(average_velocity_mm_s, -config_.jump.lower_velocity_mm_s);
+        std::min(js.velocity_mm_s, -config_.jump.lower_velocity_mm_s);
 
     const double command_velocity_mm_s =
         (average_height_mm > config_.jump.lower_height_mm) ?
@@ -1902,8 +1924,6 @@ class QuadrupedControl::Impl {
         if (joint.angle_deg != 0.0) { values.resize(1); }
         if (joint.velocity_dps != 0.0) { values.resize(2); }
         if (joint.torque_Nm != 0.0) { values.resize(3); }
-        if (joint.kp_scale) { values.resize(4); }
-        if (joint.kd_scale) { values.resize(5); }
         if (max_torque_Nm) { values.resize(6); }
         if (joint.stop_angle_deg) { values.resize(7); }
 
@@ -1924,14 +1944,9 @@ class QuadrupedControl::Impl {
                   sign * joint.torque_Nm, moteus::kInt16);
               break;
             }
-            case 3: {
-              values[i] = moteus::WritePwm(
-                  joint.kp_scale.value_or(1.0), moteus::kInt16);
-              break;
-            }
+            case 3:
             case 4: {
-              values[i] = moteus::WritePwm(
-                  joint.kd_scale.value_or(1.0), moteus::kInt16);
+              values[i] = moteus::WritePwm(1.0, moteus::kInt16);
               break;
             }
             case 5: {
@@ -1954,8 +1969,30 @@ class QuadrupedControl::Impl {
         if (!values.empty()) {
           request.request.WriteMultiple(moteus::kCommandPosition, values);
         }
-      }
 
+        // We do kp and kd separately so we can use the float type.
+        values.clear();
+        if (joint.kp_scale) { values.resize(1); }
+        if (joint.kd_scale) { values.resize(2); }
+        for (size_t i = 0; i < values.size(); i++) {
+          switch (i) {
+            case 0: {
+              values[i] = moteus::WritePwm(
+                  joint.kp_scale.value_or(1.0), moteus::kFloat);
+              break;
+            }
+            case 1: {
+              values[i] = moteus::WritePwm(
+                  joint.kd_scale.value_or(1.0), moteus::kFloat);
+              break;
+            }
+          }
+        }
+
+        if (!values.empty()) {
+          request.request.WriteMultiple(moteus::kCommandKpScale, values);
+        }
+      }
     }
   }
 
