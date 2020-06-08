@@ -17,7 +17,6 @@
 // * 3D mech
 //  * be able to plot sum total of down ground reaction force
 //     * eventually also for things that are close to the ground
-//  * render target foot placement, and target next support
 //  * render feet shadows on ground to give an idea of height off
 //  * render a grid on ground (with units)
 //  * render text velocities/forces near the arrows
@@ -35,10 +34,12 @@
 // * Plots
 //  * I get crazy artifacts when non-first plots are entirely off screen
 //  * save window size in imgui.ini
+// * multiple render/plot/tree widgets
 // * Save/restore plot configuration
 // * Save/restore tree view expansion state
 // * Save/restore render check boxes
 // * Derived/scripted fields
+// * search/filtering in tree widget
 
 
 #include <string>
