@@ -688,9 +688,9 @@ int do_main(int argc, char** argv) {
   std::string video = "/dev/video0";
   bool turret = false;
   double rotate_deg = 180.0;
-  double jump_accel_mm_s2 = 2000.0;
-  double max_forward_velocity_mm_s = 300.0;
-  double max_rotation_deg_s = 30.0;
+  double jump_accel_mm_s2 = 4000.0;
+  double max_forward_velocity_mm_s = 400.0;
+  double max_rotation_deg_s = 60.0;
   double zoom_in = 3.0;
   double reticle_x = 0.0;
   double reticle_y = 0.0;
