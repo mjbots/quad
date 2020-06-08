@@ -691,7 +691,12 @@ class QuadrupedControl::Impl {
         } else if (status_.mode == QM::kJump &&
                    status_.state.jump.mode ==
                    QuadrupedState::Jump::Mode::kDone) {
-          status_.mode = current_command_.mode;
+          // Enter rest until we've stopped moving.
+          if (IsRestAndSteadyState()) {
+            status_.mode = current_command_.mode;
+          } else {
+            status_.mode = QM::kRest;
+          }
         } else if (status_.mode == QM::kWalk) {
           // We can only leave the walk state when our desired
           // velocities are all 0 and all four legs are on the ground.
@@ -994,6 +999,17 @@ class QuadrupedControl::Impl {
     }
 
     ControlLegs_R(std::move(legs_R));
+  }
+
+  bool IsRestAndSteadyState() const {
+    if (status_.mode != QM::kRest) { return false; }
+    if (control_log_->legs_R.empty()) { return false; }
+
+    for (const auto& leg_R : control_log_->legs_R) {
+      if (leg_R.velocity_mm_s != base::Point3D()) { return false; }
+    }
+
+    return true;
   }
 
   void DoControl_Rest() {
