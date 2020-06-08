@@ -89,6 +89,7 @@ struct QuadrupedConfig {
     double velocity_dps = 60.0;
     double velocity_mm_s = 150.0;
     double max_preposition_torque_Nm = 3.0;
+    double preposition_kp_scale = 5.0;
     double timeout_s = 10.0;
     double tolerance_deg = 1.0;
     double tolerance_mm = 1;
@@ -100,6 +101,7 @@ struct QuadrupedConfig {
       a->Visit(MJ_NVP(velocity_dps));
       a->Visit(MJ_NVP(velocity_mm_s));
       a->Visit(MJ_NVP(max_preposition_torque_Nm));
+      a->Visit(MJ_NVP(preposition_kp_scale));
       a->Visit(MJ_NVP(timeout_s));
       a->Visit(MJ_NVP(tolerance_deg));
       a->Visit(MJ_NVP(tolerance_mm));

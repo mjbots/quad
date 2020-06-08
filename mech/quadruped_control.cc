@@ -944,6 +944,7 @@ class QuadrupedControl::Impl {
       joint.angle_deg = std::numeric_limits<double>::quiet_NaN();
       joint.velocity_dps = config_.stand_up.velocity_dps;
       joint.max_torque_Nm = config_.stand_up.max_preposition_torque_Nm;
+      joint.kp_scale = config_.stand_up.preposition_kp_scale;
 
       auto add_joint = [&](int id, double angle_deg) {
         joint.id = id;
