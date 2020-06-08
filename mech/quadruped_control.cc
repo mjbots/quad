@@ -1014,6 +1014,9 @@ class QuadrupedControl::Impl {
         leg_R.kd_scale = {};
         leg_R.stance = 1.0;
         leg_R.landing = false;
+        // We don't want to be moving laterally when in rest, just up
+        // and down.
+        leg_R.velocity_mm_s.head<2>() = Eigen::Vector2d(0., 0.);
       }
       QuadrupedContext::MoveOptions move_options;
       move_options.override_acceleration_mm_s2 =
