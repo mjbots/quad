@@ -22,12 +22,12 @@
 #include <boost/noncopyable.hpp>
 
 #include "mjlib/base/visitor.h"
+#include "mjlib/multiplex/asio_client.h"
 
 #include "base/context.h"
 
 #include "mech/control_timing.h"
 #include "mech/imu_client.h"
-#include "mech/multiplex_client.h"
 #include "mech/quadruped_command.h"
 #include "mech/quadruped_state.h"
 

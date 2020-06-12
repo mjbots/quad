@@ -80,6 +80,7 @@
 
 #include <boost/asio/post.hpp>
 
+#include "mjlib/base/buffer_stream.h"
 #include "mjlib/io/now.h"
 
 #include "base/telemetry_registry.h"

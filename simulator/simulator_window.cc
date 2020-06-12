@@ -417,7 +417,7 @@ class Servo : public mjlib::multiplex::MicroServer::Server,
   const double position_max_ = 1.0;
 };
 
-class SimMultiplex : public mjlib::multiplex::AsioClient {
+class SimPi3hat : public mech::Pi3hatInterface {
  public:
   struct Options {
     double torque_scale = 1.0;
@@ -428,10 +428,88 @@ class SimMultiplex : public mjlib::multiplex::AsioClient {
     }
   };
 
-  SimMultiplex(boost::asio::executor executor, const Options& options)
+  SimPi3hat(boost::asio::executor executor, const Options& options)
       : executor_(executor),
         options_(options) {}
-  ~SimMultiplex() override {}
+  ~SimPi3hat() override {}
+
+  void set_frame(dd::Frame* frame) {
+    frame_ = frame;
+  }
+
+  void ReadImu(mech::AttitudeData* attitude,
+               mjlib::io::ErrorCallback callback) override {
+    if (frame_) {
+      attitude->timestamp = mjlib::io::Now(executor_.context());
+
+      // DART uses a coordinate system where +Z is up.  The robot
+      // expects its coordinate system to be with +Z down.  The legs
+      // are already modeled inverted.  Thus we have a confusing set
+      // of transforms to get everything into an appropriate frame.
+
+      const Eigen::AngleAxisd mount(0, Eigen::Vector3d::UnitX());
+
+      const Eigen::Isometry3d tf = frame_->getTransform() * mount;
+      base::Quaternion mirror_quaternion =
+          Sophus::SE3d(tf.matrix()).unit_quaternion();
+      // https://stackoverflow.com/questions/32438252/efficient-way-to-apply-mirror-effect-on-quaternion-rotation
+      attitude->attitude =
+          base::Quaternion(
+              mirror_quaternion.w(),
+              -mirror_quaternion.x(),
+              -mirror_quaternion.y(),
+              mirror_quaternion.z());
+      attitude->euler_deg = (180.0 / M_PI) * attitude->attitude.euler_rad();
+
+      const Eigen::Vector3d rate_rps =
+          mount * frame_->getAngularVelocity();
+      attitude->rate_dps.x() = -base::Degrees(rate_rps[0]);
+      attitude->rate_dps.y() = -base::Degrees(rate_rps[1]);
+      attitude->rate_dps.z() = base::Degrees(rate_rps[2]);
+
+      Eigen::Vector3d accel =
+          mount * frame_->getLinearAcceleration(Eigen::Vector3d(0, 0, 0));
+      attitude->accel_mps2 = -1.0 * accel;
+    } else {
+      *attitude = {};
+    }
+    boost::asio::post(
+        executor_,
+        std::bind(std::move(callback), mjlib::base::error_code()));
+  }
+
+  // ***********************
+  // RfClient
+
+  void AsyncWaitForSlot(int*, uint16_t* bitfield, mjlib::io::ErrorCallback) override {
+  }
+
+  Slot rx_slot(int, int slot_idx) override {
+    return slot_;
+  }
+
+  void tx_slot(int, int slot_id, const Slot&) override {
+  }
+
+  Slot tx_slot(int, int slot_idx) override {
+    return slot_;
+  }
+
+
+  // Selector
+
+  void AsyncStart(mjlib::io::ErrorCallback callback) {
+    boost::asio::post(
+        executor_,
+        std::bind(std::move(callback), mjlib::base::error_code()));
+  }
+
+  void set_data(const mech::AttitudeData& data) {
+    data_ = data;
+  }
+
+  // ***********************
+  // multiplex::AsioClient
 
   void AsyncRegister(
       const IdRequest& request, SingleReply* single_reply,
@@ -460,12 +538,6 @@ class SimMultiplex : public mjlib::multiplex::AsioClient {
   mjlib::io::SharedStream MakeTunnel(
       uint8_t id, uint32_t channel, const TunnelOptions& options) override {
     return {};
-  }
-
-  void AsyncStart(mjlib::io::ErrorCallback callback) {
-    boost::asio::post(
-        executor_,
-        std::bind(std::move(callback), mjlib::base::error_code()));
   }
 
   void AddServo(dd::Joint* joint, int id,
@@ -558,97 +630,7 @@ class SimMultiplex : public mjlib::multiplex::AsioClient {
     {11, 1350},
     {12, 2400},
   };
-};
 
-class SimAuxStm32 : public mech::AuxStm32 {
- public:
-  struct Options {
-    template <typename Archive>
-    void Serialize(Archive*) {}
-  };
-
-  SimAuxStm32(boost::asio::executor executor, const Options&)
-      : executor_(executor) {}
-
-  ~SimAuxStm32() override {}
-
-  void set_frame(dd::Frame* frame) {
-    frame_ = frame;
-  }
-
-  void ReadImu(mech::AttitudeData* attitude,
-               mjlib::io::ErrorCallback callback) override {
-    if (frame_) {
-      attitude->timestamp = mjlib::io::Now(executor_.context());
-
-      // DART uses a coordinate system where +Z is up.  The robot
-      // expects its coordinate system to be with +Z down.  The legs
-      // are already modeled inverted.  Thus we have a confusing set
-      // of transforms to get everything into an appropriate frame.
-
-      const Eigen::AngleAxisd mount(0, Eigen::Vector3d::UnitX());
-
-      const Eigen::Isometry3d tf = frame_->getTransform() * mount;
-      base::Quaternion mirror_quaternion =
-          Sophus::SE3d(tf.matrix()).unit_quaternion();
-      // https://stackoverflow.com/questions/32438252/efficient-way-to-apply-mirror-effect-on-quaternion-rotation
-      attitude->attitude =
-          base::Quaternion(
-              mirror_quaternion.w(),
-              -mirror_quaternion.x(),
-              -mirror_quaternion.y(),
-              mirror_quaternion.z());
-      attitude->euler_deg = (180.0 / M_PI) * attitude->attitude.euler_rad();
-
-      const Eigen::Vector3d rate_rps =
-          mount * frame_->getAngularVelocity();
-      attitude->rate_dps.x() = -base::Degrees(rate_rps[0]);
-      attitude->rate_dps.y() = -base::Degrees(rate_rps[1]);
-      attitude->rate_dps.z() = base::Degrees(rate_rps[2]);
-
-      Eigen::Vector3d accel =
-          mount * frame_->getLinearAcceleration(Eigen::Vector3d(0, 0, 0));
-      attitude->accel_mps2 = -1.0 * accel;
-    } else {
-      *attitude = {};
-    }
-    boost::asio::post(
-        executor_,
-        std::bind(std::move(callback), mjlib::base::error_code()));
-  }
-
-  // ***********************
-  // RfClient
-
-  void AsyncWaitForSlot(int*, uint16_t* bitfield, mjlib::io::ErrorCallback) override {
-  }
-
-  Slot rx_slot(int, int slot_idx) override {
-    return slot_;
-  }
-
-  void tx_slot(int, int slot_id, const Slot&) override {
-  }
-
-  Slot tx_slot(int, int slot_idx) override {
-    return slot_;
-  }
-
-
-  // Selector
-
-  void AsyncStart(mjlib::io::ErrorCallback callback) {
-    boost::asio::post(
-        executor_,
-        std::bind(std::move(callback), mjlib::base::error_code()));
-  }
-
-  void set_data(const mech::AttitudeData& data) {
-    data_ = data;
-  }
-
- private:
-  boost::asio::executor executor_;
   mech::AttitudeData data_;
   dd::Frame* frame_ = nullptr;
   Slot slot_;
@@ -680,11 +662,8 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
     mDisplayTimeout = 10;
     world_->setTimeStep(0.0001);
 
-    quadruped_.m()->multiplex_client->Register<SimMultiplex>("sim");
-    quadruped_.m()->multiplex_client->set_default("sim");
-
-    quadruped_.m()->imu_client->Register<SimAuxStm32>("sim");
-    quadruped_.m()->imu_client->set_default("sim");
+    quadruped_.m()->pi3hat->Register<SimPi3hat>("sim");
+    quadruped_.m()->pi3hat->set_default("sim");
 
     floor_ = MakeFloor();
     {
@@ -728,13 +707,10 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
       return;
     }
 
-    imu_ = dynamic_cast<SimAuxStm32*>(quadruped_.m()->imu_client->selected());
-    BOOST_ASSERT(imu_);
-    multiplex_ = dynamic_cast<SimMultiplex*>(
-        quadruped_.m()->multiplex_client->selected());
-    BOOST_ASSERT(multiplex_);
+    pi3hat_ = dynamic_cast<SimPi3hat*>(quadruped_.m()->pi3hat->selected());
+    BOOST_ASSERT(pi3hat_);
 
-    imu_->set_frame(robot_->getBodyNode("robot"));
+    pi3hat_->set_frame(robot_->getBodyNode("robot"));
 
     for (int leg = 0; leg < 4; leg++) {
       const auto& leg_config = quadruped_config_.legs.at(leg);
@@ -742,7 +718,7 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
       std::string leg_prefix = fmt::format("leg{}", leg);
       auto add_servo = [&](auto name, auto id, double lower, double upper) {
         auto* const joint = robot_->getBodyNode(leg_prefix + name)->getParentJoint();
-        multiplex_->AddServo(joint, id, lower, upper);
+        pi3hat_->AddServo(joint, id, lower, upper);
       };
       constexpr auto kNaN = std::numeric_limits<double>::signaling_NaN();
       add_servo("_shoulder", leg_config.ik.shoulder.id, kNaN, kNaN);
@@ -778,7 +754,7 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
     context_.poll();
     context_.reset();
 
-    multiplex_->Run(dt_s);
+    pi3hat_->Run(dt_s);
 
     SimWindow::timeStepping();
   }
@@ -805,8 +781,7 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
   mech::QuadrupedConfig quadruped_config_;
   mech::Quadruped quadruped_;
 
-  SimAuxStm32* imu_ = nullptr;
-  SimMultiplex* multiplex_ = nullptr;
+  SimPi3hat* pi3hat_ = nullptr;
 };
 
 SimulatorWindow::Impl* SimulatorWindow::Impl::g_impl_ = nullptr;

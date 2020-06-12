@@ -17,8 +17,8 @@
 #include <boost/asio/post.hpp>
 
 #include "base/logging.h"
-#include "mech/rpi3_hat_aux_stm32.h"
-#include "mech/rpi3_hat_raw_spi.h"
+
+#include "mech/pi3hat_wrapper.h"
 
 namespace pl = std::placeholders;
 
@@ -30,28 +30,23 @@ class Turret::Impl {
   Impl(base::Context& context)
       : executor_(context.executor),
         factory_(context.factory.get()) {
-    m_.multiplex_client = std::make_unique<
-      mjlib::io::Selector<mjlib::multiplex::AsioClient>>(
-          executor_, "type");
-    m_.multiplex_client->Register<Rpi3HatRawSpi>("rpi3");
-    m_.multiplex_client->set_default("rpi3");
-
-    m_.imu_client = std::make_unique<mjlib::io::Selector<AuxStm32>>(
-        executor_, "type");
     {
-      Rpi3HatAuxStm32::Options hat_options;
+      Pi3hatWrapper::Options hat_options;
       hat_options.mounting.yaw_deg = 0;
       hat_options.mounting.pitch_deg = 90;
       hat_options.mounting.roll_deg = 90;
       hat_options.rf_id = 88754;
-      m_.imu_client->Register<Rpi3HatAuxStm32>("rpi3", hat_options);
+
+      m_.pi3hat = std::make_unique<
+        mjlib::io::Selector<Pi3hatInterface>>(executor_, "type");
+      m_.pi3hat->Register<Pi3hatWrapper>("pi3", hat_options);
+      m_.pi3hat->set_default("pi3");
     }
-    m_.imu_client->set_default("rpi3");
 
     m_.turret_control = std::make_unique<TurretControl>(
         context,
-        [&]() { return m_.multiplex_client->selected(); },
-        [&]() { return m_.imu_client->selected(); } );
+        [&]() { return m_.pi3hat->selected(); },
+        [&]() { return m_.pi3hat->selected(); } );
     m_.web_control = std::make_unique<TurretWebControl>(
         context.executor,
         [t=m_.turret_control.get()](const auto& cmd) {
@@ -67,7 +62,7 @@ class Turret::Impl {
         }());
     m_.rf_control = std::make_unique<TurretRfControl>(
         context, m_.turret_control.get(),
-        [&]() { return m_.imu_client->selected(); });
+        [&]() { return m_.pi3hat->selected(); });
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {

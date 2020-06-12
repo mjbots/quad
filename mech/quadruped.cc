@@ -17,9 +17,8 @@
 #include <boost/asio/post.hpp>
 
 #include "base/logging.h"
+#include "mech/pi3hat_wrapper.h"
 #include "mech/quadruped_debug.h"
-#include "mech/rpi3_hat_aux_stm32.h"
-#include "mech/rpi3_hat_raw_spi.h"
 
 namespace pl = std::placeholders;
 
@@ -31,21 +30,15 @@ class Quadruped::Impl {
   Impl(base::Context& context)
       : executor_(context.executor),
         factory_(context.factory.get()) {
-    m_.multiplex_client = std::make_unique<
-      mjlib::io::Selector<mjlib::multiplex::AsioClient>>(
-          executor_, "type");
-    m_.multiplex_client->Register<Rpi3HatRawSpi>("rpi3");
-    m_.multiplex_client->set_default("rpi3");
-
-    m_.imu_client = std::make_unique<mjlib::io::Selector<AuxStm32>>(
-        executor_, "type");
-    m_.imu_client->Register<Rpi3HatAuxStm32>("rpi3");
-    m_.imu_client->set_default("rpi3");
+    m_.pi3hat = std::make_unique<
+      mjlib::io::Selector<Pi3hatInterface>>(executor_, "type");
+    m_.pi3hat->Register<Pi3hatWrapper>("pi3hat");
+    m_.pi3hat->set_default("pi3hat");
 
     m_.quadruped_control = std::make_unique<QuadrupedControl>(
         context,
-        [&]() { return m_.multiplex_client->selected(); },
-        [&]() { return m_.imu_client->selected(); } );
+        [&]() { return m_.pi3hat->selected(); },
+        [&]() { return m_.pi3hat->selected(); } );
     m_.web_control = std::make_unique<QuadrupedWebControl>(
         context.executor,
         [q=m_.quadruped_control.get()](const auto& cmd) {
@@ -61,7 +54,7 @@ class Quadruped::Impl {
         }());
     m_.rf_control = std::make_unique<RfControl>(
         context, m_.quadruped_control.get(),
-        [&]() { return m_.imu_client->selected(); } );
+        [&]() { return m_.pi3hat->selected(); } );
 
     debug_stream_.type = mjlib::io::StreamFactory::Type::kTcpServer;
     debug_stream_.tcp_server_port = 4556;

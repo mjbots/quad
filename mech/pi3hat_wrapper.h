@@ -19,24 +19,23 @@
 
 #include <boost/asio/executor.hpp>
 
+#include "mjlib/base/visitor.h"
 #include "mjlib/io/async_types.h"
+#include "mjlib/multiplex/asio_client.h"
+#include "mjlib/multiplex/register.h"
 
 #include "mech/attitude_data.h"
-#include "mech/aux_stm32.h"
+#include "mech/pi3hat_interface.h"
 
 namespace mjmech {
 namespace mech {
 
-/// Operate the auxiliary stm32 on the quad pi3 hat.  This includes:
-///  * the standard bitrate CAN
-///  * the IMU
-///  * the RF interface
+/// Provide an interface to the pi3hat.
 ///
-/// For now, the auxiliary CAN interface is assumed to be connected
-/// solely to a power distribution board.  This class handles soft
-/// shutdown with no API calls necessary.  (it kicks the board's dead
-/// man and shuts down the computer when the switch is turned off)
-class Rpi3HatAuxStm32 : public AuxStm32 {
+/// NOTE: This treates the AsioClient as the primary interface.  IMU
+/// and RF requests will only be serviced when AsyncRegister or
+/// AsyncRegisterMultiple are called.
+class Pi3hatWrapper : public Pi3hatInterface {
  public:
   struct Mounting {
     double yaw_deg = 0.0;
@@ -52,28 +51,63 @@ class Rpi3HatAuxStm32 : public AuxStm32 {
   };
 
   struct Options {
-    int speed = 10000000;
+    // If set to a non-negative number, bind the time sensitive thread
+    // to the given CPU.
     int cpu_affinity = -1;
+
+    int spi_speed_hz = 10000000;
+
+    // When waiting for CAN data, wait this long before timing out.
+    double query_timeout_s = 0.001;
+
     Mounting mounting;
     uint32_t rf_id = 5678;
     double power_poll_period_s = 0.1;
     double shutdown_timeout_s = 15.0;
+    uint32_t imu_rate_hz = 400;
+
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(speed));
       a->Visit(MJ_NVP(cpu_affinity));
+      a->Visit(MJ_NVP(spi_speed_hz));
+      a->Visit(MJ_NVP(query_timeout_s));
       a->Visit(MJ_NVP(mounting));
       a->Visit(MJ_NVP(rf_id));
       a->Visit(MJ_NVP(power_poll_period_s));
       a->Visit(MJ_NVP(shutdown_timeout_s));
+      a->Visit(MJ_NVP(imu_rate_hz));
     }
   };
 
-  Rpi3HatAuxStm32(const boost::asio::executor&, const Options&);
-  ~Rpi3HatAuxStm32() override;
+  Pi3hatWrapper(const boost::asio::executor&, const Options&);
+  ~Pi3hatWrapper();
 
   void AsyncStart(mjlib::io::ErrorCallback);
+
+  // ************************
+  // mp::AsioClient
+
+  /// Request a request be made to one or more servos (and optionally
+  /// have a reply sent back).
+  void AsyncRegister(const IdRequest&, SingleReply*,
+                     mjlib::io::ErrorCallback) override;
+
+  void AsyncRegisterMultiple(const std::vector<IdRequest>&,
+                             Reply*,
+                             mjlib::io::ErrorCallback) override;
+
+  mjlib::io::SharedStream MakeTunnel(
+      uint8_t id,
+      uint32_t channel,
+      const TunnelOptions& options) override;
+
+  struct Stats {
+    template <typename Archive>
+    void Serialize(Archive* a) {
+    }
+  };
+  Stats stats() const;
 
   // ************************
   // ImuClient

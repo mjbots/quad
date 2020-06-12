@@ -37,20 +37,13 @@ cc_library(
         "camera_driver.cc",
         "mammal_ik.cc",
         "mime_type.cc",
-        "moteus_servo.cc",
-        "multiplex_client.cc",
         "nrfusb_client.cc",
+        "pi3hat_wrapper.cc",
         "quadruped.cc",
         "quadruped_control.cc",
         "quadruped_debug.cc",
         "quadruped_2leg_walk.cc",
         "rf_control.cc",
-        "rpi3_hat_aux_stm32.cc",
-        "rpi3_hat_raw_spi.cc",
-        "rpi3_raw_aux_spi.cc",
-        "rpi3_raw_spi.cc",
-        "rpi3_raw_uart.cc",
-        "rpi3_threaded_client.cc",
         "swing_trajectory.cc",
         "target_tracker.cc",
         "turret.cc",
@@ -75,6 +68,7 @@ cc_library(
         "@opencv//:aruco",
         "@opencv//:imgcodecs",
         "@opencv//:videoio",
+        "@pi3hat//mjbots/pi3hat:libpi3hat",
         "@sophus",
     ] + select({
         "//conditions:default" : [],
@@ -113,12 +107,6 @@ cc_test(
 cc_binary(
     name = "direct_servo_latency_test",
     srcs = ["direct_servo_latency_test.cc"],
-    deps = [":mech"],
-)
-
-cc_binary(
-    name = "rpi_serial_test",
-    srcs = ["rpi_serial_test.cc"],
     deps = [":mech"],
 )
 
@@ -183,54 +171,15 @@ cc_binary(
     ],
 )
 
-cc_binary(
-    name = "spi",
-    srcs = ["spi.cc"],
-    deps = [
-        ":mech",
-        "@fmt",
-        "@com_github_mjbots_mjlib//mjlib/base:string_span",
-        "@com_github_mjbots_mjlib//mjlib/base:system_error",
-        "@org_llvm_libcxx//:libcxx",
-    ],
-)
-
-cc_binary(
-    name = "bmi088_test",
-    srcs = ["bmi088_test.cc"],
-    deps = [
-        ":mech",
-        "@fmt",
-        "@com_github_mjbots_mjlib//mjlib/base:string_span",
-        "@com_github_mjbots_mjlib//mjlib/base:system_error",
-        "@org_llvm_libcxx//:libcxx",
-    ],
-)
-
-cc_binary(
-    name = "slot_rf_test",
-    srcs = ["slot_rf_test.cc"],
-    deps = [
-        ":mech",
-        "@fmt",
-        "@com_github_mjbots_mjlib//mjlib/base:string_span",
-        "@com_github_mjbots_mjlib//mjlib/base:system_error",
-        "@org_llvm_libcxx//:libcxx",
-    ],
-)
-
 pkg_tar(
     name = "deploy",
     extension = "tar",
     include_runfiles = True,
     package_dir = "mech",
     srcs = [
-        ":bmi088_test",
         ":moteus_tool",
         ":multiplex_tool",
         ":quadruped",
-        ":slot_rf_test",
-        ":spi",
         ":turret",
     ],
     files = {

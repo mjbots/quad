@@ -632,7 +632,7 @@ class TurretControl::Impl {
   boost::posix_time::ptime current_command_timestamp_;
   Parameters parameters_;
 
-  using Client = MultiplexClient::Client;
+  using Client = mjlib::multiplex::AsioClient;
   Client* client_ = nullptr;
   ImuClient* imu_client_ = nullptr;
 

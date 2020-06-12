@@ -261,20 +261,23 @@ class QuadrupedControl::Impl {
     status_reply_ = {};
 
     // Ask for the IMU and the servo data simultaneously.
-    outstanding_status_requests_ = 1;
+    outstanding_status_requests_ = 0;
+
+    if (imu_client_) {
+      outstanding_status_requests_++;
+      imu_client_->ReadImu(
+          &imu_data_, std::bind(&Impl::HandleStatus, this, pl::_1));
+    }
+
     auto* request = [&]() {
       if (status_.mode == QM::kConfiguring) {
         return &config_status_request_;
       }
       return &status_request_;
     }();
+    outstanding_status_requests_++;
     client_->AsyncRegisterMultiple(*request, &status_reply_,
                                    std::bind(&Impl::HandleStatus, this, pl::_1));
-    if (imu_client_) {
-      imu_client_->ReadImu(
-          &imu_data_, std::bind(&Impl::HandleStatus, this, pl::_1));
-      outstanding_status_requests_++;
-    }
   }
 
   void HandleStatus(const mjlib::base::error_code& ec) {
@@ -2054,7 +2057,7 @@ class QuadrupedControl::Impl {
 
   double period_s_ = 0.0;
   mjlib::io::RepeatingTimer timer_;
-  using Client = MultiplexClient::Client;
+  using Client = mjlib::multiplex::AsioClient;
 
   ClientGetter client_getter_;
   ImuGetter imu_getter_;

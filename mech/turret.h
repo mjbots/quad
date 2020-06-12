@@ -26,7 +26,7 @@
 #include "base/component_archives.h"
 #include "base/context.h"
 
-#include "mech/aux_stm32.h"
+#include "mech/pi3hat_interface.h"
 #include "mech/turret_control.h"
 #include "mech/turret_rf_control.h"
 #include "mech/web_control.h"
@@ -45,17 +45,14 @@ class Turret : boost::noncopyable {
       WebControl<TurretControl::CommandData, TurretControl::Status>;
 
   struct Members {
-    std::unique_ptr<
-      mjlib::io::Selector<mjlib::multiplex::AsioClient>> multiplex_client;
-    std::unique_ptr<mjlib::io::Selector<AuxStm32>> imu_client;
+    std::unique_ptr<mjlib::io::Selector<Pi3hatInterface>> pi3hat;
     std::unique_ptr<TurretControl> turret_control;
     std::unique_ptr<TurretWebControl> web_control;
     std::unique_ptr<TurretRfControl> rf_control;
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(multiplex_client));
-      a->Visit(MJ_NVP(imu_client));
+      a->Visit(MJ_NVP(pi3hat));
       a->Visit(MJ_NVP(turret_control));
       a->Visit(MJ_NVP(web_control));
       a->Visit(MJ_NVP(rf_control));
