@@ -40,6 +40,7 @@
 // * Save/restore render check boxes
 // * Derived/scripted fields
 // * search/filtering in tree widget
+// * remove/properties drop-down should select most recent thing added
 
 
 #include <string>
