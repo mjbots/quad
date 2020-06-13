@@ -146,12 +146,10 @@ QC CommandLog::ignored_command;
 class QuadrupedControl::Impl {
  public:
   Impl(base::Context& context,
-       ClientGetter client_getter,
-       ImuGetter imu_getter)
+       Pi3hatGetter pi3hat_getter)
       : executor_(context.executor),
         timer_(executor_),
-        client_getter_(client_getter),
-        imu_getter_(imu_getter) {
+        pi3hat_getter_(pi3hat_getter) {
     context.telemetry_registry->Register("qc_status", &status_signal_);
     context.telemetry_registry->Register("qc_command", &command_signal_);
     context.telemetry_registry->Register("qc_control", &control_signal_);
@@ -160,12 +158,9 @@ class QuadrupedControl::Impl {
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
-    client_ = client_getter_();
-    if (parameters_.enable_imu) {
-      imu_client_ = imu_getter_();
-    }
+    pi3hat_ = pi3hat_getter_();
 
-    BOOST_ASSERT(!!client_);
+    BOOST_ASSERT(!!pi3hat_);
 
     // Load our configuration.
     std::vector<std::string> configs;
@@ -251,7 +246,7 @@ class QuadrupedControl::Impl {
     if (ec == boost::asio::error::operation_aborted) { return; }
     mjlib::base::FailIf(ec);
 
-    if (!client_) { return; }
+    if (!pi3hat_) { return; }
     if (outstanding_) { return; }
 
     timing_ = ControlTiming(executor_, timing_.cycle_start());
@@ -263,34 +258,22 @@ class QuadrupedControl::Impl {
     // Ask for the IMU and the servo data simultaneously.
     outstanding_status_requests_ = 0;
 
-    if (imu_client_) {
-      outstanding_status_requests_++;
-      imu_client_->ReadImu(
-          &imu_data_, std::bind(&Impl::HandleStatus, this, pl::_1));
-    }
-
     auto* request = [&]() {
       if (status_.mode == QM::kConfiguring) {
         return &config_status_request_;
       }
       return &status_request_;
     }();
-    outstanding_status_requests_++;
-    client_->AsyncRegisterMultiple(*request, &status_reply_,
-                                   std::bind(&Impl::HandleStatus, this, pl::_1));
+    pi3hat_->Cycle(&imu_data_, *request, &status_reply_,
+                   std::bind(&Impl::HandleStatus, this, pl::_1));
   }
 
   void HandleStatus(const mjlib::base::error_code& ec) {
     mjlib::base::FailIf(ec);
 
-    outstanding_status_requests_--;
-    if (outstanding_status_requests_ > 0) { return; }
+    timing_.finish_query();
 
-    timing_.finish_status();
-
-    if (!!imu_client_) {
-      imu_signal_(&imu_data_);
-    }
+    imu_signal_(&imu_data_);
 
     // If we don't have all 12 servos, then skip this cycle.
     status_.missing_replies = 12 - status_reply_.replies.size();
@@ -311,6 +294,8 @@ class QuadrupedControl::Impl {
       return;
     }
 
+    timing_.finish_status();
+
     // Now run our control loop and generate our command.
     std::swap(control_log_, old_control_log_);
     *control_log_ = {};
@@ -320,7 +305,7 @@ class QuadrupedControl::Impl {
 
     if (!client_command_.empty()) {
       client_command_reply_ = {};
-      client_->AsyncRegisterMultiple(client_command_, &client_command_reply_,
+      pi3hat_->AsyncRegisterMultiple(client_command_, &client_command_reply_,
                                      std::bind(&Impl::HandleCommand, this, pl::_1));
     } else {
       HandleCommand({});
@@ -2059,11 +2044,9 @@ class QuadrupedControl::Impl {
   mjlib::io::RepeatingTimer timer_;
   using Client = mjlib::multiplex::AsioClient;
 
-  ClientGetter client_getter_;
-  ImuGetter imu_getter_;
+  Pi3hatGetter pi3hat_getter_;
 
-  Client* client_ = nullptr;
-  ImuClient* imu_client_ = nullptr;
+  Pi3hatInterface* pi3hat_ = nullptr;
 
   using Request = std::vector<Client::IdRequest>;
   Request status_request_;
@@ -2092,9 +2075,8 @@ class QuadrupedControl::Impl {
 };
 
 QuadrupedControl::QuadrupedControl(base::Context& context,
-                                   ClientGetter client_getter,
-                                   ImuGetter imu_getter)
-    : impl_(std::make_unique<Impl>(context, client_getter, imu_getter)) {}
+                                   Pi3hatGetter pi3hat_getter)
+    : impl_(std::make_unique<Impl>(context, pi3hat_getter)) {}
 
 QuadrupedControl::~QuadrupedControl() {}
 

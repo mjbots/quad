@@ -116,6 +116,28 @@ class Pi3hatWrapper::Impl {
         });
   }
 
+  void Cycle(
+      AttitudeData* attitude,
+      const std::vector<IdRequest>& request,
+      Reply* reply,
+      mjlib::io::ErrorCallback callback) {
+    if (rf_to_send_) {
+      // Copy all the RF data to the child.
+      pi3data_.rf_tx_slots = rf_tx_slots_;
+      pi3data_.rf_to_send = rf_to_send_;
+      rf_to_send_ = 0;
+    }
+
+    boost::asio::post(
+        child_context_,
+        [this, callback=std::move(callback), attitude, &request, reply,
+         request_rf=(rf_remote_ != nullptr)]() mutable {
+          this->CHILD_Cycle(
+              attitude, &request, reply, request_rf,
+              std::move(callback));
+        });
+  }
+
   mjlib::io::SharedStream MakeTunnel(
       uint8_t id,
       uint32_t channel,
@@ -135,7 +157,7 @@ class Pi3hatWrapper::Impl {
           "error setting affinity");
 
       std::cout << fmt::format(
-          "Rpi3HatAuxStm32 cpu affinity set to {}\n", options_.cpu_affinity);
+          "pi3hat cpu affinity set to {}\n", options_.cpu_affinity);
     }
 
     pi3hat_.emplace([&]() {
@@ -156,15 +178,8 @@ class Pi3hatWrapper::Impl {
     pi3hat_.reset();
   }
 
-  void CHILD_Register(const std::vector<IdRequest>* requests,
-                      Reply* reply,
-                      bool request_attitude,
-                      bool request_rf,
-                      mjlib::io::ErrorCallback callback) {
-    mjbots::pi3hat::Pi3Hat::Input input;
-
+  void CHILD_SetupRf(mjbots::pi3hat::Pi3Hat::Input* input) {
     auto& d = pi3data_;
-    d.tx_can.clear();
     d.tx_rf.clear();
 
     if (d.rf_to_send) {
@@ -182,8 +197,17 @@ class Pi3hatWrapper::Impl {
         d.tx_rf.push_back(rf_slot);
       }
 
-      input.tx_rf = {&d.tx_rf[0], d.tx_rf.size()};
+      input->tx_rf = {&d.tx_rf[0], d.tx_rf.size()};
     }
+
+    d.rx_rf.resize(16);
+    input->rx_rf = {&d.rx_rf[0], d.rx_rf.size()};
+  }
+
+  void CHILD_SetupCAN(mjbots::pi3hat::Pi3Hat::Input* input,
+                      const std::vector<IdRequest>* requests) {
+    auto& d = pi3data_;
+    d.tx_can.clear();
 
     for (const auto& request : *requests) {
       d.tx_can.push_back({});
@@ -201,19 +225,55 @@ class Pi3hatWrapper::Impl {
     }
 
     if (d.tx_can.size()) {
-      input.tx_can = {&d.tx_can[0], d.tx_can.size()};
+      input->tx_can = {&d.tx_can[0], d.tx_can.size()};
     }
 
-    d.rx_rf.resize(16);
-    input.rx_rf = {&d.rx_rf[0], d.rx_rf.size()};
 
     d.rx_can.resize(std::max<size_t>(d.tx_can.size() * 2, 24));
-    input.rx_can = {&d.rx_can[0], d.rx_can.size()};
+    input->rx_can = {&d.rx_can[0], d.rx_can.size()};
+  }
+
+  void CHILD_Cycle(AttitudeData* attitude_dest,
+                   const std::vector<IdRequest>* requests,
+                   Reply* reply,
+                   bool request_rf,
+                   mjlib::io::ErrorCallback callback) {
+    mjbots::pi3hat::Pi3Hat::Input input;
+
+    CHILD_SetupRf(&input);
+    CHILD_SetupCAN(&input, requests);
+
+    input.attitude = &pi3data_.attitude;
+    input.request_attitude = true;
+    input.wait_for_attitude = true;
+    input.request_attitude_detail = options_.attitude_detail;
+    input.request_rf = request_rf;
+    input.timeout_ns = options_.query_timeout_s * 1e9;
+
+    pi3data_.result = pi3hat_->Cycle(input);
+
+    // Now come back to the main thread.
+    boost::asio::post(
+        executor_,
+        [this, callback=std::move(callback), attitude_dest, reply]() mutable {
+          this->FinishCycle(attitude_dest, reply, std::move(callback));
+        });
+  }
+
+  void CHILD_Register(const std::vector<IdRequest>* requests,
+                      Reply* reply,
+                      bool request_attitude,
+                      bool request_rf,
+                      mjlib::io::ErrorCallback callback) {
+    mjbots::pi3hat::Pi3Hat::Input input;
+
+    CHILD_SetupRf(&input);
+    CHILD_SetupCAN(&input, requests);
 
     input.attitude = &pi3data_.attitude;
     input.request_attitude = request_attitude;
-    input.wait_for_attitude = request_attitude;
-    input.request_attitude_detail = true;
+    input.wait_for_attitude = false;
+    input.request_attitude_detail = options_.attitude_detail;
     input.request_rf = request_rf;
     input.timeout_ns = options_.query_timeout_s * 1e9;
 
@@ -227,11 +287,7 @@ class Pi3hatWrapper::Impl {
         });
   }
 
-  void FinishRegister(Reply* reply, mjlib::io::ErrorCallback callback) {
-    const auto now = mjlib::io::Now(executor_.context());
-
-    // Now we unpack the results and fire off the callbacks we can.
-
+  void FinishCAN(Reply* reply) {
     // First CAN.
     for (size_t i = 0; i < pi3data_.result.rx_can_size; i++) {
       reply->replies.push_back({});
@@ -243,33 +299,28 @@ class Pi3hatWrapper::Impl {
       this_reply.id = (src.id >> 8) & 0xff;
       this_reply.reply = mjlib::multiplex::ParseRegisterReply(payload_stream);
     }
+  }
 
-    // Then IMU
-    if (pi3data_.result.attitude_present && attitude_) {
-      auto make_point = [](const auto& p) {
-        return base::Point3D(p.x, p.y, p.z);
-      };
-      auto make_quat = [](const auto& q) {
-        return base::Quaternion(q.w, q.x, q.y, q.z);
-      };
-      attitude_->timestamp = now;
-      attitude_->attitude = make_quat(pi3data_.attitude.attitude);
-      attitude_->rate_dps = make_point(pi3data_.attitude.rate_dps);
-      attitude_->euler_deg = (180.0 / M_PI) * attitude_->attitude.euler_rad();
-      attitude_->accel_mps2 = make_point(pi3data_.attitude.accel_mps2);
-      attitude_->bias_dps = make_point(pi3data_.attitude.bias_dps);
-      attitude_->attitude_uncertainty =
-          make_quat(pi3data_.attitude.attitude_uncertainty);
-      attitude_->bias_uncertainty_dps =
-          make_point(pi3data_.attitude.bias_uncertainty_dps);
+  void FinishAttitude(boost::posix_time::ptime now, AttitudeData* attitude) {
+    auto make_point = [](const auto& p) {
+      return base::Point3D(p.x, p.y, p.z);
+    };
+    auto make_quat = [](const auto& q) {
+      return base::Quaternion(q.w, q.x, q.y, q.z);
+    };
+    attitude->timestamp = now;
+    attitude->attitude = make_quat(pi3data_.attitude.attitude);
+    attitude->rate_dps = make_point(pi3data_.attitude.rate_dps);
+    attitude->euler_deg = (180.0 / M_PI) * attitude->attitude.euler_rad();
+    attitude->accel_mps2 = make_point(pi3data_.attitude.accel_mps2);
+    attitude->bias_dps = make_point(pi3data_.attitude.bias_dps);
+    attitude->attitude_uncertainty =
+        make_quat(pi3data_.attitude.attitude_uncertainty);
+    attitude->bias_uncertainty_dps =
+        make_point(pi3data_.attitude.bias_uncertainty_dps);
+  }
 
-      boost::asio::post(
-          executor_,
-          std::bind(std::move(attitude_callback_), mjlib::base::error_code()));
-      attitude_ = nullptr;
-      attitude_callback_ = {};
-    }
-
+  void FinishRF(boost::posix_time::ptime now) {
     // Then RF.
     if (rf_remote_) {
       *rf_remote_ = 0;
@@ -294,6 +345,38 @@ class Pi3hatWrapper::Impl {
       rf_bitfield_ = nullptr;
       rf_callback_ = {};
     }
+  }
+
+
+  void FinishCycle(AttitudeData* attitude,
+                   Reply* reply,
+                   mjlib::io::ErrorCallback callback) {
+    const auto now = mjlib::io::Now(executor_.context());
+
+    FinishCAN(reply);
+    FinishAttitude(now, attitude);
+    FinishRF(now);
+
+    boost::asio::post(
+        executor_,
+        std::bind(std::move(callback), mjlib::base::error_code()));
+  }
+
+  void FinishRegister(Reply* reply, mjlib::io::ErrorCallback callback) {
+    const auto now = mjlib::io::Now(executor_.context());
+
+    FinishCAN(reply);
+
+    if (attitude_) {
+      FinishAttitude(now, attitude_);
+      boost::asio::post(
+          executor_,
+          std::bind(std::move(attitude_callback_), mjlib::base::error_code()));
+      attitude_ = nullptr;
+      attitude_callback_ = {};
+    }
+    FinishRF(now);
+
 
     // Finally, post our CAN response.
     boost::asio::post(
@@ -397,6 +480,13 @@ mjlib::io::SharedStream Pi3hatWrapper::MakeTunnel(
 
 Pi3hatWrapper::Stats Pi3hatWrapper::stats() const {
   return Stats();
+}
+
+void Pi3hatWrapper::Cycle(AttitudeData* attitude,
+                          const std::vector<IdRequest>& request,
+                          Reply* reply,
+                          mjlib::io::ErrorCallback callback) {
+  impl_->Cycle(attitude, request, reply, std::move(callback));
 }
 
 }

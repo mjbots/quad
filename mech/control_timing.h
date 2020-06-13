@@ -36,6 +36,7 @@ class ControlTiming {
   }
 
   struct Status {
+    double query_s = 0.0;
     double status_s = 0.0;
     double control_s = 0.0;
     double command_s = 0.0;
@@ -44,6 +45,7 @@ class ControlTiming {
 
     template <typename Archive>
     void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(query_s));
       a->Visit(MJ_NVP(status_s));
       a->Visit(MJ_NVP(control_s));
       a->Visit(MJ_NVP(command_s));
@@ -55,8 +57,10 @@ class ControlTiming {
   Status status() const {
     Status result;
 
+    result.query_s = mjlib::base::ConvertDurationToSeconds(
+        timestamps_.query_done - timestamps_.cycle_start);
     result.status_s = mjlib::base::ConvertDurationToSeconds(
-        timestamps_.status_done - timestamps_.cycle_start);
+        timestamps_.status_done - timestamps_.query_done);
     result.control_s = mjlib::base::ConvertDurationToSeconds(
         timestamps_.control_done - timestamps_.status_done);
     result.command_s = mjlib::base::ConvertDurationToSeconds(
@@ -70,6 +74,7 @@ class ControlTiming {
 
   boost::posix_time::ptime cycle_start() const { return timestamps_.cycle_start; }
 
+  void finish_query() { timestamps_.query_done = Now(); }
   void finish_status() { timestamps_.status_done = Now(); }
   void finish_control() { timestamps_.control_done = Now(); }
   void finish_command() { timestamps_.command_done = Now(); }
@@ -80,6 +85,7 @@ class ControlTiming {
     double delta_s = 0.0;
 
     boost::posix_time::ptime cycle_start;
+    boost::posix_time::ptime query_done;
     boost::posix_time::ptime status_done;
     boost::posix_time::ptime control_done;
     boost::posix_time::ptime command_done;

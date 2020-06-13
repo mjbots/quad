@@ -29,6 +29,11 @@ class Pi3hatInterface : public ImuClient,
                         public mjlib::multiplex::AsioClient {
  public:
   ~Pi3hatInterface() override {}
+
+  virtual void Cycle(
+      AttitudeData*,
+      const std::vector<IdRequest>&, Reply*,
+      mjlib::io::ErrorCallback callback) = 0;
 };
 
 }

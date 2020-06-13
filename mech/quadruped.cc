@@ -37,7 +37,6 @@ class Quadruped::Impl {
 
     m_.quadruped_control = std::make_unique<QuadrupedControl>(
         context,
-        [&]() { return m_.pi3hat->selected(); },
         [&]() { return m_.pi3hat->selected(); } );
     m_.web_control = std::make_unique<QuadrupedWebControl>(
         context.executor,

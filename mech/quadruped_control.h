@@ -22,12 +22,11 @@
 #include <boost/noncopyable.hpp>
 
 #include "mjlib/base/visitor.h"
-#include "mjlib/multiplex/asio_client.h"
 
 #include "base/context.h"
 
 #include "mech/control_timing.h"
-#include "mech/imu_client.h"
+#include "mech/pi3hat_interface.h"
 #include "mech/quadruped_command.h"
 #include "mech/quadruped_state.h"
 
@@ -38,10 +37,8 @@ namespace mech {
 class QuadrupedControl : boost::noncopyable {
  public:
   /// @param client_getter will be called at AsyncStart time
-  using ClientGetter = std::function<mjlib::multiplex::AsioClient*()>;
-  using ImuGetter = std::function<ImuClient*()>;
-  QuadrupedControl(base::Context&,
-                   ClientGetter client_getter, ImuGetter imu_getter);
+  using Pi3hatGetter = std::function<Pi3hatInterface*()>;
+  QuadrupedControl(base::Context&, Pi3hatGetter client_getter);
   ~QuadrupedControl();
 
   void AsyncStart(mjlib::io::ErrorCallback handler);

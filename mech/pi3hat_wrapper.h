@@ -65,7 +65,7 @@ class Pi3hatWrapper : public Pi3hatInterface {
     double power_poll_period_s = 0.1;
     double shutdown_timeout_s = 15.0;
     uint32_t imu_rate_hz = 400;
-
+    bool attitude_detail = false;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -77,6 +77,7 @@ class Pi3hatWrapper : public Pi3hatInterface {
       a->Visit(MJ_NVP(power_poll_period_s));
       a->Visit(MJ_NVP(shutdown_timeout_s));
       a->Visit(MJ_NVP(imu_rate_hz));
+      a->Visit(MJ_NVP(attitude_detail));
     }
   };
 
@@ -129,6 +130,11 @@ class Pi3hatWrapper : public Pi3hatInterface {
   void tx_slot(int remote, int slot_id, const Slot&) override;
 
   Slot tx_slot(int remote, int slot_idx) override;
+
+  void Cycle(AttitudeData*,
+             const std::vector<IdRequest>& request,
+             Reply* reply,
+             mjlib::io::ErrorCallback callback) override;
 
  private:
   class Impl;

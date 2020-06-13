@@ -437,8 +437,7 @@ class SimPi3hat : public mech::Pi3hatInterface {
     frame_ = frame;
   }
 
-  void ReadImu(mech::AttitudeData* attitude,
-               mjlib::io::ErrorCallback callback) override {
+  void DoAttitude(mech::AttitudeData* attitude) {
     if (frame_) {
       attitude->timestamp = mjlib::io::Now(executor_.context());
 
@@ -473,6 +472,12 @@ class SimPi3hat : public mech::Pi3hatInterface {
     } else {
       *attitude = {};
     }
+
+  }
+
+  void ReadImu(mech::AttitudeData* attitude,
+               mjlib::io::ErrorCallback callback) override {
+    DoAttitude(attitude);
     boost::asio::post(
         executor_,
         std::bind(std::move(callback), mjlib::base::error_code()));
@@ -521,15 +526,20 @@ class SimPi3hat : public mech::Pi3hatInterface {
         std::bind(std::move(callback), ec));
   }
 
+  void DoCan(const std::vector<IdRequest>& requests, Reply* reply,
+             mjlib::base::error_code* ec) {
+    *reply = {};
+    for (const auto& id_request : requests) {
+      reply->replies.push_back({});
+      DoRequest(id_request, &reply->replies.back(), ec);
+    }
+  }
+
   void AsyncRegisterMultiple(
       const std::vector<IdRequest>& requests, Reply* reply,
       mjlib::io::ErrorCallback callback) override {
-    *reply = {};
     mjlib::base::error_code ec;
-    for (const auto& id_request : requests) {
-      reply->replies.push_back({});
-      DoRequest(id_request, &reply->replies.back(), &ec);
-    }
+    DoCan(requests, reply, &ec);
     boost::asio::post(
         executor_,
         std::bind(std::move(callback), ec));
@@ -563,6 +573,18 @@ class SimPi3hat : public mech::Pi3hatInterface {
     for (auto& pair : servos_) {
       pair.second->Run(dt_s);
     }
+  }
+
+  void Cycle(mech::AttitudeData* attitude,
+             const std::vector<IdRequest>& requests, Reply* reply,
+             mjlib::io::ErrorCallback callback) override {
+    DoAttitude(attitude);
+    mjlib::base::error_code ec;
+    DoCan(requests, reply, &ec);
+
+    boost::asio::post(
+        executor_,
+        std::bind(std::move(callback), ec));
   }
 
  private:
