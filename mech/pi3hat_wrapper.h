@@ -60,6 +60,11 @@ class Pi3hatWrapper : public Pi3hatInterface {
     // When waiting for CAN data, wait this long before timing out.
     double query_timeout_s = 0.001;
 
+    // And guarantee to wait at least this long after any successful
+    // receives to catch stragglers. (Mostly to prevent stale data
+    // from the previous cycle causing us to be one cycle behind).
+    double min_wait_s = 0.00005;
+
     Mounting mounting;
     uint32_t rf_id = 5678;
     double power_poll_period_s = 0.1;
