@@ -14,6 +14,7 @@
 
 #include "mech/pi3hat_wrapper.h"
 
+#include <functional>
 #include <thread>
 
 #include <fmt/format.h>
@@ -25,8 +26,12 @@
 #include "mjlib/base/system_error.h"
 #include "mjlib/io/deadline_timer.h"
 #include "mjlib/io/now.h"
+#include "mjlib/io/repeating_timer.h"
 
 #include "mjbots/pi3hat/pi3hat.h"
+
+#include "base/logging.h"
+#include "base/saturate.h"
 
 namespace mjmech {
 namespace mech {
@@ -42,7 +47,8 @@ class Pi3hatWrapper::Impl {
  public:
   Impl(const boost::asio::executor& executor, const Options& options)
       : executor_(executor),
-        options_(options) {
+        options_(options),
+        power_poll_timer_(executor) {
     thread_ = std::thread(std::bind(&Impl::CHILD_Run, this));
   }
 
@@ -52,6 +58,10 @@ class Pi3hatWrapper::Impl {
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
+    power_poll_timer_.start(base::ConvertSecondsToDuration(
+                                options_.power_poll_period_s),
+                            std::bind(&Impl::HandlePowerPoll, this,
+                                      std::placeholders::_1));
     boost::asio::post(
         executor_,
           std::bind(std::move(callback), mjlib::base::error_code()));
@@ -154,6 +164,12 @@ class Pi3hatWrapper::Impl {
   }
 
  private:
+  void HandlePowerPoll(const mjlib::base::error_code& ec) {
+    mjlib::base::FailIf(ec);
+
+    power_poll_.store(true);
+  }
+
   class Tunnel : public mjlib::io::AsyncStream,
                  public std::enable_shared_from_this<Tunnel> {
    public:
@@ -302,10 +318,22 @@ class Pi3hatWrapper::Impl {
       dst.expect_reply = request.request.request_reply();
     }
 
+    const bool power_poll = power_poll_.exchange(false);
+    if (power_poll) {
+      d.tx_can.push_back({});
+      auto& dst = d.tx_can.back();
+      dst.bus = 5;  // The slow auxiliary CAN bus
+      dst.id = 0x00010005;
+      dst.size = 2;
+      dst.data[0] = 0;
+      dst.data[1] = base::Saturate<uint8_t>(options_.shutdown_timeout_s / 0.1);
+
+      input->force_can_check |= (1 << 5);
+    }
+
     if (d.tx_can.size()) {
       input->tx_can = {&d.tx_can[0], d.tx_can.size()};
     }
-
 
     d.rx_can.resize(std::max<size_t>(d.tx_can.size() * 2, 24));
     input->rx_can = {&d.rx_can[0], d.rx_can.size()};
@@ -508,8 +536,25 @@ class Pi3hatWrapper::Impl {
   void FinishCAN(Reply* reply) {
     // First CAN.
     for (size_t i = 0; i < pi3data_.result.rx_can_size; i++) {
-      reply->replies.push_back({});
       const auto& src = pi3data_.rx_can[i];
+
+      if (src.id == 0x10004) {
+        // This came from the power_dist board.
+        const bool power_switch = src.data[0] != 0;
+        if (!power_switch) {
+          // The power switch is off.  Shut everything down!
+          log_.warn("Shutting down!");
+          mjlib::base::system_error::throw_if(
+              ::system("shutdown -h now") < 0,
+              "error trying to shutdown, at least we'll exit the app");
+          // Quit the application to make the shutdown process go
+          // faster.
+          std::exit(0);
+        }
+        continue;
+      }
+
+      reply->replies.push_back({});
       auto& this_reply = reply->replies.back();
       mjlib::base::BufferReadStream payload_stream{
         {reinterpret_cast<const char*>(&src.data[0]),
@@ -610,8 +655,12 @@ class Pi3hatWrapper::Impl {
         1; // just send everything else out to 1 by default
   }
 
+  base::LogRef log_ = base::GetLogInstance("Pi3hatWrapper");
+
   boost::asio::executor executor_;
   const Options options_;
+
+  mjlib::io::RepeatingTimer power_poll_timer_;
 
   std::thread thread_;
 
@@ -648,6 +697,8 @@ class Pi3hatWrapper::Impl {
     mjbots::pi3hat::Pi3Hat::Output result;
   };
   Pi3Data pi3data_;
+
+  std::atomic<bool> power_poll_{false};
 };
 
 Pi3hatWrapper::Pi3hatWrapper(const boost::asio::executor& executor,
