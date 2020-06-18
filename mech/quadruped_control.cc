@@ -251,6 +251,12 @@ class QuadrupedControl::Impl {
 
     timing_ = ControlTiming(executor_, timing_.cycle_start());
 
+    if (timing_.status().delta_s > 1.5 * period_s_) {
+      // We likely skipped a cycle.  Warn.
+      WarnRateLimited(fmt::format("Skipped cycle: delta_s={}",
+                                  timing_.status().delta_s));
+    }
+
     outstanding_ = true;
 
     status_reply_ = {};
@@ -2024,6 +2030,18 @@ class QuadrupedControl::Impl {
     return true;
   }
 
+  void WarnRateLimited(const std::string& message) {
+    const boost::posix_time::time_duration kRateLimitTime =
+        boost::posix_time::seconds(1);
+
+    const auto now = Now();
+    if (last_warn_timestamp_.is_not_a_date_time() ||
+        (now - last_warn_timestamp_) > kRateLimitTime) {
+      last_warn_timestamp_ = now;
+      log_.warn(message);
+    }
+  }
+
   boost::asio::executor executor_;
   Parameters parameters_;
 
@@ -2073,6 +2091,8 @@ class QuadrupedControl::Impl {
   std::vector<moteus::Value> values_cache_;
 
   std::vector<int> all_leg_ids_{0, 1, 2, 3};
+
+  boost::posix_time::ptime last_warn_timestamp_;
 };
 
 QuadrupedControl::QuadrupedControl(base::Context& context,
