@@ -254,6 +254,8 @@ dhcp-range=192.168.16.100,192.168.16.150,255.255.255.0,24h
 
     ensure_present('/etc/dhcpcd.conf', 'denyinterfaces wlan0')
 
+    run("rfkill unblock all")
+
     run('systemctl unmask hostapd')
     run('systemctl enable hostapd')
     run('systemctl start hostapd')
