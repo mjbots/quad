@@ -86,15 +86,17 @@ class Application {
   void Stop() {
     MJ_ASSERT(outstanding_ == false);
 
-    id_request_ = {};
-    id_request_.id = 1;
-    id_request_.request.WriteSingle(
+    request_.resize(1);
+    auto& item = request_[0];
+    item = {};
+    item.id = 1;
+    item.request.WriteSingle(
         moteus::kMode, Value(static_cast<int8_t>(moteus::Mode::kStopped)));
 
     outstanding_ = true;
-    single_reply_ = {};
-    asio_client_.AsyncRegister(
-        id_request_, &single_reply_,
+    reply_ = {};
+    asio_client_.AsyncTransmit(
+        &request_, &reply_,
         std::bind(&Application::HandleStop, this, pl::_1));
   }
 
@@ -113,11 +115,13 @@ class Application {
 
     const float command_Nm = GetCommandTorqueNm();
 
-    id_request_ = {};
-    id_request_.id = 1;
-    id_request_.request.WriteSingle(
+    request_.resize(1);
+    auto& item = request_[0];
+    item = {};
+    item.id = 1;
+    item.request.WriteSingle(
         moteus::kMode, Value(static_cast<int8_t>(moteus::Mode::kPosition)));
-    id_request_.request.WriteMultiple(
+    item.request.WriteMultiple(
         moteus::kCommandPosition,
         {Value(0.0f),  // position
               Value(0.0f),  // velocity
@@ -126,12 +130,12 @@ class Application {
               Value(0.0f),  // kd_scale
               });
 
-    id_request_.request.ReadMultiple(moteus::kMode, 5, moteus::kFloat);
-    id_request_.request.ReadMultiple(moteus::kVoltage, 3, moteus::kFloat);
+    item.request.ReadMultiple(moteus::kMode, 5, moteus::kFloat);
+    item.request.ReadMultiple(moteus::kVoltage, 3, moteus::kFloat);
 
     current_reply_ = {};
-    asio_client_.AsyncRegister(
-        id_request_, &current_reply_,
+    asio_client_.AsyncTransmit(
+        &request_, &current_reply_,
         std::bind(&Application::HandleClient, this, pl::_1));
   }
 
@@ -155,8 +159,6 @@ class Application {
     if (ec == boost::asio::error::operation_aborted) { return; }
     mjlib::base::FailIf(ec);
 
-    single_reply_ = current_reply_;
-
     UpdateDisplay();
   }
 
@@ -169,12 +171,12 @@ class Application {
     double command = GetCommandTorqueNm();
 
     auto get = [&](auto moteus_reg) -> double {
-      if (single_reply_.reply.count(moteus_reg) == 0) {
-        return std::numeric_limits<double>::signaling_NaN();
+      for (const auto& item : reply_) {
+        if (item.reg == moteus_reg) {
+          return std::get<float>(std::get<Value>(item.value));
+        }
       }
-
-      return (std::get<float>(
-                  std::get<Value>(single_reply_.reply.at(moteus_reg))));
+      return std::numeric_limits<double>::signaling_NaN();
     };
 
     std::cout << fmt::format(
@@ -206,9 +208,9 @@ class Application {
 
   using AsioClient = mjlib::multiplex::AsioClient;
 
-  AsioClient::IdRequest id_request_;
-  AsioClient::SingleReply current_reply_;
-  AsioClient::SingleReply single_reply_;
+  AsioClient::Request request_;
+  AsioClient::Reply current_reply_;
+  AsioClient::Reply reply_;
   bool outstanding_ = false;
 
   const std::map<int, std::string> mode_text_ = {

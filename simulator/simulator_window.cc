@@ -189,7 +189,8 @@ class Servo : public mjlib::multiplex::MicroServer::Server,
   }
 
   void Request(const mjlib::multiplex::RegisterRequest& request,
-               mjlib::multiplex::RegisterReply* reply,
+               int id,
+               mjlib::multiplex::AsioClient::Reply* reply,
                mjlib::base::error_code*) {
     BOOST_ASSERT(!!read_header_);
 
@@ -212,14 +213,16 @@ class Servo : public mjlib::multiplex::MicroServer::Server,
       read_copy(mjlib::micro::error_code(), to_read);
     }
 
-    *reply = {};
-
     // This may have resulted in a write.
 
     if (write_header_) {
 
       mjlib::base::BufferReadStream stream{write_buffer_};
-      *reply = mjlib::multiplex::ParseRegisterReply(stream);
+      parsed_data_.clear();
+      mjlib::multiplex::ParseRegisterReply(stream, &parsed_data_);
+      for (const auto& item : parsed_data_) {
+        reply->push_back({static_cast<uint8_t>(id), item.first, item.second});
+      }
 
       {
         auto write_copy = std::move(write_callback_);
@@ -415,6 +418,8 @@ class Servo : public mjlib::multiplex::MicroServer::Server,
 
   const double position_min_ = -1.0;
   const double position_max_ = 1.0;
+
+  std::vector<mjlib::multiplex::RegisterValue> parsed_data_;
 };
 
 class SimPi3hat : public mech::Pi3hatInterface {
@@ -516,30 +521,19 @@ class SimPi3hat : public mech::Pi3hatInterface {
   // ***********************
   // multiplex::AsioClient
 
-  void AsyncRegister(
-      const IdRequest& request, SingleReply* single_reply,
-      mjlib::io::ErrorCallback callback) override {
-    mjlib::base::error_code ec;
-    DoRequest(request, single_reply, &ec);
-    boost::asio::post(
-        executor_,
-        std::bind(std::move(callback), ec));
-  }
-
-  void DoCan(const std::vector<IdRequest>& requests, Reply* reply,
+  void DoCan(const Request* request, Reply* reply,
              mjlib::base::error_code* ec) {
     *reply = {};
-    for (const auto& id_request : requests) {
-      reply->replies.push_back({});
-      DoRequest(id_request, &reply->replies.back(), ec);
+    for (const auto& id_request : *request) {
+      DoRequest(id_request, reply, ec);
     }
   }
 
-  void AsyncRegisterMultiple(
-      const std::vector<IdRequest>& requests, Reply* reply,
+  void AsyncTransmit(
+      const Request* request, Reply* reply,
       mjlib::io::ErrorCallback callback) override {
     mjlib::base::error_code ec;
-    DoCan(requests, reply, &ec);
+    DoCan(request, reply, &ec);
     boost::asio::post(
         executor_,
         std::bind(std::move(callback), ec));
@@ -576,11 +570,11 @@ class SimPi3hat : public mech::Pi3hatInterface {
   }
 
   void Cycle(mech::AttitudeData* attitude,
-             const std::vector<IdRequest>& requests, Reply* reply,
+             const Request* request, Reply* reply,
              mjlib::io::ErrorCallback callback) override {
     DoAttitude(attitude);
     mjlib::base::error_code ec;
-    DoCan(requests, reply, &ec);
+    DoCan(request, reply, &ec);
 
     boost::asio::post(
         executor_,
@@ -589,7 +583,7 @@ class SimPi3hat : public mech::Pi3hatInterface {
 
  private:
   void DoRequest(const mjlib::multiplex::AsioClient::IdRequest& id_request,
-                 mjlib::multiplex::AsioClient::SingleReply* reply,
+                 mjlib::multiplex::AsioClient::Reply* reply,
                  mjlib::base::error_code* ec) {
     const auto id = id_request.id;
     const auto it = servos_.find(id);
@@ -600,8 +594,7 @@ class SimPi3hat : public mech::Pi3hatInterface {
       return;
     }
 
-    reply->id = id;
-    it->second->Request(id_request.request, &reply->reply, ec);
+    it->second->Request(id_request.request, id, reply, ec);
   }
 
   boost::asio::executor executor_;

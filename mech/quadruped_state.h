@@ -58,31 +58,6 @@ struct QuadrupedState {
 
   std::vector<Joint> joints;
 
-  struct Link {
-    // The topmost link is relative to the "Body" frame.  Each
-    // subsequent link is relative to the previous.  The "child" frame
-    // references the endpoint of this link.
-    Sophus::SE3d pose_child_parent;
-
-    // Each of the these velocities and torques is referenced to the
-    // canonical frame for that joint.
-    double angle_deg = 0.0;
-    double velocity_dps = 0.0;
-    double torque_Nm = 0.0;
-
-    // Random diagnostics for this joint.
-    int id = 0;
-
-    template <typename Archive>
-    void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(pose_child_parent));
-      a->Visit(MJ_NVP(angle_deg));
-      a->Visit(MJ_NVP(velocity_dps));
-      a->Visit(MJ_NVP(torque_Nm));
-      a->Visit(MJ_NVP(id));
-    }
-  };
-
   // The leg end-effector level.
   struct Leg {
     int leg = 0;
@@ -90,15 +65,12 @@ struct QuadrupedState {
     base::Point3D velocity_mm_s;
     base::Point3D force_N;
 
-    std::vector<Link> links;
-
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(leg));
       a->Visit(MJ_NVP(position_mm));
       a->Visit(MJ_NVP(velocity_mm_s));
       a->Visit(MJ_NVP(force_N));
-      a->Visit(MJ_NVP(links));
     }
 
     friend Leg operator*(const Sophus::SE3d&, const Leg& rhs);

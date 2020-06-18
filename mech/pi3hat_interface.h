@@ -32,7 +32,7 @@ class Pi3hatInterface : public ImuClient,
 
   virtual void Cycle(
       AttitudeData*,
-      const std::vector<IdRequest>&, Reply*,
+      const Request*, Reply*,
       mjlib::io::ErrorCallback callback) = 0;
 };
 

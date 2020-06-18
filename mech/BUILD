@@ -68,11 +68,13 @@ cc_library(
         "@opencv//:aruco",
         "@opencv//:imgcodecs",
         "@opencv//:videoio",
-        "@pi3hat//mjbots/pi3hat:libpi3hat",
         "@sophus",
     ] + select({
         "//conditions:default" : [],
-        "//:raspberrypi" : ["@raspicam"],
+        "//:raspberrypi" : [
+            "@raspicam",
+            "@pi3hat//mjbots/pi3hat:libpi3hat",
+        ],
     }),
     copts = [
         "-Wno-gnu-designator",

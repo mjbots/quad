@@ -264,7 +264,7 @@ class QuadrupedControl::Impl {
       }
       return &status_request_;
     }();
-    pi3hat_->Cycle(&imu_data_, *request, &status_reply_,
+    pi3hat_->Cycle(&imu_data_, request, &status_reply_,
                    std::bind(&Impl::HandleStatus, this, pl::_1));
   }
 
@@ -276,9 +276,25 @@ class QuadrupedControl::Impl {
     imu_signal_(&imu_data_);
 
     // If we don't have all 12 servos, then skip this cycle.
-    status_.missing_replies = 12 - status_reply_.replies.size();
+    const uint16_t servo_bitmask = [&]() {
+      uint16_t result = 0;
+      for (const auto& item : status_reply_) {
+        result |= (1 << item.id);
+      }
+      return result;
+    }();
+    const int found_servos = [&]() {
+      int result = 0;
+      for (int i = 1; i <= 12; i++) {
+        if (servo_bitmask & (1 << i)) {
+          result++;
+        }
+      }
+      return result;
+    }();
+    status_.missing_replies = 12 - found_servos;
 
-    if (status_reply_.replies.size() != 12) {
+    if (found_servos != 12) {
       if (status_.state.joints.size() != 12) {
         // We have to get at least one full set before we can start
         // updating.
@@ -304,9 +320,10 @@ class QuadrupedControl::Impl {
     timing_.finish_control();
 
     if (!client_command_.empty()) {
-      client_command_reply_ = {};
-      pi3hat_->AsyncRegisterMultiple(client_command_, &client_command_reply_,
-                                     std::bind(&Impl::HandleCommand, this, pl::_1));
+      client_command_reply_.clear();
+      pi3hat_->AsyncTransmit(
+          &client_command_, &client_command_reply_,
+          std::bind(&Impl::HandleCommand, this, pl::_1));
     } else {
       HandleCommand({});
     }
@@ -331,8 +348,6 @@ class QuadrupedControl::Impl {
   }
 
   bool UpdateStatus() {
-    std::vector<QuadrupedState::Link> links;
-
     if (status_.mode == QM::kConfiguring) {
       // Try to update our config structure.
       UpdateConfiguringStatus();
@@ -348,7 +363,7 @@ class QuadrupedControl::Impl {
       return result;
     };
 
-    for (const auto& reply : status_reply_.replies) {
+    for (const auto& reply : status_reply_) {
       const auto maybe_sign = MaybeGetSign(reply.id);
       if (!maybe_sign) {
         log_.warn(fmt::format("Reply from unknown servo {}", reply.id));
@@ -356,55 +371,47 @@ class QuadrupedControl::Impl {
       }
 
       QuadrupedState::Joint& out_joint = find_or_make_joint(reply.id);
-      QuadrupedState::Link out_link;
 
-      out_joint.id = out_link.id = reply.id;
+      out_joint.id = reply.id;
 
       const double sign = *maybe_sign;
 
-      for (const auto& pair : reply.reply) {
-        const auto* maybe_value = std::get_if<moteus::Value>(&pair.second);
-        if (!maybe_value) { continue; }
-        const auto& value = *maybe_value;
-        switch (static_cast<moteus::Register>(pair.first)) {
-          case moteus::kMode: {
-            out_joint.mode = moteus::ReadInt(value);
-            break;
-          }
-          case moteus::kPosition: {
-            out_joint.angle_deg = sign * moteus::ReadPosition(value);
-            out_link.angle_deg = out_joint.angle_deg;
-            break;
-          }
-          case moteus::kVelocity: {
-            out_joint.velocity_dps = sign * moteus::ReadVelocity(value);
-            out_link.velocity_dps = out_joint.velocity_dps;
-            break;
-          }
-          case moteus::kTorque: {
-            out_joint.torque_Nm = sign * moteus::ReadTorque(value);
-            out_link.torque_Nm = out_joint.torque_Nm;
-            break;
-          }
-          case moteus::kVoltage: {
-            out_joint.voltage = moteus::ReadVoltage(value);
-            break;
-          }
-          case moteus::kTemperature: {
-            out_joint.temperature_C = moteus::ReadTemperature(value);
-            break;
-          }
-          case moteus::kFault: {
-            out_joint.fault = moteus::ReadInt(value);
-            break;
-          }
-          default: {
-            break;
-          }
+      const auto* maybe_value = std::get_if<moteus::Value>(&reply.value);
+      if (!maybe_value) { continue; }
+      const auto& value = *maybe_value;
+      switch (static_cast<moteus::Register>(reply.reg)) {
+        case moteus::kMode: {
+          out_joint.mode = moteus::ReadInt(value);
+          break;
+        }
+        case moteus::kPosition: {
+          out_joint.angle_deg = sign * moteus::ReadPosition(value);
+          break;
+        }
+        case moteus::kVelocity: {
+          out_joint.velocity_dps = sign * moteus::ReadVelocity(value);
+          break;
+        }
+        case moteus::kTorque: {
+          out_joint.torque_Nm = sign * moteus::ReadTorque(value);
+          break;
+        }
+        case moteus::kVoltage: {
+          out_joint.voltage = moteus::ReadVoltage(value);
+          break;
+        }
+        case moteus::kTemperature: {
+          out_joint.temperature_C = moteus::ReadTemperature(value);
+          break;
+        }
+        case moteus::kFault: {
+          out_joint.fault = moteus::ReadInt(value);
+          break;
+        }
+        default: {
+          break;
         }
       }
-
-      links.push_back(out_link);
     }
 
     std::sort(status_.state.joints.begin(), status_.state.joints.end(),
@@ -447,13 +454,6 @@ class QuadrupedControl::Impl {
 
     status_.state.legs_B.clear();
 
-    auto get_link = [&](int id) {
-      for (const auto& link : links) {
-        if (link.id == id) { return link; }
-      }
-      return QuadrupedState::Link();
-    };
-
     auto find_or_make_leg = [&](int id) -> QuadrupedState::Leg& {
       for (auto& leg : status_.state.legs_B) {
         if (leg.leg == id) { return leg; }
@@ -474,11 +474,6 @@ class QuadrupedControl::Impl {
       out_leg_B.position_mm = effector_B.pose_mm;
       out_leg_B.velocity_mm_s = effector_B.velocity_mm_s;
       out_leg_B.force_N = effector_B.force_N;
-
-      out_leg_B.links.clear();
-      out_leg_B.links.push_back(get_link(leg.config.ik.shoulder.id));
-      out_leg_B.links.push_back(get_link(leg.config.ik.femur.id));
-      out_leg_B.links.push_back(get_link(leg.config.ik.tibia.id));
     }
 
     std::sort(status_.state.legs_B.begin(), status_.state.legs_B.end(),
@@ -505,40 +500,39 @@ class QuadrupedControl::Impl {
       return result;
     };
 
-    for (const auto& reply : status_reply_.replies) {
+    for (const auto& reply : status_reply_) {
       auto& out_servo = find_or_make_servo(reply.id);
 
-      for (const auto& pair : reply.reply) {
-        const auto* maybe_value = std::get_if<moteus::Value>(&pair.second);
-        if (!maybe_value) { continue; }
-        const auto& value = *maybe_value;
-        switch (static_cast<moteus::Register>(pair.first)) {
-          case moteus::kRezeroState: {
-            out_servo.rezero_state = moteus::ReadInt(value);
-            break;
-          }
-          case moteus::kRegisterMapVersion: {
-            out_servo.register_map_version = moteus::ReadInt(value);
-            break;
-          }
-          case moteus::kSerialNumber1: {
-            const auto sn = static_cast<uint32_t>(moteus::ReadInt(value));
-            std::memcpy(&out_servo.serial_number[0], &sn, sizeof(sn));
-            break;
-          }
-          case moteus::kSerialNumber2: {
-            const auto sn = static_cast<uint32_t>(moteus::ReadInt(value));
-            std::memcpy(&out_servo.serial_number[4], &sn, sizeof(sn));
-            break;
-          }
-          case moteus::kSerialNumber3: {
-            const auto sn = static_cast<uint32_t>(moteus::ReadInt(value));
-            std::memcpy(&out_servo.serial_number[8], &sn, sizeof(sn));
-            break;
-          }
-          default: {
-            break;
-          }
+      const auto* maybe_value = std::get_if<moteus::Value>(&reply.value);
+      if (!maybe_value) { continue; }
+      const auto& value = *maybe_value;
+
+      switch (static_cast<moteus::Register>(reply.reg)) {
+        case moteus::kRezeroState: {
+          out_servo.rezero_state = moteus::ReadInt(value);
+          break;
+        }
+        case moteus::kRegisterMapVersion: {
+          out_servo.register_map_version = moteus::ReadInt(value);
+          break;
+        }
+        case moteus::kSerialNumber1: {
+          const auto sn = static_cast<uint32_t>(moteus::ReadInt(value));
+          std::memcpy(&out_servo.serial_number[0], &sn, sizeof(sn));
+          break;
+        }
+        case moteus::kSerialNumber2: {
+          const auto sn = static_cast<uint32_t>(moteus::ReadInt(value));
+          std::memcpy(&out_servo.serial_number[4], &sn, sizeof(sn));
+          break;
+        }
+        case moteus::kSerialNumber3: {
+          const auto sn = static_cast<uint32_t>(moteus::ReadInt(value));
+          std::memcpy(&out_servo.serial_number[8], &sn, sizeof(sn));
+          break;
+        }
+        default: {
+          break;
         }
       }
     }
@@ -1874,11 +1868,11 @@ class QuadrupedControl::Impl {
       }
     }
 
-    ControlJoints(out_joints);
+    ControlJoints(std::move(out_joints));
   }
 
   void ControlJoints(std::vector<QC::Joint> joints) {
-    control_log_->joints = joints;
+    control_log_->joints = std::move(joints);
     std::sort(control_log_->joints.begin(),
               control_log_->joints.end(),
               [](const auto& lhs, const auto& rhs) {
@@ -1892,10 +1886,14 @@ class QuadrupedControl::Impl {
     control_log_->timestamp = Now();
     control_signal_(control_log_);
 
-    client_command_ = {};
+    size_t pos = 0;
     for (const auto& joint : control_log_->joints) {
-      client_command_.push_back({});
-      auto& request = client_command_.back();
+      if (client_command_.size() <= pos) {
+        client_command_.resize(client_command_.size() + 1);
+      }
+
+      auto& request = client_command_[pos++];
+      request.request.clear();
       request.id = joint.id;
 
       constexpr double kInf = std::numeric_limits<double>::infinity();
@@ -2002,6 +2000,9 @@ class QuadrupedControl::Impl {
         }
       }
     }
+    if (client_command_.size() > pos) {
+      client_command_.resize(pos);
+    }
   }
 
   boost::posix_time::ptime Now() {
@@ -2048,7 +2049,7 @@ class QuadrupedControl::Impl {
 
   Pi3hatInterface* pi3hat_ = nullptr;
 
-  using Request = std::vector<Client::IdRequest>;
+  using Request = Client::Request;
   Request status_request_;
   Request config_status_request_;
   Client::Reply status_reply_;

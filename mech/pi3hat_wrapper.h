@@ -33,8 +33,8 @@ namespace mech {
 /// Provide an interface to the pi3hat.
 ///
 /// NOTE: This treates the AsioClient as the primary interface.  IMU
-/// and RF requests will only be serviced when AsyncRegister or
-/// AsyncRegisterMultiple are called.
+/// and RF requests will only be serviced when AsyncTransmit is
+/// called.
 class Pi3hatWrapper : public Pi3hatInterface {
  public:
   struct Mounting {
@@ -96,12 +96,9 @@ class Pi3hatWrapper : public Pi3hatInterface {
 
   /// Request a request be made to one or more servos (and optionally
   /// have a reply sent back).
-  void AsyncRegister(const IdRequest&, SingleReply*,
+  void AsyncTransmit(const Request*,
+                     Reply*,
                      mjlib::io::ErrorCallback) override;
-
-  void AsyncRegisterMultiple(const std::vector<IdRequest>&,
-                             Reply*,
-                             mjlib::io::ErrorCallback) override;
 
   mjlib::io::SharedStream MakeTunnel(
       uint8_t id,
@@ -137,7 +134,7 @@ class Pi3hatWrapper : public Pi3hatInterface {
   Slot tx_slot(int remote, int slot_idx) override;
 
   void Cycle(AttitudeData*,
-             const std::vector<IdRequest>& request,
+             const Request* request,
              Reply* reply,
              mjlib::io::ErrorCallback callback) override;
 

@@ -28,7 +28,9 @@
 #include "mjlib/io/now.h"
 #include "mjlib/io/repeating_timer.h"
 
+#ifdef COM_GITHUB_MJBOTS_RASPBERRYPI
 #include "mjbots/pi3hat/pi3hat.h"
+#endif
 
 #include "base/logging.h"
 #include "base/saturate.h"
@@ -43,6 +45,7 @@ uint32_t u32(T value) {
 }
 }
 
+#ifdef COM_GITHUB_MJBOTS_RASPBERRYPI
 class Pi3hatWrapper::Impl {
  public:
   Impl(const boost::asio::executor& executor, const Options& options)
@@ -96,24 +99,8 @@ class Pi3hatWrapper::Impl {
     return rf_tx_slots_[slot_idx];
   }
 
-  void AsyncRegister(const IdRequest& request,
-                     SingleReply* reply,
-                     mjlib::io::ErrorCallback callback) {
-    single_request_ = { request };
-    single_reply_ = {};
-
-    AsyncRegisterMultiple(
-        single_request_, &single_reply_,
-        [this, reply, callback=std::move(callback)](const auto& ec) mutable {
-          if (!this->single_reply_.replies.empty()) {
-            *reply = this->single_reply_.replies.front();
-          }
-          callback(ec);
-        });
-  }
-
-  void AsyncRegisterMultiple(
-      const std::vector<IdRequest>& request,
+  void AsyncTransmit(
+      const Request* request,
       Reply* reply,
       mjlib::io::ErrorCallback callback) {
     if (rf_to_send_) {
@@ -127,8 +114,8 @@ class Pi3hatWrapper::Impl {
         [this, callback=std::move(callback), &request, reply,
          request_attitude=(attitude_ != nullptr),
          request_rf=rf_remote_ != nullptr]() mutable {
-          this->CHILD_Register(
-              &request, reply,
+          this->CHILD_Transmit(
+              request, reply,
               request_attitude, request_rf,
               std::move(callback));
         });
@@ -136,7 +123,7 @@ class Pi3hatWrapper::Impl {
 
   void Cycle(
       AttitudeData* attitude,
-      const std::vector<IdRequest>& request,
+      const Request* request,
       Reply* reply,
       mjlib::io::ErrorCallback callback) {
     if (rf_to_send_) {
@@ -148,10 +135,10 @@ class Pi3hatWrapper::Impl {
 
     boost::asio::post(
         child_context_,
-        [this, callback=std::move(callback), attitude, &request, reply,
+        [this, callback=std::move(callback), attitude, request, reply,
          request_rf=(rf_remote_ != nullptr)]() mutable {
           this->CHILD_Cycle(
-              attitude, &request, reply, request_rf,
+              attitude, request, reply, request_rf,
               std::move(callback));
         });
   }
@@ -304,7 +291,7 @@ class Pi3hatWrapper::Impl {
   }
 
   void CHILD_SetupCAN(mjbots::pi3hat::Pi3Hat::Input* input,
-                      const std::vector<IdRequest>* requests) {
+                      const Request* requests) {
     auto& d = pi3data_;
     d.tx_can.clear();
 
@@ -340,14 +327,14 @@ class Pi3hatWrapper::Impl {
   }
 
   void CHILD_Cycle(AttitudeData* attitude_dest,
-                   const std::vector<IdRequest>* requests,
+                   const Request* request,
                    Reply* reply,
                    bool request_rf,
                    mjlib::io::ErrorCallback callback) {
     mjbots::pi3hat::Pi3Hat::Input input;
 
     CHILD_SetupRf(&input);
-    CHILD_SetupCAN(&input, requests);
+    CHILD_SetupCAN(&input, request);
 
     input.attitude = &pi3data_.attitude;
     input.request_attitude = true;
@@ -366,7 +353,7 @@ class Pi3hatWrapper::Impl {
         });
   }
 
-  void CHILD_Register(const std::vector<IdRequest>* requests,
+  void CHILD_Transmit(const Request* request,
                       Reply* reply,
                       bool request_attitude,
                       bool request_rf,
@@ -374,7 +361,7 @@ class Pi3hatWrapper::Impl {
     mjbots::pi3hat::Pi3Hat::Input input;
 
     CHILD_SetupRf(&input);
-    CHILD_SetupCAN(&input, requests);
+    CHILD_SetupCAN(&input, request);
 
     input.attitude = &pi3data_.attitude;
     input.request_attitude = request_attitude;
@@ -389,7 +376,7 @@ class Pi3hatWrapper::Impl {
     boost::asio::post(
         executor_,
         [this, callback=std::move(callback), reply]() mutable {
-          this->FinishRegister(reply, std::move(callback));
+          this->FinishTransmit(reply, std::move(callback));
         });
   }
 
@@ -554,13 +541,15 @@ class Pi3hatWrapper::Impl {
         continue;
       }
 
-      reply->replies.push_back({});
-      auto& this_reply = reply->replies.back();
+      parsed_data_.clear();
       mjlib::base::BufferReadStream payload_stream{
         {reinterpret_cast<const char*>(&src.data[0]),
               pi3data_.rx_can[i].size}};
-      this_reply.id = (src.id >> 8) & 0xff;
-      this_reply.reply = mjlib::multiplex::ParseRegisterReply(payload_stream);
+      mjlib::multiplex::ParseRegisterReply(payload_stream, &parsed_data_);
+      for (const auto& pair : parsed_data_) {
+        reply->push_back({static_cast<uint8_t>((src.id >> 8) & 0xff),
+                pair.first, pair.second});
+      }
     }
   }
 
@@ -625,7 +614,7 @@ class Pi3hatWrapper::Impl {
         std::bind(std::move(callback), mjlib::base::error_code()));
   }
 
-  void FinishRegister(Reply* reply, mjlib::io::ErrorCallback callback) {
+  void FinishTransmit(Reply* reply, mjlib::io::ErrorCallback callback) {
     const auto now = mjlib::io::Now(executor_.context());
 
     FinishCAN(reply);
@@ -678,6 +667,9 @@ class Pi3hatWrapper::Impl {
   std::array<Slot, 16> rf_tx_slots_ = {};
   uint16_t rf_to_send_ = 0;
 
+  // A cache to hold parsed register data.
+  std::vector<mjlib::multiplex::RegisterValue> parsed_data_;
+
   // Only accessed from the thread.
   std::optional<mjbots::pi3hat::Pi3Hat> pi3hat_;
   boost::asio::io_context child_context_;
@@ -700,6 +692,25 @@ class Pi3hatWrapper::Impl {
 
   std::atomic<bool> power_poll_{false};
 };
+#else
+
+class Pi3hatWrapper::Impl {
+ public:
+  Impl(const boost::asio::executor&, const Options&) {}
+  void AsyncStart(mjlib::io::ErrorCallback) {}
+  void ReadImu(AttitudeData*, mjlib::io::ErrorCallback) {}
+  void AsyncWaitForSlot(int*, uint16_t*, mjlib::io::ErrorCallback) {}
+  Slot rx_slot(int, int) { return {}; }
+  void tx_slot(int, int, const Slot&) {}
+  Slot tx_slot(int, int) { return {}; }
+  void AsyncTransmit(const Request*, Reply*, mjlib::io::ErrorCallback) {}
+  void Cycle(AttitudeData*, const Request*, Reply*,
+             mjlib::io::ErrorCallback) {}
+  mjlib::io::SharedStream MakeTunnel(uint8_t, uint32_t, const TunnelOptions&) {
+    return {};
+  }
+};
+#endif
 
 Pi3hatWrapper::Pi3hatWrapper(const boost::asio::executor& executor,
                                  const Options& options)
@@ -735,17 +746,10 @@ Pi3hatWrapper::Slot Pi3hatWrapper::tx_slot(int remote, int slot_idx) {
   return impl_->tx_slot(remote, slot_idx);
 }
 
-void Pi3hatWrapper::AsyncRegister(const IdRequest& request,
-                                    SingleReply* reply,
-                                    mjlib::io::ErrorCallback callback) {
-  impl_->AsyncRegister(request, reply, std::move(callback));
-}
-
-void Pi3hatWrapper::AsyncRegisterMultiple(
-    const std::vector<IdRequest>& request,
-    Reply* reply,
-    mjlib::io::ErrorCallback callback) {
-  impl_->AsyncRegisterMultiple(request, reply, std::move(callback));
+void Pi3hatWrapper::AsyncTransmit(const Request* request,
+                                  Reply* reply,
+                                  mjlib::io::ErrorCallback callback) {
+  impl_->AsyncTransmit(request, reply, std::move(callback));
 }
 
 mjlib::io::SharedStream Pi3hatWrapper::MakeTunnel(
@@ -760,7 +764,7 @@ Pi3hatWrapper::Stats Pi3hatWrapper::stats() const {
 }
 
 void Pi3hatWrapper::Cycle(AttitudeData* attitude,
-                          const std::vector<IdRequest>& request,
+                          const Request* request,
                           Reply* reply,
                           mjlib::io::ErrorCallback callback) {
   impl_->Cycle(attitude, request, reply, std::move(callback));

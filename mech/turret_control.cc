@@ -189,12 +189,12 @@ class TurretControl::Impl {
 
     status_outstanding_ = 2;
     status_count_ = (status_count_ + 1) % kWeaponDivider;
-    status_reply_ = {};
+    status_reply_.clear();
 
-    const auto& this_request =
-        (status_count_ == 0) ? status_weapon_request_ : status_request_;
+    const auto* this_request =
+        (status_count_ == 0) ? &status_weapon_request_ : &status_request_;
 
-    client_->AsyncRegisterMultiple(
+    client_->AsyncTransmit(
         this_request, &status_reply_,
         std::bind(&Impl::HandleStatus, this, pl::_1));
 
@@ -222,90 +222,86 @@ class TurretControl::Impl {
     timing_.finish_control();
   }
 
-  void UpdateServo(const mjlib::multiplex::AsioClient::SingleReply& reply,
+  void UpdateServo(const mjlib::multiplex::AsioClient::IdRegisterValue& reply,
                    Status::GimbalServo* servo) {
     servo->id = reply.id;
     const double sign = servo_sign_.at(reply.id);
 
-    for (const auto& pair : reply.reply) {
-      const auto* maybe_value = std::get_if<moteus::Value>(&pair.second);
-      if (!maybe_value) { continue; }
-      const auto& value = *maybe_value;
-      switch (static_cast<moteus::Register>(pair.first)) {
-        case moteus::kMode: {
-          servo->mode = moteus::ReadInt(value);
-          break;
-        }
-        case moteus::kPosition: {
-          servo->angle_deg = sign * moteus::ReadPosition(value);
-          break;
-        }
-        case moteus::kVelocity: {
-          servo->velocity_dps = sign * moteus::ReadPosition(value);
-          break;
-        }
-        case moteus::kTorque: {
-          servo->torque_Nm = sign * moteus::ReadTorque(value);
-          break;
-        }
-        case moteus::kVoltage: {
-          servo->voltage = moteus::ReadVoltage(value);
-          break;
-        }
-        case moteus::kTemperature: {
-          servo->temperature_C = moteus::ReadTemperature(value);
-          break;
-        }
-        case moteus::kFault: {
-          servo->fault = moteus::ReadInt(value);
-          break;
-        }
-        default: {
-          break;
-        }
+    const auto* maybe_value = std::get_if<moteus::Value>(&reply.value);
+    if (!maybe_value) { return; }
+    const auto& value = *maybe_value;
+    switch (static_cast<moteus::Register>(reply.reg)) {
+      case moteus::kMode: {
+        servo->mode = moteus::ReadInt(value);
+        break;
+      }
+      case moteus::kPosition: {
+        servo->angle_deg = sign * moteus::ReadPosition(value);
+        break;
+      }
+      case moteus::kVelocity: {
+        servo->velocity_dps = sign * moteus::ReadPosition(value);
+        break;
+      }
+      case moteus::kTorque: {
+        servo->torque_Nm = sign * moteus::ReadTorque(value);
+        break;
+      }
+      case moteus::kVoltage: {
+        servo->voltage = moteus::ReadVoltage(value);
+        break;
+      }
+      case moteus::kTemperature: {
+        servo->temperature_C = moteus::ReadTemperature(value);
+        break;
+      }
+      case moteus::kFault: {
+        servo->fault = moteus::ReadInt(value);
+        break;
+      }
+      default: {
+        break;
       }
     }
   }
 
-  void UpdateWeapon(const mjlib::multiplex::AsioClient::SingleReply& reply,
+  void UpdateWeapon(const mjlib::multiplex::AsioClient::IdRegisterValue& reply,
                     Weapon* weapon) {
     weapon->timestamp = Now();
 
     // NOTE: These won't be correct for int8_t values, but we're not
     // requesting them so it shouldn't be a problem for now.
-    for (const auto& pair : reply.reply) {
-      const auto* maybe_value = std::get_if<moteus::Value>(&pair.second);
-      if (!maybe_value) { continue; }
-      const auto& value = *maybe_value;
-      switch (static_cast<WeaponRegister>(pair.first)) {
-        case WeaponRegister::kFirePwm: {
-          weapon->fire_pwm = moteus::ReadInt(value);
-          break;
-        }
-        case WeaponRegister::kFireTime: {
-          weapon->fire_time_10ms = moteus::ReadInt(value);
-          break;
-        }
-        case WeaponRegister::kLoaderPwm: {
-          weapon->loader_pwm = moteus::ReadInt(value);
-          break;
-        }
-        case WeaponRegister::kLoaderTime: {
-          weapon->loader_time_10ms = moteus::ReadInt(value);
-          break;
-        }
-        case WeaponRegister::kLaser: {
-          weapon->laser_time_10ms = moteus::ReadInt(value);
-          break;
-        }
-        case WeaponRegister::kShotCount: {
-          weapon->shot_count = moteus::ReadInt(value);
-          break;
-        }
-        case WeaponRegister::kArmed: {
-          weapon->armed = moteus::ReadInt(value);
-          break;
-        }
+    const auto* maybe_value = std::get_if<moteus::Value>(&reply.value);
+    if (!maybe_value) { return; }
+    const auto& value = *maybe_value;
+    switch (static_cast<WeaponRegister>(reply.reg)) {
+      case WeaponRegister::kFirePwm: {
+        weapon->fire_pwm = moteus::ReadInt(value);
+        break;
+      }
+      case WeaponRegister::kFireTime: {
+        weapon->fire_time_10ms = moteus::ReadInt(value);
+        break;
+      }
+      case WeaponRegister::kLoaderPwm: {
+        weapon->loader_pwm = moteus::ReadInt(value);
+        break;
+      }
+      case WeaponRegister::kLoaderTime: {
+        weapon->loader_time_10ms = moteus::ReadInt(value);
+        break;
+      }
+      case WeaponRegister::kLaser: {
+        weapon->laser_time_10ms = moteus::ReadInt(value);
+        break;
+      }
+      case WeaponRegister::kShotCount: {
+        weapon->shot_count = moteus::ReadInt(value);
+        break;
+      }
+      case WeaponRegister::kArmed: {
+        weapon->armed = moteus::ReadInt(value);
+        break;
       }
     }
   }
@@ -320,7 +316,7 @@ class TurretControl::Impl {
           alpha * imu_servo_pitch_deg;
     }
 
-    for (const auto& reply : status_reply_.replies) {
+    for (const auto& reply : status_reply_) {
       auto* const servo = [&]() -> Status::GimbalServo* {
         if (reply.id == 1) { return &status_.pitch_servo; }
         if (reply.id == 2) { return &status_.yaw_servo; }
@@ -599,7 +595,7 @@ class TurretControl::Impl {
     control_log.control = control;
     control_signal_(&control_log);
 
-    client_command_ = {};
+    client_command_.clear();
     AddServoCommand(1, control.pitch);
     AddServoCommand(2, control.yaw);
 
@@ -607,9 +603,9 @@ class TurretControl::Impl {
       AddWeapon();
     }
 
-    client_command_reply_ = {};
-    client_->AsyncRegisterMultiple(
-        client_command_, &client_command_reply_,
+    client_command_reply_.clear();
+    client_->AsyncTransmit(
+        &client_command_, &client_command_reply_,
         std::bind(&Impl::HandleCommand, this, pl::_1));
   }
 
@@ -640,7 +636,7 @@ class TurretControl::Impl {
   bool outstanding_ = false;
   int status_outstanding_ = 0;
 
-  using Request = std::vector<Client::IdRequest>;
+  using Request = Client::Request;
   Request status_request_;
   Request status_weapon_request_;
   Client::Reply status_reply_;

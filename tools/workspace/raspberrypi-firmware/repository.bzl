@@ -20,8 +20,8 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 def raspberrypi_firmware_repository(name):
     http_archive(
         name = name,
-        url = "https://github.com/raspberrypi/firmware/archive/1.20180417.tar.gz",
-        sha256 = "aa3b7dfc9760c4be47f23a6210b6b989cf95b92e695dd4682facccd6c712c3a5",
-        strip_prefix = "firmware-1.20180417",
+        url = "https://github.com/raspberrypi/firmware/archive/1.20200601.tar.gz",
+        sha256 = "d826cdfdcf5931b5ccdcf89b206a83983bea8c94ec349552eeccdd20666430c0",
+        strip_prefix = "firmware-1.20200601",
         build_file = Label("//tools/workspace/raspberrypi-firmware:package.BUILD"),
     )
