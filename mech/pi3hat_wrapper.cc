@@ -342,6 +342,7 @@ class Pi3hatWrapper::Impl {
     input.request_attitude_detail = options_.attitude_detail;
     input.request_rf = request_rf;
     input.timeout_ns = options_.query_timeout_s * 1e9;
+    input.rx_extra_wait_ns = 0;
 
     pi3data_.result = pi3hat_->Cycle(input);
 
