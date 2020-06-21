@@ -44,6 +44,7 @@ cc_library(
         "quadruped_debug.cc",
         "quadruped_2leg_walk.cc",
         "rf_control.cc",
+        "system_info.cc",
         "swing_trajectory.cc",
         "target_tracker.cc",
         "turret.cc",

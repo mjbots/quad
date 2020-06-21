@@ -54,6 +54,7 @@ class Quadruped::Impl {
     m_.rf_control = std::make_unique<RfControl>(
         context, m_.quadruped_control.get(),
         [&]() { return m_.pi3hat->selected(); } );
+    m_.system_info = std::make_unique<SystemInfo>(context);
 
     debug_stream_.type = mjlib::io::StreamFactory::Type::kTcpServer;
     debug_stream_.tcp_server_port = 4556;

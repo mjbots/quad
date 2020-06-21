@@ -28,6 +28,7 @@
 #include "mech/pi3hat_interface.h"
 #include "mech/quadruped_control.h"
 #include "mech/rf_control.h"
+#include "mech/system_info.h"
 #include "mech/web_control.h"
 
 namespace mjmech {
@@ -49,6 +50,7 @@ class Quadruped : boost::noncopyable {
     std::unique_ptr<QuadrupedControl> quadruped_control;
     std::unique_ptr<QuadrupedWebControl> web_control;
     std::unique_ptr<RfControl> rf_control;
+    std::unique_ptr<SystemInfo> system_info;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -56,6 +58,7 @@ class Quadruped : boost::noncopyable {
       a->Visit(MJ_NVP(quadruped_control));
       a->Visit(MJ_NVP(web_control));
       a->Visit(MJ_NVP(rf_control));
+      a->Visit(MJ_NVP(system_info));
     }
   };
 

@@ -27,6 +27,7 @@
 #include "base/context.h"
 
 #include "mech/pi3hat_interface.h"
+#include "mech/system_info.h"
 #include "mech/turret_control.h"
 #include "mech/turret_rf_control.h"
 #include "mech/web_control.h"
@@ -49,6 +50,7 @@ class Turret : boost::noncopyable {
     std::unique_ptr<TurretControl> turret_control;
     std::unique_ptr<TurretWebControl> web_control;
     std::unique_ptr<TurretRfControl> rf_control;
+    std::unique_ptr<SystemInfo> system_info;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -56,6 +58,7 @@ class Turret : boost::noncopyable {
       a->Visit(MJ_NVP(turret_control));
       a->Visit(MJ_NVP(web_control));
       a->Visit(MJ_NVP(rf_control));
+      a->Visit(MJ_NVP(system_info));
     }
   };
 
