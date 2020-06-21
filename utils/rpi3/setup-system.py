@@ -27,6 +27,7 @@ sudo ./setup-system.py
 """
 
 import os
+import pathlib
 import shlex
 import shutil
 import subprocess
@@ -90,6 +91,8 @@ def ensure_present(filename, line):
 
 def ensure_contents(filename, contents, mode=None):
     '''Ensure the given file has exactly the given contents'''
+
+    pathlib.Path(filename).parent.mkdir(parents=True, exist_ok=True)
 
     if os.path.exists(filename):
         existing = open(filename, encoding='utf-8').read()
@@ -215,7 +218,7 @@ country_code=US
 
 interface=wlan0
 driver=nl80211
-ssid=MjMech-{MAC}
+ssid=mjbots-unset
 hw_mode=a
 ieee80211n=1
 require_ht=1
@@ -241,7 +244,13 @@ wpa_passphrase=WalkingRobots
 wpa_key_mgmt=WPA-PSK
 wpa_pairwise=TKIP
 rsn_pairwise=CCMP
-'''.format(MAC=MAC))
+''')
+
+    ensure_contents('/etc/systemd/system/hostapd.service.d/10-select-ssid.conf',
+                    '''
+[Service]
+ExecStartPre=bash -c "SSID=mjbots-$(iw dev wlan0 info | grep addr | perl -pe 's/.*addr //; s/://g'); perl -pi -e \"s/ssid=.*/ssid=$SSID/\" /etc/hostapd/hostapd.conf"
+''')
 
     ensure_present('/etc/default/hostapd',
                    'DAEMON_CONF="/etc/hostapd/hostapd.conf"')
