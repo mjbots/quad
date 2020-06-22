@@ -20,7 +20,7 @@ def implot_repository(name):
     github_archive(
         name = name,
         repo = "epezent/implot",
-        commit = "cb5937c4a39ab6b1a1a7afd9dbddf1c093a826e8",
-        sha256 = "9585816791b6bbd293b6a1dc58ef96c9bdc7e6bf7c818b09533ab9694b83ceea",
+        commit = "9894df49348a8de412fd3b52ff7bfb322dbeede2",
+        sha256 = "f5f655ef6d6c167c978373dcd8a53f7188d99ce768a20156fc1e042167a7c296",
         build_file = Label("//tools/workspace/implot:package.BUILD"),
     )

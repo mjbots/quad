@@ -525,8 +525,10 @@ class PlotView {
         for (const auto& pair : plot.int_styles) {
           ImPlot::PushStyleVar(pair.first, pair.second);
         }
-        ImPlot::Plot(plot.legend.c_str(), plot.xvals.data(), plot.yvals.data(),
-                    plot.xvals.size());
+        ImPlot::PlotLine(
+            plot.legend.c_str(),
+            plot.xvals.data(), plot.yvals.data(),
+            plot.xvals.size());
         ImPlot::PopStyleVar(plot.float_styles.size() + plot.int_styles.size());
 
         const auto it = std::lower_bound(
@@ -534,9 +536,10 @@ class PlotView {
         if (it != plot.timestamps.end()) {
           const auto index = it - plot.timestamps.begin();
           ImPlot::PushStyleVar(ImPlotStyleVar_Marker, ImPlotMarker_Diamond);
-          ImPlot::Plot((plot.legend + "_mrk").c_str(),
-                       plot.xvals.data() + index, plot.yvals.data() + index,
-                       1);
+          ImPlot::PlotLine(
+              ("##" + plot.legend + "_mrk").c_str(),
+              plot.xvals.data() + index, plot.yvals.data() + index,
+              1);
           ImPlot::PopStyleVar();
         }
       }
