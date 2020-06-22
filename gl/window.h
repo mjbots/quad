@@ -84,6 +84,26 @@ class Window {
     return glfwWindowShouldClose(window_);
   }
 
+  void set_pos(const Eigen::Vector2i pos) {
+    glfwSetWindowPos(window_, pos.x(), pos.y());
+  }
+
+  Eigen::Vector2i pos() {
+    int result_w = 0;
+    int result_h = 0;
+    glfwGetWindowPos(window_, &result_w, &result_h);
+    return { result_w, result_h };
+  }
+
+  // Screen coordinates
+  Eigen::Vector2i size() {
+    int result_w = 0;
+    int result_h = 0;
+    glfwGetWindowSize(window_, &result_w, &result_h);
+    return { result_w, result_h };
+  }
+
+  // Pixels
   Eigen::Vector2i framebuffer_size() {
     int result_w = 0;
     int result_h = 0;

@@ -1444,13 +1444,6 @@ class Tplot2 {
     ImGui::GetIO().ConfigFlags |=
         ImGuiConfigFlags_DockingEnable;
 
-    std::ifstream in(kIniFileName);
-    if (!in.is_open()) { return; }
-
-    State state;
-    mjlib::base::Json5ReadArchive(in).Accept(&state);
-    ImGui::LoadIniSettingsFromMemory(state.imgui.data(),
-                                     state.imgui.size());
   }
 
   void Run() {
@@ -1477,12 +1470,14 @@ class Tplot2 {
       imgui_.Render();
       window_.SwapBuffers();
     }
+
+    CheckSave(true);
   }
 
  private:
-  void CheckSave() {
+  void CheckSave(bool force = false) {
     auto& io = ImGui::GetIO();
-    if (!io.WantSaveIniSettings) { return; }
+    if (!io.WantSaveIniSettings && !force) { return; }
 
     size_t imgui_ini_size = 0;
     const char* imgui_ini = ImGui::SaveIniSettingsToMemory(&imgui_ini_size);
@@ -1490,6 +1485,8 @@ class Tplot2 {
 
     State to_save;
     to_save.imgui = std::string(imgui_ini, imgui_ini_size);
+    to_save.window.size = window_.size();
+    to_save.window.pos = window_.pos();
 
     std::ofstream of(kIniFileName);
     mjlib::base::Json5WriteArchive(of).Accept(&to_save);
@@ -1498,23 +1495,68 @@ class Tplot2 {
   struct State {
     std::string imgui;
 
+    struct Window {
+      Eigen::Vector2i size = { 1280, 720 };
+      Eigen::Vector2i pos = { -1, -1 };
+
+      template <typename Archive>
+      void Serialize(Archive* a) {
+        a->Visit(MJ_NVP(size));
+        a->Visit(MJ_NVP(pos));
+      }
+    };
+
+    Window window;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(imgui));
+      a->Visit(MJ_NVP(window));
     }
   };
+
+  const State initial_save_ = []() {
+    std::ifstream in(kIniFileName);
+    if (!in.is_open()) { return State(); }
+
+    State state;
+    try {
+      mjlib::base::Json5ReadArchive(in).Accept(&state);
+    } catch (mjlib::base::system_error& se) {
+      std::cout << "Error reading ini, ignoring: " << se.what();
+    }
+    return state;
+  }();
 
   const bool ffmpeg_register_ =
       []() { ffmpeg::Ffmpeg::Register(); return true; }();
   const Options options_;
   mjlib::telemetry::FileReader file_reader_{options_.log_filename};
   const bool mech_ = (file_reader_.record("qc_status") != nullptr);
-  gl::Window window_{1280, 720, "tplot2"};
+  gl::Window window_{
+    initial_save_.window.size.x(), initial_save_.window.size.y(),
+        "tplot2"};
+  const bool setpos_ = [&]() {
+    if (initial_save_.window.pos != Eigen::Vector2i(-1, -1)) {
+      window_.set_pos(initial_save_.window.pos);
+    }
+    return true;
+  }();
   gl::GlImGui imgui_{window_,  []() {
       gl::GlImGui::Options options;
       options.persist_settings = false;
       return options;
     }()};
+
+  const bool load_imgui_ = [&]() {
+    if (initial_save_.imgui.empty()) { return false; }
+
+    ImGui::LoadIniSettingsFromMemory(
+        initial_save_.imgui.data(),
+        initial_save_.imgui.size());
+    return true;
+  }();
+
   const boost::posix_time::ptime log_start_ =
       (*file_reader_.items().begin()).timestamp;
   Timeline timeline_{&file_reader_};
