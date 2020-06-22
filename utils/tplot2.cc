@@ -531,10 +531,11 @@ class PlotView {
             plot.xvals.size());
         ImPlot::PopStyleVar(plot.float_styles.size() + plot.int_styles.size());
 
-        const auto it = std::lower_bound(
+        const auto it = std::upper_bound(
             plot.timestamps.begin(), plot.timestamps.end(), timestamp);
         if (it != plot.timestamps.end()) {
-          const auto index = it - plot.timestamps.begin();
+          const auto index = std::max<int>(
+              0, static_cast<int>(it - plot.timestamps.begin()) - 1);
           ImPlot::PushStyleVar(ImPlotStyleVar_Marker, ImPlotMarker_Diamond);
           ImPlot::PlotLine(
               ("##" + plot.legend + "_mrk").c_str(),
