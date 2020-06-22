@@ -31,12 +31,9 @@
 //    good while
 //  * pan / zoom
 //  * hw accelerated decoding or color xform
-// * Plots
-//  * save window size in imgui.ini
 // * multiple render/plot/tree widgets
 // * Save/restore plot configuration
 // * Save/restore tree view expansion state
-// * Save/restore render check boxes
 // * Derived/scripted fields
 // * search/filtering in tree widget
 
@@ -961,11 +958,33 @@ class SphereModel {
 
 class MechRender {
  public:
-  MechRender(FileReader* reader, TreeView* tree_view)
+  struct State {
+    bool leg_actual = true;
+    bool leg_command = true;
+    bool leg_force = false;
+    bool attitude = true;
+    bool ground = true;
+    bool support = true;
+    bool target = true;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(leg_actual));
+      a->Visit(MJ_NVP(leg_command));
+      a->Visit(MJ_NVP(leg_force));
+      a->Visit(MJ_NVP(attitude));
+      a->Visit(MJ_NVP(ground));
+      a->Visit(MJ_NVP(support));
+      a->Visit(MJ_NVP(target));
+    }
+  };
+
+  MechRender(FileReader* reader, TreeView* tree_view, State state)
       : reader_(reader->record("qc_status")->schema->root()),
         control_reader_(reader->record("qc_control")->schema->root()),
         imu_reader_(reader->record("imu")->schema->root()),
-        tree_view_(tree_view) {
+        tree_view_(tree_view),
+        state_(state) {
     triangle_.SetProjMatrix(camera_.matrix());
     triangle_.SetLightPos({-1000, 0, -3000});
 
@@ -991,6 +1010,10 @@ class MechRender {
     texture_.Store(white);
   }
 
+  State state() const {
+    return state_;
+  }
+
   void Render() {
     const auto maybe_qc_status = tree_view_->data("qc_status");
     const auto maybe_qc_control = tree_view_->data("qc_control");
@@ -1012,11 +1035,11 @@ class MechRender {
   void DrawMech(const mech::QuadrupedControl::Status& qs,
                 const mech::QuadrupedControl::ControlLog& qc,
                 const mech::AttitudeData& attitude) {
-    if (ground_) {
+    if (state_.ground) {
       DrawGround(qs, attitude);
     }
 
-    if (attitude_) {
+    if (state_.attitude) {
       transform_ = Eigen::Matrix4f::Identity();
       transform_.topLeftCorner<3, 3>() =
           AttitudeMatrix(attitude.attitude).cast<float>();
@@ -1031,11 +1054,11 @@ class MechRender {
            {0, 0, 125},
            {1.0, 0, 0, 1.0});
 
-    if (leg_actual_) {
+    if (state_.leg_actual) {
       for (const auto& leg_B : qs.state.legs_B) {
         AddBall(leg_B.position_mm.cast<float>(),
                 10, Eigen::Vector4f(0, 1, 0, 1));
-        if (!leg_force_) {
+        if (!state_.leg_force) {
           AddLineSegment(
               leg_B.position_mm.cast<float>(),
               (leg_B.position_mm +
@@ -1051,11 +1074,11 @@ class MechRender {
       }
     }
 
-    if (leg_command_) {
+    if (state_.leg_command) {
       for (const auto& leg_B : qc.legs_B) {
         AddBall(leg_B.position_mm.cast<float>(),
                 8, Eigen::Vector4f(0, 0, 1, 1));
-        if (!leg_force_) {
+        if (!state_.leg_force) {
           AddLineSegment(
               leg_B.position_mm.cast<float>(),
               (leg_B.position_mm +
@@ -1071,7 +1094,7 @@ class MechRender {
       }
     }
 
-    if (target_) {
+    if (state_.target) {
       for (const auto& leg : qs.state.walk.legs) {
         Eigen::Vector3d target_mm_B =
             qs.state.robot.pose_mm_RB.inverse() * leg.target_mm_R;
@@ -1080,7 +1103,7 @@ class MechRender {
       }
     }
 
-    if (support_ && !qs.state.legs_B.empty() && !qc.legs_B.empty()) {
+    if (state_.support && !qs.state.legs_B.empty() && !qc.legs_B.empty()) {
       std::vector<base::Point3D> points;
       for (int i : {0, 1, 3, 2}) {
         const auto& leg_B = qc.legs_B[i];
@@ -1127,7 +1150,7 @@ class MechRender {
     Eigen::Vector2f uv(0, 0);
     Eigen::Vector4f rgba(0.3, 0.3, 0.3, 1.0);
 
-    if (!attitude_) {
+    if (!state_.attitude) {
       // We are rendering into the B frame.
       transform_ = Eigen::Matrix4f::Identity();
       transform_.topLeftCorner<3, 3>() = tf_LB.inverse().cast<float>();
@@ -1316,13 +1339,13 @@ class MechRender {
     if (ImGui::Button("reset view")) {
       trackball_ = MakeTrackball();
     }
-    ImGui::Checkbox("actual", &leg_actual_);
-    ImGui::Checkbox("command", &leg_command_);
-    ImGui::Checkbox("force", &leg_force_);
-    ImGui::Checkbox("attitude", &attitude_);
-    ImGui::Checkbox("ground", &ground_);
-    ImGui::Checkbox("support", &support_);
-    ImGui::Checkbox("target", &target_);
+    ImGui::Checkbox("actual", &state_.leg_actual);
+    ImGui::Checkbox("command", &state_.leg_command);
+    ImGui::Checkbox("force", &state_.leg_force);
+    ImGui::Checkbox("attitude", &state_.attitude);
+    ImGui::Checkbox("ground", &state_.ground);
+    ImGui::Checkbox("support", &state_.support);
+    ImGui::Checkbox("target", &state_.target);
 
     ImGui::EndChild();
   }
@@ -1400,13 +1423,7 @@ class MechRender {
   std::vector<float> line_data_;
   std::vector<uint32_t> line_indices_;
 
-  bool leg_actual_ = true;
-  bool leg_command_ = true;
-  bool leg_force_ = false;
-  bool attitude_ = true;
-  bool ground_ = true;
-  bool support_ = true;
-  bool target_ = true;
+  State state_;
 
   const double kVelocityDrawScale = 0.1;
   const double kForceDrawScale = 2.0;
@@ -1483,10 +1500,13 @@ class Tplot2 {
     const char* imgui_ini = ImGui::SaveIniSettingsToMemory(&imgui_ini_size);
     io.WantSaveIniSettings = false;
 
-    State to_save;
+    State to_save = initial_save_;
     to_save.imgui = std::string(imgui_ini, imgui_ini_size);
     to_save.window.size = window_.size();
     to_save.window.pos = window_.pos();
+    if (mech_) {
+      to_save.mech = mech_render_->state();
+    }
 
     std::ofstream of(kIniFileName);
     mjlib::base::Json5WriteArchive(of).Accept(&to_save);
@@ -1507,11 +1527,13 @@ class Tplot2 {
     };
 
     Window window;
+    MechRender::State mech;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(imgui));
       a->Visit(MJ_NVP(window));
+      a->Visit(MJ_NVP(mech));
     }
   };
 
@@ -1568,7 +1590,7 @@ class Tplot2 {
   const bool mech_register_ = [&]() {
     if (mech_) {
       AddQuadrupedDerived(&file_reader_, &tree_view_);
-      mech_render_.emplace(&file_reader_, &tree_view_);
+      mech_render_.emplace(&file_reader_, &tree_view_, initial_save_.mech);
     }
 
     return true;
