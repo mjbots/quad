@@ -32,7 +32,6 @@
 //  * pan / zoom
 //  * hw accelerated decoding or color xform
 // * multiple render/plot/tree widgets
-// * Save/restore plot configuration
 // * Save/restore tree view expansion state
 // * Derived/scripted fields
 // * search/filtering in tree widget
@@ -477,12 +476,100 @@ class PlotRetrieve {
 
 class PlotView {
  public:
+  struct State {
+    struct Plot {
+      std::string x_token;
+      std::string y_token;
+      bool deriv = false;
+      int axis = 0;
+
+      template <typename Archive>
+      void Serialize(Archive* a) {
+        a->Visit(MJ_NVP(x_token));
+        a->Visit(MJ_NVP(y_token));
+        a->Visit(MJ_NVP(deriv));
+        a->Visit(MJ_NVP(axis));
+      }
+    };
+
+    std::vector<Plot> plots;
+
+    struct Axis {
+      double min = base::kNaN;
+      double max = base::kNaN;
+
+      template <typename Archive>
+      void Serialize(Archive* a) {
+        a->Visit(MJ_NVP(min));
+        a->Visit(MJ_NVP(max));
+      }
+    };
+
+    Axis x_axis;
+    std::array<Axis, 3> y_axis = {};
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(plots));
+      a->Visit(MJ_NVP(x_axis));
+      a->Visit(MJ_NVP(y_axis));
+    }
+  };
+
   PlotView(FileReader* reader,
            TreeView* tree_view,
-           boost::posix_time::ptime log_start)
+           boost::posix_time::ptime log_start,
+           const State& initial)
       : reader_(reader),
         tree_view_(tree_view),
         log_start_(log_start) {
+    for (const auto& plot : initial.plots) {
+      current_axis_ = plot.axis;
+      if (plot.deriv) {
+        AddDerivPlot(plot.y_token);
+      } else {
+        AddLogPlot(plot.x_token, plot.y_token);
+      }
+    }
+
+    if (std::isfinite(initial.x_axis.min) &&
+        std::isfinite(initial.x_axis.max)) {
+      ImPlot::SetNextPlotLimitsX(
+          initial.x_axis.min, initial.x_axis.max, ImGuiCond_Always);
+    }
+    for (size_t i = 0; i < initial.y_axis.size(); i++) {
+      const auto& y = initial.y_axis[i];
+      if (std::isfinite(y.min) && std::isfinite(y.max)) {
+        ImPlot::SetNextPlotLimitsY(y.min, y.max, ImGuiCond_Always, i);
+      }
+    }
+
+    fit_plot_ = {};
+  }
+
+  State state() {
+    State result;
+    for (const auto& plot : plots_) {
+      State::Plot out;
+      out.x_token = plot.x_token;
+      out.y_token = plot.y_token;
+      out.deriv = plot.deriv;
+      out.axis = plot.axis;
+      result.plots.push_back(out);
+    }
+
+    {
+      const auto x = x_limits_;
+      result.x_axis.min = x.X.Min;
+      result.x_axis.max = x.X.Max;
+    }
+    for (int i = 0; i < result.y_axis.size(); i++) {
+      const auto y = y_limits_[i];
+      result.y_axis[i].min = y.Y.Min;
+      result.y_axis[i].max = y.Y.Max;
+    }
+
+    return result;
   }
 
   void Update(boost::posix_time::ptime timestamp) {
@@ -543,6 +630,10 @@ class PlotView {
         }
       }
 
+      x_limits_ = ImPlot::GetPlotLimits(0);
+      for (int i = 0; i < y_limits_.size(); i++) {
+        y_limits_[i] = ImPlot::GetPlotLimits(i);
+      }
       ImPlot::EndPlot();
     }
 
@@ -639,6 +730,10 @@ class PlotView {
     };
 
     int axis = 0;
+
+    bool deriv = false;
+    std::string x_token;
+    std::string y_token;
   };
 
   std::string current_plot_name() const {
@@ -665,6 +760,9 @@ class PlotView {
 
     plots_.push_back({});
     auto& plot = plots_.back();
+    plot.deriv = false;
+    plot.x_token = x_token;
+    plot.y_token = y_token;
 
     plot.legend = MakeLegend(x_token, y_token);
 
@@ -685,6 +783,10 @@ class PlotView {
   void AddDerivPlot(const std::string& token) {
     plots_.push_back({});
     auto& plot = plots_.back();
+
+    plot.deriv = true;
+    plot.y_token = token;
+
     plot.legend = MakeLegend("", token);
 
     auto data = tree_view_->ExtractDeriv(token);
@@ -750,6 +852,9 @@ class PlotView {
   std::optional<Plot*> fit_plot_;
   size_t current_plot_index_ = 0;
   int current_axis_ = 0;
+
+  ImPlotLimits x_limits_ = {};
+  std::array<ImPlotLimits, 3> y_limits_ = {};
 };
 
 class Video {
@@ -1436,6 +1541,7 @@ class Tplot2 {
  public:
   struct Options {
     std::string log_filename;
+    std::string config_filename;
     std::string video_filename;
     double video_time_offset_s = 0.0;
   };
@@ -1445,6 +1551,8 @@ class Tplot2 {
 
     auto group = clipp::group(
         clipp::value("log file", result.log_filename),
+        clipp::option("c", "config") &
+        clipp::value("CONFIG", result.config_filename),
         clipp::option("v", "video") &
         clipp::value("video", result.video_filename),
         clipp::option("voffset") &
@@ -1504,6 +1612,7 @@ class Tplot2 {
     to_save.imgui = std::string(imgui_ini, imgui_ini_size);
     to_save.window.size = window_.size();
     to_save.window.pos = window_.pos();
+    to_save.plot = plot_view_.state();
     if (mech_) {
       to_save.mech = mech_render_->state();
     }
@@ -1528,17 +1637,22 @@ class Tplot2 {
 
     Window window;
     MechRender::State mech;
+    PlotView::State plot;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(imgui));
       a->Visit(MJ_NVP(window));
       a->Visit(MJ_NVP(mech));
+      a->Visit(MJ_NVP(plot));
     }
   };
 
-  const State initial_save_ = []() {
-    std::ifstream in(kIniFileName);
+  const Options options_;
+
+  const State initial_save_ = [&]() {
+    std::ifstream in(options_.config_filename.empty() ?
+                     kIniFileName : options_.config_filename.c_str());
     if (!in.is_open()) { return State(); }
 
     State state;
@@ -1552,7 +1666,6 @@ class Tplot2 {
 
   const bool ffmpeg_register_ =
       []() { ffmpeg::Ffmpeg::Register(); return true; }();
-  const Options options_;
   mjlib::telemetry::FileReader file_reader_{options_.log_filename};
   const bool mech_ = (file_reader_.record("qc_status") != nullptr);
   gl::Window window_{
@@ -1583,7 +1696,7 @@ class Tplot2 {
       (*file_reader_.items().begin()).timestamp;
   Timeline timeline_{&file_reader_};
   TreeView tree_view_{&file_reader_, log_start_};
-  PlotView plot_view_{&file_reader_, &tree_view_, log_start_};
+  PlotView plot_view_{&file_reader_, &tree_view_, log_start_, initial_save_.plot};
 
   std::optional<Video> video_;
   std::optional<MechRender> mech_render_;
