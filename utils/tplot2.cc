@@ -40,7 +40,6 @@
 // * Save/restore render check boxes
 // * Derived/scripted fields
 // * search/filtering in tree widget
-// * remove/properties drop-down should select most recent thing added
 
 
 #include <string>
@@ -734,6 +733,8 @@ class PlotView {
             [&](const auto& plt) { return plt.axis == current_axis_; })) {
       fit_plot_ = plot;
     }
+
+    current_plot_index_ = plots_.size() - 1;
   }
 
   FileReader* const reader_;
