@@ -109,19 +109,12 @@ class TreeView {
 
     for (auto record : records) {
       const auto data = data_.data.at(record);
-      if (data.empty()) {
-        // No data... for now we won't even let you expand it.
-        if (ImGui::TreeNodeEx(record, ImGuiTreeNodeFlags_Leaf,
-                              "%s", record->name.c_str())) {
-          ImGui::TreePop();
-        }
-      } else {
-        ImGui::Columns(2, nullptr, true);
-        mjlib::base::BufferReadStream stream{data};
-        Parent parent;
-        VisitElement(record->schema->root(), stream, &parent);
-        ImGui::Columns(1);
-      }
+      ImGui::Columns(2, nullptr, true);
+      mjlib::base::BufferReadStream stream{data};
+      Parent parent;
+      VisitElement(record->schema->root(), stream, &parent,
+                   data.empty() ? kEmpty : kData);
+      ImGui::Columns(1);
     }
     VisitDerived();
   }
@@ -141,21 +134,42 @@ class TreeView {
     ImGui::Columns(1);
   }
 
+  static bool ElementHasChildren(const Element* element) {
+    return (!element->children.empty() || !element->fields.empty()) &&
+        (element->type != FT::kEnum);
+  }
+
+  enum VisitEmpty {
+    kEmpty,
+    kData,
+  };
+
   void VisitElement(const Element* element,
                     mjlib::base::ReadStream& stream,
                     const Parent* parent,
+                    VisitEmpty empty,
                     const char* name_override = nullptr) {
     // Union types we just forward through to the appropriate typed
     // child.
     if (element->type == FT::kUnion) {
-      const auto index = element->ReadUnionIndex(stream);
-      VisitElement(element->children[index], stream, parent);
-      return;
+      if (empty == kData) {
+        const auto index = element->ReadUnionIndex(stream);
+        VisitElement(element->children[index], stream, parent, empty);
+        return;
+      } else {
+        // Do the first non-null child.
+        const auto* first_non_null = [&]() -> const Element* {
+          for (const auto* child : element->children) {
+            if (child->type != FT::kNull) { return child; }
+          }
+          return nullptr;
+        }();
+        if (first_non_null) { return; }  // ???
+        return VisitElement(element, stream, parent, empty, name_override);
+      }
     }
 
-    const bool children =
-        (!element->children.empty() || !element->fields.empty()) &&
-        (element->type != FT::kEnum);
+    const bool children = ElementHasChildren(element);
 
     int flags = 0;
     if (!children) {
@@ -176,6 +190,7 @@ class TreeView {
 
     // Read the scalar data to display.
     const auto value = [&]() -> std::string {
+      if (empty == kEmpty) { return ""; }
       switch (element->type) {
         case FT::kBoolean: {
           return element->ReadBoolean(stream) ? "true" : "false";
@@ -233,7 +248,7 @@ class TreeView {
         new_parent.parent = parent;
         new_parent.element = element;
         new_parent.array_index = i;
-        VisitElement(element->children.front(), stream, &new_parent,
+        VisitElement(element->children.front(), stream, &new_parent, empty,
                      fmt::format("{}", i).c_str());
         ImGui::PopID();
       }
@@ -246,13 +261,17 @@ class TreeView {
             Parent new_parent;
             new_parent.parent = parent;
             new_parent.element = element;
-            VisitElement(field.element, stream, &new_parent);
+            VisitElement(field.element, stream, &new_parent, empty);
           }
           break;
         }
         case FT::kArray: {
-          const auto nelements = element->ReadArraySize(stream);
-          do_array(nelements);
+          if (empty == kEmpty) {
+            do_array(1);
+          } else {
+            const auto nelements = element->ReadArraySize(stream);
+            do_array(nelements);
+          }
           break;
         }
         case FT::kFixedArray: {
@@ -261,7 +280,9 @@ class TreeView {
         }
         case FT::kMap: {
           // TODO
-          element->Ignore(stream);
+          if (empty != kEmpty) {
+            element->Ignore(stream);
+          }
           break;
         }
         case FT::kUnion: {
@@ -280,7 +301,9 @@ class TreeView {
         case FT::kArray:
         case FT::kFixedArray:
         case FT::kMap: {
-          element->Ignore(stream);
+          if (empty != kEmpty) {
+            element->Ignore(stream);
+          }
           break;
         }
         case FT::kUnion: {
