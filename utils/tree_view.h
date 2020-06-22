@@ -330,8 +330,8 @@ class TreeView {
 
   struct ExtractResult {
     std::vector<boost::posix_time::ptime> timestamps;
-    std::vector<float> xvals;
-    std::vector<float> yvals;
+    std::vector<double> xvals;
+    std::vector<double> yvals;
   };
 
   ExtractResult ExtractDeriv(const std::string& token) {

@@ -295,7 +295,7 @@ class ValueRetrieve {
     return valid_;
   }
 
-  float operator()(const FileReader::Item& item) const {
+  double operator()(const FileReader::Item& item) const {
     if (is_timestamp_) {
       return mjlib::base::ConvertDurationToSeconds(item.timestamp - log_start_);
     }
@@ -309,7 +309,7 @@ class ValueRetrieve {
       switch (element->type) {
         case FT::kFinal:
         case FT::kNull: {
-          return std::numeric_limits<float>::quiet_NaN();
+          return std::numeric_limits<double>::quiet_NaN();
         }
         case FT::kBoolean: {
           return element->ReadBoolean(stream) ? 1.0f : 0.0f;
@@ -414,11 +414,11 @@ class PlotRetrieve {
     return root_.valid && x_.valid() && y_.valid();
   }
 
-  float x(const FileReader::Item& item) const {
+  double x(const FileReader::Item& item) const {
     return x_(item);
   }
 
-  float y(const FileReader::Item& item) const {
+  double y(const FileReader::Item& item) const {
     return y_(item);
   }
 
@@ -494,8 +494,8 @@ class PlotView {
 
     if (fit_plot_) {
       const auto& p = **fit_plot_;
-      float xmin = std::numeric_limits<float>::infinity();
-      float xmax = -std::numeric_limits<float>::infinity();
+      double xmin = std::numeric_limits<float>::infinity();
+      double xmax = -std::numeric_limits<float>::infinity();
       for (const auto& plot : plots_) {
         xmin = std::min(xmin, plot.min_x);
         xmax = std::max(xmax, plot.max_x);
@@ -622,13 +622,13 @@ class PlotView {
     std::string legend;
 
     std::vector<boost::posix_time::ptime> timestamps;
-    std::vector<float> xvals;
-    std::vector<float> yvals;
+    std::vector<double> xvals;
+    std::vector<double> yvals;
 
-    float min_x = {};
-    float max_x = {};
-    float min_y = {};
-    float max_y = {};
+    double min_x = {};
+    double max_x = {};
+    double min_y = {};
+    double max_y = {};
 
     std::map<int, float> float_styles {
       {ImPlotStyleVar_LineWeight, 1.0f },
@@ -705,12 +705,12 @@ class PlotView {
     // Switch all non-finite numbers to NaN.
     for (auto& value : plot->xvals) {
       if (!std::isfinite(value)) {
-        value = std::numeric_limits<float>::quiet_NaN();
+        value = std::numeric_limits<double>::quiet_NaN();
       }
     }
     for (auto& value : plot->yvals) {
       if (!std::isfinite(value)) {
-        value = std::numeric_limits<float>::quiet_NaN();
+        value = std::numeric_limits<double>::quiet_NaN();
       }
     }
 
