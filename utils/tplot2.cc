@@ -32,7 +32,7 @@
 //  * pan / zoom
 //  * hw accelerated decoding or color xform
 // * multiple render/plot/tree widgets
-// * Save/restore tree view expansion state
+// * Save/restore tree view expansion state and scroll location
 // * Derived/scripted fields
 // * search/filtering in tree widget
 
