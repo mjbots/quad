@@ -32,7 +32,6 @@
 //  * pan / zoom
 //  * hw accelerated decoding or color xform
 // * Plots
-//  * I get crazy artifacts when non-first plots are entirely off screen
 //  * save window size in imgui.ini
 // * multiple render/plot/tree widgets
 // * Save/restore plot configuration
@@ -42,6 +41,7 @@
 // * search/filtering in tree widget
 
 
+#include <fstream>
 #include <string>
 #include <variant>
 
@@ -53,6 +53,15 @@
 #include <implot.h>
 
 #include "base/aspect_ratio.h"
+
+#include "mjlib/base/buffer_stream.h"
+#include "mjlib/base/clipp.h"
+#include "mjlib/base/json5_read_archive.h"
+#include "mjlib/base/json5_write_archive.h"
+#include "mjlib/base/time_conversions.h"
+#include "mjlib/base/tokenizer.h"
+#include "mjlib/telemetry/file_reader.h"
+#include "mjlib/telemetry/mapped_binary_reader.h"
 
 #include "ffmpeg/codec.h"
 #include "ffmpeg/file.h"
@@ -72,13 +81,6 @@
 #include "gl/trackball.h"
 #include "gl/vertex_array_object.h"
 #include "gl/vertex_buffer_object.h"
-
-#include "mjlib/base/buffer_stream.h"
-#include "mjlib/base/clipp.h"
-#include "mjlib/base/time_conversions.h"
-#include "mjlib/base/tokenizer.h"
-#include "mjlib/telemetry/file_reader.h"
-#include "mjlib/telemetry/mapped_binary_reader.h"
 
 #include "mech/attitude_data.h"
 #include "mech/quadruped_control.h"
@@ -1410,68 +1412,141 @@ class MechRender {
   const double kForceDrawScale = 2.0;
   const double kGroundSize_mm = 500.0;
 };
+
+constexpr const char* kIniFileName = "tplot2.ini";
+
+class Tplot2 {
+ public:
+  struct Options {
+    std::string log_filename;
+    std::string video_filename;
+    double video_time_offset_s = 0.0;
+  };
+
+  static Options Parse(int argc, char** argv) {
+    Options result;
+
+    auto group = clipp::group(
+        clipp::value("log file", result.log_filename),
+        clipp::option("v", "video") &
+        clipp::value("video", result.video_filename),
+        clipp::option("voffset") &
+        clipp::value("OFF", result.video_time_offset_s)
+    );
+
+    mjlib::base::ClippParse(argc, argv, group);
+
+    return result;
+  }
+
+  Tplot2(int argc, char** argv)
+      : options_(Parse(argc, argv)) {
+    ImGui::GetIO().ConfigFlags |=
+        ImGuiConfigFlags_DockingEnable;
+
+    std::ifstream in(kIniFileName);
+    if (!in.is_open()) { return; }
+
+    State state;
+    mjlib::base::Json5ReadArchive(in).Accept(&state);
+    ImGui::LoadIniSettingsFromMemory(state.imgui.data(),
+                                     state.imgui.size());
+  }
+
+  void Run() {
+    while (!window_.should_close()) {
+      CheckSave();
+
+      window_.PollEvents();
+      imgui_.NewFrame();
+
+      glClearColor(0.45f, 0.55f, 0.60f, 1.0f);
+      glClear(GL_COLOR_BUFFER_BIT);
+
+      timeline_.Update();
+      const auto current = timeline_.current();
+      tree_view_.Update(current);
+      plot_view_.Update(current);
+      if (video_) {
+        video_->Update(current);
+      }
+      if (mech_render_) {
+        mech_render_->Update();
+      }
+
+      imgui_.Render();
+      window_.SwapBuffers();
+    }
+  }
+
+ private:
+  void CheckSave() {
+    auto& io = ImGui::GetIO();
+    if (!io.WantSaveIniSettings) { return; }
+
+    size_t imgui_ini_size = 0;
+    const char* imgui_ini = ImGui::SaveIniSettingsToMemory(&imgui_ini_size);
+    io.WantSaveIniSettings = false;
+
+    State to_save;
+    to_save.imgui = std::string(imgui_ini, imgui_ini_size);
+
+    std::ofstream of(kIniFileName);
+    mjlib::base::Json5WriteArchive(of).Accept(&to_save);
+  }
+
+  struct State {
+    std::string imgui;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(imgui));
+    }
+  };
+
+  const bool ffmpeg_register_ =
+      []() { ffmpeg::Ffmpeg::Register(); return true; }();
+  const Options options_;
+  mjlib::telemetry::FileReader file_reader_{options_.log_filename};
+  const bool mech_ = (file_reader_.record("qc_status") != nullptr);
+  gl::Window window_{1280, 720, "tplot2"};
+  gl::GlImGui imgui_{window_,  []() {
+      gl::GlImGui::Options options;
+      options.persist_settings = false;
+      return options;
+    }()};
+  const boost::posix_time::ptime log_start_ =
+      (*file_reader_.items().begin()).timestamp;
+  Timeline timeline_{&file_reader_};
+  TreeView tree_view_{&file_reader_, log_start_};
+  PlotView plot_view_{&file_reader_, &tree_view_, log_start_};
+
+  std::optional<Video> video_;
+  std::optional<MechRender> mech_render_;
+  const bool mech_register_ = [&]() {
+    if (mech_) {
+      AddQuadrupedDerived(&file_reader_, &tree_view_);
+      mech_render_.emplace(&file_reader_, &tree_view_);
+    }
+
+    return true;
+  }();
+
+  const bool video_register_ = [&]() {
+    if (!options_.video_filename.empty()) {
+      video_.emplace(log_start_,
+                     options_.video_filename,
+                     options_.video_time_offset_s);
+    }
+
+    return true;
+  }();
+};
 }
 
 int do_main(int argc, char** argv) {
-  ffmpeg::Ffmpeg::Register();
-
-  std::string log_filename;
-  std::string video_filename;
-  double video_time_offset_s = 0.0;
-
-  auto group = clipp::group(
-      clipp::value("log file", log_filename),
-      clipp::option("v", "video") & clipp::value("video", video_filename),
-      clipp::option("voffset") & clipp::value("OFF", video_time_offset_s)
-  );
-
-  mjlib::base::ClippParse(argc, argv, group);
-
-  mjlib::telemetry::FileReader file_reader(log_filename);
-  const bool mech = (file_reader.record("qc_status") != nullptr);
-
-  gl::Window window(1280, 720, "tplot2");
-  gl::GlImGui imgui(window);
-
-  ImGui::GetIO().ConfigFlags |=
-      ImGuiConfigFlags_DockingEnable;
-
-  auto log_start = (*file_reader.items().begin()).timestamp;
-  Timeline timeline{&file_reader};
-  TreeView tree_view{&file_reader, log_start};
-  PlotView plot_view{&file_reader, &tree_view, log_start};
-  std::optional<Video> video;
-  std::optional<MechRender> mech_render;
-  if (mech) {
-    AddQuadrupedDerived(&file_reader, &tree_view);
-    mech_render.emplace(&file_reader, &tree_view);
-  }
-
-  if (!video_filename.empty()) {
-    video.emplace(log_start, video_filename, video_time_offset_s);
-  }
-
-  while (!window.should_close()) {
-    window.PollEvents();
-    imgui.NewFrame();
-
-    glClearColor(0.45f, 0.55f, 0.60f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    timeline.Update();
-    const auto current = timeline.current();
-    tree_view.Update(current);
-    plot_view.Update(current);
-    if (video) {
-      video->Update(current);
-    }
-    if (mech_render) {
-      mech_render->Update();
-    }
-
-    imgui.Render();
-    window.SwapBuffers();
-  }
+  Tplot2 tplot2(argc, argv);
+  tplot2.Run();
 
   return 0;
 }

@@ -21,3 +21,4 @@ logs
 _bazelrc_generated
 /bazel-*
 imgui.ini
+tplot2.ini
