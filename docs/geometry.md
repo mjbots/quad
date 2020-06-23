@@ -33,9 +33,13 @@ joint, with +x facing forward, +y facing right, and +z facing down.
 Body Frame (B): This frame is oriented at the center of the quadruped
 body and fixed to the chassis.
 
-Robot Frame (R): This frame is nominally at the center of the
-quadruped body and oriented identically, but may be offset or rotated
-to account for the robot body shifting relative to its feet.
+CoM Frame (M): This frame is fixed to the chassis at the center of
+mass as measured with the legs in idle position.  It is oriented to be
+level with the ground, so +Z is always down w.r.t. gravity.
+
+Robot Frame (R): This frame is offset from the Body Frame (B) and
+referenced in the same manner, but may be offset or rotated to apply
+cosmetic kinematic changes.
 
 Local Frame (L): This frame is oriented such that down is parallel to
 gravity.  Other degrees of freedom are initialized with the quadrupeds
