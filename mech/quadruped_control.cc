@@ -842,7 +842,7 @@ class QuadrupedControl::Impl {
 
   void DoControl_StandUp() {
     // While we are standing up, the RB transform is always nil.
-    status_.state.robot.pose_mm_RB = Sophus::SE3d();
+    status_.state.robot.frame_mm_RB = {};
     ClearDesiredMotion();
 
     using M = QuadrupedState::StandUp::Mode;
@@ -1159,9 +1159,9 @@ class QuadrupedControl::Impl {
               // maneuver is well formed.
               const auto& cur_leg_B = GetLegState_B(leg_R.leg_id);
               leg_R.position_mm =
-                  status_.state.robot.pose_mm_RB * cur_leg_B.position_mm;
+                  status_.state.robot.frame_mm_RB.pose * cur_leg_B.position_mm;
               leg_R.velocity_mm_s =
-                  status_.state.robot.pose_mm_RB * cur_leg_B.velocity_mm_s;
+                  status_.state.robot.frame_mm_RB.pose * cur_leg_B.velocity_mm_s;
             }
             // Loop around and do the retracting behavior.
             old_control_log_->legs_R = legs_R;
@@ -1344,7 +1344,7 @@ class QuadrupedControl::Impl {
         limited_velocity_mm_s : 0.0;
 
     for (auto& leg_R : *legs_R) {
-      const auto& pose_mm_RB = status_.state.robot.pose_mm_RB;
+      const auto& pose_mm_RB = status_.state.robot.frame_mm_RB.pose;
       auto desired_B = pose_mm_RB.inverse() * leg_R.position_mm;
       desired_B.z() = command_height_mm;
 
@@ -1395,7 +1395,7 @@ class QuadrupedControl::Impl {
 
       switch (bs.mode) {
         case BM::kLowering: {
-          status_.state.robot.pose_mm_RB = Sophus::SE3d();
+          status_.state.robot.frame_mm_RB = {};
 
           const bool done = context_->MoveLegsFixedSpeedZ(
               all_leg_ids_,
@@ -1476,7 +1476,7 @@ class QuadrupedControl::Impl {
 
           if (leg_mm_z > config_.backflip.push_height_mm) {
             // Reset our RB transform.
-            auto& pose_mm_RB = status_.state.robot.pose_mm_RB;
+            auto& pose_mm_RB = status_.state.robot.frame_mm_RB.pose;
 
             for (auto& leg_R : legs_R) {
               const auto& leg_B = [&]() {
@@ -1556,7 +1556,7 @@ class QuadrupedControl::Impl {
     const Sophus::SE3d pose_mm_rlegp_B =
         pose_mm_rlegp_rleg * pose_mm_rleg_B;
 
-    auto& pose_mm_RB = status_.state.robot.pose_mm_RB;
+    auto& pose_mm_RB = status_.state.robot.frame_mm_RB.pose;
     const Sophus::SE3d old_pose_mm_RB = pose_mm_RB;
     pose_mm_RB = pose_mm_rleg_B.inverse() * pose_mm_rlegp_B;
     const Sophus::SE3d delta_RB = old_pose_mm_RB.inverse() * pose_mm_RB;
@@ -1654,8 +1654,8 @@ class QuadrupedControl::Impl {
     auto& b = status_.state.balance;
 
     if (!b.contact) {
-      status_.state.robot.pose_mm_RB  =
-          status_.state.robot.pose_mm_RB *
+      status_.state.robot.frame_mm_RB.pose  =
+          status_.state.robot.frame_mm_RB.pose *
           Sophus::SE3d(Sophus::SO3d(
                            base::Quaternion::FromAxisAngle(
                                (config_.balance.error_scale *
@@ -1701,8 +1701,7 @@ class QuadrupedControl::Impl {
   }
 
   void ClearDesiredMotion() {
-    status_.state.robot.desired_v_mm_s_R = {};
-    status_.state.robot.desired_w_R = {};
+    status_.state.robot.desired_mm_R = {};
   }
 
   void UpdateCommandedRB() {
@@ -1721,7 +1720,7 @@ class QuadrupedControl::Impl {
                 return lhs.leg_id < rhs.leg_id;
               });
 
-    const Sophus::SE3d pose_mm_BR = status_.state.robot.pose_mm_RB.inverse();
+    const Sophus::SE3d pose_mm_BR = status_.state.robot.frame_mm_RB.pose.inverse();
 
     std::vector<QC::Leg> legs_B;
     for (const auto& leg_R : control_log_->legs_R) {

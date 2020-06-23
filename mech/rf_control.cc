@@ -325,10 +325,10 @@ class RfControl::Impl {
       slot1.priority = 0xffffffff;
       mjlib::base::BufferWriteStream bs({slot1.data, 6});
       mjlib::telemetry::WriteStream ts{bs};
-      ts.Write(base::Saturate<int16_t>(s.robot.desired_v_mm_s_R.x()));
-      ts.Write(base::Saturate<int16_t>(s.robot.desired_v_mm_s_R.y()));
+      ts.Write(base::Saturate<int16_t>(s.robot.desired_mm_R.v.x()));
+      ts.Write(base::Saturate<int16_t>(s.robot.desired_mm_R.v.y()));
       ts.Write(base::Saturate<int16_t>(
-                   32767.0 * s.robot.desired_w_R.z() / (2 * M_PI)));
+                   32767.0 * s.robot.desired_mm_R.w.z() / (2 * M_PI)));
       rf_->tx_slot(kOnlyRemote, 1, slot1);
     }
     {

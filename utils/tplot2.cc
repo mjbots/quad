@@ -1202,7 +1202,7 @@ class MechRender {
     if (state_.target) {
       for (const auto& leg : qs.state.walk.legs) {
         Eigen::Vector3d target_mm_B =
-            qs.state.robot.pose_mm_RB.inverse() * leg.target_mm_R;
+            qs.state.robot.frame_mm_RB.pose.inverse() * leg.target_mm_R;
         AddBall(target_mm_B.cast<float>(),
                 6, Eigen::Vector4f(0, 1, 1, 1));
       }

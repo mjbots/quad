@@ -129,30 +129,30 @@ struct QuadrupedContext : boost::noncopyable {
         command->pose_mm_RB * config.command_offset_mm_RB;
     const base::Point3D translation =
         command_mm_RB.translation() -
-        state->robot.pose_mm_RB.translation();
-    state->robot.pose_mm_RB.translation() +=
+        state->robot.frame_mm_RB.pose.translation();
+    state->robot.frame_mm_RB.pose.translation() +=
         config.rb_filter_constant_Hz * config.period_s * translation;
-    state->robot.pose_mm_RB.so3() =
+    state->robot.frame_mm_RB.pose.so3() =
         Sophus::SO3d(
-            state->robot.pose_mm_RB.so3().unit_quaternion().slerp(
+            state->robot.frame_mm_RB.pose.so3().unit_quaternion().slerp(
                 config.rb_filter_constant_Hz * config.period_s,
                 command_mm_RB.so3().unit_quaternion()));
   }
 
   void UpdateCommandedR() {
     const auto result_R = FilterCommand(
-        {state->robot.desired_v_mm_s_R, state->robot.desired_w_R},
+        {state->robot.desired_mm_R.v, state->robot.desired_mm_R.w},
         {command->v_mm_s_R, command->w_R},
         config.lr_acceleration_mm_s2,
         config.lr_alpha_rad_s2,
         config.period_s);
-    state->robot.desired_v_mm_s_R = result_R.v_mm_s;
-    state->robot.desired_w_R = result_R.w;
+    state->robot.desired_mm_R.v = result_R.v_mm_s;
+    state->robot.desired_mm_R.w = result_R.w;
   }
 
   void MoveLegsForR(std::vector<QC::Leg>* legs_R) {
-    PropagateLeg propagator(state->robot.desired_v_mm_s_R,
-                            state->robot.desired_w_R,
+    PropagateLeg propagator(state->robot.desired_mm_R.v,
+                            state->robot.desired_mm_R.w,
                             config.period_s);
 
     for (auto& leg_R : *legs_R) {

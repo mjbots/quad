@@ -1,4 +1,4 @@
-// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.
+// Copyright 2014-2020 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@
 
 #include "mjlib/base/visitor.h"
 
+#include "base/kinematic_relation.h"
 #include "base/point3d.h"
 
 #include "mech/quadruped_command.h"
@@ -80,28 +81,20 @@ struct QuadrupedState {
 
   // And finally, the robot level.
   struct Robot {
-    base::Point3D desired_v_mm_s_R;
-    base::Point3D desired_w_R;
+    // Only v[0, 1] and w[2] will be non-zero.
+    base::KinematicRelation desired_mm_R;
 
     // Mappings between the B (body) frame, and the R (robot), and M
     // (CoM) frames.
-
-    Sophus::SE3d pose_mm_RB;
-    base::Point3D w_RB;
-
-    Sophus::SE3d pose_mm_MB;
-    base::Point3D w_MB;
+    base::KinematicRelation frame_mm_RB;
+    base::KinematicRelation frame_mm_MB;
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(desired_v_mm_s_R));
-      a->Visit(MJ_NVP(desired_w_R));
+      a->Visit(MJ_NVP(desired_mm_R));
 
-      a->Visit(MJ_NVP(pose_mm_RB));
-      a->Visit(MJ_NVP(w_RB));
-
-      a->Visit(MJ_NVP(pose_mm_MB));
-      a->Visit(MJ_NVP(w_MB));
+      a->Visit(MJ_NVP(frame_mm_RB));
+      a->Visit(MJ_NVP(frame_mm_MB));
     }
   };
 
