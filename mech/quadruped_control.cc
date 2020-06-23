@@ -695,7 +695,7 @@ class QuadrupedControl::Impl {
             status_.mode = current_command_.mode;
           } else {
             current_command_.v_mm_s_R = {};
-            current_command_.w_LR = {};
+            current_command_.w_R = {};
           }
         } else if (status_.mode == QM::kBackflip &&
                    status_.state.backflip.mode ==
@@ -1083,7 +1083,7 @@ class QuadrupedControl::Impl {
       }
     }();
     if (in_contact) {
-      UpdateCommandedLR();
+      UpdateCommandedR();
     }
 
     auto& js = status_.state.jump;
@@ -1117,8 +1117,8 @@ class QuadrupedControl::Impl {
 
       switch (status_.state.jump.mode) {
         case JM::kLowering: {
-          // Move legs to take into account LR rates.
-          context_->MoveLegsForLR(&legs_R);
+          // Move legs to take into account R rates.
+          context_->MoveLegsForR(&legs_R);
 
           // Lower all legs until they reach the lower_height.
           const bool done = context_->MoveLegsFixedSpeedZ(
@@ -1138,7 +1138,7 @@ class QuadrupedControl::Impl {
           break;
         }
         case JM::kPushing: {
-          context_->MoveLegsForLR(&legs_R);
+          context_->MoveLegsForR(&legs_R);
 
           auto& velocity_mm_s = status_.state.jump.velocity_mm_s;
           velocity_mm_s += js.command.acceleration_mm_s2 * period_s_;
@@ -1200,7 +1200,7 @@ class QuadrupedControl::Impl {
           // velocity will be minimal when we do land.  We aren't trying
           // to accelerate during this phase, so that should mostly work
           // out.
-          context_->MoveLegsForLR(&legs_R);
+          context_->MoveLegsForR(&legs_R);
 
           // Update our leg values that remain for this state.
           for (auto& leg_R : legs_R) {
@@ -1246,7 +1246,7 @@ class QuadrupedControl::Impl {
           break;
         }
         case JM::kLanding: {
-          context_->MoveLegsForLR(&legs_R);
+          context_->MoveLegsForR(&legs_R);
           for (auto& leg_R : legs_R) {
             leg_R.stance = 1.0;
           }
@@ -1702,15 +1702,15 @@ class QuadrupedControl::Impl {
 
   void ClearDesiredMotion() {
     status_.state.robot.desired_v_mm_s_R = {};
-    status_.state.robot.desired_w_LR = {};
+    status_.state.robot.desired_w_R = {};
   }
 
   void UpdateCommandedRB() {
     context_->UpdateCommandedRB();
   }
 
-  void UpdateCommandedLR() {
-    context_->UpdateCommandedLR();
+  void UpdateCommandedR() {
+    context_->UpdateCommandedR();
   }
 
   void ControlLegs_R(std::vector<QC::Leg> legs_R) {

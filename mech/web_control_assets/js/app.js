@@ -181,7 +181,7 @@
     }
 
     var v_mm_s_R = null;
-    var w_LR = null;
+    var w_R = null;
 
     if (down[BUTTON_SHOULDER_LB]) {
       // This means the joystick axes are used to change the RB
@@ -201,7 +201,7 @@
       };
     } else if (gp) {
       v_mm_s_R = [ -gp.axes[1] * VEL_MAX_X, gp.axes[0] * VEL_MAX_Y, 0.0 ];
-      w_LR = [ 0, 0, gp.axes[2] * RATE_MAX_Z ];
+      w_R = [ 0, 0, gp.axes[2] * RATE_MAX_Z ];
     }
 
     var value = mode_selector.value;
@@ -228,8 +228,8 @@
       if (v_mm_s_R) {
         cmd['command']['v_mm_s_R'] = v_mm_s_R;
       }
-      if (w_LR) {
-        cmd['command']['w_LR'] = w_LR;
+      if (w_R) {
+        cmd['command']['w_R'] = w_R;
       }
       if (value == 'jump') {
         var repeat = document.getElementById("jump_repeat");

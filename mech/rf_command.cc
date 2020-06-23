@@ -102,7 +102,7 @@ class SlotCommand {
   void Command(QuadrupedCommand::Mode mode,
                const Sophus::SE3d& pose_mm_RB,
                const base::Point3D& v_mm_s_R,
-               const base::Point3D& w_LR,
+               const base::Point3D& w_R,
                double jump_accel_mm_s2,
                TurretControl::Mode turret_mode,
                const base::Euler& turret_rate_dps,
@@ -135,7 +135,7 @@ class SlotCommand {
       mjlib::telemetry::WriteStream tstream{bstream};
       tstream.Write(base::Saturate<int16_t>(v_mm_s_R.x()));
       tstream.Write(base::Saturate<int16_t>(v_mm_s_R.y()));
-      tstream.Write(base::Saturate<int16_t>(32767.0 * w_LR.z() / (2 * M_PI)));
+      tstream.Write(base::Saturate<int16_t>(32767.0 * w_R.z() / (2 * M_PI)));
       nrfusb_.tx_slot(kRemoteRobot, 2, slot2);
     }
 
@@ -861,7 +861,7 @@ int do_main(int argc, char** argv) {
     DrawTurret(gamepad, gamepad_pressed, &pending_turret_mode, &turret_mode);
 
     base::Point3D v_mm_s_R;
-    base::Point3D w_LR;
+    base::Point3D w_R;
     base::Euler turret_rate_dps;
     bool turret_track = false;
     if (!turret) {
@@ -870,8 +870,8 @@ int do_main(int argc, char** argv) {
       v_mm_s_R.y() = kMaxLateralVelocity_mm_s *
           lateral_walk_expo(gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_X]);
 
-      w_LR.z() = (max_rotation_deg_s / 180.0) * M_PI *
-                 gamepad.axes[GLFW_GAMEPAD_AXIS_RIGHT_X];
+      w_R.z() = (max_rotation_deg_s / 180.0) * M_PI *
+                gamepad.axes[GLFW_GAMEPAD_AXIS_RIGHT_X];
     } else {
       const Eigen::Vector2d cmd_turret = Eigen::Vector2d(
           lateral_walk_expo(gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_X]),
@@ -904,7 +904,7 @@ int do_main(int argc, char** argv) {
       const double rotation_sign = 1.0;
           // (std::abs(turret_rad) > 0.5 * M_PI) ?
           // -1.0 : 1.0;
-      w_LR.z() =
+      w_R.z() =
           std::copysign(1.0, v_mm_s_R.x()) * rotation_sign *
           (max_rotation_deg_s / 180.0) * M_PI * turret_walk_expo(cmd_robot.x());
 
@@ -931,7 +931,7 @@ int do_main(int argc, char** argv) {
     const QuadrupedCommand::Mode actual_command_mode = [&]() {
       const bool movement_commanded = (
           v_mm_s_R.norm() > kMovementEpsilon_mm_s ||
-          w_LR.norm() > kMovementEpsilon_rad_s);
+          w_R.norm() > kMovementEpsilon_rad_s);
       if (!movement_commanded &&
           (command_mode == QuadrupedCommand::Mode::kWalk ||
            command_mode == QuadrupedCommand::Mode::kJump)) {
@@ -949,7 +949,7 @@ int do_main(int argc, char** argv) {
       ImGui::Text("cmd: (%4.0f, %4.0f, %6.3f)",
                   v_mm_s_R.x(),
                   v_mm_s_R.y(),
-                  w_LR.z());
+                  w_R.z());
       ImGui::Text("pose x/y: (%3.0f, %3.0f)",
                   pose_mm_RB.translation().x(),
                   pose_mm_RB.translation().y());
@@ -960,7 +960,7 @@ int do_main(int argc, char** argv) {
 
     if (slot_command) {
       slot_command->Command(
-          actual_command_mode, pose_mm_RB, v_mm_s_R, w_LR,
+          actual_command_mode, pose_mm_RB, v_mm_s_R, w_R,
           jump_accel_mm_s2,
           turret_mode, turret_rate_dps, turret_track,
           turret_laser, turret_fire_sequence);

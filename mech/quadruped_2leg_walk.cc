@@ -64,7 +64,7 @@ class WalkContext {
 
     if (all_stance()) {
       // We are allowed to accelerate when all legs are in stance.
-      context_->UpdateCommandedLR();
+      context_->UpdateCommandedR();
       ws_.stance_elapsed_s += config_.period_s;
     } else {
       ws_.stance_elapsed_s = 0.0;
@@ -85,7 +85,7 @@ class WalkContext {
       // validation.
       ws_.vlegs[vleg_idx].remaining_s = TrajectoryLineIntersectTime(
           state_->robot.desired_v_mm_s_R.head<2>(),
-          state_->robot.desired_w_LR.z(),
+          state_->robot.desired_w_R.z(),
           p1_R.head<2>(),
           p2_R.head<2>());
     }
@@ -139,7 +139,7 @@ class WalkContext {
     // chance of being ready for the next cycle.
     const auto predicted_state_R = FilterCommand(
         {state_->robot.desired_v_mm_s_R, state_->robot.desired_v_mm_s_R},
-        {context_->command->v_mm_s_R, context_->command->w_LR},
+        {context_->command->v_mm_s_R, context_->command->w_R},
         config_.lr_acceleration_mm_s2,
         config_.lr_alpha_rad_s2,
         wc_.swing_time_s * wc_.stance_swing_ratio);
@@ -176,7 +176,7 @@ class WalkContext {
     // Update our current leg positions.
     PropagateLeg propagator(
         state_->robot.desired_v_mm_s_R,
-        state_->robot.desired_w_LR,
+        state_->robot.desired_w_R,
         config_.period_s);
     for (int vleg_idx = 0; vleg_idx < 2; vleg_idx++) {
       auto& vleg = ws_.vlegs[vleg_idx];
@@ -200,7 +200,7 @@ class WalkContext {
                 context_->swing_trajectory[leg_idx].Advance(
                     config_.period_s,
                     -state_->robot.desired_v_mm_s_R -
-                    state_->robot.desired_w_LR.cross(leg_R.position_mm));
+                    state_->robot.desired_w_R.cross(leg_R.position_mm));
             leg_R.position_mm = swing_mm_R.position;
             leg_R.velocity_mm_s = swing_mm_R.velocity_s;
             leg_R.acceleration_mm_s2 = swing_mm_R.acceleration_s2;
@@ -214,7 +214,7 @@ class WalkContext {
         vleg.swing_elapsed_s = 0.0;
 
         if (state_->robot.desired_v_mm_s_R.norm() == 0.0 &&
-            state_->robot.desired_w_LR.norm() == 0.0) {
+            state_->robot.desired_w_R.norm() == 0.0) {
           ws_.idle_count++;
         } else {
           ws_.idle_count = 0;

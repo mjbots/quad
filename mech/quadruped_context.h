@@ -139,20 +139,20 @@ struct QuadrupedContext : boost::noncopyable {
                 command_mm_RB.so3().unit_quaternion()));
   }
 
-  void UpdateCommandedLR() {
+  void UpdateCommandedR() {
     const auto result_R = FilterCommand(
-        {state->robot.desired_v_mm_s_R, state->robot.desired_w_LR},
-        {command->v_mm_s_R, command->w_LR},
+        {state->robot.desired_v_mm_s_R, state->robot.desired_w_R},
+        {command->v_mm_s_R, command->w_R},
         config.lr_acceleration_mm_s2,
         config.lr_alpha_rad_s2,
         config.period_s);
     state->robot.desired_v_mm_s_R = result_R.v_mm_s;
-    state->robot.desired_w_LR = result_R.w;
+    state->robot.desired_w_R = result_R.w;
   }
 
-  void MoveLegsForLR(std::vector<QC::Leg>* legs_R) {
+  void MoveLegsForR(std::vector<QC::Leg>* legs_R) {
     PropagateLeg propagator(state->robot.desired_v_mm_s_R,
-                            state->robot.desired_w_LR,
+                            state->robot.desired_w_R,
                             config.period_s);
 
     for (auto& leg_R : *legs_R) {
@@ -163,7 +163,7 @@ struct QuadrupedContext : boost::noncopyable {
       leg_R.position_mm = result.position_mm;
 
       // We don't want to change the Z velocity, but do want to force
-      // the X and Y, since the LR frame movement is the only thing
+      // the X and Y, since the R frame movement is the only thing
       // that should be happening for a leg in stance configuration.
       leg_R.velocity_mm_s.head<2>() = result.velocity_mm_s.head<2>();
     }

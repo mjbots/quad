@@ -201,7 +201,7 @@ struct QuadrupedCommand {
   // These control the movement of the robot through the L frame,
   // i.e. the world.
   base::Point3D v_mm_s_R;  // Only the X and Y velocities are used
-  base::Point3D w_LR;  // Only the Z axis rate is used
+  base::Point3D w_R;  // Only the Z axis rate is used
 
   template <typename Archive>
   void Serialize(Archive* a) {
@@ -214,7 +214,7 @@ struct QuadrupedCommand {
     a->Visit(MJ_NVP(backflip));
     a->Visit(MJ_NVP(pose_mm_RB));
     a->Visit(MJ_NVP(v_mm_s_R));
-    a->Visit(MJ_NVP(w_LR));
+    a->Visit(MJ_NVP(w_R));
   }
 };
 

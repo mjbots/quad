@@ -43,11 +43,11 @@
 ///  * int16 y (scaled to -1.0 -> 1.0)
 ///  * int16 z (scaled to -1.0 -> 1.0)
 ///
-/// ## Slot 2 - v_mm_s_R, w_LR ##
+/// ## Slot 2 - v_mm_s_R, w_R ##
 ///
 ///  * int16 v_mm_s_R.x
 ///  * int16 v_mm_s_R.y
-///  * int16 w_LR.z (scaled to -+ 2 pi)
+///  * int16 w_R.z (scaled to -+ 2 pi)
 ///
 /// # Transmitted telemetry #
 ///
@@ -61,7 +61,7 @@
 ///
 ///  * int16 v_mm_s_R.x
 ///  * int16 v_mm_s_R.y
-///  * int16 w_LR.z (scaled to -+ 2 pi)
+///  * int16 w_R.z (scaled to -+ 2 pi)
 ///
 /// ## Slot 4 - Joints 1-3 ##
 ///
@@ -284,7 +284,7 @@ class RfControl::Impl {
       0.0
     };
 
-    command.w_LR = {
+    command.w_R = {
       0.0,
       0.0,
       2.0 * M_PI * read_int16(2, 4) / 32767.0
@@ -328,7 +328,7 @@ class RfControl::Impl {
       ts.Write(base::Saturate<int16_t>(s.robot.desired_v_mm_s_R.x()));
       ts.Write(base::Saturate<int16_t>(s.robot.desired_v_mm_s_R.y()));
       ts.Write(base::Saturate<int16_t>(
-                   32767.0 * s.robot.desired_w_LR.z() / (2 * M_PI)));
+                   32767.0 * s.robot.desired_w_R.z() / (2 * M_PI)));
       rf_->tx_slot(kOnlyRemote, 1, slot1);
     }
     {
