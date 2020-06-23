@@ -18,7 +18,6 @@
 
 #include "base/logging.h"
 #include "mech/pi3hat_wrapper.h"
-#include "mech/quadruped_debug.h"
 
 namespace pl = std::placeholders;
 
@@ -55,34 +54,10 @@ class Quadruped::Impl {
         context, m_.quadruped_control.get(),
         [&]() { return m_.pi3hat->selected(); } );
     m_.system_info = std::make_unique<SystemInfo>(context);
-
-    debug_stream_.type = mjlib::io::StreamFactory::Type::kTcpServer;
-    debug_stream_.tcp_server_port = 4556;
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
-    base::StartArchive::Start(
-        &m_, [this, callback=std::move(callback)](auto ec) mutable {
-          mjlib::base::FailIf(ec);
-          this->StartDebug(std::move(callback));
-        });
-  }
-
-  void StartDebug(mjlib::io::ErrorCallback callback) {
-    factory_->AsyncCreate(
-        debug_stream_,
-        std::bind(&Impl::HandleDebugStream, this, pl::_1, pl::_2));
-
-    boost::asio::post(executor_, std::bind(std::move(callback),
-                                           mjlib::base::error_code()));
-  }
-
-  void HandleDebugStream(const mjlib::base::error_code& ec,
-                         mjlib::io::SharedStream stream) {
-    mjlib::base::FailIf(ec);
-
-    quad_debug_ = std::make_unique<QuadrupedDebug>(
-        m_.quadruped_control.get(), stream);
+    base::StartArchive::Start(&m_, std::move(callback));
   }
 
   boost::asio::executor executor_;
@@ -92,10 +67,6 @@ class Quadruped::Impl {
 
   Members m_;
   Parameters p_;
-
-  mjlib::io::StreamFactory::Options debug_stream_;
-
-  std::unique_ptr<QuadrupedDebug> quad_debug_;
 };
 
 Quadruped::Quadruped(base::Context& context)
@@ -112,8 +83,6 @@ Quadruped::Members* Quadruped::m() { return &impl_->m_; }
 clipp::group Quadruped::program_options() {
   return (
       mjlib::base::ClippArchive().Accept(&impl_->p_).release(),
-      mjlib::base::ClippArchive("debug.")
-      .Accept(&impl_->debug_stream_).release(),
       base::ClippComponentArchive().Accept(&impl_->m_).release()
   );
 }

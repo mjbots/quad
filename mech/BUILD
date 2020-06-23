@@ -41,7 +41,6 @@ cc_library(
         "pi3hat_wrapper.cc",
         "quadruped.cc",
         "quadruped_control.cc",
-        "quadruped_debug.cc",
         "quadruped_2leg_walk.cc",
         "rf_control.cc",
         "system_info.cc",
