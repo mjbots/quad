@@ -141,7 +141,7 @@ dd::BodyNodePtr MakeLeg(dd::SkeletonPtr skel,
     inertia.setMass(foot_mass_kg);
     inertia.setMoment(5 * shape->computeInertia(foot_mass_kg));
     foot->setInertia(inertia);
-    foot_shape_node->getDynamicsAspect()->setFrictionCoeff(0.25);
+    foot_shape_node->getDynamicsAspect()->setFrictionCoeff(0.70);
     foot_shape_node->getDynamicsAspect()->setRestitutionCoeff(0.4);
   }
 
@@ -196,6 +196,51 @@ dd::SkeletonPtr MakeFloor() {
   body->getParentJoint()->setTransformFromParentBodyNode(tf);
 
   return floor;
+}
+
+dd::SkeletonPtr MakeRamp(double peak_height) {
+  auto ramp = dd::Skeleton::create("floor");
+
+  double ramp_length = 1.0;
+  double ramp_width = 0.8;
+  double ramp_height = 0.01;
+
+  {
+    auto body1 = ramp->createJointAndBodyNodePair<dd::WeldJoint>(nullptr).second;
+    auto side1 = std::make_shared<dd::BoxShape>(
+        Eigen::Vector3d(ramp_length, ramp_width, ramp_height));
+    auto shape_node1 = body1->createShapeNodeWith<
+      dd::VisualAspect, dd::CollisionAspect, dd::DynamicsAspect>(side1);
+    shape_node1->getVisualAspect()->setColor(dart::Color::Black());
+
+    Eigen::Isometry3d tf = Eigen::Isometry3d::Identity();
+    tf.rotate(Eigen::AngleAxisd(
+                  -std::asin(peak_height / ramp_length),
+                  Eigen::Vector3d::UnitY()));
+    tf.translation() = Eigen::Vector3d(
+        1.0, 0., -0.5 * ramp_height + 0.5 * peak_height);
+    body1->getParentJoint()->setTransformFromParentBodyNode(tf);
+  }
+
+  {
+    auto body2 = ramp->createJointAndBodyNodePair<dd::WeldJoint>(nullptr).second;
+    auto side2 = std::make_shared<dd::BoxShape>(
+        Eigen::Vector3d(ramp_length, ramp_width, ramp_height));
+    auto shape_node2 = body2->createShapeNodeWith<
+      dd::VisualAspect, dd::CollisionAspect, dd::DynamicsAspect>(side2);
+    shape_node2->getVisualAspect()->setColor(dart::Color::Black());
+
+    Eigen::Isometry3d tf = Eigen::Isometry3d::Identity();
+    tf.rotate(Eigen::AngleAxisd(
+                  std::asin(peak_height / ramp_length),
+                  Eigen::Vector3d::UnitY()));
+    tf.translation() = Eigen::Vector3d(
+        1.0 + std::sqrt(ramp_length * ramp_length - peak_height * peak_height),
+        0., 0.5 * ramp_height + 0.5 * peak_height);
+    body2->getParentJoint()->setTransformFromParentBodyNode(tf);
+  }
+
+  return ramp;
 }
 
 }

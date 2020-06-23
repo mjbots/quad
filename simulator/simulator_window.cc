@@ -656,12 +656,16 @@ struct Options {
   bool start_disabled = false;
   std::string config = "configs/quada1.cfg";
   double torque_scale = 1.0;
+  double ramp_height = 0.1;
+  int ramp = 1;
 
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(start_disabled));
     a->Visit(MJ_NVP(config));
     a->Visit(MJ_NVP(torque_scale));
+    a->Visit(MJ_NVP(ramp_height));
+    a->Visit(MJ_NVP(ramp));
   }
 };
 
@@ -698,6 +702,11 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
   }
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
+    if (options_.ramp) {
+      ramp_ = MakeRamp(options_.ramp_height);
+      world_->addSkeleton(ramp_);
+    }
+
     // The GLUT timer will actually process our event loop, so it
     // needs to be going right away.
     StartGlutTimer();
@@ -790,6 +799,7 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
 
   dd::SkeletonPtr floor_;
   dd::SkeletonPtr robot_;
+  dd::SkeletonPtr ramp_;
 
   ds::WorldPtr world_ = std::make_shared<ds::World>();
 

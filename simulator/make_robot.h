@@ -27,5 +27,8 @@ dart::dynamics::SkeletonPtr MakeRobot(const mech::QuadrupedConfig&);
 /// Return a suitably large floor.
 dart::dynamics::SkeletonPtr MakeFloor();
 
+/// Return a ramp to walk up and down.
+dart::dynamics::SkeletonPtr MakeRamp(double peak_height);
+
 }
 }
