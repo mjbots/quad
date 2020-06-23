@@ -199,14 +199,17 @@ dd::SkeletonPtr MakeFloor() {
 }
 
 dd::SkeletonPtr MakeRamp(double peak_height) {
-  auto ramp = dd::Skeleton::create("floor");
+  auto ramp = dd::Skeleton::create("ramp");
 
   double ramp_length = 1.0;
   double ramp_width = 0.8;
   double ramp_height = 0.01;
 
   {
-    auto body1 = ramp->createJointAndBodyNodePair<dd::WeldJoint>(nullptr).second;
+    dd::WeldJoint::Properties properties;
+    properties.mName = "side1";
+    auto body1 = ramp->createJointAndBodyNodePair<dd::WeldJoint>(
+        nullptr, properties, dd::BodyNode::AspectProperties("side1")).second;
     auto side1 = std::make_shared<dd::BoxShape>(
         Eigen::Vector3d(ramp_length, ramp_width, ramp_height));
     auto shape_node1 = body1->createShapeNodeWith<
@@ -223,7 +226,10 @@ dd::SkeletonPtr MakeRamp(double peak_height) {
   }
 
   {
-    auto body2 = ramp->createJointAndBodyNodePair<dd::WeldJoint>(nullptr).second;
+    dd::WeldJoint::Properties properties;
+    properties.mName = "side2";
+    auto body2 = ramp->createJointAndBodyNodePair<dd::WeldJoint>(
+        nullptr, properties, dd::BodyNode::AspectProperties("side2")).second;
     auto side2 = std::make_shared<dd::BoxShape>(
         Eigen::Vector3d(ramp_length, ramp_width, ramp_height));
     auto shape_node2 = body2->createShapeNodeWith<
