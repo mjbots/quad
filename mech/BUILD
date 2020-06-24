@@ -41,7 +41,7 @@ cc_library(
         "pi3hat_wrapper.cc",
         "quadruped.cc",
         "quadruped_control.cc",
-        "quadruped_2leg_walk.cc",
+        "quadruped_trot.cc",
         "rf_control.cc",
         "system_info.cc",
         "swing_trajectory.cc",

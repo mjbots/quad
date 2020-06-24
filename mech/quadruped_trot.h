@@ -20,8 +20,8 @@
 namespace mjmech {
 namespace mech {
 
-/// Execute the 2 leg walk gait.
-std::vector<QuadrupedCommand::Leg> Quadruped2LegWalk_R(
+/// Execute the trot gait.
+std::vector<QuadrupedCommand::Leg> QuadrupedTrot_R(
     QuadrupedContext* context,
     const std::vector<QuadrupedCommand::Leg>& old_legs_R);
 

@@ -36,9 +36,9 @@
 #include "mech/attitude_data.h"
 #include "mech/mammal_ik.h"
 #include "mech/moteus.h"
-#include "mech/quadruped_2leg_walk.h"
 #include "mech/quadruped_config.h"
 #include "mech/quadruped_context.h"
+#include "mech/quadruped_trot.h"
 #include "mech/quadruped_util.h"
 #include "mech/swing_trajectory.h"
 #include "mech/trajectory.h"
@@ -1380,7 +1380,7 @@ class QuadrupedControl::Impl {
   }
 
   void DoControl_Walk() {
-    auto legs_R = Quadruped2LegWalk_R(&*context_, old_control_log_->legs_R);
+    auto legs_R = QuadrupedTrot_R(&*context_, old_control_log_->legs_R);
     ControlLegs_R(std::move(legs_R));
   }
 

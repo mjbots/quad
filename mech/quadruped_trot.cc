@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mech/quadruped_2leg_walk.h"
+#include "mech/quadruped_trot.h"
 
 #include "mech/quadruped_util.h"
 #include "mech/trajectory_line_intersect.h"
@@ -244,7 +244,7 @@ class WalkContext {
 };
 }
 
-std::vector<QuadrupedCommand::Leg> Quadruped2LegWalk_R(
+std::vector<QuadrupedCommand::Leg> QuadrupedTrot_R(
     QuadrupedContext* context,
     const std::vector<QuadrupedCommand::Leg>& old_legs_R) {
   WalkContext ctx(context);
