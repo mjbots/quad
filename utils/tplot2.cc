@@ -1221,15 +1221,15 @@ class MechRender {
 
   void DrawGround(const mech::QuadrupedControl::Status& qs,
                   const mech::AttitudeData& attitude) {
-    Eigen::Matrix3d tf_LB = AttitudeMatrix(attitude.attitude);
+    Eigen::Matrix3d tf_MB = AttitudeMatrix(attitude.attitude);
 
     // Stick the ground perpendicular to gravity at the location of
     // the lowest leg.
-    double max_z_L = 0.0;
+    double max_z_M = 0.0;
 
     for (const auto& leg_B : qs.state.legs_B) {
-      Eigen::Vector3d position_L = tf_LB * leg_B.position;
-      max_z_L = std::max(max_z_L, position_L.z());
+      Eigen::Vector3d position_M = tf_MB * leg_B.position;
+      max_z_M = std::max(max_z_M, position_M.z());
     }
 
     const double l = kGroundSize;
@@ -1240,25 +1240,25 @@ class MechRender {
     if (!state_.attitude) {
       // We are rendering into the B frame.
       transform_ = Eigen::Matrix4f::Identity();
-      transform_.topLeftCorner<3, 3>() = tf_LB.inverse().cast<float>();
+      transform_.topLeftCorner<3, 3>() = tf_MB.inverse().cast<float>();
       triangle_.SetTransform(transform_);
       lines_.SetTransform(transform_);
     }
 
     // Render our CoM projected onto the ground.
-    AddBall(Eigen::Vector3f(0, 0, max_z_L), 0.006, Eigen::Vector4f(1, 0, 0, 1));
+    AddBall(Eigen::Vector3f(0, 0, max_z_M), 0.006, Eigen::Vector4f(1, 0, 0, 1));
 
-    auto ic = triangle_.AddVertex(Eigen::Vector3f(0, 0, max_z_L), normal, uv, rgba);
+    auto ic = triangle_.AddVertex(Eigen::Vector3f(0, 0, max_z_M), normal, uv, rgba);
     for (int i = 0; i < 16; i++) {
       const double t1 = 2 * M_PI * (static_cast<double>(i) / 16);
-      Eigen::Vector3f p1_L(l * std::cos(t1), l * std::sin(t1), max_z_L);
+      Eigen::Vector3f p1_M(l * std::cos(t1), l * std::sin(t1), max_z_M);
 
       // This could be more optimal and re-use edge indices as well.
       const double t2 = 2 * M_PI * (static_cast<double>((i + 1) % 16) / 16);
-      Eigen::Vector3f p2_L(l * std::cos(t2), l * std::sin(t2), max_z_L);
+      Eigen::Vector3f p2_M(l * std::cos(t2), l * std::sin(t2), max_z_M);
 
-      auto i1 = triangle_.AddVertex(p1_L, normal, uv, rgba);
-      auto i2 = triangle_.AddVertex(p2_L, normal, uv, rgba);
+      auto i1 = triangle_.AddVertex(p1_M, normal, uv, rgba);
+      auto i2 = triangle_.AddVertex(p2_M, normal, uv, rgba);
 
       triangle_.AddTriangle(i1, i2, ic);
     }
