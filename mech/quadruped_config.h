@@ -79,6 +79,7 @@ struct QuadrupedConfig {
 
   double mass_kg = 10.0;
   double leg_mass_kg = 0.5;
+  base::Point3D center_of_mass_B;
   Sophus::SE3d command_offset_RB;
 
   struct StandUp {
@@ -274,6 +275,7 @@ struct QuadrupedConfig {
     a->Visit(MJ_NVP(bounds));
     a->Visit(MJ_NVP(mass_kg));
     a->Visit(MJ_NVP(leg_mass_kg));
+    a->Visit(MJ_NVP(center_of_mass_B));
     a->Visit(MJ_NVP(command_offset_RB));
     a->Visit(MJ_NVP(stand_up));
     a->Visit(MJ_NVP(rest));
