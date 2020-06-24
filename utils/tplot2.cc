@@ -73,6 +73,7 @@
 #include "gl/program.h"
 #include "gl/renderbuffer.h"
 #include "gl/shader.h"
+#include "gl/simple_line_render_list.h"
 #include "gl/simple_texture_render_list.h"
 #include "gl/trackball.h"
 #include "gl/vertex_array_object.h"
@@ -93,13 +94,6 @@ using FT = Format::Type;
 namespace mjmech {
 namespace utils {
 namespace {
-
-Eigen::Vector3f Transform(const Eigen::Matrix4f& matrix, const Eigen::Vector3f& p) {
-  Eigen::Vector4f q(p.x(), p.y(), p.z(), 1.0);
-  Eigen::Vector4f r = matrix * q;
-  r = r / (r(3));
-  return r.head<3>();
-}
 
 class Timeline {
  public:
@@ -1093,21 +1087,7 @@ class MechRender {
     triangle_.SetProjMatrix(camera_.matrix());
     triangle_.SetLightPos({-1000, 0, -3000});
 
-    // LINES
-    line_program_.use();
-    line_vao_.bind();
-
-    line_vertices_.bind(GL_ARRAY_BUFFER);
-
-    line_program_.VertexAttribPointer(
-        line_program_.attribute("inVertex"), 3, GL_FLOAT, GL_FALSE, 28, 0);
-    line_program_.VertexAttribPointer(
-        line_program_.attribute("inColor"), 4, GL_FLOAT, GL_FALSE, 28, 12);
-
-    line_vao_.unbind();
-
-    line_program_.SetUniform(
-        line_program_.uniform("projMatrix"), camera_.matrix());
+    lines_.SetProjMatrix(camera_.matrix());
 
     // For now, our rendering texture will consist of a single white
     // pixel, which will just let us use the passed in color.
@@ -1152,6 +1132,7 @@ class MechRender {
       transform_ = Eigen::Matrix4f::Identity();
     }
     triangle_.SetTransform(transform_);
+    lines_.SetTransform(transform_);
 
     AddBox({0, 0, 0},
            {0.230, 0, 0},
@@ -1164,13 +1145,13 @@ class MechRender {
         AddBall(leg_B.position.cast<float>(),
                 0.010, Eigen::Vector4f(0, 1, 0, 1));
         if (!state_.leg_force) {
-          AddLineSegment(
+          lines_.AddSegment(
               leg_B.position.cast<float>(),
               (leg_B.position +
                kVelocityDrawScale * leg_B.velocity).cast<float>(),
               Eigen::Vector4f(0, 1, 0, 1));
         } else {
-          AddLineSegment(
+          lines_.AddSegment(
               leg_B.position.cast<float>(),
               (leg_B.position +
                kForceDrawScale * leg_B.force_N).cast<float>(),
@@ -1184,13 +1165,13 @@ class MechRender {
         AddBall(leg_B.position.cast<float>(),
                 0.008, Eigen::Vector4f(0, 0, 1, 1));
         if (!state_.leg_force) {
-          AddLineSegment(
+          lines_.AddSegment(
               leg_B.position.cast<float>(),
               (leg_B.position +
                kVelocityDrawScale * leg_B.velocity).cast<float>(),
               Eigen::Vector4f(0, 0, 1, 1));
         } else {
-          AddLineSegment(
+          lines_.AddSegment(
               leg_B.position.cast<float>(),
               (leg_B.position +
                kForceDrawScale * leg_B.force_N).cast<float>(),
@@ -1217,17 +1198,17 @@ class MechRender {
         }
       }
       for (size_t i = 0; i < points.size(); i++) {
-        AddLineSegment(
+        lines_.AddSegment(
             points[i].cast<float>(),
             points[(i + 1) % points.size()].cast<float>(),
             Eigen::Vector4f(1, 0, 0, 1));
       }
       if (points.size() == 4) {
         // Render putative "next" supports.
-        AddLineSegment(
+        lines_.AddSegment(
             points[0].cast<float>(), points[2].cast<float>(),
             Eigen::Vector4f(1, 0.2, 0, 1));
-        AddLineSegment(
+        lines_.AddSegment(
             points[1].cast<float>(), points[3].cast<float>(),
             Eigen::Vector4f(1, 0, 0.2, 1));
       }
@@ -1235,6 +1216,7 @@ class MechRender {
 
     transform_ = Eigen::Matrix4f::Identity();
     triangle_.SetTransform(transform_);
+    lines_.SetTransform(transform_);
   }
 
   void DrawGround(const mech::QuadrupedControl::Status& qs,
@@ -1260,6 +1242,7 @@ class MechRender {
       transform_ = Eigen::Matrix4f::Identity();
       transform_.topLeftCorner<3, 3>() = tf_LB.inverse().cast<float>();
       triangle_.SetTransform(transform_);
+      lines_.SetTransform(transform_);
     }
 
     // Render our CoM projected onto the ground.
@@ -1337,37 +1320,9 @@ class MechRender {
                       rgba);
   }
 
-  void AddLineSegment(const Eigen::Vector3f& p1,
-                      const Eigen::Vector3f& p2,
-                      const Eigen::Vector4f& rgba) {
-    auto index1 = AddLineVertex(p1, rgba);
-    auto index2 = AddLineVertex(p2, rgba);
-    auto& li = line_indices_;
-    li.push_back(index1);
-    li.push_back(index2);
-  }
-
-  uint32_t AddLineVertex(const Eigen::Vector3f& p1_in,
-                         const Eigen::Vector4f& rgba) {
-    Eigen::Vector3f p1 = Transform(transform_, p1_in);
-    auto& d = line_data_;
-    const auto i = d.size();
-    d.resize(i + 7);
-    d[i + 0] = p1.x();
-    d[i + 1] = p1.y();
-    d[i + 2] = p1.z();
-    d[i + 3] = rgba(0);
-    d[i + 4] = rgba(1);
-    d[i + 5] = rgba(2);
-    d[i + 6] = rgba(3);
-    return i / 7;
-  }
-
   void Update() {
     triangle_.Reset();
-
-    line_data_.clear();
-    line_indices_.clear();
+    lines_.Reset();
 
     Render();
 
@@ -1385,18 +1340,10 @@ class MechRender {
       triangle_.Render();
 
       // LINES
-      line_program_.use();
-      line_program_.SetUniform(
-          line_program_.uniform("viewMatrix"), trackball_.matrix());
-      line_program_.SetUniform(
-          line_program_.uniform("modelMatrix"), model_matrix_);
-      line_vao_.bind();
-
-      line_vertices_.set_vector(GL_ARRAY_BUFFER, line_data_, GL_STATIC_DRAW);
-      line_elements_.set_vector(
-          GL_ELEMENT_ARRAY_BUFFER, line_indices_, GL_STATIC_DRAW);
-      glDrawElements(GL_LINES, line_indices_.size(), GL_UNSIGNED_INT, 0);
-      line_vao_.unbind();
+      lines_.Upload();
+      lines_.SetViewMatrix(trackball_.matrix());
+      lines_.SetModelMatrix(model_matrix_);
+      lines_.Render();
     }
 
     gl::ImGuiWindow render("Render");
@@ -1492,41 +1439,7 @@ class MechRender {
 
   gl::FlatRgbTexture texture_{Eigen::Vector2i(1, 1), GL_RGBA};
   gl::SimpleTextureRenderList triangle_{&texture_.texture()};
-
-  gl::Shader line_vertex_shader_{kLineVertexShaderSource, GL_VERTEX_SHADER};
-  gl::Shader line_fragment_shader_{kLineFragShaderSource, GL_FRAGMENT_SHADER};
-
-  static constexpr const char* kLineVertexShaderSource =
-      "#version 400\n"
-      "in vec3 inVertex;\n"
-      "in vec4 inColor;\n"
-      "uniform mat4 projMatrix;\n"
-      "uniform mat4 viewMatrix;\n"
-      "uniform mat4 modelMatrix;\n"
-      "out vec4 fragColor;\n"
-      "void main() {\n"
-      "  fragColor = inColor;\n"
-      "  vec4 vertex = vec4(inVertex.x, inVertex.y, -inVertex.z, 1.0);\n"
-      "  gl_Position = projMatrix * viewMatrix * modelMatrix * vertex;\n"
-      "}\n"
-      ;
-
-  static constexpr const char* kLineFragShaderSource =
-      "#version 400\n"
-      "in vec4 fragColor;\n"
-      "void main() {\n"
-      "  gl_FragColor = fragColor;\n"
-      "}\n"
-      ;
-
-  gl::Program line_program_{line_vertex_shader_, line_fragment_shader_};
-  gl::VertexArrayObject line_vao_;
-  gl::VertexBufferObject line_vertices_;
-  gl::VertexBufferObject line_elements_;
-
-
-  std::vector<float> line_data_;
-  std::vector<uint32_t> line_indices_;
+  gl::SimpleLineRenderList lines_;
 
   State state_;
 

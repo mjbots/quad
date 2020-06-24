@@ -28,6 +28,7 @@ cc_library(
         "program.h",
         "renderbuffer.h",
         "shader.h",
+        "simple_line_render_list.h",
         "simple_texture_render_list.h",
         "texture.h",
         "trackball.h",
@@ -36,6 +37,7 @@ cc_library(
         "window.h",
     ],
     srcs = [
+        "simple_line_render_list.cc",
         "simple_texture_render_list.cc",
     ],
     deps = [

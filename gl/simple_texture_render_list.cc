@@ -118,7 +118,7 @@ void SimpleTextureRenderList::Upload() {
 }
 
 void SimpleTextureRenderList::SetAmbient(float value) {
-    program_.SetUniform(program_.uniform("ambient"), value);
+  program_.SetUniform(program_.uniform("ambient"), value);
 }
 
 void SimpleTextureRenderList::SetProjMatrix(const Eigen::Matrix4f& matrix) {
