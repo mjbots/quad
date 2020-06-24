@@ -29,12 +29,12 @@ namespace mech {
 
 MammalIk::MammalIk(const Config& config) : config_(config) {
   // Some sanity checks.
-  BOOST_ASSERT(config_.femur.pose_mm.x() == 0.0);
-  BOOST_ASSERT(config_.femur.pose_mm.y() == 0.0);
-  BOOST_ASSERT(config_.femur.pose_mm.z() > 0.0);
-  BOOST_ASSERT(config_.tibia.pose_mm.x() == 0.0);
-  BOOST_ASSERT(config_.tibia.pose_mm.y() == 0.0);
-  BOOST_ASSERT(config_.tibia.pose_mm.z() > 0.0);
+  BOOST_ASSERT(config_.femur.pose.x() == 0.0);
+  BOOST_ASSERT(config_.femur.pose.y() == 0.0);
+  BOOST_ASSERT(config_.femur.pose.z() > 0.0);
+  BOOST_ASSERT(config_.tibia.pose.x() == 0.0);
+  BOOST_ASSERT(config_.tibia.pose.y() == 0.0);
+  BOOST_ASSERT(config_.tibia.pose.z() > 0.0);
 
   namespace dyn = dart::dynamics;
   skel_ = dyn::Skeleton::create("leg");
@@ -45,7 +45,7 @@ MammalIk::MammalIk(const Config& config) : config_(config) {
     properties.mName = "shoulder_joint";
     properties.mAxis = Eigen::Vector3d::UnitX();
     properties.mT_ChildBodyToJoint.translation() =
-        -config_.shoulder.pose_mm * 0.001;
+        -config_.shoulder.pose;
 
     std::tie(shoulder_joint_, shoulder_body_) =
         skel_->createJointAndBodyNodePair<dyn::RevoluteJoint>(
@@ -58,7 +58,7 @@ MammalIk::MammalIk(const Config& config) : config_(config) {
     properties.mName = "femur_joint";
     properties.mAxis = Eigen::Vector3d::UnitY();
     properties.mT_ChildBodyToJoint.translation() =
-        -config_.femur.pose_mm * 0.001;
+        -config_.femur.pose;
 
     std::tie(femur_joint_, femur_body_) =
         skel_->createJointAndBodyNodePair<dyn::RevoluteJoint>(
@@ -71,7 +71,7 @@ MammalIk::MammalIk(const Config& config) : config_(config) {
     properties.mName = "tibia_joint";
     properties.mAxis = Eigen::Vector3d::UnitY();
     properties.mT_ChildBodyToJoint.translation() =
-        -config_.tibia.pose_mm * 0.001;
+        -config_.tibia.pose;
 
     std::tie(tibia_joint_, tibia_body_) =
         skel_->createJointAndBodyNodePair<dyn::RevoluteJoint>(
@@ -119,8 +119,8 @@ IkSolver::Effector MammalIk::Forward_G(const JointAngles& angles) const {
   skel_->computeForwardDynamics();
 
   Effector result_G;
-  result_G.pose_mm = foot_body_->getCOM() * 1000;
-  result_G.velocity_mm_s = foot_body_->getCOMLinearVelocity() * 1000;
+  result_G.pose = foot_body_->getCOM();
+  result_G.velocity = foot_body_->getCOMLinearVelocity();
 
   // No torque acceleration.
   Eigen::Vector3d no_torque_accel =
@@ -145,12 +145,12 @@ IkSolver::Effector MammalIk::Forward_G(const JointAngles& angles) const {
 IkSolver::InverseResult MammalIk::Inverse(
     const Effector& effector_G,
     const std::optional<JointAngles>& current) const {
-  const auto& point = effector_G.pose_mm;
-  const double r = config_.shoulder.pose_mm.y();
+  const auto& point = effector_G.pose;
+  const double r = config_.shoulder.pose.y();
 
   // Find the angle of the shoulder joint.  This will be the tangent
   // angle between the point and the circle with radius
-  // femur_attachment_mm.y
+  // femur_attachment.y
 
   const auto lim1 = [](double value) {
     return mjlib::base::Limit(value, -1.0, 1.0);
@@ -232,8 +232,8 @@ IkSolver::InverseResult MammalIk::Inverse(
 
     // This 2D frame is looking through the femur along its +y axis,
     // with x pointed to the right, and y pointed up.
-    const double prx = -(point.x()  - config_.shoulder.pose_mm.x());
-    const double pry = point_y + config_.shoulder.pose_mm.z();
+    const double prx = -(point.x()  - config_.shoulder.pose.x());
+    const double pry = point_y + config_.shoulder.pose.z();
 
     // Now we have a simple triangle, with the femur attachment point
     // at the origin, and the two sides being the femur and tibia.
@@ -249,8 +249,8 @@ IkSolver::InverseResult MammalIk::Inverse(
     // We know the length of all three sides, which means we can find
     // all three angles.
 
-    const double femur_length = config_.femur.pose_mm.z();
-    const double tibia_length = config_.tibia.pose_mm.z();
+    const double femur_length = config_.femur.pose.z();
+    const double tibia_length = config_.tibia.pose.z();
 
     // Use the law of cosines to find the tibia angle first.
     const double op_sq = prx * prx + pry * pry;
@@ -310,7 +310,7 @@ IkSolver::InverseResult MammalIk::Inverse(
 
   // This is a tiny 3x3 matrix, so we'll just invert it directly.
   const Eigen::Vector3d joint_dps =
-      linear_jacobian.inverse() * (effector_G.velocity_mm_s * 0.001);
+      linear_jacobian.inverse() * (effector_G.velocity);
 
   // Assemble our result with everything but torque.
   JointAngles result;

@@ -36,13 +36,13 @@ class MammalIk : public IkSolver {
       // The reference frame for each joint is the center of rotation
       // of the relevant joint, with +x being away from the rotation
       // and +z being down.
-      base::Point3D pose_mm;
+      base::Point3D pose;
 
       int id = 0;
 
       template <typename Archive>
       void Serialize(Archive* a) {
-        a->Visit(MJ_NVP(pose_mm));
+        a->Visit(MJ_NVP(pose));
         a->Visit(MJ_NVP(id));
       }
     };

@@ -94,8 +94,8 @@ class QuadrupedControl : boost::noncopyable {
       base::Point3D cmd_N;
       base::Point3D gravity_N;
       base::Point3D accel_N;
-      base::Point3D err_mm;
-      base::Point3D err_mm_s;
+      base::Point3D err_m;
+      base::Point3D err_m_s;
       base::Point3D p_N;
       base::Point3D d_N;
       base::Point3D total_N;
@@ -105,8 +105,8 @@ class QuadrupedControl : boost::noncopyable {
         a->Visit(MJ_NVP(cmd_N));
         a->Visit(MJ_NVP(gravity_N));
         a->Visit(MJ_NVP(accel_N));
-        a->Visit(MJ_NVP(err_mm));
-        a->Visit(MJ_NVP(err_mm_s));
+        a->Visit(MJ_NVP(err_m));
+        a->Visit(MJ_NVP(err_m_s));
         a->Visit(MJ_NVP(p_N));
         a->Visit(MJ_NVP(d_N));
         a->Visit(MJ_NVP(total_N));

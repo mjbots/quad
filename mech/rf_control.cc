@@ -29,24 +29,24 @@
 ///    Rest - none
 ///    Jump
 ///     byte 1: repeat
-///     byte 2-3: uint16_t acceleration_mm_s2
+///     byte 2-3: uint16_t acceleration
 ///    Walk - none
 ///   byte 1: messages received in last second
 ///
-/// ## Slot 1 - pose_mm_RB ##
+/// ## Slot 1 - pose_RB ##
 ///
-///  * int16 x_mm
-///  * int16 y_mm
-///  * int16 z_mm
+///  * int16 x_m
+///  * int16 y_m
+///  * int16 z_m
 ///  * int16 w (scaled to -1.0 -> 1.0)
 ///  * int16 x (scaled to -1.0 -> 1.0)
 ///  * int16 y (scaled to -1.0 -> 1.0)
 ///  * int16 z (scaled to -1.0 -> 1.0)
 ///
-/// ## Slot 2 - v_mm_s_R, w_R ##
+/// ## Slot 2 - v_R, w_R ##
 ///
-///  * int16 v_mm_s_R.x
-///  * int16 v_mm_s_R.y
+///  * int16 v_R.x
+///  * int16 v_R.y
 ///  * int16 w_R.z (scaled to -+ 2 pi)
 ///
 /// # Transmitted telemetry #
@@ -59,8 +59,8 @@
 ///
 /// ## Slot 1 - Movement State ##
 ///
-///  * int16 v_mm_s_R.x
-///  * int16 v_mm_s_R.y
+///  * int16 v_R.x
+///  * int16 v_R.y
 ///  * int16 w_R.z (scaled to -+ 2 pi)
 ///
 /// ## Slot 4 - Joints 1-3 ##
@@ -237,9 +237,9 @@ class RfControl::Impl {
         case 8: {
           QuadrupedCommand::Jump jump;
           jump.repeat = slot_data_.rx[0].data[1] != 0;
-          uint16_t acceleration_mm_s2 = {};
-          std::memcpy(&acceleration_mm_s2, &slot_data_.rx[0].data[2], 2);
-          jump.acceleration_mm_s2 = acceleration_mm_s2;
+          uint16_t acceleration = {};
+          std::memcpy(&acceleration, &slot_data_.rx[0].data[2], 2);
+          jump.acceleration = acceleration;
           command.jump = jump;
           return QuadrupedCommand::Mode::kJump;
         }
@@ -271,14 +271,14 @@ class RfControl::Impl {
       quat = Eigen::Quaterniond::Identity();
     }
 
-    command.pose_mm_RB = Sophus::SE3d(
+    command.pose_RB = Sophus::SE3d(
         quat,
         Eigen::Vector3d(
             read_int16(1, 0),
             read_int16(1, 2),
             read_int16(1, 4)));
 
-    command.v_mm_s_R = {
+    command.v_R = {
       read_int16(2, 0) * 1.0,
       read_int16(2, 2) * 1.0,
       0.0
@@ -325,10 +325,10 @@ class RfControl::Impl {
       slot1.priority = 0xffffffff;
       mjlib::base::BufferWriteStream bs({slot1.data, 6});
       mjlib::telemetry::WriteStream ts{bs};
-      ts.Write(base::Saturate<int16_t>(s.robot.desired_mm_R.v.x()));
-      ts.Write(base::Saturate<int16_t>(s.robot.desired_mm_R.v.y()));
+      ts.Write(base::Saturate<int16_t>(s.robot.desired_R.v.x()));
+      ts.Write(base::Saturate<int16_t>(s.robot.desired_R.v.y()));
       ts.Write(base::Saturate<int16_t>(
-                   32767.0 * s.robot.desired_mm_R.w.z() / (2 * M_PI)));
+                   32767.0 * s.robot.desired_R.w.z() / (2 * M_PI)));
       rf_->tx_slot(kOnlyRemote, 1, slot1);
     }
     {

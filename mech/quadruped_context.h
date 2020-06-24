@@ -44,8 +44,8 @@ struct QuadrupedContext : boost::noncopyable {
   struct Leg {
     int leg = 0;
     Config::Leg config;
-    Sophus::SE3d pose_mm_BG;
-    Eigen::Vector3d pose_mm_B_femur;
+    Sophus::SE3d pose_BG;
+    Eigen::Vector3d pose_B_femur;
     MammalIk ik;
 
     base::Point3D stand_up_R;
@@ -54,29 +54,29 @@ struct QuadrupedContext : boost::noncopyable {
 
     Leg(const Config::Leg& config_in,
         const Config::StandUp& stand_up,
-        double stand_height_mm,
-        double idle_x_mm,
-        double idle_y_mm)
+        double stand_height,
+        double idle_x,
+        double idle_y)
         : leg(config_in.leg),
           config(config_in),
-          pose_mm_BG(config_in.pose_mm_BG),
-          pose_mm_B_femur(config_in.pose_mm_BG * config_in.ik.shoulder.pose_mm),
+          pose_BG(config_in.pose_BG),
+          pose_B_femur(config_in.pose_BG * config_in.ik.shoulder.pose),
           ik(config_in.ik) {
       // The idle and standup poses assume a null RB transform
-      const Sophus::SE3d pose_mm_RB;
-      const auto pose_mm_RG = pose_mm_RB * config.pose_mm_BG;
+      const Sophus::SE3d pose_RB;
+      const auto pose_RG = pose_RB * config.pose_BG;
 
-      const base::Point3D pose_mm_R = [&]() {
-        auto result = stand_up.pose_mm_R;
-        if (config.pose_mm_BG.translation().x() < 0.0) { result.x() *= -1; }
-        if (config.pose_mm_BG.translation().y() < 0.0) { result.y() *= -1; }
+      const base::Point3D pose_R = [&]() {
+        auto result = stand_up.pose_R;
+        if (config.pose_BG.translation().x() < 0.0) { result.x() *= -1; }
+        if (config.pose_BG.translation().y() < 0.0) { result.y() *= -1; }
         return result;
       }();
 
-      const base::Point3D pose_mm_G = pose_mm_RG.inverse() * pose_mm_R;
+      const base::Point3D pose_G = pose_RG.inverse() * pose_R;
 
       IkSolver::Effector effector_G;
-      effector_G.pose_mm = pose_mm_G;
+      effector_G.pose = pose_G;
       const auto resolved = ik.Inverse(effector_G, {});
       auto get_resolved = [&](int id) {
         MJ_ASSERT(!!resolved);
@@ -89,12 +89,12 @@ struct QuadrupedContext : boost::noncopyable {
       resolved_stand_up_joints.femur_deg = get_resolved(config.ik.femur.id);
       resolved_stand_up_joints.tibia_deg = get_resolved(config.ik.tibia.id);
 
-      stand_up_R = pose_mm_R;
-      base::Point3D tf = config.pose_mm_BG.translation();
+      stand_up_R = pose_R;
+      base::Point3D tf = config.pose_BG.translation();
       idle_R = base::Point3D(
-          idle_x_mm * ((tf.x() > 0.0) ? 1.0 : -1.0),
-          idle_y_mm * ((tf.y() > 0.0) ? 1.0 : -1.0),
-          stand_height_mm);
+          idle_x * ((tf.x() > 0.0) ? 1.0 : -1.0),
+          idle_y * ((tf.y() > 0.0) ? 1.0 : -1.0),
+          stand_height);
     }
   };
 
@@ -105,8 +105,8 @@ struct QuadrupedContext : boost::noncopyable {
         command(command_in),
         state(state_in) {
     for (const auto& leg : config.legs) {
-      legs.emplace_back(leg, config.stand_up, config.stand_height_mm,
-                        config.idle_x_mm, config.idle_y_mm);
+      legs.emplace_back(leg, config.stand_up, config.stand_height,
+                        config.idle_x, config.idle_y);
     }
   }
 
@@ -125,73 +125,73 @@ struct QuadrupedContext : boost::noncopyable {
   }
 
   void UpdateCommandedRB() {
-    Sophus::SE3d command_mm_RB =
-        command->pose_mm_RB * config.command_offset_mm_RB;
+    Sophus::SE3d command_RB =
+        command->pose_RB * config.command_offset_RB;
     const base::Point3D translation =
-        command_mm_RB.translation() -
-        state->robot.frame_mm_RB.pose.translation();
-    state->robot.frame_mm_RB.pose.translation() +=
+        command_RB.translation() -
+        state->robot.frame_RB.pose.translation();
+    state->robot.frame_RB.pose.translation() +=
         config.rb_filter_constant_Hz * config.period_s * translation;
-    state->robot.frame_mm_RB.pose.so3() =
+    state->robot.frame_RB.pose.so3() =
         Sophus::SO3d(
-            state->robot.frame_mm_RB.pose.so3().unit_quaternion().slerp(
+            state->robot.frame_RB.pose.so3().unit_quaternion().slerp(
                 config.rb_filter_constant_Hz * config.period_s,
-                command_mm_RB.so3().unit_quaternion()));
+                command_RB.so3().unit_quaternion()));
   }
 
   void UpdateCommandedR() {
     const auto result_R = FilterCommand(
-        {state->robot.desired_mm_R.v, state->robot.desired_mm_R.w},
-        {command->v_mm_s_R, command->w_R},
-        config.lr_acceleration_mm_s2,
+        {state->robot.desired_R.v, state->robot.desired_R.w},
+        {command->v_R, command->w_R},
+        config.lr_acceleration,
         config.lr_alpha_rad_s2,
         config.period_s);
-    state->robot.desired_mm_R.v = result_R.v_mm_s;
-    state->robot.desired_mm_R.w = result_R.w;
+    state->robot.desired_R.v = result_R.v;
+    state->robot.desired_R.w = result_R.w;
   }
 
   void MoveLegsForR(std::vector<QC::Leg>* legs_R) {
-    PropagateLeg propagator(state->robot.desired_mm_R.v,
-                            state->robot.desired_mm_R.w,
+    PropagateLeg propagator(state->robot.desired_R.v,
+                            state->robot.desired_R.w,
                             config.period_s);
 
     for (auto& leg_R : *legs_R) {
       if (leg_R.stance == 0.0 && !leg_R.landing) { continue; }
 
-      const auto result = propagator(leg_R.position_mm);
+      const auto result = propagator(leg_R.position);
 
-      leg_R.position_mm = result.position_mm;
+      leg_R.position = result.position;
 
       // We don't want to change the Z velocity, but do want to force
       // the X and Y, since the R frame movement is the only thing
       // that should be happening for a leg in stance configuration.
-      leg_R.velocity_mm_s.head<2>() = result.velocity_mm_s.head<2>();
+      leg_R.velocity.head<2>() = result.velocity.head<2>();
     }
   }
 
   struct MoveOptions {
-    std::optional<double> override_acceleration_mm_s2;
+    std::optional<double> override_acceleration;
   };
 
   bool MoveLegsFixedSpeedZ(
       const std::vector<int>& leg_ids,
       std::vector<QC::Leg>* legs_R,
-      double desired_velocity_mm_s,
-      double desired_height_mm,
+      double desired_velocity,
+      double desired_height,
       const MoveOptions& move_options = MoveOptions()) const {
-    std::vector<std::pair<int, base::Point3D>> desired_poses_mm_R;
+    std::vector<std::pair<int, base::Point3D>> desired_poses_R;
 
     for (int id : leg_ids) {
       const auto& leg_R = GetLeg_R(legs_R, id);
-      base::Point3D pose_mm_R = leg_R.position_mm;
-      pose_mm_R.z() = desired_height_mm;
-      desired_poses_mm_R.push_back(std::make_pair(leg_R.leg_id, pose_mm_R));
+      base::Point3D pose_R = leg_R.position;
+      pose_R.z() = desired_height;
+      desired_poses_R.push_back(std::make_pair(leg_R.leg_id, pose_R));
     }
 
     return MoveLegsFixedSpeed(
         legs_R,
-        desired_velocity_mm_s,
-        desired_poses_mm_R,
+        desired_velocity,
+        desired_poses_R,
         move_options,
         base::Point3D(0, 0, 1),
         base::Point3D(1, 1, 0));
@@ -199,37 +199,37 @@ struct QuadrupedContext : boost::noncopyable {
 
   bool MoveLegsFixedSpeed(
       std::vector<QC::Leg>* legs_R,
-      double desired_velocity_mm_s,
-      const std::vector<std::pair<int, base::Point3D>>& command_pose_mm_R,
+      double desired_velocity,
+      const std::vector<std::pair<int, base::Point3D>>& command_pose_R,
       const MoveOptions& move_options = MoveOptions(),
       base::Point3D velocity_mask = base::Point3D(1., 1., 1),
       base::Point3D velocity_inverse_mask = base::Point3D(0., 0., 0.)) const {
 
     bool done = true;
 
-    const double acceleration_mm_s2 =
-        move_options.override_acceleration_mm_s2.value_or(
-            config.bounds.max_acceleration_mm_s2);
+    const double acceleration =
+        move_options.override_acceleration.value_or(
+            config.bounds.max_acceleration);
 
     // We do each leg independently.
-    for (const auto& pair : command_pose_mm_R) {
+    for (const auto& pair : command_pose_R) {
       auto& leg_R = GetLeg_R(legs_R, pair.first);
 
-      TrajectoryState initial{leg_R.position_mm, leg_R.velocity_mm_s};
+      TrajectoryState initial{leg_R.position, leg_R.velocity};
       const auto result = CalculateAccelerationLimitedTrajectory(
-          initial, pair.second, desired_velocity_mm_s,
-          acceleration_mm_s2,
+          initial, pair.second,
+          desired_velocity, acceleration,
           config.period_s);
 
-      leg_R.position_mm = result.pose_l;
-      leg_R.acceleration_mm_s2 =
-          velocity_inverse_mask.asDiagonal() * leg_R.acceleration_mm_s2 +
+      leg_R.position = result.pose_l;
+      leg_R.acceleration =
+          velocity_inverse_mask.asDiagonal() * leg_R.acceleration +
           velocity_mask.asDiagonal() * result.acceleration_l_s2;
-      leg_R.velocity_mm_s =
-          velocity_inverse_mask.asDiagonal() * leg_R.velocity_mm_s  +
+      leg_R.velocity =
+          velocity_inverse_mask.asDiagonal() * leg_R.velocity  +
           velocity_mask.asDiagonal() * result.velocity_l_s;
 
-      if ((leg_R.position_mm - pair.second).norm() > 1.0) {
+      if ((leg_R.position - pair.second).norm() > 0.001) {
         done = false;
       }
     }
@@ -240,28 +240,27 @@ struct QuadrupedContext : boost::noncopyable {
   void MoveLegsTargetTime(
       std::vector<QC::Leg>* legs_R,
       double remaining_s,
-      const std::vector<std::pair<int, base::Point3D>>& command_pose_mm_R) const {
-    for (const auto& pair : command_pose_mm_R) {
+      const std::vector<std::pair<int, base::Point3D>>& command_pose_R) const {
+    for (const auto& pair : command_pose_R) {
       auto& leg_R = GetLeg_R(legs_R, pair.first);
 
       // This only makes sense for things that are not on the ground.
       MJ_ASSERT(leg_R.stance == 0.0);
 
-      const base::Point3D error_mm = pair.second - leg_R.position_mm;
-      const double error_norm_mm = error_mm.norm();
-      const double velocity_mm_s = error_norm_mm /
+      const base::Point3D error = pair.second - leg_R.position;
+      const double error_norm = error.norm();
+      const double velocity = error_norm /
           std::max(config.period_s, remaining_s);
 
       // For now, we'll do this as just an infinite acceleration
       // profile.
 
-      const double delta_mm =
+      const double delta =
           std::min(
-              error_norm_mm,
-              velocity_mm_s * config.period_s);
-      leg_R.position_mm += error_mm.normalized() * delta_mm;
-      leg_R.velocity_mm_s =
-          error_mm.normalized() * velocity_mm_s;
+              error_norm,
+              velocity * config.period_s);
+      leg_R.position += error.normalized() * delta;
+      leg_R.velocity = error.normalized() * velocity;
       // Since we are not in stance.
       leg_R.force_N = base::Point3D(0, 0, 0);
     }

@@ -72,8 +72,8 @@ class IkSolver : boost::noncopyable {
 
   // End effector positions are in the leg (G) frame.
   struct Effector {
-    base::Point3D pose_mm;
-    base::Point3D velocity_mm_s;
+    base::Point3D pose;
+    base::Point3D velocity;
     base::Point3D force_N;
 
     friend Effector operator*(const Sophus::SE3d&, const Effector&);
@@ -94,8 +94,8 @@ class IkSolver : boost::noncopyable {
 inline IkSolver::Effector operator*(const Sophus::SE3d& lhs_AB,
                                     const IkSolver::Effector& rhs_B) {
   auto result_A = rhs_B;
-  result_A.pose_mm = lhs_AB * rhs_B.pose_mm;
-  result_A.velocity_mm_s = lhs_AB.so3() * rhs_B.velocity_mm_s;
+  result_A.pose = lhs_AB * rhs_B.pose;
+  result_A.velocity = lhs_AB.so3() * rhs_B.velocity;
   result_A.force_N = lhs_AB.so3() * rhs_B.force_N;
   return result_A;
 }

@@ -1154,25 +1154,25 @@ class MechRender {
     triangle_.SetTransform(transform_);
 
     AddBox({0, 0, 0},
-           {230, 0, 0},
-           {0, 240, 0},
-           {0, 0, 125},
+           {0.230, 0, 0},
+           {0, 0.240, 0},
+           {0, 0, 0.125},
            {1.0, 0, 0, 1.0});
 
     if (state_.leg_actual) {
       for (const auto& leg_B : qs.state.legs_B) {
-        AddBall(leg_B.position_mm.cast<float>(),
-                10, Eigen::Vector4f(0, 1, 0, 1));
+        AddBall(leg_B.position.cast<float>(),
+                0.010, Eigen::Vector4f(0, 1, 0, 1));
         if (!state_.leg_force) {
           AddLineSegment(
-              leg_B.position_mm.cast<float>(),
-              (leg_B.position_mm +
-               kVelocityDrawScale * leg_B.velocity_mm_s).cast<float>(),
+              leg_B.position.cast<float>(),
+              (leg_B.position +
+               kVelocityDrawScale * leg_B.velocity).cast<float>(),
               Eigen::Vector4f(0, 1, 0, 1));
         } else {
           AddLineSegment(
-              leg_B.position_mm.cast<float>(),
-              (leg_B.position_mm +
+              leg_B.position.cast<float>(),
+              (leg_B.position +
                kForceDrawScale * leg_B.force_N).cast<float>(),
               Eigen::Vector4f(0, 1, 0, 1));
         }
@@ -1181,18 +1181,18 @@ class MechRender {
 
     if (state_.leg_command) {
       for (const auto& leg_B : qc.legs_B) {
-        AddBall(leg_B.position_mm.cast<float>(),
-                8, Eigen::Vector4f(0, 0, 1, 1));
+        AddBall(leg_B.position.cast<float>(),
+                0.008, Eigen::Vector4f(0, 0, 1, 1));
         if (!state_.leg_force) {
           AddLineSegment(
-              leg_B.position_mm.cast<float>(),
-              (leg_B.position_mm +
-               kVelocityDrawScale * leg_B.velocity_mm_s).cast<float>(),
+              leg_B.position.cast<float>(),
+              (leg_B.position +
+               kVelocityDrawScale * leg_B.velocity).cast<float>(),
               Eigen::Vector4f(0, 0, 1, 1));
         } else {
           AddLineSegment(
-              leg_B.position_mm.cast<float>(),
-              (leg_B.position_mm +
+              leg_B.position.cast<float>(),
+              (leg_B.position +
                kForceDrawScale * leg_B.force_N).cast<float>(),
               Eigen::Vector4f(0, 0, 1, 1));
         }
@@ -1201,10 +1201,10 @@ class MechRender {
 
     if (state_.target) {
       for (const auto& leg : qs.state.walk.legs) {
-        Eigen::Vector3d target_mm_B =
-            qs.state.robot.frame_mm_RB.pose.inverse() * leg.target_mm_R;
-        AddBall(target_mm_B.cast<float>(),
-                6, Eigen::Vector4f(0, 1, 1, 1));
+        Eigen::Vector3d target_B =
+            qs.state.robot.frame_RB.pose.inverse() * leg.target_R;
+        AddBall(target_B.cast<float>(),
+                0.006, Eigen::Vector4f(0, 1, 1, 1));
       }
     }
 
@@ -1213,7 +1213,7 @@ class MechRender {
       for (int i : {0, 1, 3, 2}) {
         const auto& leg_B = qc.legs_B[i];
         if (leg_B.stance != 0) {
-          points.push_back(qs.state.legs_B[i].position_mm);
+          points.push_back(qs.state.legs_B[i].position);
         }
       }
       for (size_t i = 0; i < points.size(); i++) {
@@ -1246,11 +1246,11 @@ class MechRender {
     double max_z_L = 0.0;
 
     for (const auto& leg_B : qs.state.legs_B) {
-      Eigen::Vector3d position_mm_L = tf_LB * leg_B.position_mm;
-      max_z_L = std::max(max_z_L, position_mm_L.z());
+      Eigen::Vector3d position_L = tf_LB * leg_B.position;
+      max_z_L = std::max(max_z_L, position_L.z());
     }
 
-    const double l = kGroundSize_mm;
+    const double l = kGroundSize;
     Eigen::Vector3f normal = Eigen::Vector3f(0, 0, -1);
     Eigen::Vector2f uv(0, 0);
     Eigen::Vector4f rgba(0.3, 0.3, 0.3, 1.0);
@@ -1263,7 +1263,7 @@ class MechRender {
     }
 
     // Render our CoM projected onto the ground.
-    AddBall(Eigen::Vector3f(0, 0, max_z_L), 6, Eigen::Vector4f(1, 0, 0, 1));
+    AddBall(Eigen::Vector3f(0, 0, max_z_L), 0.006, Eigen::Vector4f(1, 0, 0, 1));
 
     auto ic = triangle_.AddVertex(Eigen::Vector3f(0, 0, max_z_L), normal, uv, rgba);
     for (int i = 0; i < 16; i++) {
@@ -1456,7 +1456,7 @@ class MechRender {
   }
 
   gl::Trackball MakeTrackball() {
-    return gl::Trackball{{0.f, 0.f, 1000.f}, {0.f, 0.f, 0.f}};
+    return gl::Trackball{{0.f, 0.f, 1.000f}, {0.f, 0.f, 0.f}};
   }
 
   SphereModel sphere_;
@@ -1475,8 +1475,8 @@ class MechRender {
       gl::PerspectiveCamera::Options options;
       options.aspect = static_cast<double>(size_.x()) /
                        static_cast<double>(size_.y());
-      options.near = 100;
-      options.far = 10000;
+      options.near = 0.100;
+      options.far = 10.000;
       return options;
     }()};
 
@@ -1532,7 +1532,7 @@ class MechRender {
 
   const double kVelocityDrawScale = 0.1;
   const double kForceDrawScale = 2.0;
-  const double kGroundSize_mm = 500.0;
+  const double kGroundSize = 0.500;
 };
 
 constexpr const char* kIniFileName = "tplot2.ini";

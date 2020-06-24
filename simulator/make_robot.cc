@@ -29,16 +29,6 @@ namespace simulator {
 namespace {
 constexpr double kBodyMassKg = 5.0;
 
-Sophus::SE3d ConvertSE3MmToM(const Sophus::SE3d& input) {
-  auto result = input;
-  result.translation() *= 0.001;
-  return result;
-}
-
-Eigen::Vector3d ConvertMmToM(const Eigen::Vector3d& input) {
-  return 0.001 * input;
-}
-
 dd::BodyNodePtr MakeLegJoint(
     dd::SkeletonPtr skel,
     dd::BodyNodePtr parent,
@@ -75,7 +65,7 @@ dd::BodyNodePtr MakeLeg(dd::SkeletonPtr skel,
                         dd::BodyNodePtr parent,
                         const mech::QuadrupedConfig::Leg& leg_config,
                         const std::string& name) {
-  Eigen::Vector3d shoulder_pose_m = ConvertMmToM(leg_config.ik.shoulder.pose_mm);
+  Eigen::Vector3d shoulder_pose_m = leg_config.ik.shoulder.pose;
   auto shoulder = MakeLegJoint(
       skel,
       parent,
@@ -85,7 +75,7 @@ dd::BodyNodePtr MakeLeg(dd::SkeletonPtr skel,
             Eigen::AngleAxisd(0.5 * M_PI, Eigen::Vector3d::UnitX())),
             shoulder_pose_m +
             Eigen::DiagonalMatrix<double, 3>(0, -.5, 0) * shoulder_pose_m},
-      ConvertSE3MmToM(leg_config.pose_mm_BG),
+      leg_config.pose_BG,
       {1.0, 0., 0.},
       0.5);
 
@@ -95,14 +85,13 @@ dd::BodyNodePtr MakeLeg(dd::SkeletonPtr skel,
       name + "_femur",
       std::make_shared<dd::BoxShape>(
           Eigen::Vector3d(
-              0.07, 0.04, 0.001 * leg_config.ik.femur.pose_mm.z())),
+              0.07, 0.04, leg_config.ik.femur.pose.z())),
       {Eigen::Quaterniond::Identity(),
             Eigen::Vector3d(
-                0.0, 0.0, 0.5 * 0.001 * leg_config.ik.femur.pose_mm.z())},
-      ConvertSE3MmToM(
-          {Eigen::Quaterniond(
-                Eigen::AngleAxis(M_PI, Eigen::Vector3d::UnitX())),
-                leg_config.ik.shoulder.pose_mm}),
+                0.0, 0.0, 0.5 * leg_config.ik.femur.pose.z())},
+      {Eigen::Quaterniond(
+            Eigen::AngleAxis(M_PI, Eigen::Vector3d::UnitX())),
+            leg_config.ik.shoulder.pose},
       {0., 1., 0.},
       0.7);
 
@@ -111,12 +100,11 @@ dd::BodyNodePtr MakeLeg(dd::SkeletonPtr skel,
       femur,
       name + "_tibia",
       std::make_shared<dd::CylinderShape>(
-          0.01, 0.001 * leg_config.ik.tibia.pose_mm.z()),
+          0.01, leg_config.ik.tibia.pose.z()),
       {Eigen::Quaterniond::Identity(),
             Eigen::Vector3d(
-                0.0, 0.0, 0.5 * 0.001 * leg_config.ik.tibia.pose_mm.z())},
-      ConvertSE3MmToM(
-          {Eigen::Quaterniond::Identity(), leg_config.ik.femur.pose_mm}),
+                0.0, 0.0, 0.5 * leg_config.ik.tibia.pose.z())},
+      {Eigen::Quaterniond::Identity(), leg_config.ik.femur.pose},
       {0., 1., 0.},
       0.3);
 
@@ -125,7 +113,7 @@ dd::BodyNodePtr MakeLeg(dd::SkeletonPtr skel,
     dd::WeldJoint::Properties weld_properties;
     weld_properties.mName = name + "_foot_joint";
     weld_properties.mT_ParentBodyToJoint.translation() =
-        0.001 * leg_config.ik.tibia.pose_mm;
+        leg_config.ik.tibia.pose;
 
     auto foot = skel->createJointAndBodyNodePair<dd::WeldJoint>(
         tibia, weld_properties,

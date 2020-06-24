@@ -16,7 +16,7 @@
 
 (function () {
   var websocket = null;
-  var pose_mm_RB = null;
+  var pose_RB = null;
 
   var BUTTON_START = 9;
   var BUTTON_SELECT = 8;
@@ -37,13 +37,13 @@
 
   var NUM_BUTTONS = 16;
 
-  var RB_MAX_X = 50;
-  var RB_MAX_Y = 50;
+  var RB_MAX_X = 0.050;
+  var RB_MAX_Y = 0.050;
   var RB_MAX_ROLL = 0.35;
   var RB_MAX_PITCH = 0.35;
 
-  var VEL_MAX_X = 500.0;
-  var VEL_MAX_Y = 200.0;
+  var VEL_MAX_X = 0.500;
+  var VEL_MAX_Y = 0.200;
   var RATE_MAX_Z = 1.0;
 
   var handleEvent = function(e) {
@@ -180,27 +180,27 @@
       }
     }
 
-    var v_mm_s_R = null;
+    var v_R = null;
     var w_R = null;
 
     if (down[BUTTON_SHOULDER_LB]) {
       // This means the joystick axes are used to change the RB
       // transform.
-      var pose_mm_RB_x = -gp.axes[1] * RB_MAX_X;
-      var pose_mm_RB_y = gp.axes[0] * RB_MAX_Y;
+      var pose_RB_x = -gp.axes[1] * RB_MAX_X;
+      var pose_RB_y = gp.axes[0] * RB_MAX_Y;
 
-      var pose_mm_RB_so3 = quaternionMultiply(
+      var pose_RB_so3 = quaternionMultiply(
         quaternionMultiply(
           makeUnitQuaternion(),
           makeQuaternionAxisRotate(1, 0, 0, gp.axes[2] * RB_MAX_ROLL)),
         makeQuaternionAxisRotate(0, 1, 0, -gp.axes[3] * RB_MAX_PITCH));
 
-      pose_mm_RB = {
-        translation : [ pose_mm_RB_x, pose_mm_RB_y, 0.0 ],
-        so3 : quaternionJs(pose_mm_RB_so3),
+      pose_RB = {
+        translation : [ pose_RB_x, pose_RB_y, 0.0 ],
+        so3 : quaternionJs(pose_RB_so3),
       };
     } else if (gp) {
-      v_mm_s_R = [ -gp.axes[1] * VEL_MAX_X, gp.axes[0] * VEL_MAX_Y, 0.0 ];
+      v_R = [ -gp.axes[1] * VEL_MAX_X, gp.axes[0] * VEL_MAX_Y, 0.0 ];
       w_R = [ 0, 0, gp.axes[2] * RATE_MAX_Z ];
     }
 
@@ -222,11 +222,11 @@
     }
 
     if ('command' in cmd) {
-      if (pose_mm_RB) {
-        cmd['command']['pose_mm_RB'] = pose_mm_RB;
+      if (pose_RB) {
+        cmd['command']['pose_RB'] = pose_RB;
       }
-      if (v_mm_s_R) {
-        cmd['command']['v_mm_s_R'] = v_mm_s_R;
+      if (v_R) {
+        cmd['command']['v_R'] = v_R;
       }
       if (w_R) {
         cmd['command']['w_R'] = w_R;
@@ -234,7 +234,7 @@
       if (value == 'jump') {
         var repeat = document.getElementById("jump_repeat");
         cmd['command']['jump'] = {
-          "acceleration_mm_s2" : Number(jump_acceleration.value),
+          "acceleration" : Number(jump_acceleration.value),
           "repeat" : repeat.checked,
         };
       }

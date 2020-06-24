@@ -32,11 +32,11 @@ class Fixture {
   MammalIk dut{[]() {
       MammalIk::Config config;
 
-      config.shoulder.pose_mm = {20.0, 0.0, 0.0};
+      config.shoulder.pose = {0.020, 0.0, 0.0};
       config.shoulder.id = 1;
-      config.femur.pose_mm = {0.0, 0.0, 100.0};
+      config.femur.pose = {0.0, 0.0, 0.100};
       config.femur.id = 2;
-      config.tibia.pose_mm = {0.0, 0.0, 100.0};
+      config.tibia.pose = {0.0, 0.0, 0.100};
       config.tibia.id = 3;
 
       return config;
@@ -70,11 +70,11 @@ class OffsetFixture {
   MammalIk dut{[]() {
       MammalIk::Config config;
 
-      config.shoulder.pose_mm = {20.0, 30.0, 0.0};
+      config.shoulder.pose = {0.020, 0.030, 0.0};
       config.shoulder.id = 1;
-      config.femur.pose_mm = {0.0, 0.0, 100.0};
+      config.femur.pose = {0.0, 0.0, 0.100};
       config.femur.id = 2;
-      config.tibia.pose_mm = {0.0, 0.0, 100.0};
+      config.tibia.pose = {0.0, 0.0, 0.100};
       config.tibia.id = 3;
 
       return config;
@@ -84,13 +84,13 @@ class OffsetFixture {
 };
 
 struct TorqueTest {
-  double x_mm;
-  double y_mm;
-  double z_mm;
+  double x;
+  double y;
+  double z;
 
-  // double x_mm_s;
-  // double y_mm_s;
-  // double z_mm_s;
+  // double x_m_s;
+  // double y_m_s;
+  // double z_m_s;
 
   double x_N;
   double y_N;
@@ -118,8 +118,8 @@ BOOST_FIXTURE_TEST_CASE(MammalPoseTest, Fixture) {
         J().set_id(1),
         J().set_id(2),
         J().set_id(3)});
-    BOOST_TEST(result_G.pose_mm == Eigen::Vector3d(20, 0, 200));
-    BOOST_TEST(result_G.velocity_mm_s == Eigen::Vector3d(0, 0, 0));
+    BOOST_TEST(result_G.pose == Eigen::Vector3d(0.020, 0, 0.200));
+    BOOST_TEST(result_G.velocity == Eigen::Vector3d(0, 0, 0));
     BOOST_TEST(result_G.force_N == Eigen::Vector3d(0, 0, 0));
   }
 
@@ -129,11 +129,11 @@ BOOST_FIXTURE_TEST_CASE(MammalPoseTest, Fixture) {
         J().set_id(1).set_angle_deg(10),
         J().set_id(2),
         J().set_id(3)});
-    BOOST_TEST(result_G.pose_mm.isApprox(
-                   Eigen::Vector3d(20,
-                                   std::sin(base::Radians(-10)) * 200,
-                                   std::cos(base::Radians(-10)) * 200)));
-    BOOST_TEST(result_G.velocity_mm_s == Eigen::Vector3d(0, 0, 0));
+    BOOST_TEST(result_G.pose.isApprox(
+                   Eigen::Vector3d(0.020,
+                                   std::sin(base::Radians(-10)) * 0.200,
+                                   std::cos(base::Radians(-10)) * 0.200)));
+    BOOST_TEST(result_G.velocity == Eigen::Vector3d(0, 0, 0));
     BOOST_TEST(result_G.force_N == Eigen::Vector3d(0, 0, 0));
   }
 
@@ -143,11 +143,11 @@ BOOST_FIXTURE_TEST_CASE(MammalPoseTest, Fixture) {
         J().set_id(1),
         J().set_id(2).set_angle_deg(10),
         J().set_id(3)});
-    BOOST_TEST(result_G.pose_mm.isApprox(
-                   Eigen::Vector3d(20 + std::sin(base::Radians(10)) * 200,
+    BOOST_TEST(result_G.pose.isApprox(
+                   Eigen::Vector3d(0.020 + std::sin(base::Radians(10)) * 0.200,
                                    0,
-                                   std::cos(base::Radians(10)) * 200)));
-    BOOST_TEST(result_G.velocity_mm_s == Eigen::Vector3d(0, 0, 0));
+                                   std::cos(base::Radians(10)) * 0.200)));
+    BOOST_TEST(result_G.velocity == Eigen::Vector3d(0, 0, 0));
     BOOST_TEST(result_G.force_N == Eigen::Vector3d(0, 0, 0));
   }
 
@@ -157,11 +157,11 @@ BOOST_FIXTURE_TEST_CASE(MammalPoseTest, Fixture) {
         J().set_id(1),
         J().set_id(2),
         J().set_id(3).set_angle_deg(10)});
-    BOOST_TEST(result_G.pose_mm.isApprox(
-                   Eigen::Vector3d(20 + std::sin(base::Radians(10)) * 100,
+    BOOST_TEST(result_G.pose.isApprox(
+                   Eigen::Vector3d(0.020 + std::sin(base::Radians(10)) * 0.100,
                                    0,
-                                   100 + std::cos(base::Radians(10)) * 100)));
-    BOOST_TEST(result_G.velocity_mm_s == Eigen::Vector3d(0, 0, 0));
+                                   0.100 + std::cos(base::Radians(10)) * 0.100)));
+    BOOST_TEST(result_G.velocity == Eigen::Vector3d(0, 0, 0));
     BOOST_TEST(result_G.force_N == Eigen::Vector3d(0, 0, 0));
   }
 
@@ -173,9 +173,9 @@ BOOST_FIXTURE_TEST_CASE(MammalVelocityTest, Fixture) {
         J().set_id(1).set_velocity_dps(10.0),
         J().set_id(2),
         J().set_id(3)});
-    BOOST_TEST(result_G.pose_mm == Eigen::Vector3d(20, 0, 200));
-    BOOST_TEST(result_G.velocity_mm_s.isApprox(
-                   Eigen::Vector3d(0, base::Radians(-10) * 200, 0)));
+    BOOST_TEST(result_G.pose == Eigen::Vector3d(0.020, 0, 0.200));
+    BOOST_TEST(result_G.velocity.isApprox(
+                   Eigen::Vector3d(0, base::Radians(-10) * 0.200, 0)));
     BOOST_TEST(result_G.force_N == Eigen::Vector3d(0, 0, 0));
   }
 
@@ -184,9 +184,9 @@ BOOST_FIXTURE_TEST_CASE(MammalVelocityTest, Fixture) {
         J().set_id(1),
         J().set_id(2).set_velocity_dps(10.0),
         J().set_id(3)});
-    BOOST_TEST(result_G.pose_mm == Eigen::Vector3d(20, 0, 200));
-    BOOST_TEST(result_G.velocity_mm_s.isApprox(
-                   Eigen::Vector3d(base::Radians(10) * 200, 0, 0)));
+    BOOST_TEST(result_G.pose == Eigen::Vector3d(0.020, 0, 0.200));
+    BOOST_TEST(result_G.velocity.isApprox(
+                   Eigen::Vector3d(base::Radians(10) * 0.200, 0, 0)));
     BOOST_TEST(result_G.force_N == Eigen::Vector3d(0, 0, 0));
   }
 
@@ -195,9 +195,9 @@ BOOST_FIXTURE_TEST_CASE(MammalVelocityTest, Fixture) {
         J().set_id(1),
         J().set_id(2),
         J().set_id(3).set_velocity_dps(10.0)});
-    BOOST_TEST(result_G.pose_mm == Eigen::Vector3d(20, 0, 200));
-    BOOST_TEST(result_G.velocity_mm_s.isApprox(
-                   Eigen::Vector3d(base::Radians(10) * 100, 0, 0)));
+    BOOST_TEST(result_G.pose == Eigen::Vector3d(0.020, 0, 0.200));
+    BOOST_TEST(result_G.velocity.isApprox(
+                   Eigen::Vector3d(base::Radians(10) * 0.100, 0, 0)));
     BOOST_TEST(result_G.force_N == Eigen::Vector3d(0, 0, 0));
   }
 }
@@ -208,8 +208,8 @@ BOOST_FIXTURE_TEST_CASE(MammalForceTest, Fixture) {
         J().set_id(1).set_torque_Nm(1.0),
         J().set_id(2),
         J().set_id(3)});
-    BOOST_TEST(result_G.pose_mm == Eigen::Vector3d(20, 0, 200));
-    BOOST_TEST(result_G.velocity_mm_s == Eigen::Vector3d(0, 0, 0));
+    BOOST_TEST(result_G.pose == Eigen::Vector3d(0.020, 0, 0.200));
+    BOOST_TEST(result_G.velocity == Eigen::Vector3d(0, 0, 0));
     BOOST_TEST(result_G.force_N.isApprox(
                    Eigen::Vector3d(0, -5, 0), 1e-3));
   }
@@ -219,9 +219,9 @@ BOOST_FIXTURE_TEST_CASE(MammalForceTest, Fixture) {
         J().set_id(1),
         J().set_id(2).set_angle_deg(30),
         J().set_id(3).set_angle_deg(-60).set_torque_Nm(-2)});
-    BOOST_TEST(result_G.pose_mm.isApprox(Eigen::Vector3d(20, 0, 173.205),
+    BOOST_TEST(result_G.pose.isApprox(Eigen::Vector3d(0.020, 0, 0.173205),
                                          1e-3));
-    BOOST_TEST(result_G.velocity_mm_s == Eigen::Vector3d(0, 0, 0));
+    BOOST_TEST(result_G.velocity == Eigen::Vector3d(0, 0, 0));
     BOOST_TEST(result_G.force_N.isApprox(
                    Eigen::Vector3d(0, 0, -39.98), 1e-3));
   }
@@ -239,20 +239,20 @@ BOOST_AUTO_TEST_CASE(MammalInverseShoulderTest,
   };
 
   Test tests[] = {
-    {0, 0, 0, 200, 0.0},
-    {0, 0, 10, 180, -3.18},
-    {0, 0, -10, 180, 3.18},
-    {10, 0, 10, 180, 0.0},
-    {10, 0, 0, 180, 3.18},
-    {-10, 0, 0, 180, -3.18},
+    {0, 0, 0, 0.200, 0.0},
+    {0, 0, 0.010, 0.180, -3.18},
+    {0, 0, -0.010, 0.180, 3.18},
+    {0.010, 0, 0.010, 0.180, 0.0},
+    {0.010, 0, 0, 0.180, 3.18},
+    {-0.010, 0, 0, 0.180, -3.18},
 
-    {30, 0, 40, 180, -3.165},
+    {0.030, 0, 0.040, 0.180, -3.165},
 
   };
 
   for (auto test : tests) {
     // The Z offset should have no effect on shoulder angle.
-    for (double z : {0, 10}) {
+    for (double z : {0.0, 0.010}) {
       test.shoulder_z = z;
 
       BOOST_TEST_CONTEXT(
@@ -262,18 +262,18 @@ BOOST_AUTO_TEST_CASE(MammalInverseShoulderTest,
         MammalIk dut{[&]() {
             MammalIk::Config config;
 
-            config.shoulder.pose_mm = {0.0, test.shoulder_y, test.shoulder_z};
+            config.shoulder.pose = {0.0, test.shoulder_y, test.shoulder_z};
             config.shoulder.id = 1;
-            config.femur.pose_mm = {0.0, 0.0, 100.0};
+            config.femur.pose = {0.0, 0.0, 0.100};
             config.femur.id = 2;
-            config.tibia.pose_mm = {0.0, 0.0, 100.0};
+            config.tibia.pose = {0.0, 0.0, 0.100};
             config.tibia.id = 3;
 
             return config;
           }()};
 
         IkSolver::Effector input_G;
-        input_G.pose_mm = Eigen::Vector3d(0, test.point_y, test.point_z);
+        input_G.pose = Eigen::Vector3d(0, test.point_y, test.point_z);
         const auto result = dut.Inverse(input_G, {});
         BOOST_TEST_REQUIRE(!!result);
         BOOST_TEST(Shoulder(*result).angle_deg == test.expected_angle_deg);
@@ -296,20 +296,20 @@ BOOST_AUTO_TEST_CASE(MammalInverseLowerTest,
   };
 
   Test tests[] = {
-    {  0, 200, false,   0, 0 },
-    {  0, 200, true,    0, 0 },
+    {  0, 0.200, false,   0, 0 },
+    {  0, 0.200, true,    0, 0 },
 
-    { 1.95,   194.99, false,   13.41, -25.51 },
-    { 9.75,   194.76, false,   15.70, -25.51 },
-    { 19.47,  194.03, false,   18.56, -25.51 },
-    { 164.09, 105.36, false,   70.13, -25.51 },
-    { 194.51,  13.79, false,   98.79, -25.51 },
+    { 0.00195,   0.19499, false,   13.41, -25.51 },
+    { 0.00975,   0.19476, false,   15.70, -25.51 },
+    { 0.01947,   0.19403, false,   18.56, -25.51 },
+    { 0.16409,   0.10536, false,   70.13, -25.51 },
+    { 0.19451,   0.01379, false,   98.79, -25.51 },
 
-    { 1.95,  194.99, true,   -12.26,  25.51 },
-    { 9.75,  194.76, true,    -9.97,  25.51 },
-    { 19.47, 194.03, true,    -7.10,  25.51 },
-    { 164.09, 105.36, true,   44.46,  25.51 },
-    { 194.51,  13.79, true,   73.10,  25.51 },
+    { 0.00195,   0.19499, true,   -12.26,  25.51 },
+    { 0.00975,   0.19476, true,    -9.97,  25.51 },
+    { 0.01947,   0.19403, true,    -7.10,  25.51 },
+    { 0.16409,   0.10536, true,   44.46,  25.51 },
+    { 0.19451,   0.01379, true,   73.10,  25.51 },
   };
 
   for (const auto& test : tests) {
@@ -319,11 +319,11 @@ BOOST_AUTO_TEST_CASE(MammalInverseLowerTest,
       MammalIk dut{[&]() {
           MammalIk::Config config;
 
-          config.shoulder.pose_mm = {0.0, 0.0, 0.0};
+          config.shoulder.pose = {0.0, 0.0, 0.0};
           config.shoulder.id = 1;
-          config.femur.pose_mm = {0.0, 0.0, 100.0};
+          config.femur.pose = {0.0, 0.0, 0.100};
           config.femur.id = 2;
-          config.tibia.pose_mm = {0.0, 0.0, 100.0};
+          config.tibia.pose = {0.0, 0.0, 0.100};
           config.tibia.id = 3;
           config.invert = test.invert;
 
@@ -331,7 +331,7 @@ BOOST_AUTO_TEST_CASE(MammalInverseLowerTest,
         }()};
 
       IkSolver::Effector input_G;
-      input_G.pose_mm = Eigen::Vector3d(test.point_x, 0.0, test.point_z);
+      input_G.pose = Eigen::Vector3d(test.point_x, 0.0, test.point_z);
       const auto result = dut.Inverse(input_G, {});
       BOOST_TEST_REQUIRE(!!result);
       BOOST_TEST(Femur(*result).angle_deg == test.expected_femur_deg);
@@ -344,11 +344,11 @@ BOOST_AUTO_TEST_CASE(OldMammalTest, * boost::unit_test::tolerance(1e-2)) {
   MammalIk dut{[]() {
       MammalIk::Config config;
 
-      config.shoulder.pose_mm = {0.0, 30.0, 40.0};
+      config.shoulder.pose = {0.0, 0.030, 0.040};
       config.shoulder.id = 1;
-      config.femur.pose_mm = {0.0, 0.0, 100.0};
+      config.femur.pose = {0.0, 0.0, 0.100};
       config.femur.id = 2;
-      config.tibia.pose_mm = {0.0, 0.0, 110.0};
+      config.tibia.pose = {0.0, 0.0, 0.110};
       config.tibia.id = 3;
 
       return config;
@@ -365,31 +365,31 @@ BOOST_AUTO_TEST_CASE(OldMammalTest, * boost::unit_test::tolerance(1e-2)) {
   };
 
   Test tests[] = {
-    {   0, 30, 250,   0.00,  0.00,   0.00 },
+    {      0, 0.030, 0.250,   0.00,  0.00,   0.00 },
 
-    {   0, 30, 240,   0.00,  18.65, -35.55 },
+    {      0, 0.030, 0.240,   0.00,  18.65, -35.55 },
 
-    {   0, 30, 230,   0.00,  26.52, -50.48 },
-    {   0, 30, 210,   0.00,  37.97, -72.00 },
-    {   0, 30, 190,   0.00,  47.16, -88.96 },
-    {   0, 30, 150,   0.00,  62.96, -117.04 },
-    {   0, 30, 90,    0.00,  87.71, -152.98 },
-    {  20, 30, 190,   0.00,  54.18, -87.92  },
+    {      0, 0.030, 0.230,   0.00,  26.52, -50.48 },
+    {      0, 0.030, 0.210,   0.00,  37.97, -72.00 },
+    {      0, 0.030, 0.190,   0.00,  47.16, -88.96 },
+    {      0, 0.030, 0.150,   0.00,  62.96, -117.04 },
+    {      0, 0.030, 0.090,   0.00,  87.71, -152.98 },
+    {  0.020, 0.030, 0.190,   0.00,  54.18, -87.92  },
 
-    { -20, 30, 190,   0.00,  38.99, -87.92  },
+    { -0.020, 0.030, 0.190,   0.00,  38.99, -87.92  },
 
-    { 210, 30,  40,   0.00,  90, 0  },
-    {  -210, 30, 40,  0.00, -90, 0  },
-    {   200, 30, 40,  0.00,  108.65, -35.55 },
-    {   0, 40, 190,  -3.00,  46.37, -87.52  },
-    {   0, 20, 190,   3.02,  47.72, -89.98 },
+    {  0.210, 0.030, 0.040,   0.00,  90, 0  },
+    { -0.210, 0.030, 0.040,   0.00, -90, 0  },
+    {  0.200, 0.030, 0.040,   0.00,  108.65, -35.55 },
+    {      0, 0.040, 0.190,  -3.00,  46.37, -87.52  },
+    {      0, 0.020, 0.190,   3.02,  47.72, -89.98 },
   };
 
   for (const auto& test: tests) {
     BOOST_TEST_CONTEXT(fmt::format("x={} y={} z={}",
                                    test.x, test.y, test.z)) {
       IkSolver::Effector input_G;
-      input_G.pose_mm = { test.x, test.y, test.z };
+      input_G.pose = { test.x, test.y, test.z };
       const auto result = dut.Inverse(input_G, {});
       BOOST_TEST_REQUIRE(!!result);
 
@@ -405,11 +405,11 @@ BOOST_AUTO_TEST_CASE(MammalInverseVelocityTest,
   MammalIk dut{[]() {
       MammalIk::Config config;
 
-      config.shoulder.pose_mm = {0.0, 0.0, 0.0};
+      config.shoulder.pose = {0.0, 0.0, 0.0};
       config.shoulder.id = 1;
-      config.femur.pose_mm = {0.0, 0.0, 100.0};
+      config.femur.pose = {0.0, 0.0, 0.100};
       config.femur.id = 2;
-      config.tibia.pose_mm = {0.0, 0.0, 100.0};
+      config.tibia.pose = {0.0, 0.0, 0.100};
       config.tibia.id = 3;
 
       return config;
@@ -463,8 +463,8 @@ BOOST_AUTO_TEST_CASE(MammalInverseVelocityTest,
             test.x, test.y, test.z,
             test.vx, test.vy, test.vz)) {
       IkSolver::Effector input_G;
-      input_G.pose_mm = { test.x, test.y, test.z };
-      input_G.velocity_mm_s = { test.vx, test.vy, test.vz };
+      input_G.pose = { test.x * 0.001, test.y * 0.001, test.z * 0.001 };
+      input_G.velocity = { test.vx * 0.001, test.vy * 0.001, test.vz * 0.001 };
       const auto result = dut.Inverse(input_G, {});
       BOOST_TEST_REQUIRE(!!result);
 
@@ -539,18 +539,18 @@ BOOST_AUTO_TEST_CASE(MammalInverseForceTest,
       MammalIk dut{[&]() {
           MammalIk::Config config;
 
-          config.shoulder.pose_mm = {0.0, test.sy, 0.0};
+          config.shoulder.pose = {0.0, test.sy * 0.001, 0.0};
           config.shoulder.id = 1;
-          config.femur.pose_mm = {0.0, 0.0, 100.0};
+          config.femur.pose = {0.0, 0.0, 0.100};
           config.femur.id = 2;
-          config.tibia.pose_mm = {0.0, 0.0, 100.0};
+          config.tibia.pose = {0.0, 0.0, 0.100};
           config.tibia.id = 3;
 
           return config;
         }()};
 
       IkSolver::Effector input_G;
-      input_G.pose_mm = { test.x, test.y, test.z };
+      input_G.pose = { test.x * 0.001, test.y * 0.001, test.z * 0.001};
       input_G.force_N = { test.fx, test.fy, test.fz };
       const auto result = dut.Inverse(input_G, {});
       BOOST_TEST_REQUIRE(!!result);

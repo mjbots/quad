@@ -59,12 +59,12 @@ namespace mech {
 const int kRemoteRobot = 0;
 const int kRemoteTurret = 1;
 
-constexpr double kMaxLateralVelocity_mm_s = 100.0;
+constexpr double kMaxLateralVelocity = 0.100;
 
 constexpr double kMaxTurretPitch_dps = 50.0;
 constexpr double kMaxTurretYaw_dps = 200.0;
 
-constexpr double kMovementEpsilon_mm_s = 25.0;
+constexpr double kMovementEpsilon = 0.025;
 constexpr double kMovementEpsilon_rad_s = (7.0 / 180.0) * M_PI;
 
 namespace {
@@ -100,10 +100,10 @@ class SlotCommand {
   using Slot = NrfusbClient::Slot;
 
   void Command(QuadrupedCommand::Mode mode,
-               const Sophus::SE3d& pose_mm_RB,
-               const base::Point3D& v_mm_s_R,
+               const Sophus::SE3d& pose_RB,
+               const base::Point3D& v_R,
                const base::Point3D& w_R,
-               double jump_accel_mm_s2,
+               double jump_accel,
                TurretControl::Mode turret_mode,
                const base::Euler& turret_rate_dps,
                bool turret_track,
@@ -120,7 +120,7 @@ class SlotCommand {
         slot0.size = 4;
         // For now, always repeat.
         ts.Write(static_cast<int8_t>(1));
-        ts.Write(static_cast<uint16_t>(jump_accel_mm_s2));
+        ts.Write(static_cast<uint16_t>(jump_accel));
       } else {
         slot0.size = 1;
       }
@@ -133,8 +133,8 @@ class SlotCommand {
       slot2.size = 6;
       mjlib::base::BufferWriteStream bstream({slot2.data, slot2.size});
       mjlib::telemetry::WriteStream tstream{bstream};
-      tstream.Write(base::Saturate<int16_t>(v_mm_s_R.x()));
-      tstream.Write(base::Saturate<int16_t>(v_mm_s_R.y()));
+      tstream.Write(base::Saturate<int16_t>(v_R.x()));
+      tstream.Write(base::Saturate<int16_t>(v_R.y()));
       tstream.Write(base::Saturate<int16_t>(32767.0 * w_R.z() / (2 * M_PI)));
       nrfusb_.tx_slot(kRemoteRobot, 2, slot2);
     }
@@ -194,7 +194,7 @@ class SlotCommand {
     QuadrupedCommand::Mode mode = QuadrupedCommand::Mode::kStopped;
     int tx_count = 0;
     int rx_count = 0;
-    base::Point3D v_mm_s_R;
+    base::Point3D v_R;
     base::Point3D w_LB;
     double min_voltage = 0.0;
     double max_voltage = 0.0;
@@ -249,10 +249,10 @@ class SlotCommand {
       } else if (i == 1) {
         mjlib::base::BufferReadStream bs({slot.data, slot.size});
         mjlib::telemetry::ReadStream ts{bs};
-        const double v_mm_s_R_x = *ts.Read<int16_t>();
-        const double v_mm_s_R_y = *ts.Read<int16_t>();
+        const double v_R_x = *ts.Read<int16_t>();
+        const double v_R_y = *ts.Read<int16_t>();
         const double w_LB_z = *ts.Read<int16_t>();
-        data_.v_mm_s_R = base::Point3D(v_mm_s_R_x, v_mm_s_R_y, 0.0);
+        data_.v_R = base::Point3D(v_R_x, v_R_y, 0.0);
         data_.w_LB = base::Point3D(0., 0., w_LB_z);
       } else if (i == 8) {
         data_.min_voltage = slot.data[0] * 0.25;
@@ -318,7 +318,7 @@ void DrawTelemetry(const SlotCommand* slot_command, bool turret) {
     ImGui::Text("tx/rx: %d/%d",
                 d.tx_count, d.rx_count);
     ImGui::Text("cmd: (%4.0f, %4.0f, %4.0f)",
-                d.v_mm_s_R.x(), d.v_mm_s_R.y(),
+                d.v_R.x(), d.v_R.y(),
                 d.w_LB.z());
     ImGui::Text("V: %.2f/%.2f", d.min_voltage, d.max_voltage);
     ImGui::Text("T: %.0f/%.0f", d.min_temp_C, d.max_temp_C);
@@ -688,8 +688,8 @@ int do_main(int argc, char** argv) {
   std::string video = "/dev/video0";
   bool turret = false;
   double rotate_deg = 180.0;
-  double jump_accel_mm_s2 = 4000.0;
-  double max_forward_velocity_mm_s = 400.0;
+  double jump_accel = 4.000;
+  double max_forward_velocity = 0.400;
   double max_rotation_deg_s = 60.0;
   double zoom_in = 3.0;
   double reticle_x = 0.0;
@@ -709,8 +709,8 @@ int do_main(int argc, char** argv) {
       (clipp::option("x", "reticle-x") & clipp::value("", reticle_x)),
       (clipp::option("y", "reticle-y") & clipp::value("", reticle_y)),
       (clipp::option("derate-scale") & clipp::value("", derate_scale)),
-      (clipp::option("jump-accel") & clipp::value("", jump_accel_mm_s2)),
-      (clipp::option("max-forward") & clipp::value("", max_forward_velocity_mm_s)),
+      (clipp::option("jump-accel") & clipp::value("", jump_accel)),
+      (clipp::option("max-forward") & clipp::value("", max_forward_velocity)),
       (clipp::option("max-rotation") & clipp::value("", max_rotation_deg_s)),
       mjlib::base::ClippArchive("stream.").Accept(&stream).release()
   );
@@ -860,14 +860,14 @@ int do_main(int argc, char** argv) {
     DrawGait(gamepad, gamepad_pressed, &pending_gait_mode, &command_mode);
     DrawTurret(gamepad, gamepad_pressed, &pending_turret_mode, &turret_mode);
 
-    base::Point3D v_mm_s_R;
+    base::Point3D v_R;
     base::Point3D w_R;
     base::Euler turret_rate_dps;
     bool turret_track = false;
     if (!turret) {
-      v_mm_s_R.x() = -max_forward_velocity_mm_s *
+      v_R.x() = -max_forward_velocity *
           gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_Y];
-      v_mm_s_R.y() = kMaxLateralVelocity_mm_s *
+      v_R.y() = kMaxLateralVelocity *
           lateral_walk_expo(gamepad.axes[GLFW_GAMEPAD_AXIS_LEFT_X]);
 
       w_R.z() = (max_rotation_deg_s / 180.0) * M_PI *
@@ -898,14 +898,14 @@ int do_main(int argc, char** argv) {
                   (1.0 - kTurnThreshold)),
               0.0, 1.0);
 
-      v_mm_s_R.x() = max_forward_velocity_mm_s * forward_scale * cmd_robot.y();
+      v_R.x() = max_forward_velocity * forward_scale * cmd_robot.y();
       // We pick the sign of our rotation to get closest to a forward
       // or backward configuration as possible.
       const double rotation_sign = 1.0;
           // (std::abs(turret_rad) > 0.5 * M_PI) ?
           // -1.0 : 1.0;
       w_R.z() =
-          std::copysign(1.0, v_mm_s_R.x()) * rotation_sign *
+          std::copysign(1.0, v_R.x()) * rotation_sign *
           (max_rotation_deg_s / 180.0) * M_PI * turret_walk_expo(cmd_robot.x());
 
       // Finally, do the turret rates.
@@ -926,11 +926,11 @@ int do_main(int argc, char** argv) {
       }
     }
 
-    Sophus::SE3d pose_mm_RB;
+    Sophus::SE3d pose_RB;
 
     const QuadrupedCommand::Mode actual_command_mode = [&]() {
       const bool movement_commanded = (
-          v_mm_s_R.norm() > kMovementEpsilon_mm_s ||
+          v_R.norm() > kMovementEpsilon ||
           w_R.norm() > kMovementEpsilon_rad_s);
       if (!movement_commanded &&
           (command_mode == QuadrupedCommand::Mode::kWalk ||
@@ -947,12 +947,12 @@ int do_main(int argc, char** argv) {
       ImGui::Text("Mode  : %14s", get(mapper(), command_mode));
       ImGui::Text("Actual: %14s", get(mapper(), actual_command_mode));
       ImGui::Text("cmd: (%4.0f, %4.0f, %6.3f)",
-                  v_mm_s_R.x(),
-                  v_mm_s_R.y(),
+                  v_R.x(),
+                  v_R.y(),
                   w_R.z());
       ImGui::Text("pose x/y: (%3.0f, %3.0f)",
-                  pose_mm_RB.translation().x(),
-                  pose_mm_RB.translation().y());
+                  pose_RB.translation().x(),
+                  pose_RB.translation().y());
       ImGui::Text("laser: %d", turret_laser);
       ImGui::Text("fire: %d", turret_fire_sequence);
       ImGui::End();
@@ -960,8 +960,8 @@ int do_main(int argc, char** argv) {
 
     if (slot_command) {
       slot_command->Command(
-          actual_command_mode, pose_mm_RB, v_mm_s_R, w_R,
-          jump_accel_mm_s2,
+          actual_command_mode, pose_RB, v_R, w_R,
+          jump_accel,
           turret_mode, turret_rate_dps, turret_track,
           turret_laser, turret_fire_sequence);
     }

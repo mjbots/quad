@@ -52,8 +52,8 @@ class WalkContext {
 
     // For now, set all legs pd gains to the default.
     for (auto& leg_R : legs_R) {
-      leg_R.kp_N_mm = config_.default_kp_N_mm;
-      leg_R.kd_N_mm_s = config_.default_kd_N_mm_s;
+      leg_R.kp_N_m = config_.default_kp_N_m;
+      leg_R.kd_N_m_s = config_.default_kd_N_m_s;
     }
 
     return legs_R;
@@ -76,16 +76,16 @@ class WalkContext {
       const int leg1 = kVlegMapping[vleg_idx][0];
       const int leg2 = kVlegMapping[vleg_idx][1];
 
-      Eigen::Vector3d p1_R = legs_R[leg1].position_mm;
-      Eigen::Vector3d p2_R = legs_R[leg2].position_mm;
+      Eigen::Vector3d p1_R = legs_R[leg1].position;
+      Eigen::Vector3d p2_R = legs_R[leg2].position;
       // TODO: We actually need the leg positions in the L frame, not
       // the R frame.  This will mostly matter for walking on hills and
       // side slopes, but anytime we are tipped.  For now, we'll just
       // use R to avoid a dependence on the IMU which needs more
       // validation.
       ws_.vlegs[vleg_idx].remaining_s = TrajectoryLineIntersectTime(
-          state_->robot.desired_mm_R.v.head<2>(),
-          state_->robot.desired_mm_R.w.z(),
+          state_->robot.desired_R.v.head<2>(),
+          state_->robot.desired_R.w.z(),
           p1_R.head<2>(),
           p2_R.head<2>());
     }
@@ -114,7 +114,7 @@ class WalkContext {
 
     // If we have changed direction since the last swing, repeat the
     // same foot selection.
-    if (state_->robot.desired_mm_R.v.dot(ws_.last_swing_v_mm_s_R) < 0.0) {
+    if (state_->robot.desired_R.v.dot(ws_.last_swing_v_R) < 0.0) {
       ws_.next_step_vleg = (ws_.next_step_vleg + 1) % 2;
     }
 
@@ -123,7 +123,7 @@ class WalkContext {
   }
 
   void LiftVleg(std::vector<QC::Leg>* legs_R, int vleg_idx) {
-    ws_.last_swing_v_mm_s_R = state_->robot.desired_mm_R.v;
+    ws_.last_swing_v_R = state_->robot.desired_R.v;
 
     // Yes, we are ready to begin a lift.
     auto& vleg_to_lift = ws_.vlegs[vleg_idx];
@@ -138,14 +138,14 @@ class WalkContext {
     // to swing ratio works out accurately, but then gives a better
     // chance of being ready for the next cycle.
     const auto predicted_state_R = FilterCommand(
-        {state_->robot.desired_mm_R.v, state_->robot.desired_mm_R.w},
-        {context_->command->v_mm_s_R, context_->command->w_R},
-        config_.lr_acceleration_mm_s2,
+        {state_->robot.desired_R.v, state_->robot.desired_R.w},
+        {context_->command->v_R, context_->command->w_R},
+        config_.lr_acceleration,
         config_.lr_alpha_rad_s2,
         wc_.swing_time_s * wc_.stance_swing_ratio);
 
     PropagateLeg propagate(
-        predicted_state_R.v_mm_s,
+        predicted_state_R.v,
         predicted_state_R.w,
         // We aim for half a swing period beyond the idle point
         // which would be sufficient if we had zero stance time.  We
@@ -161,12 +161,12 @@ class WalkContext {
       const auto& config_leg = context_->GetLeg(leg_idx);
 
       const auto presult_R = propagate(config_leg.idle_R);
-      ws_.legs[leg_idx].target_mm_R = presult_R.position_mm;
+      ws_.legs[leg_idx].target_R = presult_R.position;
 
       context_->swing_trajectory[leg_idx] = SwingTrajectory(
-          leg_R.position_mm, leg_R.velocity_mm_s,
-          ws_.legs[leg_idx].target_mm_R,
-          wc_.lift_height_mm,
+          leg_R.position, leg_R.velocity,
+          ws_.legs[leg_idx].target_R,
+          wc_.lift_height,
           wc_.step.lift_lower_time,
           wc_.swing_time_s);
     }
@@ -175,8 +175,8 @@ class WalkContext {
   void PropagateLegs(std::vector<QC::Leg>* legs_R) {
     // Update our current leg positions.
     PropagateLeg propagator(
-        state_->robot.desired_mm_R.v,
-        state_->robot.desired_mm_R.w,
+        state_->robot.desired_R.v,
+        state_->robot.desired_R.w,
         config_.period_s);
     for (int vleg_idx = 0; vleg_idx < 2; vleg_idx++) {
       auto& vleg = ws_.vlegs[vleg_idx];
@@ -187,23 +187,23 @@ class WalkContext {
         auto& leg_R = GetLeg_R(legs_R, leg_idx);
         switch (vleg.mode) {
           case VLeg::Mode::kStance: {
-            const auto result_R = propagator(leg_R.position_mm);
-            leg_R.position_mm = result_R.position_mm;
-            leg_R.velocity_mm_s = result_R.velocity_mm_s;
+            const auto result_R = propagator(leg_R.position);
+            leg_R.position = result_R.position;
+            leg_R.velocity = result_R.velocity;
             // TODO: We should keep track of our current desired body
             // acceleration and feed it in here.
-            leg_R.acceleration_mm_s2 = base::Point3D();
+            leg_R.acceleration = base::Point3D();
             break;
           }
           case VLeg::Mode::kSwing: {
-            const auto swing_mm_R =
+            const auto swing_R =
                 context_->swing_trajectory[leg_idx].Advance(
                     config_.period_s,
-                    -state_->robot.desired_mm_R.v -
-                    state_->robot.desired_mm_R.w.cross(leg_R.position_mm));
-            leg_R.position_mm = swing_mm_R.position;
-            leg_R.velocity_mm_s = swing_mm_R.velocity_s;
-            leg_R.acceleration_mm_s2 = swing_mm_R.acceleration_s2;
+                    -state_->robot.desired_R.v -
+                    state_->robot.desired_R.w.cross(leg_R.position));
+            leg_R.position = swing_R.position;
+            leg_R.velocity = swing_R.velocity_s;
+            leg_R.acceleration = swing_R.acceleration_s2;
 
             break;
           }
@@ -213,8 +213,8 @@ class WalkContext {
         vleg.mode = VLeg::kStance;
         vleg.swing_elapsed_s = 0.0;
 
-        if (state_->robot.desired_mm_R.v.norm() == 0.0 &&
-            state_->robot.desired_mm_R.w.norm() == 0.0) {
+        if (state_->robot.desired_R.v.norm() == 0.0 &&
+            state_->robot.desired_R.w.norm() == 0.0) {
           ws_.idle_count++;
         } else {
           ws_.idle_count = 0;

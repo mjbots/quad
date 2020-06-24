@@ -118,14 +118,14 @@ struct QuadrupedCommand {
     bool zero_velocity = false;
     bool landing = false;
     double stance = 1.0;
-    base::Point3D position_mm;
-    base::Point3D velocity_mm_s;
-    base::Point3D acceleration_mm_s2;
+    base::Point3D position;
+    base::Point3D velocity;
+    base::Point3D acceleration;
     base::Point3D force_N;
 
     // Cartesian controller performed at the application update rate.
-    base::Point3D kp_N_mm;
-    base::Point3D kd_N_mm_s;
+    base::Point3D kp_N_m;
+    base::Point3D kd_N_m_s;
 
     // Change the gains in the individual servos.
     //  x = shoulder
@@ -143,18 +143,18 @@ struct QuadrupedCommand {
       a->Visit(MJ_NVP(zero_velocity));
       a->Visit(MJ_NVP(landing));
       a->Visit(MJ_NVP(stance));
-      a->Visit(MJ_NVP(position_mm));
-      a->Visit(MJ_NVP(velocity_mm_s));
-      a->Visit(MJ_NVP(acceleration_mm_s2));
+      a->Visit(MJ_NVP(position));
+      a->Visit(MJ_NVP(velocity));
+      a->Visit(MJ_NVP(acceleration));
       a->Visit(MJ_NVP(force_N));
-      a->Visit(MJ_NVP(kp_N_mm));
-      a->Visit(MJ_NVP(kd_N_mm_s));
+      a->Visit(MJ_NVP(kp_N_m));
+      a->Visit(MJ_NVP(kd_N_m_s));
       a->Visit(MJ_NVP(kp_scale));
       a->Visit(MJ_NVP(kd_scale));
       a->Visit(MJ_NVP(B_frame));
     }
 
-    friend Leg operator*(const Sophus::SE3d& pose_mm, const Leg&);
+    friend Leg operator*(const Sophus::SE3d& pose, const Leg&);
   };
 
   // Only valid for kLeg mode.
@@ -162,12 +162,12 @@ struct QuadrupedCommand {
 
   // Only valid for kJump.  These are latched at the start of a jump.
   struct Jump {
-    double acceleration_mm_s2 = 0;
+    double acceleration = 0;
     bool repeat = false;
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(acceleration_mm_s2));
+      a->Visit(MJ_NVP(acceleration));
       a->Visit(MJ_NVP(repeat));
     }
   };
@@ -194,13 +194,13 @@ struct QuadrupedCommand {
   // Things which are common to multiple modes.
 
   // Valid for kRest, kJump, kWalk, and...
-  Sophus::SE3d pose_mm_RB;
+  Sophus::SE3d pose_RB;
 
   // Valid for kJump, kWalk, etc..
   //
   // These control the movement of the robot through the L frame,
   // i.e. the world.
-  base::Point3D v_mm_s_R;  // Only the X and Y velocities are used
+  base::Point3D v_R;  // Only the X and Y velocities are used
   base::Point3D w_R;  // Only the Z axis rate is used
 
   template <typename Archive>
@@ -212,22 +212,22 @@ struct QuadrupedCommand {
     a->Visit(MJ_NVP(jump));
     a->Visit(MJ_NVP(walk));
     a->Visit(MJ_NVP(backflip));
-    a->Visit(MJ_NVP(pose_mm_RB));
-    a->Visit(MJ_NVP(v_mm_s_R));
+    a->Visit(MJ_NVP(pose_RB));
+    a->Visit(MJ_NVP(v_R));
     a->Visit(MJ_NVP(w_R));
   }
 };
 
-inline QuadrupedCommand::Leg operator*(const Sophus::SE3d& pose_mm_AB,
+inline QuadrupedCommand::Leg operator*(const Sophus::SE3d& pose_AB,
                                        const QuadrupedCommand::Leg& leg_B) {
   QuadrupedCommand::Leg result_A = leg_B;
 
-  result_A.position_mm = pose_mm_AB * leg_B.position_mm;
-  result_A.velocity_mm_s = pose_mm_AB.so3() * leg_B.velocity_mm_s;
-  result_A.acceleration_mm_s2 = pose_mm_AB.so3() * leg_B.acceleration_mm_s2;
-  result_A.force_N = pose_mm_AB.so3() * leg_B.force_N;
-  result_A.kp_N_mm = pose_mm_AB.so3() * leg_B.kp_N_mm;
-  result_A.kd_N_mm_s = pose_mm_AB.so3() * leg_B.kd_N_mm_s;
+  result_A.position = pose_AB * leg_B.position;
+  result_A.velocity = pose_AB.so3() * leg_B.velocity;
+  result_A.acceleration = pose_AB.so3() * leg_B.acceleration;
+  result_A.force_N = pose_AB.so3() * leg_B.force_N;
+  result_A.kp_N_m = pose_AB.so3() * leg_B.kp_N_m;
+  result_A.kd_N_m_s = pose_AB.so3() * leg_B.kd_N_m_s;
   result_A.kp_scale = leg_B.kp_scale;
   result_A.kd_scale = leg_B.kd_scale;
 

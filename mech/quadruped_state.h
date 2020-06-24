@@ -62,15 +62,15 @@ struct QuadrupedState {
   // The leg end-effector level.
   struct Leg {
     int leg = 0;
-    base::Point3D position_mm;
-    base::Point3D velocity_mm_s;
+    base::Point3D position;
+    base::Point3D velocity;
     base::Point3D force_N;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(leg));
-      a->Visit(MJ_NVP(position_mm));
-      a->Visit(MJ_NVP(velocity_mm_s));
+      a->Visit(MJ_NVP(position));
+      a->Visit(MJ_NVP(velocity));
       a->Visit(MJ_NVP(force_N));
     }
 
@@ -82,19 +82,19 @@ struct QuadrupedState {
   // And finally, the robot level.
   struct Robot {
     // Only v[0, 1] and w[2] will be non-zero.
-    base::KinematicRelation desired_mm_R;
+    base::KinematicRelation desired_R;
 
     // Mappings between the B (body) frame, and the R (robot), and M
     // (CoM) frames.
-    base::KinematicRelation frame_mm_RB;
-    base::KinematicRelation frame_mm_MB;
+    base::KinematicRelation frame_RB;
+    base::KinematicRelation frame_MB;
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(desired_mm_R));
+      a->Visit(MJ_NVP(desired_R));
 
-      a->Visit(MJ_NVP(frame_mm_RB));
-      a->Visit(MJ_NVP(frame_mm_MB));
+      a->Visit(MJ_NVP(frame_RB));
+      a->Visit(MJ_NVP(frame_MB));
     }
   };
 
@@ -142,16 +142,16 @@ struct QuadrupedState {
     };
 
     Mode mode = kLowering;
-    double velocity_mm_s = 0.0;
-    double acceleration_mm_s2 = 0.0;
+    double velocity = 0.0;
+    double acceleration = 0.0;
 
     QuadrupedCommand::Jump command;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(mode));
-      a->Visit(MJ_NVP(velocity_mm_s));
-      a->Visit(MJ_NVP(acceleration_mm_s2));
+      a->Visit(MJ_NVP(velocity));
+      a->Visit(MJ_NVP(acceleration));
       a->Visit(MJ_NVP(command));
     }
   };
@@ -162,11 +162,11 @@ struct QuadrupedState {
     int idle_count = 0;
 
     struct Leg {
-      base::Point3D target_mm_R;
+      base::Point3D target_R;
 
       template <typename Archive>
       void Serialize(Archive* a) {
-        a->Visit(MJ_NVP(target_mm_R));
+        a->Visit(MJ_NVP(target_R));
       }
     };
 
@@ -192,7 +192,7 @@ struct QuadrupedState {
     std::array<VLeg, 2> vlegs;
     int next_step_vleg = 0;
     double stance_elapsed_s = 0.0;
-    base::Point3D last_swing_v_mm_s_R;
+    base::Point3D last_swing_v_R;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -201,7 +201,7 @@ struct QuadrupedState {
       a->Visit(MJ_NVP(vlegs));
       a->Visit(MJ_NVP(next_step_vleg));
       a->Visit(MJ_NVP(stance_elapsed_s));
-      a->Visit(MJ_NVP(last_swing_v_mm_s_R));
+      a->Visit(MJ_NVP(last_swing_v_R));
     }
   };
 
@@ -220,7 +220,7 @@ struct QuadrupedState {
     double pitch_deg = 0.0;
     double pitch_rate_dps = 0.0;
     double pitch_accel_dps2 = 0.0;
-    double velocity_mm_s = 0.0;
+    double velocity = 0.0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -228,7 +228,7 @@ struct QuadrupedState {
       a->Visit(MJ_NVP(pitch_deg));
       a->Visit(MJ_NVP(pitch_rate_dps));
       a->Visit(MJ_NVP(pitch_accel_dps2));
-      a->Visit(MJ_NVP(velocity_mm_s));
+      a->Visit(MJ_NVP(velocity));
     }
   };
 
@@ -269,8 +269,8 @@ struct QuadrupedState {
 inline QuadrupedState::Leg operator*(const Sophus::SE3d& pose_AB,
                                      const QuadrupedState::Leg& rhs_B) {
   auto result_A = rhs_B;
-  result_A.position_mm = pose_AB * rhs_B.position_mm;
-  result_A.velocity_mm_s = pose_AB.so3() * rhs_B.velocity_mm_s;
+  result_A.position = pose_AB * rhs_B.position;
+  result_A.velocity = pose_AB.so3() * rhs_B.velocity;
   result_A.force_N = pose_AB.so3() * rhs_B.force_N;
   return result_A;
 }
