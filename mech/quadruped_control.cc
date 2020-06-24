@@ -604,10 +604,6 @@ class QuadrupedControl::Impl {
         DoControl_Backflip();
         break;
       }
-      case QM::kBalance: {
-        DoControl_Balance();
-        break;
-      }
       case QM::kNumModes: {
         mjlib::base::AssertNotReached();
       }
@@ -659,8 +655,7 @@ class QuadrupedControl::Impl {
       case QM::kRest:
       case QM::kJump:
       case QM::kWalk:
-      case QM::kBackflip:
-      case QM::kBalance: {
+      case QM::kBackflip: {
         // This can only be done from certain configurations, where we
         // know all four legs are on the ground.  Modify our command
         // to try and get into that state.
@@ -676,8 +671,7 @@ class QuadrupedControl::Impl {
                     status_.state.rest.done) ||
                    (status_.mode == QM::kStandUp &&
                     status_.state.stand_up.mode ==
-                    QuadrupedState::StandUp::Mode::kDone) ||
-                   status_.mode == QM::kBalance) {
+                    QuadrupedState::StandUp::Mode::kDone)) {
           status_.mode = current_command_.mode;
 
           status_.state.jump.command = current_command_.jump.value_or(
@@ -740,10 +734,6 @@ class QuadrupedControl::Impl {
           status_.state.rest = {};
           break;
         }
-        case QM::kBalance: {
-          status_.state.balance = {};
-          break;
-        }
         case QM::kConfiguring:
         case QM::kStopped:
         case QM::kFault:
@@ -751,14 +741,6 @@ class QuadrupedControl::Impl {
         case QM::kJoint:
         case QM::kLeg:
         case QM::kNumModes: {
-          break;
-        }
-      }
-      switch (status_.mode) {
-        case QM::kBalance: {
-          break;
-        }
-        default: {
           break;
         }
       }
@@ -1611,100 +1593,6 @@ class QuadrupedControl::Impl {
 
     // TODO: have an RB rate of change so that we can properly
     // command velocities of the joints.
-  }
-
-  void DoControl_Balance() {
-    ClearDesiredMotion();
-
-    MJ_ASSERT(!old_control_log_->legs_R.empty());
-    auto legs_R = old_control_log_->legs_R;
-
-    auto is_stance = [](auto leg_id) {
-      return leg_id == 0 || leg_id == 3;
-    };
-
-    const double feedforward_force_N = config_.mass_kg * base::kGravity * 0.5;
-
-    std::array<base::Point3D, 2> stance_leg_R = {};
-
-    int stance_count = 0;
-    for (auto& leg_R : legs_R) {
-      leg_R.kp_scale = {};
-      leg_R.kd_scale = {};
-      leg_R.landing = false;
-
-      if (is_stance(leg_R.leg_id)) {
-        leg_R.stance = 1.0;
-        leg_R.velocity = base::Point3D(0., 0., 0.);
-        leg_R.force_N = base::Point3D(0., 0., feedforward_force_N);
-        stance_leg_R[stance_count] = leg_R.position;
-        stance_count++;
-      } else {
-        leg_R.stance = 0.0;
-        leg_R.force_N = base::Point3D(0., 0., 0.);
-        leg_R.B_frame = true;
-      }
-    }
-
-    MJ_ASSERT(stance_count == 2);
-    const base::Point3D stance_direction_R = stance_leg_R[1] - stance_leg_R[0];
-    // The Z value should be basically zero here.
-    MJ_ASSERT(std::abs(stance_direction_R.z()) < 1.0);
-    const base::Point3D stance_direction_R_norm = stance_direction_R.normalized();
-
-    const double error_rad =
-        imu_data_.attitude.axis_angle().magnitude_vector().dot(stance_direction_R_norm);
-
-    const double stance_rate_dps =
-        imu_data_.rate_dps.dot(stance_direction_R_norm);
-
-    auto& b = status_.state.balance;
-
-    if (!b.contact) {
-      status_.state.robot.frame_RB.pose  =
-          status_.state.robot.frame_RB.pose *
-          Sophus::SE3d(Sophus::SO3d(
-                           base::Quaternion::FromAxisAngle(
-                               (config_.balance.error_scale *
-                                error_rad +
-                                config_.balance.rate_scale *
-                                base::Radians(stance_rate_dps)) * config_.period_s,
-                               stance_direction_R_norm).eigen()),
-                       base::Point3D());
-    }
-
-    const bool done = context_->MoveLegsFixedSpeed(
-        &legs_R, config_.balance.velocity,
-        [&]() {
-          std::vector<std::pair<int, base::Point3D>> result;
-          for (const auto& leg_R : legs_R) {
-            base::Point3D point_R = GetLeg(leg_R.leg_id).idle_R;
-            if (!is_stance(leg_R.leg_id)) {
-              point_R.z() = config_.balance.height;
-              result.push_back(std::make_pair(leg_R.leg_id, point_R));
-            }
-          }
-          return result;
-        }());
-
-    if (done && !b.contact) {
-      // Look at our non-stance legs to see if they are moving more
-      // than a threshold.
-      for (const auto& leg_B : status_.state.legs_B) {
-        if (is_stance(leg_B.leg)) { continue; }
-        if (leg_B.velocity.norm() > config_.balance.contact_threshold_m_s ||
-            leg_B.position.z() < (config_.balance.height -
-                                  config_.balance.contact_threshold_m)) {
-          b.contact = true;
-        }
-      }
-    }
-
-    b.stance_direction_R = stance_direction_R;
-    b.error_rad = error_rad;
-    b.stance_rate_dps = stance_rate_dps;
-
-    ControlLegs_R(std::move(legs_R));
   }
 
   void ClearDesiredMotion() {

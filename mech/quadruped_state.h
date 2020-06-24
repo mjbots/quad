@@ -234,23 +234,6 @@ struct QuadrupedState {
 
   Backflip backflip;
 
-  struct Balance {
-    base::Point3D stance_direction_R;
-    double error_rad = 0.0;
-    double stance_rate_dps = 0.0;
-    bool contact = false;
-
-    template <typename Archive>
-    void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(stance_direction_R));
-      a->Visit(MJ_NVP(error_rad));
-      a->Visit(MJ_NVP(stance_rate_dps));
-      a->Visit(MJ_NVP(contact));
-    }
-  };
-
-  Balance balance;
-
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(joints));
@@ -262,7 +245,6 @@ struct QuadrupedState {
     a->Visit(MJ_NVP(jump));
     a->Visit(MJ_NVP(walk));
     a->Visit(MJ_NVP(backflip));
-    a->Visit(MJ_NVP(balance));
   }
 };
 

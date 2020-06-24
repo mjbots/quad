@@ -60,8 +60,6 @@ class WalkContext {
   }
 
   void UpdateGlobal() {
-    context_->UpdateCommandedRB();
-
     if (all_stance()) {
       // We are allowed to accelerate when all legs are in stance.
       context_->UpdateCommandedR();

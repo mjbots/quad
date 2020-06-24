@@ -244,29 +244,6 @@ struct QuadrupedConfig {
 
   Backflip backflip;
 
-  struct Balance {
-    double velocity = 0.400;
-    double height = 0.150;
-    double contact_threshold_m_s = 0.050;
-    double contact_threshold_m = 0.010;
-
-    double error_scale = 0.0;
-    double rate_scale = 2.0;
-
-    template <typename Archive>
-    void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(velocity));
-      a->Visit(MJ_NVP(height));
-      a->Visit(MJ_NVP(contact_threshold_m_s));
-      a->Visit(MJ_NVP(contact_threshold_m));
-
-      a->Visit(MJ_NVP(error_scale));
-      a->Visit(MJ_NVP(rate_scale));
-    }
-  };
-
-  Balance balance;
-
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(period_s));
@@ -290,7 +267,6 @@ struct QuadrupedConfig {
     a->Visit(MJ_NVP(jump));
     a->Visit(MJ_NVP(walk));
     a->Visit(MJ_NVP(backflip));
-    a->Visit(MJ_NVP(balance));
   }
 };
 
