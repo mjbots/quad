@@ -1619,7 +1619,7 @@ class QuadrupedControl::Impl {
 
     std::vector<QC::Leg> legs_B;
     for (const auto& leg_R : control_log_->legs_R) {
-      legs_B.push_back(leg_R.B_frame ? leg_R : (pose_BR * leg_R));
+      legs_B.push_back(pose_BR * leg_R);
     }
 
     ControlLegs_B(std::move(legs_B));

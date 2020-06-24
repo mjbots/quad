@@ -133,8 +133,6 @@ struct QuadrupedCommand {
     std::optional<base::Point3D> kp_scale;
     std::optional<base::Point3D> kd_scale;
 
-    bool B_frame = false;
-
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(leg_id));
@@ -150,7 +148,6 @@ struct QuadrupedCommand {
       a->Visit(MJ_NVP(kd_N_m_s));
       a->Visit(MJ_NVP(kp_scale));
       a->Visit(MJ_NVP(kd_scale));
-      a->Visit(MJ_NVP(B_frame));
     }
 
     friend Leg operator*(const Sophus::SE3d& pose, const Leg&);
