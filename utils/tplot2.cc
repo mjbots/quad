@@ -1161,7 +1161,10 @@ class MechRender {
     }
 
     if (state_.leg_command) {
-      for (const auto& leg_B : qc.legs_B) {
+      for (size_t i = 0; i < qc.legs_B.size(); i++) {
+        const auto& leg_B = qc.legs_B[i];
+        const auto& pds_B = qc.leg_pds[i];
+
         AddBall(leg_B.position.cast<float>(),
                 0.008, Eigen::Vector4f(0, 0, 1, 1));
         if (!state_.leg_force) {
@@ -1174,7 +1177,7 @@ class MechRender {
           lines_.AddSegment(
               leg_B.position.cast<float>(),
               (leg_B.position +
-               kForceDrawScale * leg_B.force_N).cast<float>(),
+               kForceDrawScale * pds_B.total_N).cast<float>(),
               Eigen::Vector4f(0, 0, 1, 1));
         }
       }
