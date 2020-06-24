@@ -489,7 +489,14 @@ class QuadrupedControl::Impl {
 
     // Now update the robot values.
 
-    // pose_RB isn't sensed, but is just a commanded value.
+    // frame_RB isn't sensed, but is just a commanded value.
+
+    // Do the M frame (CoM frame)
+    auto& frame_MB = status_.state.robot.frame_MB;
+    frame_MB.pose.translation() = config_.center_of_mass_B;
+    frame_MB.pose.so3() = Sophus::SO3d(imu_data_.attitude.eigen());
+    frame_MB.w = (M_PI / 180.0) * imu_data_.rate_dps;
+
     return true;
   }
 

@@ -1078,6 +1078,47 @@ class MechRender {
     }
   };
 
+  struct RenderFrame {
+    RenderFrame(MechRender* parent, const char* frame)
+        : parent_(parent) {
+      old_transform_ = parent_->transform_;
+
+      const Eigen::Matrix4f tf_XB = [&]() -> Eigen::Matrix4f {
+        if (std::string(frame) == "B") {
+          return Eigen::Matrix4f::Identity();
+        } else if (std::string(frame) == "M") {
+          return parent_->tf_MB_.matrix().cast<float>();
+        }
+        mjlib::base::AssertNotReached();
+      }();
+
+      const Eigen::Matrix4f tf_YX = [&]() -> Eigen::Matrix4f {
+        if (parent_->state_.attitude) {
+        // We want to render into the M frame instead of the B frame.
+          const Eigen::Matrix4f tf_MX = (
+              parent_->tf_MB_.matrix().cast<float>() * tf_XB.inverse());
+          return tf_MX;
+        } else {
+          const Eigen::Matrix4f tf_BX = tf_XB.inverse();
+          return tf_BX;
+        }
+      }();
+
+      parent_->transform_ = tf_YX;
+      parent_->triangle_.SetTransform(tf_YX);
+      parent_->lines_.SetTransform(tf_YX);
+    }
+
+    ~RenderFrame() {
+      parent_->transform_ = old_transform_;
+      parent_->triangle_.SetTransform(parent_->transform_);
+      parent_->lines_.SetTransform(parent_->transform_);
+    }
+
+    MechRender* const parent_;
+    Eigen::Matrix4f old_transform_;
+  };
+
   MechRender(FileReader* reader, TreeView* tree_view, State state)
       : reader_(reader->record("qc_status")->schema->root()),
         control_reader_(reader->record("qc_control")->schema->root()),
@@ -1120,19 +1161,14 @@ class MechRender {
   void DrawMech(const mech::QuadrupedControl::Status& qs,
                 const mech::QuadrupedControl::ControlLog& qc,
                 const mech::AttitudeData& attitude) {
+    tf_MB_ = qs.state.robot.frame_MB.pose;
+
+    // We'll draw in the B frame.
+    RenderFrame b(this, "B");
+
     if (state_.ground) {
       DrawGround(qs, attitude);
     }
-
-    if (state_.attitude) {
-      transform_ = Eigen::Matrix4f::Identity();
-      transform_.topLeftCorner<3, 3>() =
-          AttitudeMatrix(attitude.attitude).cast<float>();
-    } else {
-      transform_ = Eigen::Matrix4f::Identity();
-    }
-    triangle_.SetTransform(transform_);
-    lines_.SetTransform(transform_);
 
     AddBox({0, 0, 0},
            {0.230, 0, 0},
@@ -1216,10 +1252,6 @@ class MechRender {
             Eigen::Vector4f(1, 0, 0.2, 1));
       }
     }
-
-    transform_ = Eigen::Matrix4f::Identity();
-    triangle_.SetTransform(transform_);
-    lines_.SetTransform(transform_);
   }
 
   void DrawGround(const mech::QuadrupedControl::Status& qs,
@@ -1240,13 +1272,7 @@ class MechRender {
     Eigen::Vector2f uv(0, 0);
     Eigen::Vector4f rgba(0.3, 0.3, 0.3, 1.0);
 
-    if (!state_.attitude) {
-      // We are rendering into the B frame.
-      transform_ = Eigen::Matrix4f::Identity();
-      transform_.topLeftCorner<3, 3>() = tf_MB.inverse().cast<float>();
-      triangle_.SetTransform(transform_);
-      lines_.SetTransform(transform_);
-    }
+    RenderFrame tf_M(this, "M");
 
     // Render our CoM projected onto the ground.
     AddBall(Eigen::Vector3f(0, 0, max_z_M), 0.006, Eigen::Vector4f(1, 0, 0, 1));
@@ -1445,6 +1471,8 @@ class MechRender {
   gl::SimpleLineRenderList lines_;
 
   State state_;
+
+  Sophus::SE3d tf_MB_;
 
   const double kVelocityDrawScale = 0.1;
   const double kForceDrawScale = 0.002;
