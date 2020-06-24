@@ -1444,7 +1444,7 @@ class MechRender {
   State state_;
 
   const double kVelocityDrawScale = 0.1;
-  const double kForceDrawScale = 2.0;
+  const double kForceDrawScale = 0.002;
   const double kGroundSize = 0.500;
 };
 
