@@ -170,7 +170,7 @@ class RfControl::Impl {
 
   void AsyncStart(mjlib::io::ErrorCallback callback) {
     rf_ = rf_getter_();
-    BOOST_ASSERT(!rf_);
+    BOOST_ASSERT(!!rf_);
 
     StartRead();
 
