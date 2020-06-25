@@ -21,6 +21,7 @@ cc_library(
     srcs = [
         "aspect_ratio.cc",
         "context.cc",
+        "fit_plane.cc",
         "linux_input.cc",
         "logging.cc",
         "quaternion.cc",
@@ -79,6 +80,7 @@ cc_test(
     srcs = ["test/" + x for x in [
         "aspect_ratio_test.cc",
         "bezier_test.cc",
+        "fit_plane_test.cc",
         "named_type_test.cc",
         "quaternion_test.cc",
         "signal_result_test.cc",
