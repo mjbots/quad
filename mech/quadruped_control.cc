@@ -57,12 +57,12 @@ auto Average(Iter begin, Iter end, Functor f) -> decltype(f(*begin)) {
   using T = decltype(f(*begin));
 
   T sum = {};
-  T count = {};
+  double count = {};
   for (Iter it = begin; it != end; ++it) {
     count++;
     sum += f(*it);
   }
-  return sum / count;
+  return (1.0 / count) * sum;
 }
 
 template <typename Iter, typename Functor>
