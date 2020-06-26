@@ -426,10 +426,12 @@ class SimPi3hat : public mech::Pi3hatInterface {
  public:
   struct Options {
     double torque_scale = 1.0;
+    double yaw_offset_rad = 0.0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(torque_scale));
+      a->Visit(MJ_NVP(yaw_offset_rad));
     }
   };
 
@@ -458,6 +460,7 @@ class SimPi3hat : public mech::Pi3hatInterface {
           Sophus::SE3d(tf.matrix()).unit_quaternion();
       // https://stackoverflow.com/questions/32438252/efficient-way-to-apply-mirror-effect-on-quaternion-rotation
       attitude->attitude =
+          base::Quaternion::FromAxisAngle(options_.yaw_offset_rad, 0, 0, 1) *
           base::Quaternion(
               mirror_quaternion.w(),
               -mirror_quaternion.x(),
