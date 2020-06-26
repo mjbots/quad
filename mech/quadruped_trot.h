@@ -20,8 +20,13 @@
 namespace mjmech {
 namespace mech {
 
+struct TrotResult {
+  std::vector<QuadrupedCommand::Leg> legs_R;
+  base::KinematicRelation desired_RB;
+};
+
 /// Execute the trot gait.
-std::vector<QuadrupedCommand::Leg> QuadrupedTrot_R(
+TrotResult QuadrupedTrot(
     QuadrupedContext* context,
     const std::vector<QuadrupedCommand::Leg>& old_legs_R);
 

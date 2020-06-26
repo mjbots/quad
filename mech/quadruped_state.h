@@ -22,6 +22,7 @@
 
 #include "base/kinematic_relation.h"
 #include "base/point3d.h"
+#include "base/quaternion.h"
 
 #include "mech/quadruped_command.h"
 
@@ -65,6 +66,7 @@ struct QuadrupedState {
     base::Point3D position;
     base::Point3D velocity;
     base::Point3D force_N;
+    double stance = 0.0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -72,6 +74,7 @@ struct QuadrupedState {
       a->Visit(MJ_NVP(position));
       a->Visit(MJ_NVP(velocity));
       a->Visit(MJ_NVP(force_N));
+      a->Visit(MJ_NVP(stance));
     }
 
     friend Leg operator*(const Sophus::SE3d&, const Leg& rhs);
@@ -89,12 +92,19 @@ struct QuadrupedState {
     base::KinematicRelation frame_RB;
     base::KinematicRelation frame_MB;
 
+    // Transform from the CoM frame to the terrain frame.
+    std::array<double, 2> terrain_rad = {};
+    Sophus::SE3d tf_TM;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(desired_R));
 
       a->Visit(MJ_NVP(frame_RB));
       a->Visit(MJ_NVP(frame_MB));
+
+      a->Visit(MJ_NVP(terrain_rad));
+      a->Visit(MJ_NVP(tf_TM));
     }
   };
 

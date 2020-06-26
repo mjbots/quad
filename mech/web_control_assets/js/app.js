@@ -222,7 +222,8 @@
 
     if ('command' in cmd) {
       if (pose_RB) {
-        cmd['command']['pose_RB'] = pose_RB;
+        cmd['command']['rest'] = {};
+        cmd['command']['rest']['offset_RB'] = pose_RB;
       }
       if (v_R) {
         cmd['command']['v_R'] = v_R;

@@ -80,7 +80,6 @@ struct QuadrupedConfig {
   double mass_kg = 10.0;
   double leg_mass_kg = 0.5;
   base::Point3D center_of_mass_B;
-  Sophus::SE3d command_offset_RB;
 
   struct StandUp {
     // This pose is referenced to the leg in the front right and the
@@ -134,6 +133,7 @@ struct QuadrupedConfig {
   double rb_filter_constant_Hz = 2.0;
   double lr_acceleration = 2.000;
   double lr_alpha_rad_s2 = 1.0;
+  double terrain_filter_s = 0.5;
 
   struct Jump {
     double lower_velocity = 0.100;
@@ -253,7 +253,6 @@ struct QuadrupedConfig {
     a->Visit(MJ_NVP(mass_kg));
     a->Visit(MJ_NVP(leg_mass_kg));
     a->Visit(MJ_NVP(center_of_mass_B));
-    a->Visit(MJ_NVP(command_offset_RB));
     a->Visit(MJ_NVP(stand_up));
     a->Visit(MJ_NVP(rest));
     a->Visit(MJ_NVP(stand_height));
@@ -264,6 +263,7 @@ struct QuadrupedConfig {
     a->Visit(MJ_NVP(rb_filter_constant_Hz));
     a->Visit(MJ_NVP(lr_acceleration));
     a->Visit(MJ_NVP(lr_alpha_rad_s2));
+    a->Visit(MJ_NVP(terrain_filter_s));
     a->Visit(MJ_NVP(jump));
     a->Visit(MJ_NVP(walk));
     a->Visit(MJ_NVP(backflip));

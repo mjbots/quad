@@ -1065,6 +1065,7 @@ class MechRender {
     bool ground = true;
     bool support = true;
     bool target = true;
+    bool terrain = false;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -1075,6 +1076,7 @@ class MechRender {
       a->Visit(MJ_NVP(ground));
       a->Visit(MJ_NVP(support));
       a->Visit(MJ_NVP(target));
+      a->Visit(MJ_NVP(terrain));
     }
   };
 
@@ -1088,6 +1090,8 @@ class MechRender {
           return Eigen::Matrix4f::Identity();
         } else if (std::string(frame) == "M") {
           return parent_->tf_MB_.matrix().cast<float>();
+        } else if (std::string(frame) == "T") {
+          return (parent_->tf_TM_.matrix() * parent_->tf_MB_.matrix()).cast<float>();
         }
         mjlib::base::AssertNotReached();
       }();
@@ -1162,12 +1166,17 @@ class MechRender {
                 const mech::QuadrupedControl::ControlLog& qc,
                 const mech::AttitudeData& attitude) {
     tf_MB_ = qs.state.robot.frame_MB.pose;
+    tf_TM_ = qs.state.robot.tf_TM;
 
     // We'll draw in the B frame.
     RenderFrame b(this, "B");
 
     if (state_.ground) {
       DrawGround(qs, attitude);
+    }
+
+    if (state_.terrain) {
+      DrawTerrain();
     }
 
     AddBox({0, 0, 0},
@@ -1254,6 +1263,15 @@ class MechRender {
     }
   }
 
+  void DrawTerrain() {
+    RenderFrame tf_T(this, "T");
+
+    DrawPlane(kGroundSize,
+              Eigen::Vector3f(0, 0, -1),
+              Eigen::Vector3f(0, 0, 0),
+              Eigen::Vector4f(0.3, 0.0, 0.3, 1.0));
+  }
+
   void DrawGround(const mech::QuadrupedControl::Status& qs,
                   const mech::AttitudeData& attitude) {
     Eigen::Matrix3d tf_MB = AttitudeMatrix(attitude.attitude);
@@ -1267,24 +1285,31 @@ class MechRender {
       max_z_M = std::max(max_z_M, position_M.z());
     }
 
-    const double l = kGroundSize;
-    Eigen::Vector3f normal = Eigen::Vector3f(0, 0, -1);
-    Eigen::Vector2f uv(0, 0);
-    Eigen::Vector4f rgba(0.3, 0.3, 0.3, 1.0);
-
     RenderFrame tf_M(this, "M");
 
     // Render our CoM projected onto the ground.
     AddBall(Eigen::Vector3f(0, 0, max_z_M), 0.006, Eigen::Vector4f(1, 0, 0, 1));
 
-    auto ic = triangle_.AddVertex(Eigen::Vector3f(0, 0, max_z_M), normal, uv, rgba);
+    DrawPlane(kGroundSize,
+              Eigen::Vector3f(0, 0, -1),
+              Eigen::Vector3f(0, 0, max_z_M),
+              Eigen::Vector4f(0.3, 0.3, 0.3, 1.0));
+  }
+
+  void DrawPlane(double l, Eigen::Vector3f normal, Eigen::Vector3f offset,
+                 Eigen::Vector4f rgba) {
+    Eigen::Vector2f uv(0, 0);
+
+    auto ic = triangle_.AddVertex(offset, normal, uv, rgba);
     for (int i = 0; i < 16; i++) {
       const double t1 = 2 * M_PI * (static_cast<double>(i) / 16);
-      Eigen::Vector3f p1_M(l * std::cos(t1), l * std::sin(t1), max_z_M);
+      Eigen::Vector3f p1_M =
+          Eigen::Vector3f(l * std::cos(t1), l * std::sin(t1), 0) + offset;
 
       // This could be more optimal and re-use edge indices as well.
       const double t2 = 2 * M_PI * (static_cast<double>((i + 1) % 16) / 16);
-      Eigen::Vector3f p2_M(l * std::cos(t2), l * std::sin(t2), max_z_M);
+      Eigen::Vector3f p2_M =
+          Eigen::Vector3f(l * std::cos(t2), l * std::sin(t2), 0) + offset;
 
       auto i1 = triangle_.AddVertex(p1_M, normal, uv, rgba);
       auto i2 = triangle_.AddVertex(p2_M, normal, uv, rgba);
@@ -1427,6 +1452,7 @@ class MechRender {
     ImGui::Checkbox("ground", &state_.ground);
     ImGui::Checkbox("support", &state_.support);
     ImGui::Checkbox("target", &state_.target);
+    ImGui::Checkbox("terrain", &state_.terrain);
 
     ImGui::EndChild();
   }
@@ -1473,6 +1499,7 @@ class MechRender {
   State state_;
 
   Sophus::SE3d tf_MB_;
+  Sophus::SE3d tf_TM_;
 
   const double kVelocityDrawScale = 0.1;
   const double kForceDrawScale = 0.002;

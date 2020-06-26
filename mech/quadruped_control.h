@@ -116,6 +116,7 @@ class QuadrupedControl : boost::noncopyable {
 
     std::vector<QC::Leg> legs_B;
     std::vector<QC::Leg> legs_R;
+    base::KinematicRelation desired_RB;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -124,6 +125,7 @@ class QuadrupedControl : boost::noncopyable {
       a->Visit(MJ_NVP(leg_pds));
       a->Visit(MJ_NVP(legs_B));
       a->Visit(MJ_NVP(legs_R));
+      a->Visit(MJ_NVP(desired_RB));
     }
   };
 

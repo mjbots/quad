@@ -41,6 +41,11 @@ Robot Frame (R): This frame is offset from the Body Frame (B) and
 referenced in the same manner, but may be offset or rotated to apply
 cosmetic kinematic changes.
 
+Terrain Frame (T): This frame is located at the center of mass,
+projected along the body Z direction at the ground location.  It is
+oriented parallel to the local ground terrain and rotated to be
+consistent with the M frame.
+
 Local Frame (L): This frame is oriented such that down is parallel to
 gravity.  Other degrees of freedom are initialized with the quadrupeds
 body center at turn on, and have no absolute correlation with the

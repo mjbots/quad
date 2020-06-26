@@ -271,7 +271,7 @@ class RfControl::Impl {
       quat = Eigen::Quaterniond::Identity();
     }
 
-    command.pose_RB = Sophus::SE3d(
+    command.rest.offset_RB = Sophus::SE3d(
         quat,
         Eigen::Vector3d(
             read_int16(1, 0),

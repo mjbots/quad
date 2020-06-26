@@ -40,9 +40,7 @@ class WalkContext {
         ws_(state_->walk),
         wc_(config_.walk) {}
 
-  std::vector<QC::Leg> Run(const std::vector<QC::Leg>& old_legs_R) {
-    context_->UpdateCommandedRB();
-
+  TrotResult Run(const std::vector<QC::Leg>& old_legs_R) {
     auto legs_R = old_legs_R;
 
     UpdateGlobal();
@@ -56,7 +54,10 @@ class WalkContext {
       leg_R.kd_N_m_s = config_.default_kd_N_m_s;
     }
 
-    return legs_R;
+    TrotResult result;
+    result.legs_R = std::move(legs_R);
+    result.desired_RB = context_->LevelDesiredRB();
+    return result;
   }
 
   void UpdateGlobal() {
@@ -76,11 +77,9 @@ class WalkContext {
 
       Eigen::Vector3d p1_R = legs_R[leg1].position;
       Eigen::Vector3d p2_R = legs_R[leg2].position;
-      // TODO: We actually need the leg positions in the L frame, not
-      // the R frame.  This will mostly matter for walking on hills and
-      // side slopes, but anytime we are tipped.  For now, we'll just
-      // use R to avoid a dependence on the IMU which needs more
-      // validation.
+      // The R frame is adjusted automatically to keep the CoM over
+      // the balance point, so we can just do our math here in the R
+      // frame.
       ws_.vlegs[vleg_idx].remaining_s = TrajectoryLineIntersectTime(
           state_->robot.desired_R.v.head<2>(),
           state_->robot.desired_R.w.z(),
@@ -242,7 +241,7 @@ class WalkContext {
 };
 }
 
-std::vector<QuadrupedCommand::Leg> QuadrupedTrot_R(
+TrotResult QuadrupedTrot(
     QuadrupedContext* context,
     const std::vector<QuadrupedCommand::Leg>& old_legs_R) {
   WalkContext ctx(context);

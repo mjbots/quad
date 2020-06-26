@@ -156,6 +156,17 @@ struct QuadrupedCommand {
   // Only valid for kLeg mode.
   std::vector<Leg> legs_B;
 
+  struct Rest {
+    Sophus::SE3d offset_RB;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(offset_RB));
+    }
+  };
+
+  Rest rest;
+
   // Only valid for kJump.  These are latched at the start of a jump.
   struct Jump {
     double acceleration = 0;
@@ -189,9 +200,6 @@ struct QuadrupedCommand {
   /////////////////////////////////////////////
   // Things which are common to multiple modes.
 
-  // Valid for kRest, kJump, kWalk, and...
-  Sophus::SE3d pose_RB;
-
   // Valid for kJump, kWalk, etc..
   //
   // These control the movement of the robot through the L frame,
@@ -205,10 +213,10 @@ struct QuadrupedCommand {
     a->Visit(MJ_NVP(mode));
     a->Visit(MJ_NVP(joints));
     a->Visit(MJ_NVP(legs_B));
+    a->Visit(MJ_NVP(rest));
     a->Visit(MJ_NVP(jump));
     a->Visit(MJ_NVP(walk));
     a->Visit(MJ_NVP(backflip));
-    a->Visit(MJ_NVP(pose_RB));
     a->Visit(MJ_NVP(v_R));
     a->Visit(MJ_NVP(w_R));
   }

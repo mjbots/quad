@@ -124,19 +124,16 @@ struct QuadrupedContext : boost::noncopyable {
     mjlib::base::AssertNotReached();
   }
 
-  void UpdateCommandedRB() {
-    Sophus::SE3d command_RB =
-        command->pose_RB * config.command_offset_RB;
-    const base::Point3D translation =
-        command_RB.translation() -
-        state->robot.frame_RB.pose.translation();
-    state->robot.frame_RB.pose.translation() +=
-        config.rb_filter_constant_Hz * config.period_s * translation;
-    state->robot.frame_RB.pose.so3() =
-        Sophus::SO3d(
-            state->robot.frame_RB.pose.so3().unit_quaternion().slerp(
-                config.rb_filter_constant_Hz * config.period_s,
-                command_RB.so3().unit_quaternion()));
+  base::KinematicRelation LevelDesiredRB() const {
+    const auto& robot = state->robot;
+    Eigen::Vector3d p_T(0, 0, 0);
+    Eigen::Vector3d p_M = robot.tf_TM.inverse() * p_T;
+    p_M.z() += robot.tf_TM.translation().z();
+    Eigen::Vector3d p_B = robot.frame_MB.pose.inverse() * p_M;
+
+    base::KinematicRelation result_RB;
+    result_RB.pose.translation().head<2>() = p_B.head<2>();
+    return result_RB;
   }
 
   void UpdateCommandedR() {

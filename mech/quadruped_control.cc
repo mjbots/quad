@@ -28,6 +28,7 @@
 #include "mjlib/io/repeating_timer.h"
 
 #include "base/common.h"
+#include "base/fit_plane.h"
 #include "base/interpolate.h"
 #include "base/logging.h"
 #include "base/sophus.h"
@@ -480,6 +481,17 @@ class QuadrupedControl::Impl {
       out_leg_B.position = effector_B.pose;
       out_leg_B.velocity = effector_B.velocity;
       out_leg_B.force_N = effector_B.force_N;
+
+      const auto* control_B = [&]() -> const QC::Leg* {
+        for (const auto& item_B : old_control_log_->legs_B) {
+          if (item_B.leg_id == leg.leg) { return &item_B; }
+        }
+        return nullptr;
+      }();
+
+      if (control_B) {
+        out_leg_B.stance = control_B->stance;
+      }
     }
 
     std::sort(status_.state.legs_B.begin(), status_.state.legs_B.end(),
@@ -493,11 +505,68 @@ class QuadrupedControl::Impl {
 
     // Do the M frame (CoM frame)
     auto& frame_MB = status_.state.robot.frame_MB;
-    frame_MB.pose.translation() = config_.center_of_mass_B;
-    frame_MB.pose.so3() = Sophus::SO3d(imu_data_.attitude.eigen());
+    Sophus::SE3d CB{
+      Sophus::SO3d(),
+          config_.center_of_mass_B};
+    Sophus::SE3d MC{
+      Sophus::SO3d(imu_data_.attitude.eigen()),
+          Eigen::Vector3d(),
+    };
+
+    frame_MB.pose = MC * CB;
     frame_MB.w = (M_PI / 180.0) * imu_data_.rate_dps;
 
+    // Do terrain.
+    UpdateTerrain();
+
     return true;
+  }
+
+  void UpdateTerrain() {
+    const auto& tf_MB = status_.state.robot.frame_MB;
+    auto& tf_TM = status_.state.robot.tf_TM;
+
+    std::vector<base::Point3D> stance_M;
+    for (const auto& leg_B : status_.state.legs_B) {
+      Eigen::Vector3d p_M = tf_MB.pose * leg_B.position;
+      if (leg_B.stance != 1.0) {
+        // Use the Z value from the current terrain.
+        Eigen::Vector3d p_T = tf_TM * p_M;
+        p_T.z() = 0;
+        stance_M.push_back(tf_TM.inverse() * p_T);
+      } else {
+        stance_M.push_back(p_M);
+      }
+    }
+
+    auto& robot = status_.state.robot;
+
+    // Now update the attitude recursively.
+    std::vector<base::Point3D> stance_T;
+    for (const auto& leg_M : stance_M) {
+      stance_T.push_back(tf_TM * leg_M);
+    }
+
+    // Fit a plane to these four points to see how to update our
+    // terrain transform.
+    const auto plane = base::FitPlane(stance_M);
+
+    // We just always exactly set our translation.
+    robot.tf_TM.translation().z() = -plane.c;
+
+    // We filter our X and Y slopes.
+    const double alpha = (
+        std::pow(0.5, config_.period_s / config_.terrain_filter_s));
+    robot.terrain_rad[0] = (
+        alpha * robot.terrain_rad[0] + (1.0 - alpha) * std::atan(plane.a));
+    robot.terrain_rad[1] = (
+        alpha * robot.terrain_rad[1] + (1.0 - alpha) * std::atan(plane.b));
+
+    robot.tf_TM.so3() = Sophus::SO3d(
+        (base::Quaternion::FromAxisAngle(
+            robot.terrain_rad[0], 0, 1, 0) *
+         base::Quaternion::FromAxisAngle(
+             -robot.terrain_rad[1], 1, 0, 0)).eigen());
   }
 
   void UpdateConfiguringStatus() {
@@ -976,7 +1045,7 @@ class QuadrupedControl::Impl {
       status_.state.stand_up.mode = QuadrupedState::StandUp::Mode::kDone;
     }
 
-    ControlLegs_R(std::move(legs_R));
+    ControlLegs_R(std::move(legs_R), context_->LevelDesiredRB());
   }
 
   bool IsRestAndSteadyState() const {
@@ -991,52 +1060,44 @@ class QuadrupedControl::Impl {
   }
 
   void DoControl_Rest() {
-    UpdateCommandedRB();
     ClearDesiredMotion();
 
     std::vector<QC::Leg> legs_R;
 
-    if (!old_control_log_->legs_R.empty()) {
-      legs_R = old_control_log_->legs_R;
+    MJ_ASSERT(!old_control_log_->legs_R.empty());
 
-      // Ensure all gains are back to their default and that
-      // everything is marked as in stance.
-      for (auto& leg_R : legs_R) {
-        leg_R.kp_N_m = config_.default_kp_N_m;
-        leg_R.kd_N_m_s = config_.default_kd_N_m_s;
-        leg_R.kp_scale = {};
-        leg_R.kd_scale = {};
-        leg_R.stance = 1.0;
-        leg_R.landing = false;
-        // We don't want to be moving laterally when in rest, just up
-        // and down.
-        leg_R.velocity.head<2>() = Eigen::Vector2d(0., 0.);
-      }
-      QuadrupedContext::MoveOptions move_options;
-      move_options.override_acceleration =
-          config_.stand_up.acceleration;
-      status_.state.rest.done = context_->MoveLegsFixedSpeedZ(
-          all_leg_ids_,
-          &legs_R,
-          config_.rest.velocity,
-          config_.stand_height,
-          move_options);
-    } else {
-      for (const auto& leg : context_->legs) {
-        QC::Leg leg_R;
-        leg_R.leg_id = leg.leg;
-        leg_R.power = true;
-        leg_R.kp_N_m = config_.default_kp_N_m;
-        leg_R.kd_N_m_s = config_.default_kd_N_m_s;
+    legs_R = old_control_log_->legs_R;
 
-        // TODO: This is unlikely to be a good idea.
-        leg_R.position = leg.idle_R;
-        legs_R.push_back(leg_R);
-      }
-      status_.state.rest.done = true;
+    // Ensure all gains are back to their default and that
+    // everything is marked as in stance.
+    for (auto& leg_R : legs_R) {
+      leg_R.kp_N_m = config_.default_kp_N_m;
+      leg_R.kd_N_m_s = config_.default_kd_N_m_s;
+      leg_R.kp_scale = {};
+      leg_R.kd_scale = {};
+      leg_R.stance = 1.0;
+      leg_R.landing = false;
+      // We don't want to be moving laterally when in rest, just up
+      // and down.
+      leg_R.velocity.head<2>() = Eigen::Vector2d(0., 0.);
     }
+    QuadrupedContext::MoveOptions move_options;
+    move_options.override_acceleration =
+        config_.stand_up.acceleration;
+    status_.state.rest.done = context_->MoveLegsFixedSpeedZ(
+        all_leg_ids_,
+        &legs_R,
+        config_.rest.velocity,
+        config_.stand_height,
+        move_options);
 
-    ControlLegs_R(std::move(legs_R));
+    auto desired_RB = context_->LevelDesiredRB();
+    desired_RB.pose.so3() =
+        current_command_.rest.offset_RB.so3() * desired_RB.pose.so3();
+    desired_RB.pose.translation() +=
+        current_command_.rest.offset_RB.translation();
+
+    ControlLegs_R(std::move(legs_R), desired_RB);
   }
 
   std::vector<std::pair<int, base::Point3D>> MakeIdleLegs() const {
@@ -1050,7 +1111,6 @@ class QuadrupedControl::Impl {
   void DoControl_Jump() {
     using JM = QuadrupedState::Jump::Mode;
 
-    UpdateCommandedRB();
     // We can only accelerate in one of the states where our legs are
     // actually in contact with the ground.
     const bool in_contact = [&]() {
@@ -1276,7 +1336,7 @@ class QuadrupedControl::Impl {
 
       // If we make it here, then we haven't skipped back to redo our
       // loop.  Thus we can actually emit our control.
-      ControlLegs_R(std::move(legs_R));
+      ControlLegs_R(std::move(legs_R), context_->LevelDesiredRB());
       return;
     }
   }
@@ -1362,8 +1422,8 @@ class QuadrupedControl::Impl {
   }
 
   void DoControl_Walk() {
-    auto legs_R = QuadrupedTrot_R(&*context_, old_control_log_->legs_R);
-    ControlLegs_R(std::move(legs_R));
+    auto result = QuadrupedTrot(&*context_, old_control_log_->legs_R);
+    ControlLegs_R(std::move(result.legs_R), result.desired_RB);
   }
 
   void DoControl_Backflip() {
@@ -1508,7 +1568,7 @@ class QuadrupedControl::Impl {
       }
 
       // If we make it here, then we don't need to repeat.
-      ControlLegs_R(std::move(legs_R));
+      ControlLegs_R(std::move(legs_R), context_->LevelDesiredRB());
       return;
     }
   }
@@ -1599,21 +1659,37 @@ class QuadrupedControl::Impl {
     status_.state.robot.desired_R = {};
   }
 
-  void UpdateCommandedRB() {
-    context_->UpdateCommandedRB();
-  }
-
   void UpdateCommandedR() {
     context_->UpdateCommandedR();
   }
 
-  void ControlLegs_R(std::vector<QC::Leg> legs_R) {
+  void ControlLegs_R(std::vector<QC::Leg> legs_R,
+                     const base::KinematicRelation& desired_RB) {
+    control_log_->desired_RB = desired_RB;
     control_log_->legs_R = std::move(legs_R);
     std::sort(control_log_->legs_R.begin(),
               control_log_->legs_R.end(),
               [](const auto& lhs, const auto& rhs) {
                 return lhs.leg_id < rhs.leg_id;
               });
+
+    // Apply our desired RB frame with an exponential smoothing
+    // filter.
+    {
+      auto& frame_RB = status_.state.robot.frame_RB;
+      // Filter the RB desire.
+      const base::Point3D delta =
+          desired_RB.pose.translation() - frame_RB.pose.translation();
+      frame_RB.pose.translation() +=
+          config_.rb_filter_constant_Hz * config_.period_s * delta;
+      frame_RB.pose.so3() =
+          Sophus::SO3d(
+              frame_RB.pose.so3().unit_quaternion().slerp(
+                  config_.rb_filter_constant_Hz * config_.period_s,
+                  desired_RB.pose.so3().unit_quaternion()));
+      frame_RB.v = desired_RB.v;
+      frame_RB.w = desired_RB.w;
+    }
 
     const Sophus::SE3d pose_BR = status_.state.robot.frame_RB.pose.inverse();
 
@@ -1667,6 +1743,9 @@ class QuadrupedControl::Impl {
       return std::max(1.0, result);
     }();
 
+    const base::Point3D g_M = base::Point3D(0., 0., 1.);
+    const base::Point3D g_B = status_.state.robot.frame_MB.pose.inverse() * g_M;
+
     for (const auto& leg_B : control_log_->legs_B) {
       const auto& qleg = GetLeg(leg_B.leg_id);
       const auto& leg_state_B = GetLegState_B(leg_B.leg_id);
@@ -1702,8 +1781,7 @@ class QuadrupedControl::Impl {
         // Do the cartesian PD control.
         leg_pd.cmd_N = leg_B.force_N;
         leg_pd.gravity_N =
-            stance_fraction * base::kGravity * config_.mass_kg *
-            base::Point3D(0., 0., 1.);
+            stance_fraction * base::kGravity * config_.mass_kg * g_B;
 
         leg_pd.accel_N =
             (leg_B.acceleration) *
