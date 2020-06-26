@@ -110,10 +110,10 @@ class WalkContext {
       return;
     }
 
-    // If we have changed direction since the last swing, repeat the
-    // same foot selection.
+    // If we have changed direction since the last swing, explicitly
+    // choose the leg which needs to be moved more.
     if (state_->robot.desired_R.v.dot(ws_.last_swing_v_R) < 0.0) {
-      ws_.next_step_vleg = (ws_.next_step_vleg + 1) % 2;
+      ws_.next_step_vleg = (biggest_vleg_idx + 1) % 2;
     }
 
     LiftVleg(legs_R, ws_.next_step_vleg);
