@@ -90,7 +90,8 @@ template <typename Body>
 void StartWebsocket(WebServer::WebsocketHandler handler,
                     beast::tcp_stream socket,
                     http::request<Body> request) {
-  websocket::stream<beast::tcp_stream> websocket(std::move(socket));
+  using Stream = websocket::stream<beast::tcp_stream>;
+  Stream websocket(std::move(socket));
 
   websocket.set_option(
       websocket::stream_base::timeout::suggested(
@@ -199,6 +200,10 @@ class WebServer::Impl {
       for (const auto& handler : parent_->options_.websocket_handlers) {
         if (request.target() == handler.endpoint) {
           // Yes, we have one.
+
+          // Websocket has its own timeout mechanism.
+          stream_.expires_never();
+
           StartWebsocket(handler.handler, std::move(stream_), std::move(request));
           return;
         }

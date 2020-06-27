@@ -121,6 +121,7 @@ class WebControl {
           ec == boost::asio::error::not_connected ||
           ec == boost::asio::error::connection_reset ||
           ec == boost::beast::websocket::error::closed) {
+        log_.warn(fmt::format("Closing websocket connection: {}", ec.message()));
         Close();
         return true;
       }
