@@ -152,6 +152,9 @@ class Pi3hatWrapper::Impl {
 
  private:
   void HandlePowerPoll(const mjlib::base::error_code& ec) {
+    if (ec == boost::asio::error::operation_aborted) {
+      return;
+    }
     mjlib::base::FailIf(ec);
 
     power_poll_.store(true);

@@ -27,6 +27,7 @@
 #include "mech/quadruped_util.h"
 #include "mech/swing_trajectory.h"
 #include "mech/trajectory.h"
+#include "mech/valid_leg_region.h"
 
 namespace mjmech {
 namespace mech {
@@ -107,6 +108,18 @@ struct QuadrupedContext : boost::noncopyable {
     for (const auto& leg : config.legs) {
       legs.emplace_back(leg, config.stand_up, config.stand_height,
                         config.idle_x, config.idle_y);
+    }
+
+    // Determine a rough estimate of the valid region for each leg.
+
+    // assume B == R .... this doesn't matter too much, we just need
+    // to give a point "somewhere" in the valid G region.
+    Sophus::SE3d tf_BR;
+    for (size_t i = 0; i < legs.size(); i++) {
+      valid_regions.emplace_back(
+          legs[i].ik,
+          legs[i].pose_BG.inverse() * tf_BR * legs[i].idle_R,
+          config.walk.lift_height);
     }
   }
 
@@ -269,6 +282,7 @@ struct QuadrupedContext : boost::noncopyable {
   std::deque<Leg> legs;
 
   std::array<SwingTrajectory, 4> swing_trajectory = {};
+  std::vector<ValidLegRegion> valid_regions;
 };
 
 }

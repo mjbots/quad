@@ -173,10 +173,12 @@ struct QuadrupedState {
 
     struct Leg {
       base::Point3D target_R;
+      double invalid_time_s = 0.0;
 
       template <typename Archive>
       void Serialize(Archive* a) {
         a->Visit(MJ_NVP(target_R));
+        a->Visit(MJ_NVP(invalid_time_s));
       }
     };
 
@@ -184,6 +186,7 @@ struct QuadrupedState {
 
     struct VLeg {
       double remaining_s = 0.0;
+      double invalid_time_s = 0.0;
       enum Mode {
         kStance,
         kSwing,
@@ -194,6 +197,7 @@ struct QuadrupedState {
       template <typename Archive>
       void Serialize(Archive* a) {
         a->Visit(MJ_NVP(remaining_s));
+        a->Visit(MJ_NVP(invalid_time_s));
         a->Visit(MJ_NVP(mode));
         a->Visit(MJ_NVP(swing_elapsed_s));
       }

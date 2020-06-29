@@ -190,6 +190,10 @@ struct QuadrupedConfig {
     // more time spent in stance.
     double stance_swing_ratio = 0.75;
 
+    // When a leg would become invalid in this many swing times, force
+    // a step.
+    double invalid_ratio = 1.5;
+
 
     // The elements of this structure are all measured in fraction of
     // a step.
@@ -212,6 +216,7 @@ struct QuadrupedConfig {
       a->Visit(MJ_NVP(min_stance_s));
       a->Visit(MJ_NVP(max_stance_s));
       a->Visit(MJ_NVP(stance_swing_ratio));
+      a->Visit(MJ_NVP(invalid_ratio));
       a->Visit(MJ_NVP(step));
     }
   };
