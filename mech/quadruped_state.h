@@ -175,10 +175,15 @@ struct QuadrupedState {
       base::Point3D target_R;
       double invalid_time_s = 0.0;
 
+      // From the idle R frame position, what balanced travel distance
+      // can be achieved at the current command.
+      double travel_distance = 0.0;
+
       template <typename Archive>
       void Serialize(Archive* a) {
         a->Visit(MJ_NVP(target_R));
         a->Visit(MJ_NVP(invalid_time_s));
+        a->Visit(MJ_NVP(travel_distance));
       }
     };
 
@@ -207,6 +212,8 @@ struct QuadrupedState {
     int next_step_vleg = 0;
     double stance_elapsed_s = 0.0;
     base::Point3D last_swing_v_R;
+    // The minimum travel distance of any leg.
+    double travel_distance = 0.0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -216,6 +223,7 @@ struct QuadrupedState {
       a->Visit(MJ_NVP(next_step_vleg));
       a->Visit(MJ_NVP(stance_elapsed_s));
       a->Visit(MJ_NVP(last_swing_v_R));
+      a->Visit(MJ_NVP(travel_distance));
     }
   };
 

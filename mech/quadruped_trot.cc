@@ -46,6 +46,7 @@ class WalkContext {
     UpdateGlobal();
     UpdateSwingTime(legs_R);
     UpdateInvalidTime(legs_R);
+    UpdateTravelDistance();
     MaybeLift(&legs_R);
     PropagateLegs(&legs_R);
 
@@ -122,6 +123,33 @@ class WalkContext {
       ws_.vlegs[vleg_idx].invalid_time_s =
           std::min(ws_.legs[leg1].invalid_time_s,
                    ws_.legs[leg2].invalid_time_s);
+    }
+  }
+
+  void UpdateTravelDistance() {
+    for (int id = 0; id < 4; id++) {
+      const auto& config_leg = context_->GetLeg(id);
+      const base::Point3D p_R = config_leg.idle_R;
+      const base::Point3D p_B = state_->robot.frame_RB.pose.inverse() * p_R;
+      const base::Point3D p_G = config_leg.pose_BG.inverse() * p_B;
+      auto find_time = [&](double sign) {
+        const base::Point3D v =
+            sign * state_->robot.desired_R.v +
+            p_R.cross(state_->robot.desired_R.w);
+        constexpr double kBothSides = 2.0;
+        return kBothSides * std::abs(
+            v.norm() * context_->valid_regions[id].TimeToLeave_G(
+                p_G.head<2>(), v.head<2>(),
+                -state_->robot.desired_R.w.z()));
+      };
+      ws_.legs[id].travel_distance = std::min(find_time(-1.0), find_time(1.0));
+    }
+
+    ws_.travel_distance = std::numeric_limits<double>::infinity();
+    for (const auto& leg : ws_.legs) {
+      if (leg.travel_distance < ws_.travel_distance) {
+        ws_.travel_distance = leg.travel_distance;
+      }
     }
   }
 
