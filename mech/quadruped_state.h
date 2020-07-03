@@ -215,6 +215,25 @@ struct QuadrupedState {
     // The minimum travel distance of any leg.
     double travel_distance = 0.0;
 
+    struct Trot {
+      double swing_time = 0.0;
+      double onevleg_time = 0.0;
+      double twovleg_time = 0.0;
+      double flight_time = 0.0;
+      double speed = 0.0;
+
+      template <typename Archive>
+      void Serialize(Archive* a) {
+        a->Visit(MJ_NVP(swing_time));
+        a->Visit(MJ_NVP(onevleg_time));
+        a->Visit(MJ_NVP(twovleg_time));
+        a->Visit(MJ_NVP(flight_time));
+        a->Visit(MJ_NVP(speed));
+      }
+    };
+
+    Trot trot;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(idle_count));
@@ -224,6 +243,7 @@ struct QuadrupedState {
       a->Visit(MJ_NVP(stance_elapsed_s));
       a->Visit(MJ_NVP(last_swing_v_R));
       a->Visit(MJ_NVP(travel_distance));
+      a->Visit(MJ_NVP(trot));
     }
   };
 

@@ -194,20 +194,17 @@ struct QuadrupedConfig {
     // a step.
     double invalid_ratio = 1.5;
 
+    // The fraction of a swing spent ramping in and out of the world
+    // velocity.
+    double world_blend_ratio = 0.15;
 
-    // The elements of this structure are all measured in fraction of
-    // a step.
-    struct Step {
-      // The length of time spent lifting the leg to the step height.
-      double lift_lower_time = 0.15;
 
-      template <typename Archive>
-      void Serialize(Archive* a) {
-        a->Visit(MJ_NVP(lift_lower_time));
-      }
-    };
-
-    Step step;
+    // New trot gait parameters.
+    double max_swing_time_s = 0.20;
+    double min_swing_time_s = 0.15;
+    double max_twovleg_time_s = 0.35;
+    double max_flight_time_s = 0.02;
+    double travel_ratio = 0.8;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -217,7 +214,13 @@ struct QuadrupedConfig {
       a->Visit(MJ_NVP(max_stance_s));
       a->Visit(MJ_NVP(stance_swing_ratio));
       a->Visit(MJ_NVP(invalid_ratio));
-      a->Visit(MJ_NVP(step));
+      a->Visit(MJ_NVP(world_blend_ratio));
+
+      a->Visit(MJ_NVP(max_swing_time_s));
+      a->Visit(MJ_NVP(min_swing_time_s));
+      a->Visit(MJ_NVP(max_twovleg_time_s));
+      a->Visit(MJ_NVP(max_flight_time_s));
+      a->Visit(MJ_NVP(travel_ratio));
     }
   };
 

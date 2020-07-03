@@ -29,6 +29,66 @@ constexpr int kVlegMapping[][2] = {
   {0, 3}, {1, 2},
 };
 
+QuadrupedState::Walk::Trot CalculateTrot(
+    const QuadrupedConfig& config,
+    double max_travel_dist, double speed) {
+  MJ_ASSERT(speed >= 0.0);
+  MJ_ASSERT(max_travel_dist >= 0.0);
+
+  // From trot_timing.py
+  const auto& cw = config.walk;
+
+  QuadrupedState::Walk::Trot r;
+
+  if (speed < ((0.5 * max_travel_dist) /
+               (cw.max_twovleg_time_s +
+                0.5 * cw.max_swing_time_s))) {
+    // Phase A
+    r.swing_time = r.onevleg_time = cw.max_swing_time_s;
+    r.twovleg_time = cw.max_twovleg_time_s;
+    r.speed = speed;
+    return r;
+  }
+
+  if (speed < (max_travel_dist / cw.max_swing_time_s)) {
+    // Phase B
+    r.swing_time = r.onevleg_time = cw.max_swing_time_s;
+    r.twovleg_time = 0.5 * max_travel_dist / speed - 0.5 * cw.max_swing_time_s;
+    r.speed = speed;
+    return r;
+  }
+
+  if (speed < (max_travel_dist / (cw.max_swing_time_s - 2 * cw.max_flight_time_s))) {
+    // Phase C
+    r.swing_time = cw.max_swing_time_s;
+    r.twovleg_time = 0.0;
+    r.flight_time = 0.5 * r.swing_time - max_travel_dist / (2 * speed);
+    r.onevleg_time = r.swing_time - 2 * r.flight_time;
+    r.speed = speed;
+    return r;
+  }
+
+  const double max_speed =
+      max_travel_dist / (cw.min_swing_time_s - 2 * cw.max_flight_time_s);
+  if (speed < max_speed) {
+    // Phase D
+    r.flight_time = cw.max_flight_time_s;
+    r.twovleg_time = 0.0;
+    r.swing_time = max_travel_dist / speed + 2 * r.flight_time;
+    r.onevleg_time = r.swing_time - 2 * r.flight_time;
+    r.speed = speed;
+    return r;
+  }
+
+  // Phase E: max speed
+  r.swing_time = cw.min_swing_time_s;
+  r.flight_time = cw.max_flight_time_s;
+  r.twovleg_time = 0;
+  r.onevleg_time = r.swing_time - 2 * r.flight_time;
+  r.speed = max_speed;
+  return r;
+}
+
 /// This object exists to hold a bunch of state variables and make it
 /// relatively easy to split up the calculation into multiple pieces.
 class WalkContext {
@@ -47,6 +107,7 @@ class WalkContext {
     UpdateSwingTime(legs_R);
     UpdateInvalidTime(legs_R);
     UpdateTravelDistance();
+    UpdateTrot();
     MaybeLift(&legs_R);
     PropagateLegs(&legs_R);
 
@@ -145,12 +206,23 @@ class WalkContext {
       ws_.legs[id].travel_distance = std::min(find_time(-1.0), find_time(1.0));
     }
 
-    ws_.travel_distance = std::numeric_limits<double>::infinity();
+    double new_travel_distance = std::numeric_limits<double>::infinity();
     for (const auto& leg : ws_.legs) {
-      if (leg.travel_distance < ws_.travel_distance) {
-        ws_.travel_distance = leg.travel_distance;
+      if (leg.travel_distance < new_travel_distance) {
+        new_travel_distance = leg.travel_distance;
       }
     }
+
+    if (std::isfinite(new_travel_distance)) {
+      ws_.travel_distance = new_travel_distance;
+    }
+  }
+
+  void UpdateTrot() {
+    ws_.trot = CalculateTrot(
+        config_,
+        config_.walk.travel_ratio * ws_.travel_distance,
+        state_->robot.desired_R.v.norm());
   }
 
   void MaybeLift(std::vector<QC::Leg>* legs_R) {
@@ -284,7 +356,7 @@ class WalkContext {
           leg_R.position, leg_R.velocity,
           ws_.legs[leg_idx].target_R,
           wc_.lift_height,
-          wc_.step.lift_lower_time,
+          wc_.world_blend_ratio,
           wc_.swing_time_s);
     }
   }

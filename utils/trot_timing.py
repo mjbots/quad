@@ -130,7 +130,9 @@
 #  If flight_time <= 0.0 we lift when the opposing leg is at 0.5 * swing_time
 
 #  If flight_time >= 0.0 we lift when the current leg is at -0.5 * oneleg_time
-#    NEED FACTOR TO KEEP TWO LEGS IN PHASE SYNC
+#    * Weight this based on how far the next leg is in its swing
+#      phase.  Split the difference between getting the correct flight
+#      time and getting the correct lift point.
 
 
 ###########
