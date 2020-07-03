@@ -27,13 +27,13 @@ BOOST_AUTO_TEST_CASE(BasicSophusTest) {
       "x" : 0,
       "y" : 0,
       "z" : 0,
-      "w" : 1,
+      "w" : 1
     },
     "translation" : [
       0,
       0,
-      0,
-    ],
+      0
+    ]
   })XXX";
   BOOST_TEST(actual == expected);
 }

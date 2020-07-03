@@ -17,6 +17,7 @@
 (function () {
   var websocket = null;
   var pose_RB = null;
+  var robot_state = null;
 
   var BUTTON_START = 9;
   var BUTTON_SELECT = 8;
@@ -49,6 +50,10 @@
   var handleEvent = function(e) {
     var state = document.getElementById('robot_state');
     state.innerHTML = "Status: " + e.data;
+    robot_state = JSON.parse(e.data);
+    let voltage = document.getElementById('voltage');
+    const joints = robot_state['state']['joints']
+    voltage.innerHTML = Math.min(...joints.map(x => x['voltage'])) + 'V'
   };
 
   var openWebsocket = function() {
