@@ -32,12 +32,36 @@
       </form>
       <p>Voltage: <span id="voltage" /></p>
     </div>
-    <div id="current_command">
+
+    <div id="mode">
+      <div id="bg"></div>
+      <div id="text">
+        <div class="mode-main">WALK</div>
+        <div class="mode-sub">(STANDUP)</div>
+      </div>
+      <input id="mode_expander" type="checkbox" class="toggle"/>
+      <label for="mode_expander" class="lbl-toggle"></label>
+      <div id="mode_select" class="collapsible-content">
+        <input type="radio" id="stop" name="mode" value="stop" checked>
+        <label for="stop">Stop</label>
+
+        <input type="radio" id="walk" name="mode" value="walk">
+        <label for="walk">Walk</label>
+
+        <input type="radio" id="pronk" name="mode" value="pronk">
+        <label for="pronk">Pronk</label>
+      </div>
     </div>
-    <div id="robot_state">
-    </div>
-    <div id="current_joystick">
-    </div>
+
+    <div id="connected_state"></div>
+    <div id="battery"></div>
+
+    <div id="current_command"></div>
+
+    <div id="robot_state"></div>
+    <div id="current_joystick"></div>
+
+    <div id="mstop"></div>
 
     <script src="js/app.js"></script>
   </body>

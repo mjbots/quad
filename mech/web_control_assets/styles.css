@@ -1,5 +1,9 @@
-/* Copyright 2019 Josh Pieper, jjp@pobox.com */
+/* Copyright 2019-2020 Josh Pieper, jjp@pobox.com */
 /* Licensed under the Apache License, Version 2.0.  See LICENSE */
+
+div {
+    padding: 0;
+}
 
 #current_joystick {
     background-color: #e0e0e0;
@@ -10,9 +14,128 @@
 }
 
 #current_command {
+    position: fixed;
+    bottom: 0;
+    left: 20%;
+    width: 60%;
     background-color: #e0a0e0;
 }
 
-div {
-    padding: 1em;
+#mode {
+    position: fixed;
+    top: 0;
+    left: 30%;
+    width: 40%;
+    height: 12%;
+    padding: 0;
+    font-size: 8vw;
+    font-weight: bold;
+    font-family: courier;
+}
+
+#mode #bg {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background-color: #e0e0e0;
+    transform: perspective(10px) rotateX(-1deg);
+    padding: 0;
+}
+
+#mode #text {
+    position: absolute;
+    left: 30;
+    top: 50%;
+    width: 70%;
+    margin-top: -5vw;
+    padding: 0;
+    text-align: center;
+    line-height: 65%;
+}
+
+.mode-main {
+    clear: both;
+}
+
+#mode #text .mode-sub {
+    font-size: 4vw;
+}
+
+.lbl-toggle ~ input[type='checkbox'] {
+    display: none;
+}
+
+.lbl-toggle {
+    position: absolute;
+    top: 50%;
+    right: 2vw;
+    padding: 0;
+    width: 0;
+    height: 0;
+    font-size: 8vw;
+
+    color: #404040;
+    cursor: pointer;
+
+    transition: all 0.25s ease-out;
+}
+
+.lbl-toggle:hover {
+    color: #000000;
+}
+
+.lbl-toggle {
+    content: ' ';
+
+    border-top: 2vw solid transparent;
+    border-bottom: 2vw solid transparent;
+    border-left: 2vw solid currentColor;
+
+    transform: translateY(-2px);
+
+    transition: transform .2s ease-out;
+};
+
+
+.collapsible {
+    border: none;
+    outline: none;
+}
+
+#mode_select {
+    position: absolute;
+    top: 100%;
+    left: 10%;
+    width: 80%;
+    background: #e0ffe0;
+    font-size: 6vw;
+    margin: 5px;
+    text-align: center;
+}
+
+.collapsible-content {
+    max-height: 0px;
+    overflow: hidden;
+    transition: max-height .25s ease-in-out;
+}
+
+.toggle:checked + label + .collapsible-content {
+    max-height: 80vh;
+}
+
+.toggle:checked + .lbl-toggle{
+    transform: rotate(90deg) translateX(-3px);
+}
+
+.toggle:checked + .lbl-toggle {
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: 0;
+}
+
+#mode_select input[type='radio'] {
+    display: none;
+}
+
+#mode_select input:checked + label {
+    background: #00a000;
 }
