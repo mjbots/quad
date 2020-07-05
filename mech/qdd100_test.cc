@@ -171,7 +171,7 @@ class Application {
     double command = GetCommandTorqueNm();
 
     auto get = [&](auto moteus_reg) -> double {
-      for (const auto& item : reply_) {
+      for (const auto& item : current_reply_) {
         if (item.reg == moteus_reg) {
           return std::get<float>(std::get<Value>(item.value));
         }
