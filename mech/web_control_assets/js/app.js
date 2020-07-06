@@ -14,13 +14,53 @@
 
 const CMD_MAX_RATE_X = 0.5;
 const CMD_MAX_RATE_Y = 0.2;
-const CMD_MAX_RATE_Z = 1.0;
+const CMD_MAX_RATE_Z = Math.PI * 60 / 180.0;
+
+
+const CMD_MAX_POSE_YAW = Math.PI * 20 / 180.0;
+const CMD_MAX_POSE_PITCH = Math.PI * 11 / 180.0;
 
 const TRANSLATION_EPSILON = 0.025;
 const ROTATION_EPSILON = Math.PI * 7.0 / 180.0;
 
 const getElement = (v) => document.getElementById(v);
 const iota = (v) => Array.from((new Array(v)).keys());
+
+function normalizeQuaternion(q) {
+  const norm = Math.sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
+  return [
+    q[0] / norm, q[1] / norm, q[2] / norm, q[3] / norm
+  ];
+};
+
+function makeUnitQuaternion() {
+  return [1, 0, 0, 0];
+};
+
+function quaternionMultiply(lhs, rhs) {
+  return normalizeQuaternion([
+    lhs[0] * rhs[0] - lhs[1] * rhs[1] - lhs[2] * rhs[2] - lhs[3] * rhs[3],
+    lhs[0] * rhs[1] + lhs[1] * rhs[0] + lhs[2] * rhs[3] - lhs[3] * rhs[2],
+    lhs[0] * rhs[2] - lhs[1] * rhs[3] + lhs[2] * rhs[0] + lhs[3] * rhs[1],
+    lhs[0] * rhs[3] + lhs[1] * rhs[2] - lhs[2] * rhs[1] + lhs[3] * rhs[0]
+  ]);
+};
+
+function quaternionJs(q) {
+  return {
+    w: q[0],
+    x: q[1],
+    y: q[2],
+    z: q[3],
+  };
+}
+
+function makeQuaternionAxisRotate(x, y, z, angle_rad) {
+  const factor = Math.sin(angle_rad / 2.0);
+
+  return normalizeQuaternion([
+    Math.cos(angle_rad / 2.0), x * factor, y * factor, z * factor])
+};
 
 class Joystick {
   static BUTTON_START = 9;
@@ -175,16 +215,40 @@ class Application {
   }
 
   _sendCommand() {
-    const v_R = [
-      -this._joystick.axis(Joystick.AXES_LEFT_Y) * CMD_MAX_RATE_X,
-      this._joystick.axis(Joystick.AXES_LEFT_X) * CMD_MAX_RATE_Y,
-      0.0
-    ];
-    const w_R = [
-      0.0,
-      0.0,
-      this._joystick.axis(Joystick.AXES_RIGHT_X) * CMD_MAX_RATE_Z,
-    ];
+    const [v_R, w_R, pose_RB] = (() => {
+      // Are we in body mode?
+      if (this._joystick.down(Joystick.BUTTON_SHOULDER_LB)) {
+        const v_R = [0, 0, 0];
+        const w_R = [0, 0, 0];
+
+        const yaw = this._joystick.axis(Joystick.AXES_RIGHT_X) * CMD_MAX_POSE_YAW;
+        const pitch = -this._joystick.axis(Joystick.AXES_RIGHT_Y) * CMD_MAX_POSE_PITCH;
+        const pose_RB_so3 = quaternionMultiply(
+          quaternionMultiply(
+            makeUnitQuaternion(),
+            makeQuaternionAxisRotate(0, 1, 0, pitch)),
+          makeQuaternionAxisRotate(0, 0, 1, yaw));
+        const pose_RB = {
+          translation : [ 0, 0, 0],
+          so3 : quaternionJs(pose_RB_so3),
+        };
+        return [v_R, w_R, pose_RB];
+      } else {
+        // Normal movement mode.
+        const v_R = [
+          -this._joystick.axis(Joystick.AXES_LEFT_Y) * CMD_MAX_RATE_X,
+          this._joystick.axis(Joystick.AXES_LEFT_X) * CMD_MAX_RATE_Y,
+          0.0
+        ];
+        const w_R = [
+          0.0,
+          0.0,
+          this._joystick.axis(Joystick.AXES_RIGHT_X) * CMD_MAX_RATE_Z,
+        ];
+        return [v_R, w_R, null];
+      }
+    })();
+
 
     {
       const desired_rot_cmd = getElement('desired_rot_cmd');
@@ -229,6 +293,19 @@ class Application {
     command["command"]["v_R"] = v_R;
     command["command"]["w_R"] = w_R;
 
+    if (pose_RB) {
+      command["command"]["rest"] = {
+        offset_RB : pose_RB,
+      };
+    }
+
+    if (command["command"]["mode"] == "jump") {
+      command["command"]["jump"] = {
+        "acceleration" : Number(getElement("jump_acceleration").value),
+        "repeat" : getElement("jump_repeat").checked,
+      };
+    }
+
     const command_string = JSON.stringify(command);
     getElement('current_json_command').innerHTML = command_string;
 
@@ -260,6 +337,7 @@ class Application {
         const cur = this._state.mode;
         if (cur == "zero_velocity") { return "damped"; }
         if (cur == "rest") { return "idle"; }
+        if (cur == "jump") { return "pronk"; }
         return cur;
       })() + ')';
     }
