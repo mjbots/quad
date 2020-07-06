@@ -1,4 +1,4 @@
-<!-- Copyright 2019 Josh Pieper, jjp@pobox.com -->
+<!-- Copyright 2019-2020 Josh Pieper, jjp@pobox.com -->
 <!-- Licensed under the Apache License, Version 2.0.  See LICENSE -->
 
 <html>
@@ -8,31 +8,6 @@
     <link rel="stylesheet" href="styles.css"/>
   </head>
   <body>
-    <div id="requested_command">
-      <form>
-        <select id="mode_selector" multiple>
-          <option value="stopped" selected="true">stop</option>
-          <option value="zero_velocity">zero</option>
-          <option value="rest">rest</option>
-          <option value="jump">jump</option>
-          <option value="walk">walk</option>
-          <option value="backflip">backflip</option>
-        </select>
-        <select id="jump_acceleration" multiple>
-          <option value="2" selected="true">2 m/s^2</option>
-          <option value="3">3 m/s^2</option>
-          <option value="4">4 m/s^2</option>
-          <option value="6">6 m/s^2</option>
-          <option value="8">8 m/s^2</option>
-          <option value="12">12 m/s^2</option>
-          <option value="16">16 m/s^2</option>
-          <option value="24">24 m/s^2</option>
-        </select>
-        <input type="checkbox" id="jump_repeat" checked="true">Repeat Jump</input>
-      </form>
-      <p>Voltage: <span id="voltage" /></p>
-    </div>
-
     <div id="mode">
       <div id="bg"></div>
       <div id="text">
@@ -40,8 +15,8 @@
         <div class="mode-sub">(STANDUP)</div>
       </div>
       <input id="mode_expander" type="checkbox" class="toggle"/>
-      <label for="mode_expander" class="lbl-toggle"></label>
-      <div id="mode_select" class="collapsible-content">
+      <label id="mode_expander_label" for="mode_expander" class="lbl-toggle"></label>
+      <div id="mode_select" class="collapsible-content-vert">
         <input type="radio" id="stop" name="mode" value="stop" checked>
         <label for="stop">Stop</label>
 
@@ -53,10 +28,92 @@
       </div>
     </div>
 
-    <div id="connected_state"></div>
+    <div id="command">
+      <svg id="command_plot">
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7"
+                  refX="0" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" />
+          </marker>
+        </defs>
+        <svg id="command_rotate" x="0%" y="0%" width="100%" height="8%">
+          <g fill="none" stroke="black" stroke-width="1.5px">
+            <line x1="45%" y1="30%" x2="30%" y2="30%"
+                  marker-end="url(#arrowhead)"/>
+            <line x1="55%" y1="30%" x2="70%" y2="30%"
+                  marker-end="url(#arrowhead)">
+          </g>
+          <g stroke="black" stroke-width="0.5" font-family="monospace"
+             text-anchor="middle">
+            <text x="50%" y="30%">0dps</text>
+            <text x="13%" y="30%">-30</text>
+            <text x="87%" y="30%">30</text>
+            <text x="23%" y="30%">Q</text>
+            <text x="77%" y="30%">E</text>
+          </g>
+          <rect x="48%" y="50%" width="4%" height="45%"
+                fill="red" stroke="black" stroke-width="2"/>
+          <rect x="49%" y="60%" width="2%" height="22%"
+                fill="blue" stroke="black" stroke-width="1"/>
+        </svg>
+        <svg id="command_translate" x="0%" y="10%" width="100%" height="92%">
+          <g fill="#e0e0e0" stroke="black" stroke-width="1.5px">
+            <rect x="12%" y="12%" width="76%" height="76%" stroke-width="3px"/>
+            <line x1="30%" y1="50%" x2="70%" y2="50%"/>
+            <line x1="50%" y1="30%" x2="50%" y2="70%"/>
+            <line x1="95%" y1="45%" x2="95%" y2="30%"
+                  marker-end="url(#arrowhead)" />
+            <line x1="95%" y1="55%" x2="95%" y2="70%"
+                  marker-end="url(#arrowhead)" />
+            <line x1="45%" y1="95%" x2="30%" y2="95%"
+                  marker-end="url(#arrowhead)" />
+            <line x1="55%" y1="95%" x2="70%" y2="95%"
+                  marker-end="url(#arrowhead)" />
+          </g>
+          <g stroke="black" stroke-width="0.5" font-family="monospace"
+             text-anchor="middle">
+            <text x="95%" y="50%">0m/s</text>
+            <text x="95%" y="13%">0.5</text>
+            <text x="95%" y="87%">-0.5</text>
+            <text x="95%" y="23%">W</text>
+            <text x="95%" y="77%">S</text>
+
+            <text x="13%" y="95%">-0.2</text>
+            <text x="50%" y="95%">0m/s</text>
+            <text x="87%" y="95%">0.2</text>
+            <text x="23%" y="95%">A</text>
+            <text x="77%" y="95%">D</text>
+          </g>
+          <rect id="tgt-command-translate"
+                x="48%" y="48%" width="4%" height="4%"
+                fill="red" stroke="black" stroke-width="2"/>
+          <rect id="act-command-translate"
+                x="49%" y="49%" width="2%" height="2%"
+                fill="blue" stroke="black" stroke-width="1.5"/>
+        </svg>
+      </svg>
+    </div>
+
+    <div id="advanced_command">
+      <input id="advanced_expander_input" type="checkbox" class="toggle">
+      <label id="advanced_expander_label" for="advanced_expander_input"
+             class="lbl-toggle">ADVANCED</label>
+      <div id="advanced_content" class="collapsible-content-vert bottom-advanced">
+        <select id="jump_acceleration" multiple>
+          <option value="4" selected="true">4 m/s^2</option>
+          <option value="6">6 m/s^2</option>
+          <option value="8">8 m/s^2</option>
+        </select>
+        <label for="jump_acceleration">Jump Accel</label>
+        <input type="checkbox" id="jump_repeat" checked="true">Repeat Jump</input>
+        <input type="checkbox" id="always_step" checked="false">Always Step</input>
+      </div>
+    </div>
+
+    <div id="connected_state">CONNECTED</div>
     <div id="battery"></div>
 
-    <div id="current_command"></div>
+    <div id="current_json_command"></div>
 
     <div id="robot_state"></div>
     <div id="current_joystick"></div>

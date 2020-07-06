@@ -5,32 +5,16 @@ div {
     padding: 0;
 }
 
-#current_joystick {
-    background-color: #e0e0e0;
-}
-
-#robot_state {
-    background-color: #a0e0e0;
-}
-
-#current_command {
-    position: fixed;
-    bottom: 0;
-    left: 20%;
-    width: 60%;
-    background-color: #e0a0e0;
-}
-
 #mode {
     position: fixed;
     top: 0;
     left: 30%;
     width: 40%;
     height: 12%;
-    padding: 0;
-    font-size: 8vw;
+    font-size: 8vh;
     font-weight: bold;
     font-family: courier;
+    z-index: 10;
 }
 
 #mode #bg {
@@ -39,7 +23,6 @@ div {
     height: 100%;
     background-color: #e0e0e0;
     transform: perspective(10px) rotateX(-1deg);
-    padding: 0;
 }
 
 #mode #text {
@@ -47,8 +30,7 @@ div {
     left: 30;
     top: 50%;
     width: 70%;
-    margin-top: -5vw;
-    padding: 0;
+    margin-top: -5vh;
     text-align: center;
     line-height: 65%;
 }
@@ -58,48 +40,13 @@ div {
 }
 
 #mode #text .mode-sub {
-    font-size: 4vw;
+    font-size: 4vh;
 }
 
-.lbl-toggle ~ input[type='checkbox'] {
-    display: none;
-}
-
-.lbl-toggle {
+#mode_expander_label {
     position: absolute;
     top: 50%;
     right: 2vw;
-    padding: 0;
-    width: 0;
-    height: 0;
-    font-size: 8vw;
-
-    color: #404040;
-    cursor: pointer;
-
-    transition: all 0.25s ease-out;
-}
-
-.lbl-toggle:hover {
-    color: #000000;
-}
-
-.lbl-toggle {
-    content: ' ';
-
-    border-top: 2vw solid transparent;
-    border-bottom: 2vw solid transparent;
-    border-left: 2vw solid currentColor;
-
-    transform: translateY(-2px);
-
-    transition: transform .2s ease-out;
-};
-
-
-.collapsible {
-    border: none;
-    outline: none;
 }
 
 #mode_select {
@@ -113,29 +60,165 @@ div {
     text-align: center;
 }
 
-.collapsible-content {
+#mode_select input[type='radio'] {
+    display: none;
+}
+
+#mode_select label {
+    cursor: pointer;
+}
+
+#mode_select input:checked + label {
+    background: #80ff80;
+}
+
+#command {
+    position: fixed;
+    left: 25%;
+    top: 25%;
+    width: 50%;
+    height: 50%;
+}
+
+#command_plot {
+    width: 100%;
+    height: 100%;
+}
+
+#advanced_command {
+    position: fixed;
+    z-index: 10;
+    bottom: 0;
+    height: 5vh;
+    left: 20%;
+    width: 55%;
+
+    background: #d0d0d0;
+    padding: 5px;
+    padding-left: 2vw;
+    padding-right: 2vw;
+}
+
+#advanced_expander_label {
+    font-family: monospace;
+    font-weight: bold;
+    font-size: 5vh;
+}
+
+#advanced_content {
+    position: fixed;
+    bottom: 6vh;
+    left: 20%;
+    width: 55%;
+    background: #e0e0e0;
+}
+
+.bottom-advanced {
+    padding: 5px;
+    padding-left: 2vw;
+    padding-right: 2vw;
+}
+
+#connected_state {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    width: 18%;
+
+    font-family: monospace;
+    font-weight: bold;
+    font-size: 3vh;
+    text-align: center;
+
+    height: 1.2em;
+    padding: 5px;
+
+    background: #00e000;
+}
+
+/* General collapsible toggle support */
+
+.toggle {
+    display: none;
+}
+
+.lbl-toggle::before {
+    content: ' ';
+    display: inline-block;
+
+    border-top: 1.5vw solid transparent;
+    border-bottom: 1.5vw solid transparent;
+    border-left: 1.5vw solid #404040;
+
+    transform: translateY(-2px);
+
+    transition: all .25s ease-out;
+
+    color: #404040;
+    cursor: pointer;
+};
+
+.lbl-toggle {
+    cursor: pointer;
+}
+
+.lbl-toggle:hover {
+    color: #000000;
+}
+
+.toggle:checked + .lbl-toggle::before {
+    transform: rotate(90deg) translateX(-3px);
+
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: 0;
+}
+
+.collapsible-content-vert {
     max-height: 0px;
     overflow: hidden;
     transition: max-height .25s ease-in-out;
 }
 
-.toggle:checked + label + .collapsible-content {
-    max-height: 80vh;
+.toggle:not(:checked) + label + .collapsible-content-vert {
+    padding-top: 0;
+    padding-bottom: 0;
+    transition: all .25s ease-in-out;
 }
 
-.toggle:checked + .lbl-toggle{
-    transform: rotate(90deg) translateX(-3px);
+.toggle:checked + label + .collapsible-content-vert {
+    max-height: 100vh;
 }
 
-.toggle:checked + .lbl-toggle {
-    border-bottom-right-radius: 0;
-    border-bottom-left-radius: 0;
+.collapsible-content-horiz {
+    max-width: 0px;
+    overflow: hidden;
+    transition: max-width 0.25s ease-in-out;
 }
 
-#mode_select input[type='radio'] {
+.toggle:checked + label + .collapsible-content-horiz {
+    max-width: 100vh;
+}
+
+
+/* Things which I am going to delete */
+
+#robot_state {
+    background-color: #a0e0e0;
     display: none;
 }
 
-#mode_select input:checked + label {
-    background: #00a000;
+#current_json_command {
+    position: fixed;
+    bottom: 7vh;
+    left: 20%;
+    width: 55%;
+    background-color: #e0a0e0;
+    padding-left: 2vw;
+    padding-right: 2vw;
+    z-index: 0;
+}
+
+#current_joystick {
+    background-color: #e0e0e0;
+    display: none;
 }

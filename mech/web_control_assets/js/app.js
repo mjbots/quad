@@ -53,7 +53,6 @@
     robot_state = JSON.parse(e.data);
     let voltage = document.getElementById('voltage');
     const joints = robot_state['state']['joints']
-    voltage.innerHTML = Math.min(...joints.map(x => x['voltage'])) + 'V'
   };
 
   var openWebsocket = function() {
@@ -161,27 +160,26 @@
     var pressed = checkButtons(gp);
     var down = downButtons(gp);
 
-    var mode_selector = document.getElementById("mode_selector");
     var jump_acceleration = document.getElementById("jump_acceleration");
-    var old_value = mode_selector.value;
+    var old_value = "stopped";
 
     if (pressed[BUTTON_START]) {
       // If we have no value, are stopped, or at zero, switch to rest.
       if (old_value == "" ||
           old_value == "stopped" ||
           old_value == "zero_velocity") {
-        mode_selector.value = "rest";
+        // mode_selector.value = "rest";
       } else {
         // Otherwise, we switch to zero.
-        mode_selector.value = "zero_velocity";
+        // mode_selector.value = "zero_velocity";
       }
     } else if (pressed[BUTTON_SELECT]) {
       // If we aren't in jump, switch to that.  If we are, then just
       // switch to rest.
       if (old_value != "jump") {
-        mode_selector.value = "jump";
+        // mode_selector.value = "jump";
       } else {
-        mode_selector.value = "rest";
+        // mode_selector.value = "rest";
       }
     }
 
@@ -209,7 +207,7 @@
       w_R = [ 0, 0, gp.axes[2] * RATE_MAX_Z ];
     }
 
-    var value = mode_selector.value;
+    var value = "stopped";  // mode_selector.value;
 
     var cmd = {};
     if (value == "stopped" ||
@@ -255,7 +253,7 @@
     jsui.innerHTML = gp ? renderJoystick(gp) : "no joystick";
 
     var cmd = makeCommand(gp);
-    var ccui = document.getElementById('current_command');
+    var ccui = document.getElementById('current_json_command');
     ccui.innerHTML = "Command: " + cmd;
 
     websocket.send(cmd);
