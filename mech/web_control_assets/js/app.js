@@ -17,12 +17,89 @@ const CMD_MAX_RATE_Y = 0.2;
 const CMD_MAX_RATE_Z = 1.0;
 
 const getElement = (v) => document.getElementById(v);
+const iota = (v) => Array.from((new Array(v)).keys());
+
+class Joystick {
+  static BUTTON_START = 9;
+  static BUTTON_SELECT = 8;
+  static BUTTON_2 = 0;
+  static BUTTON_3 = 1;
+  static BUTTON_1 = 2;
+  static BUTTON_4 = 3;
+  static BUTTON_SHOULDER_LT = 4;
+  static BUTTON_SHOULDER_RT = 5;
+  static BUTTON_SHOULDER_LB = 6;
+  static BUTTON_SHOULDER_RB = 7;
+  static BUTTON_LEFT_JOY = 10;
+  static BUTTON_RIGHT_JOY = 11;
+  static BUTTON_HAT_UP = 12;
+  static BUTTON_HAT_DOWN = 13;
+  static BUTTON_HAT_LEFT = 14;
+  static BUTTON_HAT_RIGHT = 15;
+
+  static NUM_BUTTONS = 16;
+
+  static AXES_LEFT_X = 0;
+  static AXES_LEFT_Y = 1;
+  static AXES_RIGHT_X = 2;
+  static AXES_RIGHT_Y = 3;
+
+  constructor() {
+    this._zero();
+  }
+
+  _zero() {
+    this._down = iota(Joystick.NUM_BUTTONS).map(x => false);
+    this._pressed = iota(Joystick.NUM_BUTTONS).map(x => false);
+    this._axes = iota(4).map(x => 0.0);
+  }
+
+  /// Call once per update, this ensures that 'pressed' and 'released'
+  /// are correct.
+  update() {
+    const gp = this._getJoystick();
+    if (!gp) {
+      // No joystick this time.  Set all of our values to all buttons
+      // off.
+      this._zero();
+      return;
+    }
+
+    const old_down = [...this._down];
+    this._down = iota(Joystick.NUM_BUTTONS).map(x => gp.buttons[x].pressed);
+    this._pressed = iota(Joystick.NUM_BUTTONS).map(
+      x => this._down[x] && old_down[x]);
+
+    this._axes = [...gp.axes];
+  }
+
+  down(button) {
+    return this._down[button];
+  }
+
+  pressed(button) {
+    return this._pressed[button];
+  }
+
+  axis(num) {
+    return this._axes[num];
+  }
+
+  _getJoystick() {
+    const gps = navigator.getGamepads();
+    for (const gp of gps) {
+      if (gp) { return gp; }
+    }
+    return null;
+  }
+};
 
 class Application {
   constructor() {
     this._websocket = null;
-    this._mode = "stopped";
+    this._mode = "stop";
     this._state = null;
+    this._joystick = new Joystick();
 
     // Fill in our constant values.
     document.getElementById('chart_rot_min').innerHTML =
@@ -40,10 +117,10 @@ class Application {
       checkbox.checked = !checkbox.checked;
     });
 
-    for (const mode_label of document.getElementsByClassName("mode_label")) {
-      mode_label.addEventListener('click', () => {
+    for (const mode_label of document.getElementsByClassName("mode_check")) {
+      mode_label.addEventListener('input', () => {
         checkbox.checked = false;
-        this._updateCommand();
+        this._updateMode();
       });
     }
   }
@@ -53,7 +130,15 @@ class Application {
     this._openWebsocket();
   }
 
-  _updateCommand() {
+  _updateMode() {
+    this._mode = (() => {
+      for (const mode_check of document.getElementsByClassName("mode_check")) {
+        if (mode_check.checked) { return mode_check.value; }
+      }
+      throw "Unknown mode";
+    })();
+
+    getElement('mode_text').innerHTML = this._mode;
   }
 
   _openWebsocket() {
@@ -76,10 +161,58 @@ class Application {
   }
 
   _handleTimer() {
+    this._joystick.update();
     this._updateState();
+    this._sendCommand();
+  }
+
+  _sendCommand() {
+    const v_R = [
+      -this._joystick.axis(Joystick.AXES_LEFT_Y) * CMD_MAX_RATE_X,
+      this._joystick.axis(Joystick.AXES_LEFT_X) * CMD_MAX_RATE_Y,
+      0.0
+    ];
+    const w_R = [
+      0.0,
+      0.0,
+      this._joystick.axis(Joystick.AXES_RIGHT_X) * CMD_MAX_RATE_Z,
+    ];
+
+    {
+      const desired_rot_cmd = getElement('desired_rot_cmd');
+      const scaled_w =
+            Math.max(-1.0, Math.min(1.0, w_R[2] / CMD_MAX_RATE_Z));
+      desired_rot_cmd.setAttribute('x', `${scaled_w * 38 + 48}%`);
+
+      const desired_trans_cmd = getElement('desired_trans_cmd');
+      const scaled_x =
+            Math.max(-1.0, Math.min(1.0, v_R[0] / CMD_MAX_RATE_X));
+      const scaled_y =
+            Math.max(-1.0, Math.min(1.0, v_R[1] / CMD_MAX_RATE_Y));
+      desired_trans_cmd.setAttribute('x', `${scaled_y * 38 + 48}%`);
+      desired_trans_cmd.setAttribute('y', `${-scaled_x * 38 + 48}%`);
+    }
+
+    let command = {
+      "command" : {
+        "mode" : (() => {
+          if (this._mode == "stop") { return "zero_velocity" ;}
+          if (this._mode == "idle") { return "rest"; }
+          if (this._mode == "walk") { return "walk"; }
+          if (this._mode == "pronk") { return "jump"; }
+          return "zero_velocity";
+        })(),
+      },
+    };
+
+    command["command"]["v_R"] = v_R;
+    command["command"]["w_R"] = w_R;
+
+    const command_string = JSON.stringify(command);
+    getElement('current_json_command').innerHTML = command_string;
 
     if (this._websocket.readyState == WebSocket.OPEN) {
-      this._websocket.send('{}')
+      this._websocket.send(command_string)
     }
   }
 
@@ -116,15 +249,15 @@ class Application {
       const desired_rot_act = getElement('desired_rot_act');
       const scaled_w =
             Math.max(-1.0, Math.min(1.0, desired_R.w[2] / CMD_MAX_RATE_Z));
-      desired_rot_act.setAttribute('x', `${scaled_w * 40 + 49}%`);
+      desired_rot_act.setAttribute('x', `${scaled_w * 38 + 49}%`);
 
       const desired_trans_act = getElement('desired_trans_act');
       const scaled_x =
             Math.max(-1.0, Math.min(1.0, desired_R.v[0] / CMD_MAX_RATE_X));
       const scaled_y =
             Math.max(-1.0, Math.min(1.0, desired_R.v[1] / CMD_MAX_RATE_Y));
-      desired_trans_act.setAttribute('x', `${scaled_y * 40 + 49}%`);
-      desired_trans_act.setAttribute('y', `${-scaled_x * 40 + 49}%`);
+      desired_trans_act.setAttribute('x', `${scaled_y * 38 + 49}%`);
+      desired_trans_act.setAttribute('y', `${-scaled_x * 38 + 49}%`);
     }
 
     // Battery
@@ -146,7 +279,7 @@ class Application {
       }
     }
   }
-}
+};
 
 const app = async () => {
   const app = new Application();

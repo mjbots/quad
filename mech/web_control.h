@@ -138,8 +138,11 @@ class WebControl {
       std::istringstream istr(message);
 
       try {
+        using JsonRead = mjlib::base::Json5ReadArchive;
         const auto command =
-            mjlib::base::Json5ReadArchive::Read<WebCommand>(istr);
+            JsonRead::Read<WebCommand>(
+                istr,
+                JsonRead::Options().set_permissive_nan(true));
 
         boost::asio::post(
             parent_->executor_,
@@ -166,7 +169,9 @@ class WebControl {
     }
 
     void WriteReply(const StatusClass& status) {
-      message_ = mjlib::base::Json5WriteArchive::Write(status);
+      using JsonWrite = mjlib::base::Json5WriteArchive;
+      message_ = JsonWrite::Write(
+          status, JsonWrite::Options().set_standard(true));
 
       stream_.async_write(
           boost::asio::buffer(message_),
