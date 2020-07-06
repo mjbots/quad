@@ -16,6 +16,9 @@ const CMD_MAX_RATE_X = 0.5;
 const CMD_MAX_RATE_Y = 0.2;
 const CMD_MAX_RATE_Z = 1.0;
 
+const TRANSLATION_EPSILON = 0.025;
+const ROTATION_EPSILON = Math.PI * 7.0 / 180.0;
+
 const getElement = (v) => document.getElementById(v);
 const iota = (v) => Array.from((new Array(v)).keys());
 
@@ -193,11 +196,24 @@ class Application {
       desired_trans_cmd.setAttribute('y', `${-scaled_x * 38 + 48}%`);
     }
 
+    const v_norm = Math.sqrt(v_R[0] * v_R[0] + v_R[1] * v_R[1]);
+    const w_norm = Math.sqrt(w_R[2] * w_R[2]);
+    const movement_commanded = (
+      v_norm > TRANSLATION_EPSILON ||
+        w_norm > ROTATION_EPSILON);
+    const force_step = getElement("always_step").checked;
+
     let command = {
       "command" : {
         "mode" : (() => {
           if (this._mode == "stop") { return "zero_velocity" ;}
           if (this._mode == "idle") { return "rest"; }
+
+          if (!movement_commanded && !force_step &&
+              (this._mode == "walk" ||
+               this._mode == "pronk")) {
+            return "rest";
+          }
           if (this._mode == "walk") { return "walk"; }
           if (this._mode == "pronk") { return "jump"; }
           return "zero_velocity";
