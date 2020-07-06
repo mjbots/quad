@@ -96,6 +96,7 @@ class Joystick {
     this._pressed = iota(Joystick.NUM_BUTTONS).map(x => false);
     this._released = iota(Joystick.NUM_BUTTONS).map(x => false);
     this._axes = iota(4).map(x => 0.0);
+    this.present = false;
   }
 
   /// Call once per update, this ensures that 'pressed' and 'released'
@@ -109,6 +110,7 @@ class Joystick {
       return;
     }
 
+    this.present = true;
     const old_down = [...this._down];
     this._down = iota(Joystick.NUM_BUTTONS).map(x => gp.buttons[x].pressed);
     this._pressed = iota(Joystick.NUM_BUTTONS).map(
@@ -178,11 +180,21 @@ class Application {
         this._updateMode();
       });
     }
+
+    this._keys = {};
+    this._kbd_v = [ 0, 0 ];
+    this._kbd_w = [ 0 ];
+
+    window.addEventListener(
+      'keydown', (e) => { this._keydown(e); });
+    window.addEventListener(
+      'keyup', (e) => { this._keyup(e); });
   }
 
   start() {
     setInterval(() => this._handleTimer(), 100);
     this._openWebsocket();
+    getElement("command_plot").focus();
   }
 
   _updateMode() {
@@ -205,6 +217,14 @@ class Application {
       'close', () => { this._handleWebsocketClose(); });
   }
 
+  _keydown(e) {
+    this._keys[e.key] = true;
+  }
+
+  _keyup(e) {
+    this._keys[e.key] = false;
+  }
+
   _handleWebsocketMessage(e) {
     this._state = JSON.parse(e.data)
 
@@ -219,6 +239,7 @@ class Application {
     this._joystick.update();
 
     this._processJoystickCommands();
+    this._processKeyboardCommands();
 
     this._updateState();
     this._sendCommand();
@@ -254,8 +275,38 @@ class Application {
     }
   }
 
+  _updateKey(oldValue, upKey, downKey, maxValue) {
+    const updateValue = (() => {
+      if (this._keys[upKey]) { return maxValue; }
+      if (this._keys[downKey]) { return -maxValue; }
+      return 0.0;
+    })();
+    const alpha = 0.95;
+    return oldValue * alpha + (1.0 - alpha) * updateValue;
+  }
+
+  _processKeyboardCommands() {
+    if (this._joystick.present) {
+      // We don't allow keyboard operation when a joystick is
+      // connected.
+      this._kbd_v = [0, 0];
+      this._kbd_w = [0];
+      return;
+    }
+
+    this._kbd_v[0] = this._updateKey(this._kbd_v[0], 'w', 's', CMD_MAX_RATE_X);
+    this._kbd_v[1] = this._updateKey(this._kbd_v[1], 'd', 'a', CMD_MAX_RATE_Y);
+    this._kbd_w[0] = this._updateKey(this._kbd_w[0], 'e', 'q', CMD_MAX_RATE_Z);
+  }
+
   _sendCommand() {
     const [v_R, w_R, pose_RB] = (() => {
+      // Are we in keyboard mode?
+      if (!this._joystick.present) {
+        const v_R = [this._kbd_v[0], this._kbd_v[1], 0];
+        const w_R = [0, 0, this._kbd_w[0]];
+        return [v_R, w_R, null];
+      }
       // Are we in body mode?
       if (this._joystick.down(Joystick.BUTTON_SHOULDER_LB)) {
         const v_R = [0, 0, 0];
