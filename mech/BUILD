@@ -22,6 +22,7 @@ load("@rules_pkg//:pkg.bzl", "pkg_tar")
 filegroup(
     name = "web_control_assets",
     srcs = [
+        "web_control_assets/mjbots.png",
         "web_control_assets/index.html",
         "web_control_assets/styles.css",
         "web_control_assets/js/app.js",
@@ -198,6 +199,7 @@ pkg_tar(
         "//utils:turret-start.sh": "turret_start.sh",
         "//utils:turret_screen.conf": "turret_screen.conf",
         "//utils:turret.cmd": "turret.cmd",
+        "web_control_assets/mjbots.png" : "web_control_assets/mjbots.png",
         "web_control_assets/index.html" : "web_control_assets/index.html",
         "web_control_assets/styles.css" : "web_control_assets/styles.css",
         "web_control_assets/js/app.js" : "web_control_assets/js/app.js",
