@@ -519,6 +519,21 @@ class QuadrupedControl::Impl {
     // Do terrain.
     UpdateTerrain();
 
+    {
+      const double min_voltage =
+          Min(status_.state.joints.begin(), status_.state.joints.end(),
+              [](const auto& joint) { return joint.voltage; });
+      auto& out_voltage = status_.state.robot.voltage;
+
+      if (out_voltage == 0.0) {
+        out_voltage = min_voltage;
+      } else {
+        const double alpha =
+            std::pow(0.5, config_.period_s / config_.voltage_filter_s);
+        out_voltage = alpha * out_voltage + (1.0 - alpha) * min_voltage;
+      }
+    }
+
     return true;
   }
 

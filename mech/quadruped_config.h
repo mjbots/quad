@@ -134,6 +134,7 @@ struct QuadrupedConfig {
   double lr_acceleration = 2.000;
   double lr_alpha_rad_s2 = 1.0;
   double terrain_filter_s = 0.5;
+  double voltage_filter_s = 1.0;
 
   struct Jump {
     double lower_velocity = 0.100;

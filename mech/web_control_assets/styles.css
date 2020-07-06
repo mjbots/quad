@@ -42,10 +42,12 @@ div.toplevel {
 
 .mode-main {
     clear: both;
+    text-transform: uppercase;
 }
 
 #mode #text .mode-sub {
     font-size: 4vh;
+    text-transform: uppercase;
 }
 
 #mode_expander_label {
@@ -139,7 +141,7 @@ div.toplevel {
     text-align: center;
 
     height: 4vh;
-    background: #00e000;
+    background-color: #00e000;
 }
 
 #connected_state {
@@ -169,7 +171,7 @@ div.toplevel {
 #battery_level {
     position: absolute;
     bottom: 0%;
-    background: #00a000;
+    background-color: #00a000;
     height: 50%;
     width: 100%;
 }
@@ -218,7 +220,7 @@ div.toplevel {
     top: 50%;
     left: 0;
     right: 0;
-    margin-top: -0.5em;
+    margin-top: -0.6em;
     text-align: center;
     font-family: monospace;
     font-weight: bold;

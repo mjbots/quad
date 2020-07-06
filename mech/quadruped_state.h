@@ -96,6 +96,8 @@ struct QuadrupedState {
     std::array<double, 2> terrain_rad = {};
     Sophus::SE3d tf_TM;
 
+    double voltage = 0.0;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(desired_R));
@@ -105,6 +107,7 @@ struct QuadrupedState {
 
       a->Visit(MJ_NVP(terrain_rad));
       a->Visit(MJ_NVP(tf_TM));
+      a->Visit(MJ_NVP(voltage));
     }
   };
 
