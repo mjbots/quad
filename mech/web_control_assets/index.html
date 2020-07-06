@@ -13,20 +13,23 @@
     <div id="mode" class="toplevel">
       <div id="bg"></div>
       <div id="text">
-        <div id="mode_text" class="mode-main">WALK</div>
+        <div id="mode_text" class="mode-main">STOP</div>
         <div id="mode_sub" class="mode-sub">(STANDUP)</div>
       </div>
       <input id="mode_expander" type="checkbox" class="toggle"/>
       <label id="mode_expander_label" for="mode_expander" class="lbl-toggle"></label>
       <div id="mode_select" class="collapsible-content-vert">
         <input type="radio" id="stop" name="mode" value="stop" checked>
-        <label for="stop">Stop</label>
+        <label for="stop" class="mode_label">Stop</label>
+
+        <input type="radio" id="idle" name="mode" value="idle">
+        <label for="idle" class="mode_label">Idle</label>
 
         <input type="radio" id="walk" name="mode" value="walk">
-        <label for="walk">Walk</label>
+        <label for="walk" class="mode_label">Walk</label>
 
         <input type="radio" id="pronk" name="mode" value="pronk">
-        <label for="pronk">Pronk</label>
+        <label for="pronk" class="mode_label">Pronk</label>
       </div>
     </div>
 
@@ -48,14 +51,16 @@
           <g stroke="black" stroke-width="0.5" font-family="monospace"
              text-anchor="middle">
             <text x="50%" y="30%">0dps</text>
-            <text x="13%" y="30%">-30</text>
-            <text x="87%" y="30%">30</text>
+            <text id="chart_rot_min" x="13%" y="30%">-30</text>
+            <text id="chart_rot_max" x="87%" y="30%">30</text>
             <text x="23%" y="30%">Q</text>
             <text x="77%" y="30%">E</text>
           </g>
-          <rect x="48%" y="50%" width="4%" height="45%"
+          <rect id="desired_rot_cmd"
+                x="48%" y="50%" width="4%" height="45%"
                 fill="red" stroke="black" stroke-width="2"/>
-          <rect x="49%" y="60%" width="2%" height="22%"
+          <rect id="desired_rot_act"
+                x="49%" y="60%" width="2%" height="22%"
                 fill="blue" stroke="black" stroke-width="1"/>
         </svg>
         <svg id="command_translate" x="0%" y="10%" width="100%" height="92%">
@@ -75,21 +80,21 @@
           <g stroke="black" stroke-width="0.5" font-family="monospace"
              text-anchor="middle">
             <text x="95%" y="50%">0m/s</text>
-            <text x="95%" y="13%">0.5</text>
-            <text x="95%" y="87%">-0.5</text>
+            <text id="chart_x_max" x="95%" y="13%">0.5</text>
+            <text id="chart_x_min" x="95%" y="87%">-0.5</text>
             <text x="95%" y="23%">W</text>
             <text x="95%" y="77%">S</text>
 
-            <text x="13%" y="95%">-0.2</text>
+            <text id="chart_y_min" x="13%" y="95%">-0.2</text>
             <text x="50%" y="95%">0m/s</text>
-            <text x="87%" y="95%">0.2</text>
+            <text id="chart_y_max" x="87%" y="95%">0.2</text>
             <text x="23%" y="95%">A</text>
             <text x="77%" y="95%">D</text>
           </g>
-          <rect id="tgt-command-translate"
+          <rect id="desired_trans_cmd"
                 x="48%" y="48%" width="4%" height="4%"
                 fill="red" stroke="black" stroke-width="2"/>
-          <rect id="act-command-translate"
+          <rect id="desired_trans_act"
                 x="49%" y="49%" width="2%" height="2%"
                 fill="blue" stroke="black" stroke-width="1.5"/>
         </svg>
