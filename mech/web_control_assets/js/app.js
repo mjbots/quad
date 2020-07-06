@@ -365,7 +365,7 @@ class Application {
       const battery_text = getElement('battery_text');
 
       const voltage = this._state.state.robot.voltage;
-      battery_text.innerHTML = `${voltage.toFixed(1)}`;
+      battery_text.innerHTML = `${voltage.toFixed(1)}V`;
       const percentage =
             100.0 * Math.min(1.0, Math.max(0.0, (voltage - 16.0) / (23.0 - 16.0)));
       battery_level.style.height = `${percentage}%`;
