@@ -5,6 +5,10 @@ div {
     padding: 0;
 }
 
+div.toplevel {
+    padding: 0;
+}
+
 #mode {
     position: fixed;
     top: 0;
@@ -33,6 +37,7 @@ div {
     margin-top: -5vh;
     text-align: center;
     line-height: 65%;
+    cursor: pointer;
 }
 
 .mode-main {
@@ -85,15 +90,18 @@ div {
     height: 100%;
 }
 
-#advanced_command {
+#advanced_command_container {
     position: fixed;
     z-index: 10;
     bottom: 0;
-    height: 5vh;
+    height: 6vh;
     left: 20%;
     width: 55%;
 
     background: #d0d0d0;
+}
+
+#advanced_command {
     padding: 5px;
     padding-left: 2vw;
     padding-right: 2vw;
@@ -105,7 +113,7 @@ div {
     font-size: 5vh;
 }
 
-#advanced_content {
+#advanced_content_container {
     position: fixed;
     bottom: 6vh;
     left: 20%;
@@ -119,7 +127,7 @@ div {
     padding-right: 2vw;
 }
 
-#connected_state {
+#connected_state_container {
     position: fixed;
     right: 0;
     bottom: 0;
@@ -130,10 +138,54 @@ div {
     font-size: 3vh;
     text-align: center;
 
-    height: 1.2em;
-    padding: 5px;
-
+    height: 4vh;
     background: #00e000;
+}
+
+#connected_state {
+    padding: 5px;
+}
+
+#battery_container {
+    position: fixed;
+    right: 0;
+    bottom: 4vh;
+    height: 15vh;
+    width: 18%;
+    background: #d0d0d0;
+}
+
+#battery_text {
+    position: absolute;
+    top: 50%;
+    width: 100%;
+    margin-top: -.5em;
+    text-align: center;
+    font-family: monospace;
+    font-size: 3vh;
+    font-weight: bold;
+}
+
+#battery_level {
+    position: absolute;
+    bottom: 0%;
+    background: #00a000;
+    height: 50%;
+    width: 100%;
+}
+
+#current_json_command_container {
+    position: fixed;
+    bottom: 6vh;
+    left: 20%;
+    width: 55%;
+    background-color: #e0a0e0;
+    z-index: 0;
+}
+
+#current_json_command {
+    padding-left: 2vw;
+    padding-right: 2vw;
 }
 
 /* General collapsible toggle support */
@@ -207,16 +259,6 @@ div {
     display: none;
 }
 
-#current_json_command {
-    position: fixed;
-    bottom: 7vh;
-    left: 20%;
-    width: 55%;
-    background-color: #e0a0e0;
-    padding-left: 2vw;
-    padding-right: 2vw;
-    z-index: 0;
-}
 
 #current_joystick {
     background-color: #e0e0e0;

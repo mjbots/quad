@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="styles.css"/>
   </head>
   <body>
-    <div id="mode">
+    <div id="mode" class="toplevel">
       <div id="bg"></div>
       <div id="text">
         <div class="mode-main">WALK</div>
@@ -28,7 +28,7 @@
       </div>
     </div>
 
-    <div id="command">
+    <div id="command" class="toplevel">
       <svg id="command_plot">
         <defs>
           <marker id="arrowhead" markerWidth="10" markerHeight="7"
@@ -94,26 +94,37 @@
       </svg>
     </div>
 
-    <div id="advanced_command">
-      <input id="advanced_expander_input" type="checkbox" class="toggle">
-      <label id="advanced_expander_label" for="advanced_expander_input"
-             class="lbl-toggle">ADVANCED</label>
-      <div id="advanced_content" class="collapsible-content-vert bottom-advanced">
-        <select id="jump_acceleration" multiple>
-          <option value="4" selected="true">4 m/s^2</option>
-          <option value="6">6 m/s^2</option>
-          <option value="8">8 m/s^2</option>
-        </select>
-        <label for="jump_acceleration">Jump Accel</label>
-        <input type="checkbox" id="jump_repeat" checked="true">Repeat Jump</input>
-        <input type="checkbox" id="always_step" checked="false">Always Step</input>
+    <div id="advanced_command_container" class="toplevel">
+      <div id="advanced_command">
+        <input id="advanced_expander_input" type="checkbox" class="toggle">
+        <label id="advanced_expander_label" for="advanced_expander_input"
+               class="lbl-toggle">ADVANCED</label>
+        <div id="advanced_content_container" class="collapsible-content-vert">
+          <div class="bottom-advanced">
+            <select id="jump_acceleration" multiple>
+              <option value="4" selected="true">4 m/s^2</option>
+              <option value="6">6 m/s^2</option>
+              <option value="8">8 m/s^2</option>
+            </select>
+            <label for="jump_acceleration">Jump Accel</label>
+            <input type="checkbox" id="jump_repeat" checked="true">Repeat Jump</input>
+            <input type="checkbox" id="always_step" checked="false">Always Step</input>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div id="connected_state">CONNECTED</div>
-    <div id="battery"></div>
+    <div id="connected_state_container" class="toplevel">
+      <div id="connected_state">CONNECTED</div>
+    </div>
+    <div id="battery_container" class="toplevel">
+      <div id="battery_level"></div>
+      <div id="battery_text">22.0V</div>
+    </div>
 
-    <div id="current_json_command"></div>
+    <div id="current_json_command_container" class="toplevel">
+      <div id="current_json_command"></div>
+    </div>
 
     <div id="robot_state"></div>
     <div id="current_joystick"></div>
