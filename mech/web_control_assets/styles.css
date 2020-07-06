@@ -97,7 +97,7 @@ div.toplevel {
     z-index: 10;
     bottom: 0;
     height: 6vh;
-    left: 20%;
+    left: 25%;
     width: 55%;
 
     background: #d0d0d0;
@@ -118,7 +118,7 @@ div.toplevel {
 #advanced_content_container {
     position: fixed;
     bottom: 6vh;
-    left: 20%;
+    left: 25%;
     width: 55%;
     background: #e0e0e0;
 }
@@ -179,7 +179,7 @@ div.toplevel {
 #current_json_command_container {
     position: fixed;
     bottom: 6vh;
-    left: 20%;
+    left: 25%;
     width: 55%;
     background-color: #e0a0e0;
     z-index: 0;
