@@ -120,6 +120,11 @@ class Application {
       checkbox.checked = !checkbox.checked;
     });
 
+    getElement('mstop').addEventListener('click', () => {
+      getElement('stop').checked = true;
+      this._updateMode();
+    });
+
     for (const mode_label of document.getElementsByClassName("mode_check")) {
       mode_label.addEventListener('input', () => {
         checkbox.checked = false;
