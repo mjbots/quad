@@ -232,7 +232,7 @@ class Application {
   }
 
   _handleWebsocketClose() {
-    this._openWebsocket();
+    setTimeout(() => { this._openWebsocket()}, 500);
   }
 
   _handleTimer() {

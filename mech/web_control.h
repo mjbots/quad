@@ -41,6 +41,7 @@ class WebControl {
  public:
   struct Options {
     std::string asset_path;
+    bool exclusive = true;
   };
 
   using SetCommand = std::function<void (const CommandClass&)>;
@@ -91,9 +92,19 @@ class WebControl {
 
  private:
   void HandleControlWebsocket(WebServer::WebsocketStream stream) {
+    if (options_.exclusive) {
+      const auto maybe = websocket_.lock();
+      if (maybe) {
+        // We already have a connection.  Just drop this one.
+        log_.warn("Dropping connection because one already open");
+        return;
+      }
+    }
     // This stream is running on a different executor, thus we need to
     // keep it segregated.
-    std::make_shared<WebsocketServer>(this, std::move(stream))->Start();
+    auto websocket = std::make_shared<WebsocketServer>(this, std::move(stream));
+    websocket->Start();
+    websocket_ = websocket;
   }
 
   class WebsocketServer : public std::enable_shared_from_this<WebsocketServer> {
@@ -235,6 +246,7 @@ class WebControl {
     }
   };
 
+  base::LogRef log_ = base::GetLogInstance("WebControl");
   boost::asio::executor executor_;
   SetCommand set_command_;
   GetStatus get_status_;
@@ -244,6 +256,7 @@ class WebControl {
   Parameters parameters_;
 
   std::unique_ptr<WebServer> web_server_;
+  std::weak_ptr<WebsocketServer> websocket_;
 };
 
 }
