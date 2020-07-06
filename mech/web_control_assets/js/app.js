@@ -94,6 +94,7 @@ class Joystick {
   _zero() {
     this._down = iota(Joystick.NUM_BUTTONS).map(x => false);
     this._pressed = iota(Joystick.NUM_BUTTONS).map(x => false);
+    this._released = iota(Joystick.NUM_BUTTONS).map(x => false);
     this._axes = iota(4).map(x => 0.0);
   }
 
@@ -111,7 +112,9 @@ class Joystick {
     const old_down = [...this._down];
     this._down = iota(Joystick.NUM_BUTTONS).map(x => gp.buttons[x].pressed);
     this._pressed = iota(Joystick.NUM_BUTTONS).map(
-      x => this._down[x] && old_down[x]);
+      x => this._down[x] && !old_down[x]);
+    this._released = iota(Joystick.NUM_BUTTONS).map(
+      x => !this._down[x] && old_down[x])
 
     this._axes = [...gp.axes];
   }
@@ -122,6 +125,10 @@ class Joystick {
 
   pressed(button) {
     return this._pressed[button];
+  }
+
+  released(button) {
+    return this._released[button];
   }
 
   axis(num) {
@@ -210,8 +217,41 @@ class Application {
 
   _handleTimer() {
     this._joystick.update();
+
+    this._processJoystickCommands();
+
     this._updateState();
     this._sendCommand();
+  }
+
+  _moveMode(direction) {
+    const mode_checks = [...document.getElementsByClassName("mode_check")];
+    const checked = mode_checks.map(x => x.checked);
+    const [first_selected, ...rest] = iota(mode_checks.length).filter(x => checked[x]);
+    const new_selected =
+          Math.max(0, Math.min(
+            mode_checks.length - 1, first_selected + direction));
+    mode_checks[new_selected].checked = true;
+  }
+
+  _processJoystickCommands() {
+    const mode_check = getElement('mode_expander');
+    if (this._joystick.pressed(Joystick.BUTTON_4)) {
+      mode_check.checked = true;
+    }
+    if (this._joystick.released(Joystick.BUTTON_4)) {
+      mode_check.checked = false;
+      this._updateMode();
+    }
+
+    if (this._joystick.down(Joystick.BUTTON_4) &&
+        mode_check.checked) {
+      if (this._joystick.pressed(Joystick.BUTTON_HAT_UP)) {
+        this._moveMode(-1);
+      } else if (this._joystick.pressed(Joystick.BUTTON_HAT_DOWN)) {
+        this._moveMode(1);
+      }
+    }
   }
 
   _sendCommand() {
@@ -221,8 +261,10 @@ class Application {
         const v_R = [0, 0, 0];
         const w_R = [0, 0, 0];
 
-        const yaw = this._joystick.axis(Joystick.AXES_RIGHT_X) * CMD_MAX_POSE_YAW;
-        const pitch = -this._joystick.axis(Joystick.AXES_RIGHT_Y) * CMD_MAX_POSE_PITCH;
+        const yaw = this._joystick.axis(Joystick.AXES_RIGHT_X) *
+              CMD_MAX_POSE_YAW;
+        const pitch = -this._joystick.axis(Joystick.AXES_RIGHT_Y) *
+              CMD_MAX_POSE_PITCH;
         const pose_RB_so3 = quaternionMultiply(
           quaternionMultiply(
             makeUnitQuaternion(),
