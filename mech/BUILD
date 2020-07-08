@@ -175,7 +175,7 @@ cc_binary(
 )
 
 pkg_tar(
-    name = "deploy",
+    name = "quad_deploy",
     extension = "tar",
     include_runfiles = True,
     package_dir = "mech",
@@ -183,26 +183,43 @@ pkg_tar(
         ":moteus_tool",
         ":multiplex_tool",
         ":quadruped",
-        ":turret",
     ],
     files = {
         "//configs:quadruped.ini": "configs/quadruped.ini",
         "//configs:quada0.cfg": "configs/quada0.cfg",
         "//configs:quada1.cfg": "configs/quada1.cfg",
-        "//configs:turret.ini": "configs/turret.ini",
         "//utils:start-robot.sh": "start-robot.sh",
         "//utils:performance_governor.sh": "performance_governor.sh",
         "//utils:rezero.sh": "rezero.sh",
         "//utils:update_limits.sh": "update_limits.sh",
         "//utils:update_pid.sh": "update_pid.sh",
         "//utils:update_voltage.sh": "update_voltage.sh",
-        "//utils:turret-start.sh": "turret_start.sh",
-        "//utils:turret_screen.conf": "turret_screen.conf",
-        "//utils:turret.cmd": "turret.cmd",
+        "//utils:quad.cmd" : "quad.cmd",
+        "//utils:quad_screen.conf" : "quad_screen.conf",
+        "//utils:quad-start.sh" : "quad-start.sh",
         "web_control_assets/mjbots.png" : "web_control_assets/mjbots.png",
         "web_control_assets/index.html" : "web_control_assets/index.html",
         "web_control_assets/styles.css" : "web_control_assets/styles.css",
         "web_control_assets/js/app.js" : "web_control_assets/js/app.js",
+    },
+)
+
+pkg_tar(
+    name = "turret_deploy",
+    extension = "tar",
+    include_runfiles = True,
+    package_dir = "mech",
+    srcs = [
+        ":moteus_tool",
+        ":multiplex_tool",
+        ":turret",
+    ],
+    files = {
+        "//configs:turret.ini": "configs/turret.ini",
+        "//utils:performance_governor.sh": "performance_governor.sh",
+        "//utils:turret-start.sh": "turret_start.sh",
+        "//utils:turret_screen.conf": "turret_screen.conf",
+        "//utils:turret.cmd": "turret.cmd",
         "turret_assets/index.html" : "turret_assets/index.html",
         "turret_assets/styles.css" : "turret_assets/styles.css",
         "turret_assets/js/app.js" : "turret_assets/js/app.js",
