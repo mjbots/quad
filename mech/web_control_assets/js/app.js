@@ -149,7 +149,7 @@ class Joystick {
 class Application {
   constructor() {
     this._websocket = null;
-    this._mode = "stop";
+    this._mode = "";
     this._state = null;
     this._joystick = new Joystick();
 
@@ -222,6 +222,13 @@ class Application {
   }
 
   _openWebsocket() {
+    // We don't know what mode we are in.
+    this._mode = "";
+    for (const mode_check of document.getElementsByClassName("mode_check")) {
+      mode_check.checked = false;
+    }
+    this._state = null;
+
     const location = window.location;
     this._websocket = new WebSocket("ws://" + location.host + "/control");
     this._websocket.addEventListener(
@@ -313,6 +320,15 @@ class Application {
   }
 
   _sendCommand() {
+    // If we don't yet know our mode, then all we do is send an empty
+    // command.
+    if (this._mode == "") {
+      if (this._websocket.readyState == WebSocket.OPEN) {
+        this._websocket.send("{}");
+      }
+      return;
+    }
+
     const [v_R, w_R, pose_RB] = (() => {
       // Are we in keyboard mode?
       if (!this._joystick.present) {
@@ -435,6 +451,28 @@ class Application {
 
     if (this._state === null) {
       return;
+    }
+
+    if (this._mode == "") {
+      // This is our first update, so set our mode to be whatever the
+      // robot is at now.
+      this._mode = (() => {
+        const cur = this._state.mode;
+        if (cur == "stopped") { return "off"; }
+        if (cur == "zero_velocity") { return "stop"; }
+        if (cur == "rest") { return "idle" };
+        if (cur == "walk") { return "walk" };
+        if (cur == "jump") { return "pronk" };
+        return "stop";
+      })();
+      for (const mode_check  of document.getElementsByClassName("mode_check")) {
+        if (mode_check.value == this._mode) {
+          mode_check.checked = true;
+        } else {
+          mode_check.checked = false;
+        }
+      }
+      getElement('mode_text').innerHTML = this._mode;
     }
 
     // Primary mode
