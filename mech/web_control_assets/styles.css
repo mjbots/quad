@@ -79,6 +79,22 @@ div.toplevel {
     background: #80ff80;
 }
 
+#fault_text_container {
+    position: fixed;
+    top: 12%;
+    left: 30%;
+    width: 40%;
+    background: #c00000;
+    display: none;
+}
+
+#fault_text {
+    font-family: monospace;
+    font-weight: bold;
+    font-size: normal;
+    padding: 5px;
+}
+
 #command {
     position: fixed;
     left: 25%;

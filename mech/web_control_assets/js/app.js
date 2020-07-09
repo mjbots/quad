@@ -435,6 +435,18 @@ class Application {
       })() + ')';
     }
 
+    // Fault status.
+    {
+      const fault_container = getElement('fault_text_container');
+      const fault_text = getElement('fault_text');
+      if (this._state.fault.length > 0) {
+        fault_text.innerHTML = this._state.fault;
+        fault_container.style.display = "block";
+      } else {
+        fault_container.style.display = "none";
+      }
+    }
+
     // Movement command.
     {
       const desired_R = this._state.state.robot.desired_R;
