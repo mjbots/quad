@@ -70,16 +70,13 @@ cc_binary(
 )
 
 exports_files([
-    "rezero.sh",
-    "start-robot.sh",
+    "config_servos.py",
     "performance_governor.sh",
     "quad-start.sh",
     "quad_screen.conf",
     "quad.cmd",
+    "start-robot.sh",
     "turret-start.sh",
     "turret_screen.conf",
     "turret.cmd",
-    "update_limits.sh",
-    "update_pid.sh",
-    "update_voltage.sh",
 ])
