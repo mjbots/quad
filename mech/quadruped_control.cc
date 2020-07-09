@@ -534,6 +534,11 @@ class QuadrupedControl::Impl {
             std::pow(0.5, config_.period_s / config_.voltage_filter_s);
         out_voltage = alpha * out_voltage + (1.0 - alpha) * min_voltage;
       }
+
+      if (out_voltage < config_.min_voltage) {
+        Fault(fmt::format(
+                  "Battery low: {} < {}", out_voltage, config_.min_voltage));
+      }
     }
 
     return true;

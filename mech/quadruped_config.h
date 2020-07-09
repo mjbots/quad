@@ -29,6 +29,7 @@ namespace mech {
 // robot.
 struct QuadrupedConfig {
   double period_s = 0.0025;
+  double min_voltage = 16.0;
 
   struct Joint {
     int id = 0;
@@ -258,6 +259,7 @@ struct QuadrupedConfig {
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(period_s));
+    a->Visit(MJ_NVP(min_voltage));
     a->Visit(MJ_NVP(joints));
     a->Visit(MJ_NVP(rezero_threshold_deg));
     a->Visit(MJ_NVP(legs));
