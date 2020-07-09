@@ -181,6 +181,10 @@ class Application {
       });
     }
 
+    getElement("power_off").addEventListener('click', () => {
+      this._powerOff();
+    });
+
     this._keys = {};
     this._kbd_v = [ 0, 0 ];
     this._kbd_w = [ 0 ];
@@ -205,6 +209,15 @@ class Application {
       throw "Unknown mode";
     })();
 
+    getElement('mode_text').innerHTML = this._mode;
+  }
+
+  _powerOff() {
+    for (const mode_check of document.getElementsByClassName("mode_check")) {
+      mode_check.checked = false;
+    }
+
+    this._mode = 'off';
     getElement('mode_text').innerHTML = this._mode;
   }
 
@@ -368,6 +381,7 @@ class Application {
     let command = {
       "command" : {
         "mode" : (() => {
+          if (this._mode == "off") { return "stopped"; }
           if (this._mode == "stop") { return "zero_velocity" ;}
           if (this._mode == "idle") { return "rest"; }
 
@@ -428,6 +442,7 @@ class Application {
       const mode_sub = getElement('mode_sub');
       mode_sub.innerHTML = '(' + (() => {
         const cur = this._state.mode;
+        if (cur == "stopped") { return "power off"; }
         if (cur == "zero_velocity") { return "damped"; }
         if (cur == "rest") { return "idle"; }
         if (cur == "jump") { return "pronk"; }
