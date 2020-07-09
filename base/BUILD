@@ -17,11 +17,22 @@
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
+    name = "git_info",
+    hdrs = ["git_info.h"],
+    srcs = ["git_info.cc"],
+    linkstamp = "git_info_linkstamp.cc",
+    deps = [
+        "@com_github_mjbots_mjlib//mjlib/base:visitor",
+    ],
+)
+
+cc_library(
     name = "base",
     srcs = [
         "aspect_ratio.cc",
         "context.cc",
         "fit_plane.cc",
+        "format_hex.cc",
         "linux_input.cc",
         "logging.cc",
         "quaternion.cc",
@@ -35,6 +46,7 @@ cc_library(
         "*.h",
     ]),
     deps = [
+        ":git_info",
         "@bazel_tools//tools/cpp/runfiles",
         "@boost",
         "@boost//:system",

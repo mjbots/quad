@@ -25,3 +25,9 @@ build -c opt
 test -c opt
 
 test --test_output=errors
+
+build --workspace_status_command=tools/workspace_status.sh
+test --workspace_status_command=tools/workspace_status.sh
+
+build --stamp
+test --stamp

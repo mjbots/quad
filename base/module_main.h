@@ -18,6 +18,8 @@
 
 #include <fstream>
 
+#include <fmt/format.h>
+
 #include <clipp/clipp.h>
 
 #include "mjlib/base/clipp.h"
@@ -25,6 +27,8 @@
 #include "mjlib/base/fail.h"
 
 #include "base/context_full.h"
+#include "base/format_hex.h"
+#include "base/git_info.h"
 #include "base/handler_util.h"
 #include "base/logging.h"
 #include "base/timestamped_log.h"
@@ -118,6 +122,17 @@ int safe_main(int argc, char**argv) {
               mjlib::base::system_error::throw_if(
                   ::sched_setaffinity(0, sizeof(cpu_set_t), &cpuset) < 0);
             }
+
+            GitInfo git_info;
+            LogRef log = GetLogInstance("");
+            log.warn(
+                fmt::format(
+                    "git {} {}",
+                    FormatHex(
+                        std::string_view(
+                            reinterpret_cast<const char*>(
+                                &git_info.hash[0]), 20)),
+                    git_info.dirty ? "dirty" : "clean"));
 
             std::cout << "Started!\n";
 
