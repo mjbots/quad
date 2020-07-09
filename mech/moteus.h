@@ -69,6 +69,8 @@ enum Register : uint32_t {
   kSerialNumber1 = 0x120,
   kSerialNumber2 = 0x121,
   kSerialNumber3 = 0x122,
+
+  kRezero = 0x130,
 };
 
 enum class Mode {

@@ -50,6 +50,8 @@ namespace mjmech {
 namespace mech {
 
 namespace {
+constexpr int kNumServos = 12;
+
 using QC = QuadrupedCommand;
 using QM = QC::Mode;
 
@@ -176,7 +178,7 @@ class QuadrupedControl::Impl {
     }
 
     if (config_.legs.size() != 4 ||
-        config_.joints.size() != 12) {
+        config_.joints.size() != kNumServos) {
       mjlib::base::Fail(
           fmt::format(
               "Incorrect number of legs/joints configured: {}/{} != 4/12",
@@ -292,17 +294,17 @@ class QuadrupedControl::Impl {
     }();
     const int found_servos = [&]() {
       int result = 0;
-      for (int i = 1; i <= 12; i++) {
+      for (int i = 1; i <= kNumServos; i++) {
         if (servo_bitmask & (1 << i)) {
           result++;
         }
       }
       return result;
     }();
-    status_.missing_replies = 12 - found_servos;
+    status_.missing_replies = kNumServos - found_servos;
 
-    if (found_servos != 12) {
-      if (status_.state.joints.size() != 12) {
+    if (found_servos != kNumServos) {
+      if (status_.state.joints.size() != kNumServos) {
         // We have to get at least one full set before we can start
         // updating.
         outstanding_ = false;
@@ -443,7 +445,7 @@ class QuadrupedControl::Impl {
     }
 
     // We should only be here if we have something for all our joints.
-    if (status_.state.joints.size() != 12) {
+    if (status_.state.joints.size() != kNumServos) {
       return false;
     }
 
@@ -834,7 +836,7 @@ class QuadrupedControl::Impl {
 
   bool IsConfiguringDone() {
     // We must have heard from all 12 servos.
-    if (reported_servo_config_.servos.size() != 12) {
+    if (reported_servo_config_.servos.size() != kNumServos) {
       status_.fault = "missing servos";
       return false;
     }
@@ -852,12 +854,56 @@ class QuadrupedControl::Impl {
         return false;
       }
     }
+
+    // If we are the one who did the rezeroing, then they also must be
+    // close enough to the desired position.
+    if (status_.performed_rezero) {
+      for (const auto& joint : status_.state.joints) {
+        const auto* config = [&]() -> const QuadrupedConfig::Joint* {
+          for (const auto& cj : config_.joints) {
+            if (cj.id == joint.id) { return &cj; }
+          }
+          return nullptr;
+        }();
+        if (!config) {
+          status_.fault = "Unknown joint";
+          return false;
+        }
+        if ((std::abs(
+                 base::WrapNeg180To180(
+                     (config->sign * joint.angle_deg) -
+                     config->rezero_pos_deg))) >
+            config_.rezero_threshold_deg) {
+          status_.fault = fmt::format("Legs not in turn-on position id {}={}",
+                                      joint.id, joint.angle_deg);
+          return false;
+        }
+      }
+    }
+
     status_.fault = "";
     return true;
   }
 
   void DoControl_Configuring() {
-    EmitStop();
+    // If we are configuring, and have received a status that *all* of
+    // our servos are not zeroed, then we skip a control cycle and
+    // instead rezero them.
+    const int need_rezero_count = [&]() {
+      int total = 0;
+      for (const auto& servo : reported_servo_config_.servos) {
+        if (servo.rezero_state == 0) { total++; }
+      }
+      return total;
+    }();
+
+    if (need_rezero_count == kNumServos) {
+      // Instead of sending a normal command, we will tell our servos
+      // to rezero.
+      EmitRezero();
+    } else {
+      EmitStop();
+    }
   }
 
   void DoControl_Stopped() {
@@ -1995,6 +2041,23 @@ class QuadrupedControl::Impl {
     }
     if (client_command_.size() > pos) {
       client_command_.resize(pos);
+    }
+  }
+
+  void EmitRezero() {
+    log_.warn("Emitting rezero to all servos");
+
+    status_.performed_rezero = true;
+
+    client_command_.resize(config_.joints.size());
+    size_t pos = 0;
+    for (const auto& joint : config_.joints) {
+      auto& request = client_command_[pos++];
+      request.request.clear();
+      request.id = joint.id;
+
+      request.request.WriteSingle(
+          moteus::kRezero, static_cast<float>(joint.rezero_pos_deg / 360.0));
     }
   }
 

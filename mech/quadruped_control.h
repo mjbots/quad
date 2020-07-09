@@ -71,6 +71,7 @@ class QuadrupedControl : boost::noncopyable {
 
     int missing_replies = 0;
     ControlTiming::Status timing;
+    bool performed_rezero = false;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -81,6 +82,7 @@ class QuadrupedControl : boost::noncopyable {
       a->Visit(MJ_NVP(state));
       a->Visit(MJ_NVP(missing_replies));
       a->Visit(MJ_NVP(timing));
+      a->Visit(MJ_NVP(performed_rezero));
     }
   };
 

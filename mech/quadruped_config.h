@@ -33,19 +33,21 @@ struct QuadrupedConfig {
   struct Joint {
     int id = 0;
     double sign = 1.0;
-    double min_deg = -360.0;
-    double max_deg = 360.0;
+    double rezero_pos_deg = 0.0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(id));
       a->Visit(MJ_NVP(sign));
-      a->Visit(MJ_NVP(min_deg));
-      a->Visit(MJ_NVP(max_deg));
+      a->Visit(MJ_NVP(rezero_pos_deg));
     }
   };
 
   std::vector<Joint> joints;
+
+  // The maximum error is about +-30 deg, so this will at least catch
+  // some fraction of failures to position properly at startup.
+  double rezero_threshold_deg = 15.0;
 
   struct Leg {
     int leg = 0;
@@ -257,6 +259,7 @@ struct QuadrupedConfig {
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(period_s));
     a->Visit(MJ_NVP(joints));
+    a->Visit(MJ_NVP(rezero_threshold_deg));
     a->Visit(MJ_NVP(legs));
     a->Visit(MJ_NVP(bounds));
     a->Visit(MJ_NVP(mass_kg));
