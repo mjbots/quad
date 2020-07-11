@@ -71,6 +71,7 @@ class Pi3hatWrapper : public Pi3hatInterface {
     double shutdown_timeout_s = 15.0;
     uint32_t imu_rate_hz = 400;
     bool attitude_detail = false;
+    int force_bus = -1;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -83,6 +84,7 @@ class Pi3hatWrapper : public Pi3hatInterface {
       a->Visit(MJ_NVP(shutdown_timeout_s));
       a->Visit(MJ_NVP(imu_rate_hz));
       a->Visit(MJ_NVP(attitude_detail));
+      a->Visit(MJ_NVP(force_bus));
     }
   };
 

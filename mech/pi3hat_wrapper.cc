@@ -640,7 +640,9 @@ class Pi3hatWrapper::Impl {
         std::bind(std::move(callback), mjlib::base::error_code()));
   }
 
-  static int SelectBus(int id) {
+  int SelectBus(int id) const {
+    if (options_.force_bus >= 0) { return options_.force_bus; }
+
     return (id >= 1 && id <= 3) ? 1 :
         (id >= 4 && id <= 6) ? 2 :
         (id >= 7 && id <= 9) ? 3 :
