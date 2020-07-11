@@ -527,9 +527,9 @@ class Application {
       const percentage =
             100.0 * Math.min(1.0, Math.max(0.0, (voltage - 16.0) / (19.5 - 16.0)));
       battery_level.style.height = `${percentage}%`;
-      if (percentage < 30.0) {
+      if (percentage < 10.0) {
         battery_level.style.backgroundColor = "#d00000";
-      } else if (percentage < 50.0) {
+      } else if (percentage < 30.0) {
         battery_level.style.backgroundColor = "#d0d000";
       } else {
         battery_level.style.backgroundColor = "#008000";
