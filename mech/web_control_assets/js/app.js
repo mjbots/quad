@@ -517,6 +517,23 @@ class Application {
       desired_trans_act.setAttribute('y', `${-scaled_x * 38 + 49}%`);
     }
 
+    // Temperature
+    {
+      const temperature_container = getElement('temperature_container');
+      const temperature_text = getElement('temperature_text');
+      const joints = this._state.state.joints;
+      const max_temp = Math.max(...joints.map(x => x.temperature_C));
+      temperature_text.innerHTML = `${max_temp.toFixed(1)}C`;
+
+      if (max_temp < 53.0) {
+        temperature_container.style.backgroundColor = "#c0c0c0";
+      } else if (max_temp < 63.0) {
+        temperature_container.style.backgroundColor = "#d0d000";
+      } else {
+        temperature_container.style.backgroundColor = "#d00000";
+      }
+    }
+
     // Battery
     {
       const battery_level = getElement('battery_level');

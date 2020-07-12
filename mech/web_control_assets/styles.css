@@ -164,6 +164,26 @@ div.toplevel {
     padding: 5px;
 }
 
+#temperature_container {
+    position: fixed;
+    right: 0;
+    bottom: 19vh;
+    height: 5vh;
+    width: 18%;
+    background: #c0c0c0;
+}
+
+#temperature_text {
+    position: absolute;
+    top: 50%;
+    width: 100%;
+    margin-top: -.5em;
+    text-align: center;
+    font-family: monospace;
+    font-size: 3vh;
+    font-weight: bold;
+}
+
 #battery_container {
     position: fixed;
     right: 0;
