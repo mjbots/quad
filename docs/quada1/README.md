@@ -120,6 +120,27 @@ shutdown -h now
 10. At this point the quad A1 can be set in the "turn-on" position and
     started up as normal.
 
+## Change ssh key ##
+
+The quad A1 is initially provisioned with an ssh key that is common to
+all machines.  This is not normally a problem, as the SSID is unique
+and the password is secret.  If you wish to expose the quad A1 to a
+wider network, first contact info@mjbots.com to discuss your risk
+profile.  Second, you may wish to change the default ssh access key.
+
+First, use `ssh-copy-id` to install a new key on the quad A1:
+
+```
+ssh-copy-id -o "-i utils/ssh/default.ssh" pi@192.168.16.47
+```
+
+Then, ssh in, and remove the old key.
+
+```
+ssh pi@192.168.16.47
+vi .ssh/authorized_keys  # remove the info@mjbots.com line
+```
+
 ## Upgrading software ##
 
 1. Compile:
@@ -131,7 +152,7 @@ tools/bazel build --config pi -c opt //mech:quad_deploy.tar
 2. Copy it to the robot:
 
 ```
-rsync -Pv -e "ssh -i utils/ssh/mjbots.ssh"  \
+rsync -Pv -e "ssh -i utils/ssh/default.ssh"  \
   bazel-out/armeabihf-opt/bin/mech/quad_deploy.tar pi@192.168.16.47:
 ```
 
@@ -142,7 +163,7 @@ manually capture those now, as this process will reset all
 configuration to factory default.
 
 ```
-ssh -i utils/ssh/mjbots.ssh pi@192.168.16.47
+ssh -i utils/ssh/default.ssh pi@192.168.16.47
 sudo screen -r
 <CTRL-c>
 cd /home/pi
