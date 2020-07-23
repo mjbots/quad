@@ -124,10 +124,12 @@ struct QuadrupedState {
     };
 
     Mode mode = kPrepositioning;
+    int prepositioning_stage = 0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(mode));
+      a->Visit(MJ_NVP(prepositioning_stage));
     }
   };
 

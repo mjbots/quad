@@ -52,6 +52,7 @@ struct QuadrupedContext : boost::noncopyable {
     base::Point3D stand_up_R;
     base::Point3D idle_R;
     MammalJoint resolved_stand_up_joints;
+    double shoulder_clearance_deg = 0.0;
 
     Leg(const Config::Leg& config_in,
         const Config::StandUp& stand_up,
@@ -89,6 +90,10 @@ struct QuadrupedContext : boost::noncopyable {
       resolved_stand_up_joints.shoulder_deg = get_resolved(config.ik.shoulder.id);
       resolved_stand_up_joints.femur_deg = get_resolved(config.ik.femur.id);
       resolved_stand_up_joints.tibia_deg = get_resolved(config.ik.tibia.id);
+      shoulder_clearance_deg =
+          ((config.pose_BG.translation().y() < 0.0) ? 1.0 : -1.0) *
+          ((config.pose_BG.so3().unit_quaternion().z() == 0.0) ? 1.0 : -1.0) *
+          stand_up.shoulder_clearance_deg;
 
       stand_up_R = pose_R;
       base::Point3D tf = config.pose_BG.translation();
@@ -133,6 +138,13 @@ struct QuadrupedContext : boost::noncopyable {
   const QuadrupedState::Leg& GetLegState_B(int id) const {
     for (const auto& leg_B : state->legs_B) {
       if (leg_B.leg == id) { return leg_B; }
+    }
+    mjlib::base::AssertNotReached();
+  }
+
+  const QuadrupedState::Joint& GetJointState(int id) const {
+    for (const auto& joint : state->joints) {
+      if (joint.id == id) { return joint; }
     }
     mjlib::base::AssertNotReached();
   }

@@ -1064,13 +1064,61 @@ class QuadrupedControl::Impl {
         joints.push_back(joint);
       };
 
-      add_joint(leg.config.ik.shoulder.id,
-                leg.resolved_stand_up_joints.shoulder_deg);
-      add_joint(leg.config.ik.femur.id,
-                leg.resolved_stand_up_joints.femur_deg);
-      add_joint(leg.config.ik.tibia.id,
-                leg.resolved_stand_up_joints.tibia_deg);
+      auto add_stopped_joint = [&](int id) {
+        joint.id = id;
+        joint.velocity_dps = 0.0;
+        joint.stop_angle_deg = {};
+        joints.push_back(joint);
+      };
+
+      switch (status_.state.stand_up.prepositioning_stage) {
+        case 0: {
+          // First just lift the shoulders while leaving the other
+          // joints unchanged.
+          add_joint(leg.config.ik.shoulder.id,
+                    leg.shoulder_clearance_deg);
+          add_stopped_joint(leg.config.ik.femur.id);
+          add_stopped_joint(leg.config.ik.tibia.id);
+          break;
+        }
+        case 1: {
+          // Then move the other joints into position.
+          add_joint(leg.config.ik.shoulder.id,
+                    leg.shoulder_clearance_deg);
+          add_joint(leg.config.ik.femur.id,
+                    leg.resolved_stand_up_joints.femur_deg);
+          add_joint(leg.config.ik.tibia.id,
+                    leg.resolved_stand_up_joints.tibia_deg);
+          break;
+        }
+        case 2: {
+          // And finally put the shoulders back into place.
+          add_joint(leg.config.ik.shoulder.id,
+                    leg.resolved_stand_up_joints.shoulder_deg);
+          add_joint(leg.config.ik.femur.id,
+                    leg.resolved_stand_up_joints.femur_deg);
+          add_joint(leg.config.ik.tibia.id,
+                    leg.resolved_stand_up_joints.tibia_deg);
+          break;
+        }
+      }
     }
+
+    // See if we can advance to the next prepositioning stage.
+    bool all_done = true;
+    for (const auto& joint : joints) {
+      const auto& joint_state = context_->GetJointState(joint.id);
+      if (!!joint.stop_angle_deg &&
+          std::abs(joint.stop_angle_deg.value_or(0.0) - joint_state.angle_deg) >
+          config_.stand_up.tolerance_deg) {
+        all_done = false;
+      }
+    }
+    if (all_done) {
+      status_.state.stand_up.prepositioning_stage =
+          std::min(status_.state.stand_up.prepositioning_stage + 1, 2);
+    }
+
     ControlJoints(joints);
   }
 

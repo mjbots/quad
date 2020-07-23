@@ -91,6 +91,7 @@ struct QuadrupedConfig {
     base::Point3D pose_R = {0.151, 0.219, 0.049};
     double velocity_dps = 60.0;
     double velocity = 0.150;
+    double shoulder_clearance_deg = 52.0;
     double max_preposition_torque_Nm = 3.0;
     double preposition_kp_scale = 5.0;
     double timeout_s = 10.0;
@@ -103,6 +104,7 @@ struct QuadrupedConfig {
       a->Visit(MJ_NVP(pose_R));
       a->Visit(MJ_NVP(velocity_dps));
       a->Visit(MJ_NVP(velocity));
+      a->Visit(MJ_NVP(shoulder_clearance_deg));
       a->Visit(MJ_NVP(max_preposition_torque_Nm));
       a->Visit(MJ_NVP(preposition_kp_scale));
       a->Visit(MJ_NVP(timeout_s));
