@@ -20,6 +20,10 @@
 
 #include <boost/asio/executor.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/read_until.hpp>
+#include <boost/asio/serial_port.hpp>
+#include <boost/asio/streambuf.hpp>
+#include <boost/signals2.hpp>
 
 #include "mjlib/base/clipp_archive.h"
 #include "mjlib/base/clipp.h"
@@ -44,6 +48,9 @@ struct Options {
   mjlib::multiplex::StreamAsioClientBuilder::Options stream;
   double period_s = 0.05;
   double max_torque_Nm = 1.0;
+  std::string load_cell;
+  double load_cell_tare_g = 110.0;
+  double torque_scale = 0.00980665;
 
   template <typename Archive>
   void Serialize(Archive* a) {
@@ -51,7 +58,57 @@ struct Options {
     a->Visit(MJ_NVP(stream));
     a->Visit(MJ_NVP(period_s));
     a->Visit(MJ_NVP(max_torque_Nm));
+    a->Visit(MJ_NVP(load_cell));
+    a->Visit(MJ_NVP(load_cell_tare_g));
+    a->Visit(MJ_NVP(torque_scale));
   }
+};
+
+class LoadCell {
+ public:
+  LoadCell(const boost::asio::executor& executor,
+           const std::string& path) {
+    if (!path.empty()) {
+      port_.emplace(executor, path);
+      port_->set_option(boost::asio::serial_port::baud_rate(115200));
+      StartRead();
+    }
+  }
+
+  void StartRead() {
+    boost::asio::async_read_until(
+        *port_, streambuf_,
+        "\n", [this](auto ec, auto size) {
+          this->HandleRead(ec, size);
+        });
+  }
+
+  void HandleRead(const mjlib::base::error_code& ec, size_t) {
+    mjlib::base::FailIf(ec);
+
+    std::istream istr(&streambuf_);
+    while (!istr.eof()) {
+      std::string line;
+      std::getline(istr, line);
+      try {
+        const double load_g = std::stod(line);
+        Emit(load_g);
+      } catch (std::invalid_argument&) {
+      }
+    }
+    StartRead();
+  }
+
+  void Emit(double load_g) {
+    load_signal_(load_g);
+  }
+
+  boost::signals2::signal<void (double)>* signal() { return &load_signal_; }
+
+ private:
+  std::optional<boost::asio::serial_port> port_;
+  boost::asio::streambuf streambuf_;
+  boost::signals2::signal<void (double)> load_signal_;
 };
 
 class Application {
@@ -62,7 +119,10 @@ class Application {
         options_(options),
         timer_(executor),
         linux_input_(executor, options.joystick),
-        asio_client_(executor, options.stream) {
+        asio_client_(executor, options.stream),
+        load_cell_(executor, options.load_cell) {
+    load_cell_.signal()->connect(
+        std::bind(&Application::HandleLoad, this, pl::_1));
   }
 
   void Start() {
@@ -167,6 +227,12 @@ class Application {
         options_.max_torque_Nm;
   }
 
+  void HandleLoad(double load_g) {
+    measured_torque_Nm_ = (load_g - options_.load_cell_tare_g) *
+                          options_.torque_scale;
+    UpdateDisplay();
+  }
+
   void UpdateDisplay() {
     double command = GetCommandTorqueNm();
 
@@ -180,10 +246,11 @@ class Application {
     };
 
     std::cout << fmt::format(
-        " cmd={:5.1f}Nm  qdd100[ mode={:4} "
+        " cmd={:5.1f}Nm  mt={:5.1f}Nm  qdd100[ mode={:4} "
         "pos={:7.1f}deg vel={:6.1f}dps torque={:5.1f}Nm i={:4.1f}A "
         "t={:3.0f}C ]  \r",
         command,
+        measured_torque_Nm_,
         MapMode(get(moteus::kMode)),
         get(moteus::kPosition) * 360.0,
         get(moteus::kVelocity) * 360.0,
@@ -203,6 +270,7 @@ class Application {
   mjlib::io::RepeatingTimer timer_;
   base::LinuxInput linux_input_;
   mjlib::multiplex::StreamAsioClientBuilder asio_client_;
+  LoadCell load_cell_;
 
   base::LinuxInput::Event event_;
 
@@ -212,6 +280,8 @@ class Application {
   AsioClient::Reply current_reply_;
   AsioClient::Reply reply_;
   bool outstanding_ = false;
+
+  double measured_torque_Nm_ = 0.0;
 
   const std::map<int, std::string> mode_text_ = {
     { 0, "stop" },
