@@ -14,7 +14,10 @@
 
 #include <linux/input.h>
 
+#include <atomic>
+#include <fstream>
 #include <functional>
+#include <thread>
 
 #include <fmt/format.h>
 
@@ -48,9 +51,12 @@ struct Options {
   mjlib::multiplex::StreamAsioClientBuilder::Options stream;
   double period_s = 0.05;
   double max_torque_Nm = 1.0;
+
   std::string load_cell;
   double load_cell_tare_g = 110.0;
   double torque_scale = 0.00980665;
+
+  std::string power_supply;
 
   template <typename Archive>
   void Serialize(Archive* a) {
@@ -61,7 +67,85 @@ struct Options {
     a->Visit(MJ_NVP(load_cell));
     a->Visit(MJ_NVP(load_cell_tare_g));
     a->Visit(MJ_NVP(torque_scale));
+    a->Visit(MJ_NVP(power_supply));
   }
+};
+
+class PowerSupply {
+ public:
+  struct Data {
+    double voltage = 0.0;
+    double current_A = 0.0;
+    double power_W = 0.0;
+  };
+
+  using Signal = boost::signals2::signal<void (const Data*)>;
+
+  PowerSupply(const boost::asio::executor& executor,
+              const std::string& path)
+      : executor_(executor),
+        path_(path) {
+    if (!path.empty()) {
+      thread_ = std::thread(std::bind(&PowerSupply::Run, this));
+    }
+  }
+
+  ~PowerSupply() {
+    done_.store(true);
+  }
+
+  Signal* signal() { return &signal_; }
+
+  void Run() {
+    // We can't use any buffered IO, because the tmc device works on a
+    // per-read-write call, so we have to know exactly how many
+    // syscalls we are making.
+    const int fd = ::open(path_.c_str(), O_RDWR);
+    mjlib::base::system_error::throw_if(
+        fd < 0, fmt::format("Error opening '{}'", path_));
+
+    auto write = [&](const std::string& str) {
+      const int r = ::write(fd, str.data(), str.size());
+      mjlib::base::system_error::throw_if(
+          r < 0, fmt::format("Error writing"));
+    };
+
+    char buf[256] = {};
+    auto read = [&]() {
+      const int r = ::read(fd, buf, sizeof(buf));
+      if (r < 0) { return std::string(); }
+      return std::string(buf, r);
+    };
+
+    while (!done_.load()) {
+      ::usleep(100000);
+
+      Data data;
+
+      write("MEAS:CURR?\n");
+      data.current_A = std::stod(read());
+
+      write("MEAS:VOLT?\n");
+      data.voltage = std::stod(read());
+
+      data.power_W = data.voltage * data.current_A;
+
+      boost::asio::post(
+          executor_,
+          [this, data]() {
+            this->signal_(&data);
+          });
+    }
+
+    ::close(fd);
+  }
+
+  boost::asio::executor executor_;
+  std::string path_;
+  std::thread thread_;
+  Signal signal_;
+
+  std::atomic<bool> done_{false};
 };
 
 class LoadCell {
@@ -120,9 +204,12 @@ class Application {
         timer_(executor),
         linux_input_(executor, options.joystick),
         asio_client_(executor, options.stream),
-        load_cell_(executor, options.load_cell) {
+        load_cell_(executor, options.load_cell),
+        power_supply_(executor, options.power_supply) {
     load_cell_.signal()->connect(
         std::bind(&Application::HandleLoad, this, pl::_1));
+    power_supply_.signal()->connect(
+        std::bind(&Application::HandlePowerSupply, this, pl::_1));
   }
 
   void Start() {
@@ -233,6 +320,11 @@ class Application {
     UpdateDisplay();
   }
 
+  void HandlePowerSupply(const PowerSupply::Data* data) {
+    power_supply_data_ = *data;
+    UpdateDisplay();
+  }
+
   void UpdateDisplay() {
     double command = GetCommandTorqueNm();
 
@@ -246,11 +338,12 @@ class Application {
     };
 
     std::cout << fmt::format(
-        " cmd={:5.1f}Nm  mt={:5.1f}Nm  qdd100[ mode={:4} "
+        " cmd={:5.1f}Nm  mt={:5.1f}Nm  mp={:4.1f}W  qdd100[ mode={:4} "
         "pos={:7.1f}deg vel={:6.1f}dps torque={:5.1f}Nm i={:4.1f}A "
         "t={:3.0f}C ]  \r",
         command,
         measured_torque_Nm_,
+        power_supply_data_.power_W,
         MapMode(get(moteus::kMode)),
         get(moteus::kPosition) * 360.0,
         get(moteus::kVelocity) * 360.0,
@@ -271,6 +364,7 @@ class Application {
   base::LinuxInput linux_input_;
   mjlib::multiplex::StreamAsioClientBuilder asio_client_;
   LoadCell load_cell_;
+  PowerSupply power_supply_;
 
   base::LinuxInput::Event event_;
 
@@ -282,6 +376,7 @@ class Application {
   bool outstanding_ = false;
 
   double measured_torque_Nm_ = 0.0;
+  PowerSupply::Data power_supply_data_;
 
   const std::map<int, std::string> mode_text_ = {
     { 0, "stop" },
