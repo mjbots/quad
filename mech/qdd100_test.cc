@@ -21,11 +21,7 @@
 
 #include <fmt/format.h>
 
-#include <boost/asio/executor.hpp>
-#include <boost/asio/io_context.hpp>
-#include <boost/asio/read_until.hpp>
-#include <boost/asio/serial_port.hpp>
-#include <boost/asio/streambuf.hpp>
+#include <boost/asio.hpp>
 #include <boost/signals2.hpp>
 
 #include "mjlib/base/clipp_archive.h"
@@ -34,8 +30,10 @@
 #include "mjlib/base/time_conversions.h"
 #include "mjlib/io/repeating_timer.h"
 #include "mjlib/multiplex/stream_asio_client_builder.h"
+#include "mjlib/telemetry/file_writer.h"
 
 #include "base/linux_input.h"
+#include "base/telemetry_log_registrar.h"
 #include "mech/moteus.h"
 
 namespace pl = std::placeholders;
@@ -58,6 +56,8 @@ struct Options {
 
   std::string power_supply;
 
+  std::string log;
+
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(joystick));
@@ -68,6 +68,7 @@ struct Options {
     a->Visit(MJ_NVP(load_cell_tare_g));
     a->Visit(MJ_NVP(torque_scale));
     a->Visit(MJ_NVP(power_supply));
+    a->Visit(MJ_NVP(log));
   }
 };
 
@@ -92,6 +93,7 @@ class PowerSupply {
 
   ~PowerSupply() {
     done_.store(true);
+    thread_.join();
   }
 
   Signal* signal() { return &signal_; }
@@ -197,19 +199,27 @@ class LoadCell {
 
 class Application {
  public:
-  Application(const boost::asio::executor& executor,
+  Application(boost::asio::io_context& context,
               const Options& options)
-      : executor_(executor),
+      : executor_(context.get_executor()),
         options_(options),
-        timer_(executor),
-        linux_input_(executor, options.joystick),
-        asio_client_(executor, options.stream),
-        load_cell_(executor, options.load_cell),
-        power_supply_(executor, options.power_supply) {
+        timer_(executor_),
+        linux_input_(executor_, options.joystick),
+        asio_client_(executor_, options.stream),
+        load_cell_(executor_, options.load_cell),
+        power_supply_(executor_, options.power_supply),
+        file_writer_(),
+        log_registrar_(context, &file_writer_) {
+    if (!options.log.empty()) {
+      file_writer_.Open(options.log);
+    }
+
     load_cell_.signal()->connect(
         std::bind(&Application::HandleLoad, this, pl::_1));
     power_supply_.signal()->connect(
         std::bind(&Application::HandlePowerSupply, this, pl::_1));
+
+    log_registrar_.Register("torque_test", &signal_);
   }
 
   void Start() {
@@ -337,6 +347,21 @@ class Application {
       return std::numeric_limits<double>::signaling_NaN();
     };
 
+    Data data;
+    data.timestamp = mjlib::io::Now(executor_.context());
+    data.command_Nm = -command;
+    data.measured.torque_Nm = measured_torque_Nm_;
+    data.measured.voltage = power_supply_data_.voltage;
+    data.measured.current_A = power_supply_data_.current_A;
+    data.measured.power_W = power_supply_data_.power_W;
+
+    data.qdd100.mode = get(moteus::kMode);
+    data.qdd100.position_deg = get(moteus::kPosition) * 360.0;
+    data.qdd100.velocity_dps = get(moteus::kVelocity) * 360.0;
+    data.qdd100.torque_Nm = get(moteus::kTorque);
+    data.qdd100.q_current_A = get(moteus::kQCurrent);
+    data.qdd100.temperature_C = get(moteus::kTemperature);
+
     std::cout << fmt::format(
         " cmd={:5.1f}Nm  mt={:5.1f}Nm  mp={:4.1f}W  qdd100[ mode={:4} "
         "pos={:7.1f}deg vel={:6.1f}dps torque={:5.1f}Nm i={:4.1f}A "
@@ -344,19 +369,71 @@ class Application {
         command,
         measured_torque_Nm_,
         power_supply_data_.power_W,
-        MapMode(get(moteus::kMode)),
-        get(moteus::kPosition) * 360.0,
-        get(moteus::kVelocity) * 360.0,
-        get(moteus::kTorque),
-        get(moteus::kQCurrent),
-        get(moteus::kTemperature));
+        MapMode(data.qdd100.mode),
+        data.qdd100.position_deg,
+        data.qdd100.velocity_dps,
+        data.qdd100.torque_Nm,
+        data.qdd100.q_current_A,
+        data.qdd100.temperature_C);
     std::cout.flush();
+
+    signal_(&data);
   }
 
   std::string MapMode(float value) {
     if (!std::isfinite(value)) { return "unk"; }
     return mode_text_.at(static_cast<int>(value));
   }
+
+  struct Data {
+    boost::posix_time::ptime timestamp;
+    double command_Nm = 0.0;
+
+    struct Measured {
+      double torque_Nm = 0.0;
+      double voltage = 0.0;
+      double current_A = 0.0;
+      double power_W = 0.0;
+
+      template <typename Archive>
+      void Serialize(Archive* a) {
+        a->Visit(MJ_NVP(torque_Nm));
+        a->Visit(MJ_NVP(voltage));
+        a->Visit(MJ_NVP(current_A));
+        a->Visit(MJ_NVP(power_W));
+      }
+    };
+
+    Measured measured;
+
+    struct Qdd100 {
+      double mode = 0.0;
+      double position_deg = 0.0;
+      double velocity_dps = 0.0;
+      double torque_Nm = 0.0;
+      double q_current_A = 0.0;
+      double temperature_C = 0.0;
+
+      template <typename Archive>
+      void Serialize(Archive* a) {
+        a->Visit(MJ_NVP(position_deg));
+        a->Visit(MJ_NVP(velocity_dps));
+        a->Visit(MJ_NVP(torque_Nm));
+        a->Visit(MJ_NVP(q_current_A));
+        a->Visit(MJ_NVP(temperature_C));
+      }
+    };
+
+    Qdd100 qdd100;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(timestamp));
+      a->Visit(MJ_NVP(command_Nm));
+      a->Visit(MJ_NVP(measured));
+      a->Visit(MJ_NVP(qdd100));
+    }
+  };
 
   boost::asio::executor executor_;
   const Options options_;
@@ -365,6 +442,9 @@ class Application {
   mjlib::multiplex::StreamAsioClientBuilder asio_client_;
   LoadCell load_cell_;
   PowerSupply power_supply_;
+
+  mjlib::telemetry::FileWriter file_writer_;
+  base::TelemetryLogRegistrar log_registrar_;
 
   base::LinuxInput::Event event_;
 
@@ -377,6 +457,8 @@ class Application {
 
   double measured_torque_Nm_ = 0.0;
   PowerSupply::Data power_supply_data_;
+
+  boost::signals2::signal<void (const Data*)> signal_;
 
   const std::map<int, std::string> mode_text_ = {
     { 0, "stop" },
@@ -404,9 +486,14 @@ int do_main(int argc, char**argv) {
   mjlib::base::ClippParse(argc, argv, group);
 
   boost::asio::io_context context;
-  Application application(context.get_executor(), options);
+  Application application(context, options);
 
   application.Start();
+
+  boost::asio::signal_set signals(context, SIGINT, SIGTERM);
+  signals.async_wait([&](auto _1, auto _2) {
+      context.stop();
+    });
 
   context.run();
   return 0;
