@@ -21,6 +21,7 @@
 
 #include <fmt/format.h>
 
+#include <boost/algorithm/string.hpp>
 #include <boost/asio.hpp>
 #include <boost/signals2.hpp>
 
@@ -43,6 +44,118 @@ namespace mech {
 
 namespace {
 using Value = mjlib::multiplex::Format::Value;
+
+struct Context {
+  mjlib::io::SharedStream stream;
+  boost::asio::streambuf* streambuf = nullptr;
+  std::string* prefix = nullptr;
+  std::string* name = nullptr;
+  std::string* data = nullptr;
+  mjlib::io::ErrorCallback callback;
+
+  auto AtLeast(int size) {
+    return [this, size](auto, auto) -> size_t  {
+      return std::max<int>(0, size - streambuf->size());
+    };
+  }
+
+  Context(mjlib::io::SharedStream stream_in,
+          boost::asio::streambuf* streambuf_in,
+          std::string* prefix_in,
+          std::string* name_in,
+          std::string* data_in,
+          mjlib::io::ErrorCallback callback_in)
+      : stream(stream_in),
+        streambuf(streambuf_in),
+        prefix(prefix_in),
+        name(name_in),
+        data(data_in),
+        callback(std::move(callback_in)) {}
+};
+
+void AsyncHandleData(const mjlib::base::error_code& ec,
+                     std::shared_ptr<Context> ctx) {
+  mjlib::base::FailIf(ec);
+
+  std::istream istr(ctx->streambuf);
+  istr.read(&(*ctx->data)[0], ctx->data->size());
+
+  boost::asio::post(
+      ctx->stream->get_executor(),
+      std::bind(std::move(ctx->callback), mjlib::base::error_code()));
+}
+
+void AsyncHandleSize(const mjlib::base::error_code& ec,
+                     std::shared_ptr<Context> ctx) {
+  mjlib::base::FailIf(ec);
+
+  std::istream istr(ctx->streambuf);
+
+  uint32_t size = 0;
+  istr.read(reinterpret_cast<char*>(&size), sizeof(size));
+  MJ_ASSERT(istr.gcount() == sizeof(size));
+
+  ctx->data->resize(size);
+
+  // Now read the data.
+  boost::asio::async_read(
+      *ctx->stream,
+      *ctx->streambuf,
+      ctx->AtLeast(size),
+      std::bind(&AsyncHandleData, pl::_1, ctx));
+}
+
+void AsyncReadBinary(std::shared_ptr<Context> ctx);
+
+void AsyncHandleLine(const mjlib::base::error_code& ec,
+                     std::shared_ptr<Context> ctx) {
+  mjlib::base::FailIf(ec);
+
+  std::istream istr(ctx->streambuf);
+
+  std::string line;
+  std::getline(istr, line);
+  boost::trim(line);
+  if (line.substr(0, 2) == "OK") {
+    // We just skip these.
+    AsyncReadBinary(ctx);
+    return;
+  }
+  const auto spacepos = line.find(' ');
+  if (spacepos == std::string::npos) {
+    throw mjlib::base::system_error::einval(
+          "Malformed response: " + line);
+  }
+
+  *ctx->prefix = line.substr(0, spacepos);
+  *ctx->name = line.substr(spacepos + 1);
+
+  boost::asio::async_read(
+      *ctx->stream,
+      *ctx->streambuf,
+      ctx->AtLeast(4),
+      std::bind(&AsyncHandleSize, pl::_1, ctx));
+}
+
+void AsyncReadBinary(std::shared_ptr<Context> ctx) {
+  boost::asio::async_read_until(
+      *ctx->stream,
+      *ctx->streambuf,
+      "\r\n",
+      std::bind(AsyncHandleLine, pl::_1, ctx));
+}
+
+void AsyncReadBinary(
+    mjlib::io::SharedStream stream,
+    boost::asio::streambuf* streambuf,
+    std::string* prefix,
+    std::string* name,
+    std::string* data,
+    mjlib::io::ErrorCallback cbk) {
+  auto ctx = std::make_shared<Context>(
+      stream, streambuf, prefix, name, data, std::move(cbk));
+  AsyncReadBinary(ctx);
+}
 
 struct Options {
   std::string joystick;
@@ -204,6 +317,7 @@ class Application {
       : executor_(context.get_executor()),
         options_(options),
         timer_(executor_),
+        flush_timer_(executor_),
         linux_input_(executor_, options.joystick),
         asio_client_(executor_, options.stream),
         load_cell_(executor_, options.load_cell),
@@ -236,6 +350,10 @@ class Application {
     timer_.start(mjlib::base::ConvertSecondsToDuration(options_.period_s),
                  std::bind(&Application::HandleTimer, this, pl::_1));
 
+    debug_stream_ = asio_client_.MakeTunnel(1, 1, {});
+    remaining_schemas_ = monitor_schemas_;
+    InitSchema();
+
     StartRead();
     UpdateDisplay();
   }
@@ -255,6 +373,105 @@ class Application {
     asio_client_.AsyncTransmit(
         &request_, &reply_,
         std::bind(&Application::HandleStop, this, pl::_1));
+  }
+
+  void InitSchema() {
+    boost::asio::async_write(
+        *debug_stream_,
+        boost::asio::buffer("tel stop\r\n"),
+        [this](auto ec, auto) {
+          mjlib::base::FailIf(ec);
+          flush_timer_.expires_from_now(boost::posix_time::milliseconds(200));
+          flush_timer_.async_wait([this](auto) { debug_stream_->cancel(); });
+          this->FlushRead();
+        });
+  }
+
+  void FlushRead() {
+    debug_stream_->async_read_some(
+        boost::asio::buffer(flush_buffer_),
+        [this](auto ec, auto size) {
+          if (ec == boost::asio::error::operation_aborted) {
+            this->StartSchemaRead();
+          } else {
+            mjlib::base::FailIf(ec);
+            FlushRead();
+          }
+        });
+  }
+
+  void StartSchemaRead() {
+    if (remaining_schemas_.empty()) {
+      // We're all done.  Now just set everything we're monitoring to
+      // spew at 10Hz.
+      std::ostringstream ostr;
+      for (const auto& schema : monitor_schemas_) {
+        ostr << fmt::format("tel rate {} 100\n", schema);
+      }
+      write_buffer_ = ostr.str();
+      boost::asio::async_write(
+          *debug_stream_,
+          boost::asio::buffer(write_buffer_),
+          std::bind(&Application::HandleSchemaDone, this, pl::_1));
+    } else {
+      // Request the next.
+      write_buffer_ = fmt::format("tel schema {}\n", remaining_schemas_.back());
+      remaining_schemas_.pop_back();
+      boost::asio::async_write(
+          *debug_stream_,
+          boost::asio::buffer(write_buffer_),
+          std::bind(&Application::HandleSchemaRequest, this, pl::_1));
+    }
+  }
+
+  void HandleSchemaRequest(const mjlib::base::error_code& ec) {
+    mjlib::base::FailIf(ec);
+
+    AsyncReadBinary(debug_stream_,
+                    &debug_streambuf_,
+                    &schema_prefix_,
+                    &schema_name_,
+                    &schema_data_,
+                    std::bind(&Application::HandleSchemaResponse, this, pl::_1));
+  }
+
+  void HandleSchemaResponse(const mjlib::base::error_code& ec) {
+    mjlib::base::FailIf(ec);
+
+    if (schema_prefix_ != "schema") {
+      throw mjlib::base::system_error::einval(
+          "Unknown response: " + schema_prefix_);
+    }
+    debug_ids_[schema_name_] = file_writer_.AllocateIdentifier(schema_name_);
+    file_writer_.WriteSchema(debug_ids_[schema_name_], schema_data_);
+    StartSchemaRead();
+  }
+
+  void HandleSchemaDone(const mjlib::base::error_code& ec) {
+    mjlib::base::FailIf(ec);
+
+    StartReadDebugData();
+  }
+
+  void StartReadDebugData() {
+    AsyncReadBinary(debug_stream_,
+                    &debug_streambuf_,
+                    &schema_prefix_,
+                    &schema_name_,
+                    &schema_data_,
+                    std::bind(&Application::HandleDataRead, this, pl::_1));
+  }
+
+  void HandleDataRead(const mjlib::base::error_code& ec) {
+    mjlib::base::FailIf(ec);
+
+    if (schema_prefix_ != "emit") {
+      throw mjlib::base::system_error::einval("Unknown emit: " + schema_prefix_);
+    }
+
+    file_writer_.WriteData({}, debug_ids_[schema_name_], schema_data_);
+
+    StartReadDebugData();
   }
 
   void HandleStop(const mjlib::base::error_code& ec) {
@@ -438,6 +655,7 @@ class Application {
   boost::asio::executor executor_;
   const Options options_;
   mjlib::io::RepeatingTimer timer_;
+  mjlib::io::DeadlineTimer flush_timer_;
   base::LinuxInput linux_input_;
   mjlib::multiplex::StreamAsioClientBuilder asio_client_;
   LoadCell load_cell_;
@@ -475,6 +693,24 @@ class Application {
     { 11, "tmt" },
     { 12, "zero" },
   };
+
+  mjlib::io::SharedStream debug_stream_;
+  boost::asio::streambuf debug_streambuf_;
+
+  std::string write_buffer_;
+  std::map<std::string, uint64_t> debug_ids_;
+  std::string schema_prefix_;
+  std::string schema_name_;
+  std::string schema_data_;
+
+  const std::vector<std::string> monitor_schemas_ = {
+    "servo_stats",
+    "servo_cmd",
+    "servo_control",
+  };
+  std::vector<std::string> remaining_schemas_;
+
+  char flush_buffer_[256] = {};
 };
 
 }
@@ -495,7 +731,13 @@ int do_main(int argc, char**argv) {
       context.stop();
     });
 
-  context.run();
+  try {
+    context.run();
+  } catch (std::runtime_error& e) {
+    // We catch what errors we can to give cleanup a chance to happen.
+    std::cerr << "ERROR: " << e.what() << "\n";
+    return 1;
+  }
   return 0;
 }
 
