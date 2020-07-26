@@ -206,7 +206,9 @@ class PowerSupply {
 
   ~PowerSupply() {
     done_.store(true);
-    thread_.join();
+    if (thread_.joinable()) {
+      thread_.join();
+    }
   }
 
   Signal* signal() { return &signal_; }
