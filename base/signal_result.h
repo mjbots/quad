@@ -1,4 +1,4 @@
-// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.
+// Copyright 2015-2020 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include <boost/asio/executor.hpp>
+#include <boost/asio/any_io_executor.hpp>
 #include <boost/signals2/signal.hpp>
 #include <boost/signals2/connection.hpp>
 
@@ -36,7 +36,7 @@ class SignalResult : boost::noncopyable {
  public:
 
   template <typename Handler, typename T>
-  static void Wait(const boost::asio::executor& executor,
+  static void Wait(const boost::asio::any_io_executor& executor,
                    boost::signals2::signal<void (const T*)>* signal,
                    double timeout_s,
                    Handler handler) {
@@ -46,7 +46,7 @@ class SignalResult : boost::noncopyable {
       boost::signals2::connection connection;
       Handler handler;
 
-      Context(const boost::asio::executor& executor, Handler handler_in)
+      Context(const boost::asio::any_io_executor& executor, Handler handler_in)
           : timer(executor),
             handler(std::move(handler_in)) {}
     };

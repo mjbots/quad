@@ -1,4 +1,4 @@
-// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.
+// Copyright 2014-2020 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,9 +28,9 @@ namespace mjmech {
 namespace base {
 class LinuxInput::Impl : boost::noncopyable {
  public:
-  Impl(const boost::asio::executor& executor) : executor_(executor) {}
+  Impl(const boost::asio::any_io_executor& executor) : executor_(executor) {}
 
-  boost::asio::executor executor_;
+  boost::asio::any_io_executor executor_;
   boost::asio::posix::stream_descriptor stream_{executor_};
 
   struct input_event input_event_;
@@ -38,10 +38,10 @@ class LinuxInput::Impl : boost::noncopyable {
   std::map<int, AbsInfo> abs_info_;
 };
 
-LinuxInput::LinuxInput(const boost::asio::executor& executor)
+LinuxInput::LinuxInput(const boost::asio::any_io_executor& executor)
     : impl_(new Impl(executor)) {}
 
-LinuxInput::LinuxInput(const boost::asio::executor& executor,
+LinuxInput::LinuxInput(const boost::asio::any_io_executor& executor,
                        const std::string& device)
     : LinuxInput(executor) {
   Open(device);
@@ -49,7 +49,7 @@ LinuxInput::LinuxInput(const boost::asio::executor& executor,
 
 LinuxInput::~LinuxInput() {}
 
-boost::asio::executor LinuxInput::get_executor() {
+boost::asio::any_io_executor LinuxInput::get_executor() {
   return impl_->executor_;
 }
 

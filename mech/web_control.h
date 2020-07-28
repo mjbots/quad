@@ -18,7 +18,7 @@
 
 #include <clipp/clipp.h>
 
-#include <boost/asio/executor.hpp>
+#include <boost/asio/any_io_executor.hpp>
 #include <boost/beast/websocket.hpp>
 #include <boost/filesystem.hpp>
 
@@ -47,7 +47,7 @@ class WebControl {
   using SetCommand = std::function<void (const CommandClass&)>;
   using GetStatus = std::function<StatusClass ()>;
 
-  WebControl(const boost::asio::executor& executor,
+  WebControl(const boost::asio::any_io_executor& executor,
              SetCommand set_command,
              GetStatus get_status,
              const Options& options)
@@ -208,7 +208,7 @@ class WebControl {
 
     WebControl* const parent_;
     WebServer::WebsocketStream stream_;
-    boost::asio::executor executor_;
+    boost::asio::any_io_executor executor_;
 
     base::LogRef log_ = base::GetLogInstance("WebControl");
 
@@ -247,7 +247,7 @@ class WebControl {
   };
 
   base::LogRef log_ = base::GetLogInstance("WebControl");
-  boost::asio::executor executor_;
+  boost::asio::any_io_executor executor_;
   SetCommand set_command_;
   GetStatus get_status_;
 

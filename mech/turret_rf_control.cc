@@ -336,7 +336,7 @@ class TurretRfControl::Impl {
     }
   }
 
-  boost::asio::executor executor_;
+  boost::asio::any_io_executor executor_;
   TurretControl* const turret_control_;
   RfGetter rf_getter_;
 

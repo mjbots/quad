@@ -59,7 +59,7 @@ class ResponseFactory {
   template <typename Response>
   void SetupResponse(Response* response, std::string_view content_type) const {
     response->set(http::field::server, BOOST_BEAST_VERSION_STRING);
-    response->set(http::field::content_type, content_type);
+    response->set(http::field::content_type, content_type.data());
     response->keep_alive(request_->keep_alive());
   }
 
@@ -110,7 +110,7 @@ void StartWebsocket(WebServer::WebsocketHandler handler,
 
 class WebServer::Impl {
  public:
-  Impl(const boost::asio::executor& executor, const Options& options)
+  Impl(const boost::asio::any_io_executor& executor, const Options& options)
       : executor_(executor),
         options_(options) {}
 
@@ -298,7 +298,7 @@ class WebServer::Impl {
   class Listener : public std::enable_shared_from_this<Listener> {
    public:
     Listener(Impl* parent,
-             const boost::asio::executor& executor,
+             const boost::asio::any_io_executor& executor,
              tcp::endpoint endpoint)
         : parent_(parent),
           executor_(executor),
@@ -340,20 +340,20 @@ class WebServer::Impl {
     }
 
     Impl* const parent_;
-    boost::asio::executor executor_;
+    boost::asio::any_io_executor executor_;
     tcp::acceptor acceptor_;
 
     base::LogRef log_ = base::GetLogInstance("WebServer");
   };
 
-  boost::asio::executor executor_;
+  boost::asio::any_io_executor executor_;
   const Options options_;
 
   std::thread child_thread_;
   boost::asio::io_context child_context_;
 };
 
-WebServer::WebServer(const boost::asio::executor& executor,
+WebServer::WebServer(const boost::asio::any_io_executor& executor,
                      const Options& options)
     : impl_(std::make_unique<Impl>(executor, options)) {}
 

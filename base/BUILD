@@ -79,9 +79,6 @@ cc_library(
         "@sophus",
         "@org_llvm_libcxx//:libcxx",
     ],
-    defines = [
-        "BOOST_ASIO_ENABLE_OLD_SERVICES",
-    ],
     features = [
         "dbg",
     ],

@@ -297,7 +297,7 @@ class SlotCommand {
     }
   }
 
-  boost::asio::executor executor_;
+  boost::asio::any_io_executor executor_;
   int remote_ = 0;
   uint16_t bitfield_ = 0;
   NrfusbClient nrfusb_;
@@ -721,7 +721,7 @@ int do_main(int argc, char** argv) {
   std::unique_ptr<SlotCommand> slot_command;
 
   boost::asio::io_context context;
-  boost::asio::executor executor = context.get_executor();
+  boost::asio::any_io_executor executor = context.get_executor();
   mjlib::io::StreamFactory stream_factory{executor};
   stream_factory.AsyncCreate(stream, [&](auto ec, auto shared_stream_in) {
       mjlib::base::FailIf(ec);

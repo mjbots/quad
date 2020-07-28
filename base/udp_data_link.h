@@ -1,5 +1,5 @@
+// Copyright 2019-2020 Josh Pieper, jjp@pobox.com.
 // Copyright 2015-2016 Mikhail Afanasyev.
-// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -32,7 +32,7 @@ class UdpDataLink : boost::noncopyable {
   struct Parameters;
   // @p log will be used for message logging
   // @p params -- parameters to use, will be copied
-  UdpDataLink(const boost::asio::executor&, LogRef& log,
+  UdpDataLink(const boost::asio::any_io_executor&, LogRef& log,
               const Parameters& params);
   ~UdpDataLink() {};
 
@@ -122,7 +122,7 @@ class UdpDataLink : boost::noncopyable {
 
   const int kUdpV4HeaderSize = 28; // 20 byte IPv4 + 8 bytes UDP
 
-  boost::asio::executor executor_;
+  boost::asio::any_io_executor executor_;
   mjlib::io::DeadlineTimer periodic_timer_;
   const Parameters params_;
   LogRef log_;

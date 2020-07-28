@@ -1,5 +1,5 @@
+// Copyright 2019-2020 Josh Pieper, jjp@pobox.com.
 // Copyright 2015-2016 Mikhail Afanasyev.
-// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -44,7 +44,7 @@ Precise semantics:
 namespace mjmech {
 namespace base {
 
-UdpDataLink::UdpDataLink(const boost::asio::executor& executor,
+UdpDataLink::UdpDataLink(const boost::asio::any_io_executor& executor,
                          LogRef& log,
                          const Parameters& params)
     : executor_(executor),

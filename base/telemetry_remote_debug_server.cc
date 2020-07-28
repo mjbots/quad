@@ -1,4 +1,4 @@
-// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.
+// Copyright 2015-2020 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ namespace mjmech {
 namespace base {
 class TelemetryRemoteDebugServer::Impl : boost::noncopyable {
  public:
-  Impl(const boost::asio::executor& executor)
+  Impl(const boost::asio::any_io_executor& executor)
       : executor_(executor),
         socket_(executor) {}
 
@@ -117,7 +117,7 @@ class TelemetryRemoteDebugServer::Impl : boost::noncopyable {
     mjlib::base::FailIf(ec);
   }
 
-  boost::asio::executor executor_;
+  boost::asio::any_io_executor executor_;
   Parameters parameters_;
   udp::socket socket_;
   char receive_buffer_[3000] = {};
@@ -127,7 +127,7 @@ class TelemetryRemoteDebugServer::Impl : boost::noncopyable {
 };
 
 TelemetryRemoteDebugServer::TelemetryRemoteDebugServer(
-    const boost::asio::executor& executor)
+    const boost::asio::any_io_executor& executor)
     : impl_(new Impl(executor)) {}
 
 TelemetryRemoteDebugServer::~TelemetryRemoteDebugServer() {}

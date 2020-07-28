@@ -1,4 +1,4 @@
-// Copyright 2015-2019 Josh Pieper, jjp@pobox.com.
+// Copyright 2015-2020 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ class TelemetryRemoteDebugServer : boost::noncopyable {
  public:
   typedef boost::asio::ip::udp udp;
 
-  TelemetryRemoteDebugServer(const boost::asio::executor&);
+  TelemetryRemoteDebugServer(const boost::asio::any_io_executor&);
   ~TelemetryRemoteDebugServer();
 
   struct Parameters {

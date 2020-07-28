@@ -48,7 +48,7 @@ uint32_t u32(T value) {
 #ifdef COM_GITHUB_MJBOTS_RASPBERRYPI
 class Pi3hatWrapper::Impl {
  public:
-  Impl(const boost::asio::executor& executor, const Options& options)
+  Impl(const boost::asio::any_io_executor& executor, const Options& options)
       : executor_(executor),
         options_(options),
         power_poll_timer_(executor) {
@@ -207,7 +207,7 @@ class Pi3hatWrapper::Impl {
           });
     }
 
-    boost::asio::executor get_executor() override {
+    boost::asio::any_io_executor get_executor() override {
       return parent_->executor_;
     }
 
@@ -652,7 +652,7 @@ class Pi3hatWrapper::Impl {
 
   base::LogRef log_ = base::GetLogInstance("Pi3hatWrapper");
 
-  boost::asio::executor executor_;
+  boost::asio::any_io_executor executor_;
   const Options options_;
 
   mjlib::io::RepeatingTimer power_poll_timer_;
@@ -702,7 +702,7 @@ class Pi3hatWrapper::Impl {
 
 class Pi3hatWrapper::Impl {
  public:
-  Impl(const boost::asio::executor&, const Options&) {}
+  Impl(const boost::asio::any_io_executor&, const Options&) {}
   void AsyncStart(mjlib::io::ErrorCallback) {}
   void ReadImu(AttitudeData*, mjlib::io::ErrorCallback) {}
   void AsyncWaitForSlot(int*, uint16_t*, mjlib::io::ErrorCallback) {}
@@ -718,7 +718,7 @@ class Pi3hatWrapper::Impl {
 };
 #endif
 
-Pi3hatWrapper::Pi3hatWrapper(const boost::asio::executor& executor,
+Pi3hatWrapper::Pi3hatWrapper(const boost::asio::any_io_executor& executor,
                                  const Options& options)
     : impl_(std::make_unique<Impl>(executor, options)) {}
 

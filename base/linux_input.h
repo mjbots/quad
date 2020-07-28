@@ -1,4 +1,4 @@
-// Copyright 2014-2019 Josh Pieper, jjp@pobox.com.
+// Copyright 2014-2020 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include <boost/asio/executor.hpp>
+#include <boost/asio/any_io_executor.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/dynamic_bitset.hpp>
 #include <boost/noncopyable.hpp>
@@ -26,13 +26,13 @@ namespace base {
 /// Support reading events from a linux input device.
 class LinuxInput : boost::noncopyable {
  public:
-  explicit LinuxInput(const boost::asio::executor&);
-  LinuxInput(const boost::asio::executor&, const std::string& device);
+  explicit LinuxInput(const boost::asio::any_io_executor&);
+  LinuxInput(const boost::asio::any_io_executor&, const std::string& device);
   void Open(const std::string& device);
 
   ~LinuxInput();
 
-  boost::asio::executor get_executor();
+  boost::asio::any_io_executor get_executor();
 
   /// @return the underlying file descriptor for this device.
   int fileno() const;

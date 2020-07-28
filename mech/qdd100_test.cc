@@ -195,7 +195,7 @@ class PowerSupply {
 
   using Signal = boost::signals2::signal<void (const Data*)>;
 
-  PowerSupply(const boost::asio::executor& executor,
+  PowerSupply(const boost::asio::any_io_executor& executor,
               const std::string& path)
       : executor_(executor),
         path_(path) {
@@ -257,7 +257,7 @@ class PowerSupply {
     ::close(fd);
   }
 
-  boost::asio::executor executor_;
+  boost::asio::any_io_executor executor_;
   std::string path_;
   std::thread thread_;
   Signal signal_;
@@ -267,7 +267,7 @@ class PowerSupply {
 
 class LoadCell {
  public:
-  LoadCell(const boost::asio::executor& executor,
+  LoadCell(const boost::asio::any_io_executor& executor,
            const std::string& path) {
     if (!path.empty()) {
       port_.emplace(executor, path);
@@ -654,7 +654,7 @@ class Application {
     }
   };
 
-  boost::asio::executor executor_;
+  boost::asio::any_io_executor executor_;
   const Options options_;
   mjlib::io::RepeatingTimer timer_;
   mjlib::io::DeadlineTimer flush_timer_;

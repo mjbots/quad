@@ -1,5 +1,5 @@
+// Copyright 2019-2020 Josh Pieper, jjp@pobox.com.
 // Copyright 2015 Mikhail Afanasyev.
-// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@
 #include <optional>
 #include <string>
 
-#include <boost/asio/executor.hpp>
+#include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/ip/udp.hpp>
 #include <boost/signals2/signal.hpp>
 
@@ -49,13 +49,13 @@ class UdpSocket {
   //    contain port number, and we are not listening to multicast/broadcast:
   //       true = use parameters.default_port.
   //       false = use zero.
-  UdpSocket(const boost::asio::executor&, LogRef&,
+  UdpSocket(const boost::asio::any_io_executor&, LogRef&,
             const std::string& listen_addr,
             bool server_mode,
             const Parameters&);
 
   // A version of the constructor when address is already parsed
-  UdpSocket(const boost::asio::executor&, LogRef&,
+  UdpSocket(const boost::asio::any_io_executor&, LogRef&,
             const ParseResult&,
             bool server_mode,
             const Parameters&);

@@ -368,7 +368,7 @@ class RfControl::Impl {
     }
   }
 
-  boost::asio::executor executor_;
+  boost::asio::any_io_executor executor_;
   QuadrupedControl* const quadruped_control_;
   RfGetter rf_getter_;
 

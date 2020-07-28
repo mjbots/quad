@@ -37,7 +37,7 @@ class SocketTesterBase : boost::noncopyable {
  public:
   struct BaseParameters;
 
-  SocketTesterBase(const boost::asio::executor& executor,
+  SocketTesterBase(const boost::asio::any_io_executor& executor,
                    const char* logname,
                    const BaseParameters& base_parameters)
       : executor_(executor),
@@ -160,7 +160,7 @@ class SocketTesterBase : boost::noncopyable {
       });
   }
 
-  boost::asio::executor executor_;
+  boost::asio::any_io_executor executor_;
   LogRef log_;
 
  private:
@@ -177,7 +177,7 @@ class SocketTester: public SocketTesterBase {
  public:
   struct Parameters;
 
-  SocketTester(const boost::asio::executor& executor,
+  SocketTester(const boost::asio::any_io_executor& executor,
                const char* logname,
                const Parameters& parameters)
       : SocketTesterBase(executor, logname, parameters.base),
@@ -260,7 +260,7 @@ class LinkTester: public SocketTesterBase {
  public:
   struct Parameters;
 
-  LinkTester(const boost::asio::executor& executor,
+  LinkTester(const boost::asio::any_io_executor& executor,
              const char* logname,
              const Parameters& parameters)
       : SocketTesterBase(executor, logname, parameters.base),
@@ -388,7 +388,7 @@ class UdpManualTest : boost::noncopyable {
   }
 
  private:
-  boost::asio::executor executor_;
+  boost::asio::any_io_executor executor_;
   Parameters parameters_;
   typedef std::shared_ptr<SocketTesterBase> TesterPtr;
   std::vector<TesterPtr> testers_;

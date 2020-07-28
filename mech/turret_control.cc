@@ -614,7 +614,7 @@ class TurretControl::Impl {
     return mjlib::io::Now(executor_.context());
   }
 
-  boost::asio::executor executor_;
+  boost::asio::any_io_executor executor_;
   ClientGetter client_getter_;
   ImuGetter imu_getter_;
 

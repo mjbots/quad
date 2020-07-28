@@ -1,5 +1,5 @@
+// Copyright 2019-2020 Josh Pieper, jjp@pobox.com.
 // Copyright 2015-2018 Mikhail Afanasyev.
-// Copyright 2019 Josh Pieper, jjp@pobox.com.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ Cool UDP features:
 
 namespace ip = boost::asio::ip;
 
-UdpSocket::UdpSocket(const boost::asio::executor& executor,
+UdpSocket::UdpSocket(const boost::asio::any_io_executor& executor,
                      LogRef& log,
                      const std::string& listen_addr,
                      bool server_mode,
@@ -46,7 +46,7 @@ UdpSocket::UdpSocket(const boost::asio::executor& executor,
 };
 
 
-UdpSocket::UdpSocket(const boost::asio::executor& executor,
+UdpSocket::UdpSocket(const boost::asio::any_io_executor& executor,
                      LogRef& log,
                      const ParseResult& listen_p,
                      bool server_mode,

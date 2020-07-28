@@ -17,7 +17,7 @@
 #include <fstream>
 #include <functional>
 
-#include <boost/asio/executor.hpp>
+#include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/signals2/signal.hpp>
 
@@ -94,7 +94,7 @@ class SystemInfo::Impl {
     return result;
   }
 
-  boost::asio::executor executor_;
+  boost::asio::any_io_executor executor_;
   mjlib::io::RepeatingTimer timer_{executor_};
 
   double period_s_ = 1.0;

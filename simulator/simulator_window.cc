@@ -435,7 +435,7 @@ class SimPi3hat : public mech::Pi3hatInterface {
     }
   };
 
-  SimPi3hat(boost::asio::executor executor, const Options& options)
+  SimPi3hat(boost::asio::any_io_executor executor, const Options& options)
       : executor_(executor),
         options_(options) {}
   ~SimPi3hat() override {}
@@ -600,7 +600,7 @@ class SimPi3hat : public mech::Pi3hatInterface {
     it->second->Request(id_request.request, id, reply, ec);
   }
 
-  boost::asio::executor executor_;
+  boost::asio::any_io_executor executor_;
   const Options options_;
   std::map<int, std::unique_ptr<Servo>> servos_;
 
@@ -787,7 +787,7 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
   }
 
   boost::asio::io_context& context_;
-  boost::asio::executor executor_;
+  boost::asio::any_io_executor executor_;
   mjlib::io::DebugDeadlineService* const debug_time_ =
       mjlib::io::DebugDeadlineService::Install(context_);
   const bool set_time_ = [this]() {

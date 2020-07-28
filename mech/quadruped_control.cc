@@ -2145,7 +2145,7 @@ class QuadrupedControl::Impl {
     }
   }
 
-  boost::asio::executor executor_;
+  boost::asio::any_io_executor executor_;
   Parameters parameters_;
 
   base::LogRef log_ = base::GetLogInstance("QuadrupedControl");

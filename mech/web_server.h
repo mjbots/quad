@@ -19,7 +19,7 @@
 #include <memory>
 #include <string>
 
-#include <boost/asio/executor.hpp>
+#include <boost/asio/any_io_executor.hpp>
 
 #include <boost/beast/core.hpp>
 #include <boost/beast/websocket.hpp>
@@ -69,7 +69,7 @@ class WebServer {
     std::vector<Websocket> websocket_handlers;
   };
 
-  WebServer(const boost::asio::executor&, const Options&);
+  WebServer(const boost::asio::any_io_executor&, const Options&);
   ~WebServer();
 
   void AsyncStart(mjlib::io::ErrorCallback);

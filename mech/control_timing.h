@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include <boost/asio/executor.hpp>
+#include <boost/asio/any_io_executor.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 
 #include "mjlib/base/time_conversions.h"
@@ -26,7 +26,7 @@ namespace mech {
 
 class ControlTiming {
  public:
-  ControlTiming(const boost::asio::executor& executor,
+  ControlTiming(const boost::asio::any_io_executor& executor,
                 boost::posix_time::ptime last_cycle_start)
       : executor_(executor) {
     timestamps_.last_cycle_start = last_cycle_start;
@@ -95,7 +95,7 @@ class ControlTiming {
     return mjlib::io::Now(executor_.context());
   }
 
-  boost::asio::executor executor_;
+  boost::asio::any_io_executor executor_;
   Timestamps timestamps_;
 };
 

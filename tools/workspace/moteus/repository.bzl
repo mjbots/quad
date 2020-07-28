@@ -1,6 +1,6 @@
 # -*- python -*-
 
-# Copyright 2018-2019 Josh Pieper, jjp@pobox.com.
+# Copyright 2018-2020 Josh Pieper, jjp@pobox.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,6 +20,6 @@ def moteus_repository(name):
     github_archive(
         name = name,
         repo = "mjbots/moteus",
-        commit = "a23b545aad4e408a8f66e2a0f15fece52a26ef0e",
-        sha256 = "f747b45715a09add55a803a2bba6703d9dcd09144c4fcd139c7970932b25560d",
+        commit = "31718a497b5d1d9f274714d3927a5b230870e267",
+        sha256 = "3df511fc1d4b0f403990d95c8de5cae54750ab96468757c2e0ae25701204db52",
     )

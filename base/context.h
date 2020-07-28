@@ -17,6 +17,7 @@
 #include <memory>
 
 #include <boost/noncopyable.hpp>
+#include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/io_context.hpp>
 
 #include "mjlib/io/realtime_executor.h"
@@ -35,7 +36,7 @@ struct Context : boost::noncopyable {
 
   boost::asio::io_context context;
   mjlib::io::RealtimeExecutor rt_executor{context.get_executor()};
-  boost::asio::executor executor{rt_executor};
+  boost::asio::any_io_executor executor{rt_executor};
   std::unique_ptr<mjlib::telemetry::FileWriter> telemetry_log;
   std::unique_ptr<TelemetryRemoteDebugServer> remote_debug;
   std::unique_ptr<TelemetryRegistry> telemetry_registry;

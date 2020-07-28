@@ -60,7 +60,7 @@ class Quadruped::Impl {
     base::StartArchive::Start(&m_, std::move(callback));
   }
 
-  boost::asio::executor executor_;
+  boost::asio::any_io_executor executor_;
   mjlib::io::StreamFactory* const factory_;
 
   base::LogRef log_ = base::GetLogInstance("Quadruped");

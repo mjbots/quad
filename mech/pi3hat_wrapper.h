@@ -17,7 +17,7 @@
 #include <memory>
 #include <string>
 
-#include <boost/asio/executor.hpp>
+#include <boost/asio/any_io_executor.hpp>
 
 #include "mjlib/base/visitor.h"
 #include "mjlib/io/async_types.h"
@@ -88,7 +88,7 @@ class Pi3hatWrapper : public Pi3hatInterface {
     }
   };
 
-  Pi3hatWrapper(const boost::asio::executor&, const Options&);
+  Pi3hatWrapper(const boost::asio::any_io_executor&, const Options&);
   ~Pi3hatWrapper();
 
   void AsyncStart(mjlib::io::ErrorCallback);
