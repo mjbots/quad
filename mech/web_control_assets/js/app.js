@@ -26,6 +26,10 @@ const ROTATION_EPSILON = Math.PI * 7.0 / 180.0;
 const getElement = (v) => document.getElementById(v);
 const iota = (v) => Array.from((new Array(v)).keys());
 
+function _isUndefined(v) {
+  return typeof v === "undefined";
+}
+
 function normalizeQuaternion(q) {
   const norm = Math.sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
   return [
@@ -269,10 +273,15 @@ class Application {
     const mode_checks = [...document.getElementsByClassName("mode_check")];
     const checked = mode_checks.map(x => x.checked);
     const [first_selected, ...rest] = iota(mode_checks.length).filter(x => checked[x]);
-    const new_selected =
-          Math.max(0, Math.min(
-            mode_checks.length - 1, first_selected + direction));
-    mode_checks[new_selected].checked = true;
+
+    if (_isUndefined(first_selected)) {
+      getElement("stop").checked = true;
+    } else {
+      const new_selected =
+            Math.max(0, Math.min(
+              mode_checks.length - 1, first_selected + direction));
+      mode_checks[new_selected].checked = true;
+    }
   }
 
   _processJoystickCommands() {
