@@ -455,10 +455,15 @@ class PlotRetrieve {
       result.record = y_tokenizer.next();
     }
 
-    result.root = reader->record(result.record)->schema->root();
-    result.x_name = x_tokenizer.remaining();
-    result.y_name = y_tokenizer.remaining();
-    result.valid = true;
+    auto* const log_record = reader->record(result.record);
+    if (!log_record) {
+      result.valid = false;
+    } else {
+      result.root = log_record->schema->root();
+      result.x_name = x_tokenizer.remaining();
+      result.y_name = y_tokenizer.remaining();
+      result.valid = true;
+    }
     return result;
   }
 
