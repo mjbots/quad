@@ -93,6 +93,7 @@ cc_test(
         "named_type_test.cc",
         "quaternion_test.cc",
         "signal_result_test.cc",
+        "se3d_test.cc",
         "sophus_test.cc",
         "telemetry_log_registrar_test.cc",
         "telemetry_registry_test.cc",

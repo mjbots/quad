@@ -100,6 +100,7 @@ cc_test(
         "trajectory_line_intersect_test.cc",
         "trajectory_test.cc",
         "test_main.cc",
+        "vertical_line_frame_test.cc",
     ]],
     deps = [
         ":mech",

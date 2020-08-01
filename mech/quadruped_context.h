@@ -28,6 +28,7 @@
 #include "mech/swing_trajectory.h"
 #include "mech/trajectory.h"
 #include "mech/valid_leg_region.h"
+#include "mech/vertical_line_frame.h"
 
 namespace mjmech {
 namespace mech {
@@ -151,13 +152,27 @@ struct QuadrupedContext : boost::noncopyable {
 
   base::KinematicRelation LevelDesiredRB() const {
     const auto& robot = state->robot;
-    Eigen::Vector3d p_T(0, 0, 0);
-    Eigen::Vector3d p_M = robot.tf_TM.inverse() * p_T;
-    p_M.z() += robot.tf_TM.translation().z();
-    Eigen::Vector3d p_B = robot.frame_MB.pose.inverse() * p_M;
+
+    // Project the M(0, 0, 0) point down until it intersects the T
+    // plane, getting the result in the M frame.
+
+    const Eigen::Vector3d com_on_ground_M =
+        FindVerticalLinePlaneIntersect(
+            robot.tf_TM.inverse(),
+            Eigen::Vector3d(0, 0, 0),
+            Eigen::Vector3d(0, 0, 1),
+            Eigen::Vector3d(0, 0, 0));
+
+    // Convert that into the B frame.
+    Eigen::Vector3d p_B = robot.frame_MB.pose.inverse() * com_on_ground_M;
+
+    // And then move it back up by our Z height from the terrain.
+    p_B.z() += robot.tf_TM.translation().z();
+
+    // And that is the negative of our desired RB transform.
 
     base::KinematicRelation result_RB;
-    result_RB.pose.translation().head<2>() = p_B.head<2>();
+    result_RB.pose.translation().head<2>() = -p_B.head<2>();
     return result_RB;
   }
 

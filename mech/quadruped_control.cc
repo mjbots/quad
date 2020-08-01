@@ -509,7 +509,7 @@ class QuadrupedControl::Impl {
     auto& frame_MB = status_.state.robot.frame_MB;
     Sophus::SE3d CB{
       Sophus::SO3d(),
-          config_.center_of_mass_B};
+          -config_.center_of_mass_B};
     Sophus::SE3d MC{
       Sophus::SO3d(imu_data_.attitude.eigen()),
           Eigen::Vector3d(),
