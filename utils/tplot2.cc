@@ -1063,6 +1063,7 @@ class SphereModel {
 class MechRender {
  public:
   struct State {
+    bool body = true;
     bool leg_actual = true;
     bool leg_command = true;
     bool leg_force = false;
@@ -1074,6 +1075,7 @@ class MechRender {
 
     template <typename Archive>
     void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(body));
       a->Visit(MJ_NVP(leg_actual));
       a->Visit(MJ_NVP(leg_command));
       a->Visit(MJ_NVP(leg_force));
@@ -1184,11 +1186,13 @@ class MechRender {
       DrawTerrain();
     }
 
-    AddBox({0, 0, 0},
-           {0.230, 0, 0},
-           {0, 0.240, 0},
-           {0, 0, 0.125},
-           {1.0, 0, 0, 1.0});
+    if (state_.body) {
+      AddBox({0, 0, 0},
+             {0.230, 0, 0},
+             {0, 0.240, 0},
+             {0, 0, 0.125},
+             {1.0, 0, 0, 1.0});
+    }
 
     if (state_.leg_actual) {
       for (const auto& leg_B : qs.state.legs_B) {
@@ -1450,6 +1454,7 @@ class MechRender {
     if (ImGui::Button("reset view")) {
       trackball_ = MakeTrackball();
     }
+    ImGui::Checkbox("body", &state_.body);
     ImGui::Checkbox("actual", &state_.leg_actual);
     ImGui::Checkbox("command", &state_.leg_command);
     ImGui::Checkbox("force", &state_.leg_force);
