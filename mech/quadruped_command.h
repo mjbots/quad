@@ -31,6 +31,17 @@ struct QuadrupedCommand {
   /// value is stale.
   int priority = 0;
 
+  /// Determines if on-disk logging takes place.
+  enum Log {
+    // kUnset leaves the default command-line option in place.
+    kUnset,
+
+    kDisable,
+    kEnable,
+  };
+
+  Log log = kUnset;
+
   enum Mode {
     // This is a transient state that should not be commanded.  The
     // quadruped uses it to perform initialization functions.
@@ -210,6 +221,7 @@ struct QuadrupedCommand {
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(MJ_NVP(priority));
+    a->Visit(MJ_NVP(log));
     a->Visit(MJ_NVP(mode));
     a->Visit(MJ_NVP(joints));
     a->Visit(MJ_NVP(legs_B));
@@ -266,5 +278,19 @@ struct IsEnum<mjmech::mech::QuadrupedCommand::Mode> {
   }
 };
 
+template <>
+struct IsEnum<mjmech::mech::QuadrupedCommand::Log> {
+  static constexpr bool value = true;
+
+  using M = mjmech::mech::QuadrupedCommand::Log;
+
+  static std::map<M, const char*> map() {
+    return { {
+        { M::kUnset, "unset" },
+        { M::kDisable, "disable" },
+        { M::kEnable, "enable" },
+      }};
+  }
+};
 }
 }

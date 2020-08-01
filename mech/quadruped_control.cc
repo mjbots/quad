@@ -33,6 +33,7 @@
 #include "base/logging.h"
 #include "base/sophus.h"
 #include "base/telemetry_registry.h"
+#include "base/timestamped_log.h"
 
 #include "mech/attitude_data.h"
 #include "mech/mammal_ik.h"
@@ -151,6 +152,7 @@ class QuadrupedControl::Impl {
   Impl(base::Context& context,
        Pi3hatGetter pi3hat_getter)
       : executor_(context.executor),
+        telemetry_log_(context.telemetry_log.get()),
         timer_(executor_),
         pi3hat_getter_(pi3hat_getter) {
     context.telemetry_registry->Register("qc_status", &status_signal_);
@@ -215,6 +217,20 @@ class QuadrupedControl::Impl {
 
     current_command_ = command;
     current_command_timestamp_ = now;
+
+    // Update our logging status.
+    if (command.log != QuadrupedCommand::Log::kUnset) {
+      if (command.log == QuadrupedCommand::Log::kEnable &&
+          !telemetry_log_->IsOpen()) {
+        base::OpenMaybeTimestampedLog(
+            telemetry_log_,
+            parameters_.log_filename_base,
+            base::kTimestamped);
+      } else if (command.log == QuadrupedCommand::Log::kDisable &&
+                 telemetry_log_->IsOpen()) {
+        telemetry_log_->Close();
+      }
+    }
 
     command_signal_(&command_log);
   }
@@ -2146,6 +2162,7 @@ class QuadrupedControl::Impl {
   }
 
   boost::asio::any_io_executor executor_;
+  mjlib::telemetry::FileWriter* const telemetry_log_;
   Parameters parameters_;
 
   base::LogRef log_ = base::GetLogInstance("QuadrupedControl");

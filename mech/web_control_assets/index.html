@@ -111,14 +111,16 @@
                class="lbl-toggle">ADVANCED</label>
         <div id="advanced_content_container" class="collapsible-content-vert">
           <div class="bottom-advanced">
-            <select id="jump_acceleration" multiple>
-              <option value="4" selected="true">4 m/s^2</option>
-              <option value="6">6 m/s^2</option>
+            <select id="jump_acceleration">
+              <option value="4">4 m/s^2</option>
+              <option value="6" selected="true">6 m/s^2</option>
               <option value="8">8 m/s^2</option>
+              <option value="10">10 m/s^2</option>
             </select>
             <label for="jump_acceleration">Jump Accel</label>
             <input type="checkbox" id="jump_repeat" checked="true">Repeat Jump</input>
             <input type="checkbox" id="always_step">Always Step</input>
+            <input type="checkbox" id="record_data">Record Data</input>
             <input type="button" id="power_off" value="Power Off / Clear Fault"></input>
           </div>
         </div>

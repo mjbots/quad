@@ -16,7 +16,7 @@ mach=$(uname -m)
 cd $(dirname $(dirname $(readlink -f $0)))
 
 if [[ "$mach" == "armv7l" ]]; then
-    CONFIG="-c configs/quadruped.ini"
+    CONFIG="-c configs/quadruped.ini --quadruped_control.log_filename_base /home/pi/mjbots-quad-a1.log"
     set -x
     cd /home/pi/mech/
     ./performance_governor.sh

@@ -46,6 +46,7 @@ class QuadrupedControl : boost::noncopyable {
   struct Parameters {
     double max_torque_Nm = -1.0;
     std::string config;
+    std::string log_filename_base = "mjbots-quada1.log";
 
     bool enable_imu = true;
 
@@ -55,6 +56,7 @@ class QuadrupedControl : boost::noncopyable {
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(max_torque_Nm));
       a->Visit(MJ_NVP(config));
+      a->Visit(MJ_NVP(log_filename_base));
       a->Visit(MJ_NVP(enable_imu));
       a->Visit(MJ_NVP(command_timeout_s));
     }

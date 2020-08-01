@@ -422,6 +422,11 @@ class Application {
       },
     };
 
+    const record_data = getElement("record_data").checked;
+    // Unset leaves the current value alone, but we can just send it
+    // every time.
+    command["command"]["log"] = record_data ? "enable" : "disable";
+
     command["command"]["v_R"] = v_R;
     command["command"]["w_R"] = w_R;
 
