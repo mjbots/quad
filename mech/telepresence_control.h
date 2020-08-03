@@ -145,9 +145,25 @@ class TelepresenceControl : boost::noncopyable {
   struct ControlData {
     bool power = false;
 
+    struct Servo {
+      double torque_Nm = 0.0;
+      double velocity_dps = 0.0;
+
+      template <typename Archive>
+      void Serialize(Archive* a) {
+        a->Visit(MJ_NVP(torque_Nm));
+        a->Visit(MJ_NVP(velocity_dps));
+      }
+    };
+
+    Servo servo1;
+    Servo servo2;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(power));
+      a->Visit(MJ_NVP(servo1));
+      a->Visit(MJ_NVP(servo2));
     }
   };
 

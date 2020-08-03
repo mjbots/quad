@@ -228,7 +228,15 @@ class TelepresenceControl::Impl {
 
   void DoControl_Active() {
     ControlData control;
-    control.power = false;
+
+    control.power = true;
+    const double torque_Nm = pid_.Apply(
+        status_.servo1.angle_deg, status_.servo2.angle_deg,
+        status_.servo1.velocity_dps, status_.servo2.velocity_dps,
+        1.0 / parameters_.period_s);
+
+    control.servo1.torque_Nm = torque_Nm;
+    control.servo2.torque_Nm = -torque_Nm;
 
     Control(control);
   }
@@ -246,7 +254,7 @@ class TelepresenceControl::Impl {
     DoControl_Fault();
   }
 
-  void AddServoCommand(int id, bool power, double velocity, double torque_Nm) {
+  void AddServoCommand(int id, bool power, double torque_Nm, double velocity_dps) {
     client_command_.push_back({});
     auto& request = client_command_.back();
     request.id = id;
@@ -259,8 +267,8 @@ class TelepresenceControl::Impl {
       request.request.WriteMultiple(
           moteus::kCommandVelocity,  /// feedforward torque is after
           {
-            moteus::Value(static_cast<float>(velocity)),
-            moteus::Value(static_cast<float>(torque_Nm))
+            moteus::WriteVelocity(velocity_dps, moteus::kFloat),
+            moteus::WriteTorque(torque_Nm, moteus::kFloat)
           });
 
       {
@@ -290,8 +298,12 @@ class TelepresenceControl::Impl {
 
     client_command_.clear();
 
-    AddServoCommand(parameters_.id1, control.power, 0, 0);
-    AddServoCommand(parameters_.id2, control.power, 0, 0);
+    AddServoCommand(
+        parameters_.id1, control.power,
+        control.servo1.torque_Nm, control.servo1.velocity_dps);
+    AddServoCommand(
+        parameters_.id2, control.power,
+        control.servo2.torque_Nm, control.servo2.velocity_dps);
 
     client_command_reply_.clear();
     client_->AsyncTransmit(
