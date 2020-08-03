@@ -47,6 +47,8 @@ cc_library(
         "system_info.cc",
         "swing_trajectory.cc",
         "target_tracker.cc",
+        "telepresence.cc",
+        "telepresence_control.cc",
         "turret.cc",
         "turret_control.cc",
         "turret_rf_control.cc",
@@ -155,6 +157,13 @@ module_main(
     deps = [":mech"],
 )
 
+module_main(
+    name = "telepresence",
+    cname = "mjmech::mech::Telepresence",
+    prefix = "mech",
+    deps = [":mech"],
+)
+
 cc_binary(
     name = "multiplex_tool",
     srcs = ["multiplex_tool_main.cc"],
@@ -183,6 +192,7 @@ pkg_tar(
     srcs = [
         ":moteus_tool",
         ":multiplex_tool",
+        ":telepresence",
         ":quadruped",
     ],
     files = {
