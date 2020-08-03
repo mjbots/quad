@@ -111,24 +111,7 @@ class TelepresenceControl::Impl {
 
     timing_ = ControlTiming(executor_, timing_.cycle_start());
 
-    outstanding_ = true;
-
-    status_reply_.clear();
-    // TODO: Fill in status_request_.
-    client_->AsyncTransmit(
-        &status_request_, &status_reply_,
-        std::bind(&Impl::HandleStatus, this, pl::_1));
-  }
-
-  void HandleStatus(const mjlib::base::error_code& ec) {
-    mjlib::base::FailIf(ec);
-
-    UpdateStatus();
-
-    timing_.finish_status();
-
     RunControl();
-    timing_.finish_control();
   }
 
   void UpdateServo(const mjlib::multiplex::AsioClient::IdRegisterValue& reply,
@@ -175,7 +158,7 @@ class TelepresenceControl::Impl {
   }
 
   void UpdateStatus() {
-    for (const auto& reply : status_reply_) {
+    for (const auto& reply : client_command_reply_) {
       auto* const servo = [&]() -> Status::Servo* {
         if (reply.id == parameters_.id1) { return &status_.servo1; }
         if (reply.id == parameters_.id2) { return &status_.servo2; }
@@ -238,16 +221,6 @@ class TelepresenceControl::Impl {
     }
   }
 
-  void HandleCommand(const mjlib::base::error_code& ec) {
-    timing_.finish_command();
-
-    status_.timestamp = Now();
-    status_.timing = timing_.status();
-    telepresence_signal_(&status_);
-
-    outstanding_ = false;
-  }
-
   void DoControl_Stop() {
     ControlData control;
     Control(control);
@@ -273,7 +246,43 @@ class TelepresenceControl::Impl {
     DoControl_Fault();
   }
 
+  void AddServoCommand(int id, bool power, double velocity, double torque_Nm) {
+    client_command_.push_back({});
+    auto& request = client_command_.back();
+    request.id = id;
+
+    const auto mode =
+        power ? moteus::Mode::kPosition : moteus::Mode::kStopped;
+    request.request.WriteSingle(moteus::kMode, static_cast<int8_t>(mode));
+
+    if (power) {
+      request.request.WriteMultiple(
+          moteus::kCommandVelocity,  /// feedforward torque is after
+          {
+            moteus::Value(static_cast<float>(velocity)),
+            moteus::Value(static_cast<float>(torque_Nm))
+          });
+
+      {
+        // Static only to save allocations.
+        static std::vector<moteus::Value> values;
+        if (values.empty()) {
+          values.push_back(moteus::WritePwm(0, moteus::kInt8));
+          values.push_back(moteus::WritePwm(0, moteus::kInt8));
+        }
+        request.request.WriteMultiple(moteus::kCommandKpScale, values);
+      }
+    }
+
+    request.request.ReadMultiple(moteus::Register::kMode, 4, 3);
+    request.request.ReadMultiple(moteus::Register::kVoltage, 3, 1);
+  }
+
   void Control(const ControlData& control) {
+    timing_.finish_query();
+    timing_.finish_status();
+    timing_.finish_control();
+
     ControlLog control_log;
     control_log.timestamp = Now();
     control_log.control = control;
@@ -281,10 +290,25 @@ class TelepresenceControl::Impl {
 
     client_command_.clear();
 
+    AddServoCommand(parameters_.id1, control.power, 0, 0);
+    AddServoCommand(parameters_.id2, control.power, 0, 0);
+
     client_command_reply_.clear();
     client_->AsyncTransmit(
         &client_command_, &client_command_reply_,
         std::bind(&Impl::HandleCommand, this, pl::_1));
+  }
+
+  void HandleCommand(const mjlib::base::error_code& ec) {
+    timing_.finish_command();
+
+    UpdateStatus();
+
+    status_.timestamp = Now();
+    status_.timing = timing_.status();
+    telepresence_signal_(&status_);
+
+    outstanding_ = false;
   }
 
 
@@ -311,9 +335,6 @@ class TelepresenceControl::Impl {
   int status_outstanding_ = 0;
 
   using Request = Client::Request;
-  Request status_request_;
-  Client::Reply status_reply_;
-
   Request client_command_;
   Client::Reply client_command_reply_;
 

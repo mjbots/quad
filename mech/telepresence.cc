@@ -56,7 +56,7 @@ class Telepresence::Impl {
         },
         []() {
           TelepresenceWebControl::Options options;
-          options.asset_path = "telepresence_assets";
+          options.asset_path = "turret_assets";
           return options;
         }());
     m_.system_info = std::make_unique<SystemInfo>(context);

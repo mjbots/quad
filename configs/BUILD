@@ -22,6 +22,7 @@ filegroup(
         "quadruped.ini",
         "quada0.cfg",
         "quada1.cfg",
+        "telepresence.ini",
         "turret.ini",
     ],
 )

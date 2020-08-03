@@ -192,7 +192,6 @@ pkg_tar(
     srcs = [
         ":moteus_tool",
         ":multiplex_tool",
-        ":telepresence",
         ":quadruped",
     ],
     files = {
@@ -220,9 +219,11 @@ pkg_tar(
     srcs = [
         ":moteus_tool",
         ":multiplex_tool",
+        ":telepresence",
         ":turret",
     ],
     files = {
+        "//configs:telepresence.ini": "configs/telepresence.ini",
         "//configs:turret.ini": "configs/turret.ini",
         "//utils:performance_governor.sh": "performance_governor.sh",
         "//utils:turret-start.sh": "turret_start.sh",
