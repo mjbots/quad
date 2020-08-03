@@ -109,6 +109,8 @@ class TelepresenceControl::Impl {
     if (!client_) { return; }
     if (outstanding_) { return; }
 
+    outstanding_ = true;
+
     timing_ = ControlTiming(executor_, timing_.cycle_start());
 
     RunControl();
@@ -235,8 +237,20 @@ class TelepresenceControl::Impl {
         status_.servo1.velocity_dps, status_.servo2.velocity_dps,
         1.0 / parameters_.period_s);
 
-    control.servo1.torque_Nm = torque_Nm;
-    control.servo2.torque_Nm = -torque_Nm;
+    // We process our scale so that we only *decrease* gains, not
+    // increase them.  That means you can tweak this parameter and not
+    // worry too much about loop stability, but one parameter still
+    // changes the relationship between both sides.
+    double id1_scale = parameters_.id1_scale;
+    double id2_scale = 1.0;
+
+    if (id1_scale > 1.0) {
+      id2_scale /= id1_scale;
+      id1_scale = 1.0;
+    }
+
+    control.servo1.torque_Nm = id1_scale * torque_Nm;
+    control.servo2.torque_Nm = id2_scale * -torque_Nm;
 
     Control(control);
   }
@@ -264,12 +278,9 @@ class TelepresenceControl::Impl {
     request.request.WriteSingle(moteus::kMode, static_cast<int8_t>(mode));
 
     if (power) {
-      request.request.WriteMultiple(
-          moteus::kCommandVelocity,  /// feedforward torque is after
-          {
-            moteus::WriteVelocity(velocity_dps, moteus::kFloat),
-            moteus::WriteTorque(torque_Nm, moteus::kFloat)
-          });
+      request.request.WriteSingle(
+          moteus::kCommandFeedforwardTorque,
+          moteus::WriteTorque(torque_Nm, moteus::kInt16));
 
       {
         // Static only to save allocations.
@@ -282,8 +293,9 @@ class TelepresenceControl::Impl {
       }
     }
 
-    request.request.ReadMultiple(moteus::Register::kMode, 4, 3);
-    request.request.ReadMultiple(moteus::Register::kVoltage, 3, 1);
+    request.request.ReadMultiple(moteus::Register::kPosition, 3, 2);
+    // To reach 2kHz
+    // request.request.ReadMultiple(moteus::Register::kVoltage, 3, 1);
   }
 
   void Control(const ControlData& control) {
@@ -344,7 +356,6 @@ class TelepresenceControl::Impl {
 
   mjlib::io::RepeatingTimer timer_{executor_};
   bool outstanding_ = false;
-  int status_outstanding_ = 0;
 
   using Request = Client::Request;
   Request client_command_;
