@@ -1136,10 +1136,7 @@ class MechRender {
         imu_reader_(reader->record("imu")->schema->root()),
         tree_view_(tree_view),
         state_(state) {
-    triangle_.SetProjMatrix(camera_.matrix());
     triangle_.SetLightPos({-1000, 0, -3000});
-
-    lines_.SetProjMatrix(camera_.matrix());
 
     // For now, our rendering texture will consist of a single white
     // pixel, which will just let us use the passed in color.
@@ -1398,12 +1395,15 @@ class MechRender {
 
       // TRIANGLES
       triangle_.Upload();
+      triangle_.SetProjMatrix(camera_.matrix());
       triangle_.SetViewMatrix(trackball_.matrix());
       triangle_.SetModelMatrix(model_matrix_);
+
       triangle_.Render();
 
       // LINES
       lines_.Upload();
+      lines_.SetProjMatrix(camera_.matrix());
       lines_.SetViewMatrix(trackball_.matrix());
       lines_.SetModelMatrix(model_matrix_);
       lines_.Render();
@@ -1451,8 +1451,20 @@ class MechRender {
                        0);
 
     ImGui::NextColumn();
-    if (ImGui::Button("reset view")) {
-      trackball_ = MakeTrackball();
+    if (ImGui::Button("reset top")) {
+      trackball_ = MakeTrackballTop();
+    }
+    if (ImGui::Button("reset side")) {
+      trackball_ = MakeTrackballSide();
+    }
+    if (ImGui::Button("reset back")) {
+      trackball_ = MakeTrackballBack();
+    }
+    if (ImGui::Button("perspective")) {
+      camera_ = MakePerspectiveCamera();
+    }
+    if (ImGui::Button("ortho")) {
+      // Not implemented.
     }
     ImGui::Checkbox("body", &state_.body);
     ImGui::Checkbox("actual", &state_.leg_actual);
@@ -1467,8 +1479,27 @@ class MechRender {
     ImGui::EndChild();
   }
 
-  gl::Trackball MakeTrackball() {
-    return gl::Trackball{{0.f, 0.f, 1.000f}, {0.f, 0.f, 0.f}};
+  static gl::Trackball MakeTrackballTop() {
+    return gl::Trackball{{0.f, 0.f, 1.0f}, {0.f, 0.f, 0.f}, {0.0f, 1.0f, 0.0f}};
+  }
+
+  static gl::Trackball MakeTrackballSide() {
+    return gl::Trackball{{0.0f, 1.0f, 0.0f}, {0.f, 0.f, 0.f}, {0.0f, 0.0f, -1.0f}};
+  }
+
+  static gl::Trackball MakeTrackballBack() {
+    return gl::Trackball{{-1.0f, 0.0f, 0.0f}, {0.f, 0.f, 0.f}, {0.0f, 0.0f, -1.0f}};
+  }
+
+  gl::PerspectiveCamera MakePerspectiveCamera() const {
+    return gl::PerspectiveCamera([&]() {
+        gl::PerspectiveCamera::Options options;
+        options.aspect = static_cast<double>(size_.x()) /
+                         static_cast<double>(size_.y());
+        options.near = 0.100;
+        options.far = 10.000;
+        return options;
+      }());
   }
 
   SphereModel sphere_;
@@ -1483,16 +1514,9 @@ class MechRender {
 
   Eigen::Matrix4f model_matrix_{Eigen::Matrix4f::Identity()};
   Eigen::Matrix4f transform_{Eigen::Matrix4f::Identity()};
-  gl::PerspectiveCamera camera_{[&]() {
-      gl::PerspectiveCamera::Options options;
-      options.aspect = static_cast<double>(size_.x()) /
-                       static_cast<double>(size_.y());
-      options.near = 0.100;
-      options.far = 10.000;
-      return options;
-    }()};
+  gl::PerspectiveCamera camera_{MakePerspectiveCamera()};
 
-  gl::Trackball trackball_ = MakeTrackball();
+  gl::Trackball trackball_ = MakeTrackballTop();
 
   gl::Framebuffer framebuffer_;
   gl::FlatRgbTexture imgui_texture_{size_};

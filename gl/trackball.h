@@ -30,17 +30,19 @@ class Trackball {
     float pan_speed = 0.3f;
     float dynamic_damping_factor = 0.2f;
     float min_distance = 0.0f;
-    float max_distance = std::numeric_limits<float>::infinity();;
+    float max_distance = std::numeric_limits<float>::infinity();
 
     Options() {}
   };
 
   Trackball(const Eigen::Vector3f& initial_position,
             const Eigen::Vector3f& target,
+            const Eigen::Vector3f& up,
             const Options& options = Options())
       : options_(options) {
     state_.position = initial_position;
     state_.target = target;
+    state_.up = up;
     Update();
   }
 
@@ -251,7 +253,7 @@ class Trackball {
   struct State {
     Eigen::Vector3f target;
     Eigen::Vector3f position;
-    Eigen::Vector3f up{0.0f, 1.0f, 0.0f};
+    Eigen::Vector3f up;
     double zoom = 1.0;
   };
   State state_;
@@ -282,4 +284,5 @@ class Trackball {
 };
 
 }
+
 }
