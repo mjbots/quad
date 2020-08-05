@@ -784,6 +784,8 @@ class SimulatorWindow::Impl : public dart::gui::glut::SimWindow {
     pi3hat_->Run(dt_s);
 
     SimWindow::timeStepping();
+
+    mTrans = -1000.0 * robot_->getBodyNode("robot")->getTransform().translation();
   }
 
   boost::asio::io_context& context_;
