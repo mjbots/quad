@@ -69,6 +69,7 @@
 #include "gl/flat_rgb_texture.h"
 #include "gl/framebuffer.h"
 #include "gl/gl_imgui.h"
+#include "gl/orthographic_camera.h"
 #include "gl/perspective_camera.h"
 #include "gl/program.h"
 #include "gl/renderbuffer.h"
@@ -1395,7 +1396,7 @@ class MechRender {
 
       // TRIANGLES
       triangle_.Upload();
-      triangle_.SetProjMatrix(camera_.matrix());
+      triangle_.SetProjMatrix(camera_->matrix(trackball_.zoom()));
       triangle_.SetViewMatrix(trackball_.matrix());
       triangle_.SetModelMatrix(model_matrix_);
 
@@ -1403,7 +1404,7 @@ class MechRender {
 
       // LINES
       lines_.Upload();
-      lines_.SetProjMatrix(camera_.matrix());
+      lines_.SetProjMatrix(camera_->matrix(trackball_.zoom()));
       lines_.SetViewMatrix(trackball_.matrix());
       lines_.SetModelMatrix(model_matrix_);
       lines_.Render();
@@ -1462,9 +1463,11 @@ class MechRender {
     }
     if (ImGui::Button("perspective")) {
       camera_ = MakePerspectiveCamera();
+      trackball_ = MakeTrackballTop();
     }
     if (ImGui::Button("ortho")) {
-      // Not implemented.
+      camera_ = MakeOrthoCamera();
+      trackball_ = MakeTrackballTop();
     }
     ImGui::Checkbox("body", &state_.body);
     ImGui::Checkbox("actual", &state_.leg_actual);
@@ -1479,24 +1482,40 @@ class MechRender {
     ImGui::EndChild();
   }
 
-  static gl::Trackball MakeTrackballTop() {
-    return gl::Trackball{{0.f, 0.f, 1.0f}, {0.f, 0.f, 0.f}, {0.0f, 1.0f, 0.0f}};
+  gl::Trackball MakeTrackballTop() const {
+    return gl::Trackball({0.f, 0.f, 1.0f}, {0.f, 0.f, 0.f}, {0.0f, 1.0f, 0.0f},
+                         camera_->type());
   }
 
-  static gl::Trackball MakeTrackballSide() {
-    return gl::Trackball{{0.0f, 1.0f, 0.0f}, {0.f, 0.f, 0.f}, {0.0f, 0.0f, -1.0f}};
+  gl::Trackball MakeTrackballSide() const {
+    return gl::Trackball({0.0f, 1.0f, 0.0f}, {0.f, 0.f, 0.f}, {0.0f, 0.0f, -1.0f},
+                         camera_->type());
   }
 
-  static gl::Trackball MakeTrackballBack() {
-    return gl::Trackball{{-1.0f, 0.0f, 0.0f}, {0.f, 0.f, 0.f}, {0.0f, 0.0f, -1.0f}};
+  gl::Trackball MakeTrackballBack() const {
+    return gl::Trackball({-1.0f, 0.0f, 0.0f}, {0.f, 0.f, 0.f}, {0.0f, 0.0f, -1.0f},
+                         camera_->type());
   }
 
-  gl::PerspectiveCamera MakePerspectiveCamera() const {
-    return gl::PerspectiveCamera([&]() {
+  std::unique_ptr<gl::Camera> MakePerspectiveCamera() const {
+    return std::make_unique<gl::PerspectiveCamera>([&]() {
         gl::PerspectiveCamera::Options options;
         options.aspect = static_cast<double>(size_.x()) /
                          static_cast<double>(size_.y());
         options.near = 0.100;
+        options.far = 10.000;
+        return options;
+      }());
+  }
+
+  std::unique_ptr<gl::Camera> MakeOrthoCamera() const {
+    return std::make_unique<gl::OrthographicCamera>([&]() {
+        gl::OrthographicCamera::Options options;
+        options.left = -1.0;
+        options.right = 1.0;
+        options.bottom = -1.0;
+        options.top = 1.0f;
+        options.near = 0.000;
         options.far = 10.000;
         return options;
       }());
@@ -1514,7 +1533,7 @@ class MechRender {
 
   Eigen::Matrix4f model_matrix_{Eigen::Matrix4f::Identity()};
   Eigen::Matrix4f transform_{Eigen::Matrix4f::Identity()};
-  gl::PerspectiveCamera camera_{MakePerspectiveCamera()};
+  std::unique_ptr<gl::Camera> camera_{MakePerspectiveCamera()};
 
   gl::Trackball trackball_ = MakeTrackballTop();
 

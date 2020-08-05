@@ -19,11 +19,13 @@ package(default_visibility = ["//visibility:public"])
 cc_library(
     name = "gl",
     hdrs = [
+        "camera.h",
         "flat_rgb_texture.h",
         "framebuffer.h",
         "gl.h",
         "gl_imgui.h",
         "image_texture.h",
+        "orthographic_camera.h",
         "perspective_camera.h",
         "program.h",
         "renderbuffer.h",

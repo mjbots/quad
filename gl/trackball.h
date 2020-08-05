@@ -17,6 +17,8 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
+#include "gl/camera.h"
+
 namespace mjmech {
 namespace gl {
 
@@ -38,8 +40,10 @@ class Trackball {
   Trackball(const Eigen::Vector3f& initial_position,
             const Eigen::Vector3f& target,
             const Eigen::Vector3f& up,
+            Camera::Type camera_type,
             const Options& options = Options())
-      : options_(options) {
+      : camera_type_(camera_type),
+        options_(options) {
     state_.position = initial_position;
     state_.target = target;
     state_.up = up;
@@ -48,6 +52,10 @@ class Trackball {
 
   Eigen::Matrix4f matrix() const {
     return view_;
+  }
+
+  double zoom() const {
+    return state_.zoom;
   }
 
   bool active() const {
@@ -174,7 +182,16 @@ class Trackball {
         1.0f + (zoom_end_.y() - zoom_start_.y()) * options_.zoom_speed;
 
     if (factor != 1.0f && factor > 0.0f) {
-      eye_ = eye_ * factor;
+      switch (camera_type_) {
+        case Camera::kPerspective: {
+          eye_ = eye_ * factor;
+          break;
+        }
+        case Camera::kOrthographic: {
+          state_.zoom = state_.zoom / factor;
+          break;
+        }
+      }
       if (static_moving) {
         zoom_start_ = zoom_end_;
       } else {
@@ -188,6 +205,18 @@ class Trackball {
     Eigen::Vector2f mouse_change = pan_end_ - pan_start_;
 
     if (mouse_change.squaredNorm() == 0.0f) { return; }
+
+    mouse_change.y() *= -1.0f;
+
+    switch (camera_type_) {
+      case Camera::kOrthographic: {
+        // TODO: Apply a different scale.
+        break;
+      }
+      case Camera::kPerspective: {
+        break;
+      }
+    }
 
     mouse_change *= eye_.norm() * options_.pan_speed;
     Eigen::Vector3f pan = (
@@ -248,6 +277,7 @@ class Trackball {
     return result.transpose();
   }
 
+  Camera::Type camera_type_ = Camera::kPerspective;
   Options options_;
 
   struct State {

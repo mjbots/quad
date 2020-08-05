@@ -20,10 +20,12 @@
 
 #include "base/common.h"
 
+#include "gl/camera.h"
+
 namespace mjmech {
 namespace gl {
 
-class PerspectiveCamera {
+class PerspectiveCamera : public Camera {
  public:
   struct Options {
     double fov = 50;
@@ -35,14 +37,17 @@ class PerspectiveCamera {
   };
   PerspectiveCamera(const Options& options = {})
       : fov_(options.fov),
-        zoom_(1.0),
         near_(options.near),
         far_(options.far),
         aspect_(options.aspect) {
   }
 
-  Eigen::Matrix4f matrix() {
-    double top = near_ * std::tan(base::Radians(0.5 * fov_)) / zoom_;
+  ~PerspectiveCamera() override {}
+
+  Type type() const override { return kPerspective; }
+
+  Eigen::Matrix4f matrix(double zoom = 1.0) override {
+    double top = near_ * std::tan(base::Radians(0.5 * fov_)) / zoom;
     double height = 2 * top;
     double width = aspect_ * height;
     double left = -0.5 * width;
@@ -73,7 +78,6 @@ class PerspectiveCamera {
 
  private:
   float fov_;
-  float zoom_;
   float near_;
   float far_;
   float aspect_;
