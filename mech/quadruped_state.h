@@ -203,6 +203,8 @@ struct QuadrupedState {
       };
       Mode mode = kStance;
       double swing_elapsed_s = 0.0;
+      double target_time_s = 0.0;
+      Eigen::Vector3d predicted_next_v;
 
       template <typename Archive>
       void Serialize(Archive* a) {
@@ -210,6 +212,8 @@ struct QuadrupedState {
         a->Visit(MJ_NVP(invalid_time_s));
         a->Visit(MJ_NVP(mode));
         a->Visit(MJ_NVP(swing_elapsed_s));
+        a->Visit(MJ_NVP(target_time_s));
+        a->Visit(MJ_NVP(predicted_next_v));
       }
     };
 

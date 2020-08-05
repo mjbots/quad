@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-const CMD_MAX_RATE_X = 0.5;
+const CMD_MAX_RATE_X = 1.9;
 const CMD_MAX_RATE_Y = 0.2;
 const CMD_MAX_RATE_Z = Math.PI * 60 / 180.0;
 

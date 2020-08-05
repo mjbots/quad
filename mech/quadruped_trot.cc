@@ -124,9 +124,13 @@ class WalkContext {
   }
 
   void UpdateGlobal() {
+    const int stance_vlegs = count_stance();
+    if (stance_vlegs >= 1) {
+      // We are allowed to accelerate when at least one vleg is down.
+      context_->UpdateCommandedR(
+          stance_vlegs == 2 ? 1.0 : config_.walk.onevleg_accel);
+    }
     if (all_stance()) {
-      // We are allowed to accelerate when all legs are in stance.
-      context_->UpdateCommandedR();
       ws_.stance_elapsed_s += config_.period_s;
     } else {
       ws_.stance_elapsed_s = 0.0;
@@ -196,6 +200,8 @@ class WalkContext {
       auto find_time = [&](double sign) {
         const base::Point3D v =
             sign * state_->robot.desired_R.v +
+            // TODO: Do I need to apply sign to the cross product too?  Or
+            // to where it is used down below?
             p_R.cross(state_->robot.desired_R.w);
         constexpr double kBothSides = 2.0;
         return kBothSides * std::abs(
@@ -226,7 +232,10 @@ class WalkContext {
   }
 
   void MaybeLift(std::vector<QC::Leg>* legs_R) {
-    if (!all_stance()) {
+    const auto num_stance = count_stance();
+    if (num_stance == 0) { return; }
+
+    if (num_stance <= 1 && ws_.trot.flight_time <= 0.0) {
       return;
     }
 
@@ -243,6 +252,8 @@ class WalkContext {
 
       for (int vleg_idx = 0; vleg_idx < 2; vleg_idx++) {
         const auto& vleg = ws_.vlegs[vleg_idx];
+        if (vleg.mode == VLeg::Mode::kSwing) { continue; }
+
         if (vleg.remaining_s > biggest_remaining_s) {
           biggest_remaining_s = vleg.remaining_s;
           biggest_vleg_idx = vleg_idx;
@@ -255,25 +266,27 @@ class WalkContext {
         total_invalid_s += vleg.invalid_time_s;
       }
 
-      const bool satisfied_min_stance = ws_.stance_elapsed_s > wc_.min_stance_s;
-      const bool individual_leg_invalid = (
-          smallest_invalid_s < config_.walk.invalid_ratio * wc_.swing_time_s);
-      const bool legs_together_invalid = (
-          total_invalid_s < (
-              2 * config_.walk.invalid_ratio * wc_.swing_time_s +
-              wc_.min_stance_s));
-      if (satisfied_min_stance &&
-          (individual_leg_invalid || legs_together_invalid)) {
-        // We're going to run out of travel before a full swing could
-        // complete.  Thus pick up a leg no matter what the balance
-        // says.  If the two legs are relatively close as to when they
-        // will be invalid, then just let the normal leg selection
-        // process work here.
-        if (std::abs(ws_.vlegs[0].invalid_time_s -
-                     ws_.vlegs[1].invalid_time_s) < 0.75 * wc_.swing_time_s) {
-          return -1;
+      if (ws_.trot.twovleg_time >= config_.walk.min_invalid_time_s &&
+          std::isfinite(smallest_invalid_s) &&
+          std::isfinite(total_invalid_s)) {
+        const double other_invalid_s = total_invalid_s - smallest_invalid_s;
+        const bool individual_leg_invalid = (
+            smallest_invalid_s < config_.walk.min_invalid_time_s);
+        const bool other_leg_invalid = (
+            other_invalid_s <
+            (wc_.swing_time_s + config_.walk.min_invalid_time_s));
+        if (individual_leg_invalid || other_leg_invalid) {
+          // We're going to run out of travel before a full swing could
+          // complete.  Thus pick up a leg no matter what the balance
+          // says.  If the two legs are relatively close as to when they
+          // will be invalid, then just let the normal leg selection
+          // process work here.
+          if (std::abs(ws_.vlegs[0].invalid_time_s -
+                       ws_.vlegs[1].invalid_time_s) < 0.75 * wc_.swing_time_s) {
+            return -1;
+          }
+          return smallest_vleg_idx;
         }
-        return smallest_vleg_idx;
       }
 
       const bool max_stance_exceeded = (
@@ -283,18 +296,40 @@ class WalkContext {
         return -1;
       }
 
-      const bool balance_point_reached = (
-          biggest_remaining_s < 0.5 * wc_.swing_time_s &&
-          satisfied_min_stance);
-
-      if (balance_point_reached) {
-        // If we have changed direction since the last swing, explicitly
-        // choose the leg which needs to be moved more.
-        if (state_->robot.desired_R.v.dot(ws_.last_swing_v_R) < 0.0) {
-          return (biggest_vleg_idx + 1) % 2;
+      if (ws_.trot.flight_time <= 0.0) {
+        if (!std::isfinite(biggest_remaining_s)) {
+          if (ws_.stance_elapsed_s >= ws_.trot.twovleg_time) {
+            return -1;
+          }
+        } else if (biggest_remaining_s < 0.5 * ws_.trot.swing_time) {
+          return -1;
         }
+      } else {
+        // Nominally, when a stance leg is 1/2 of one_leg time away
+        // from the balance point, then it gets lifted.  We add a
+        // corrective term to keep the two vlegs in the correct phase.
+        // If they are in the correct phase, then the alternating vleg
+        // should be in flight and have flight_time_s remaining in its
+        // swing.
+        for (int vleg_idx = 0; vleg_idx < 2; vleg_idx++) {
+          const auto& vleg = ws_.vlegs[vleg_idx];
+          if (vleg.mode != VLeg::Mode::kStance) { continue; }
 
-        return -1;
+          const auto alternate_leg_swing_remaining = [&]() {
+            const int alternate_vleg_idx = (vleg_idx + 1) % 2;
+            const auto& alternate_vleg = ws_.vlegs[alternate_vleg_idx];
+            if (alternate_vleg.mode == VLeg::Mode::kStance) { return 0.0; }
+            return ws_.trot.swing_time - alternate_vleg.swing_elapsed_s;
+          }();
+
+          const auto desired_remaining = (
+              (-0.5 * ws_.trot.onevleg_time) -
+              0.5 * alternate_leg_swing_remaining);
+
+          if (vleg.remaining_s <= desired_remaining) {
+            return vleg_idx;
+          }
+        }
       }
 
       // No leg to lift now.
@@ -322,26 +357,29 @@ class WalkContext {
     // Pick a target and initialize our swing calculators for each
     // leg about to lift.
 
-    // We use our "expected next" velocity as the swing target to aim
-    // for.  This assumes constant acceleration, and that the stance
-    // to swing ratio works out accurately, but then gives a better
-    // chance of being ready for the next cycle.
+    const double target_time_s =
+        (ws_.trot.flight_time <= 0.0) ?
+        (0.5 * ws_.trot.swing_time + ws_.trot.twovleg_time) :
+        (0.5 * ws_.trot.onevleg_time);
+
+    const double filter_time_s = 0.6 * ws_.trot.swing_time;
+
+    // We use an estimate of our expected next velocity to pick the
+    // target point.
     const auto predicted_state_R = FilterCommand(
         {state_->robot.desired_R.v, state_->robot.desired_R.w},
         {context_->command->v_R, context_->command->w_R},
         config_.lr_acceleration,
         config_.lr_alpha_rad_s2,
-        wc_.swing_time_s * wc_.stance_swing_ratio);
+        filter_time_s);
+
+    ws_.vlegs[vleg_idx].predicted_next_v = predicted_state_R.v;
+    ws_.vlegs[vleg_idx].target_time_s = target_time_s;
 
     PropagateLeg propagate(
         predicted_state_R.v,
         predicted_state_R.w,
-        // We aim for half a swing period beyond the idle point
-        // which would be sufficient if we had zero stance time.  We
-        // then add more so that in steady state we have a non-zero
-        // amount of time spent in stance (and some time to
-        // accelerate/decelerate).
-        -(0.5 + wc_.stance_swing_ratio * 1.0) * wc_.swing_time_s);
+        -target_time_s);
 
     for (int leg_idx : kVlegMapping[vleg_idx]) {
       auto& leg_R = GetLeg_R(legs_R, leg_idx);
@@ -418,11 +456,15 @@ class WalkContext {
   }
 
   bool all_stance() const {
+    return count_stance() == 2;
+  }
+
+  int count_stance() const {
     return std::count_if(
         std::begin(ws_.vlegs), std::end(ws_.vlegs),
         [&](const auto& vleg) {
-          return vleg.mode == VLeg::Mode::kSwing;
-        }) == 0;
+          return vleg.mode == VLeg::Mode::kStance;
+        });
   }
 
   QuadrupedContext* const context_;

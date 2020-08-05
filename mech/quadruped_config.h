@@ -186,19 +186,12 @@ struct QuadrupedConfig {
 
     double lift_height = 0.025;
 
-    // The minimum amount of time to spend in stance.
-    double min_stance_s = 0.15;
-
     // The maximum amount of time to spend in stance.
     double max_stance_s = 0.40;
 
-    // Ratio of time spent in stance vs swing.  Bigger numbers mean
-    // more time spent in stance.
-    double stance_swing_ratio = 0.75;
-
-    // When a leg would become invalid in this many swing times, force
-    // a step.
-    double invalid_ratio = 1.5;
+    // When a leg would become invalid in this much time, force a
+    // step.
+    double min_invalid_time_s = 0.02;
 
     // The fraction of a swing spent ramping in and out of the world
     // velocity.
@@ -212,14 +205,15 @@ struct QuadrupedConfig {
     double max_flight_time_s = 0.02;
     double travel_ratio = 0.8;
 
+    // How much acceleration to allow when only one vleg is down.
+    double onevleg_accel = 0.6;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(swing_time_s));
       a->Visit(MJ_NVP(lift_height));
-      a->Visit(MJ_NVP(min_stance_s));
       a->Visit(MJ_NVP(max_stance_s));
-      a->Visit(MJ_NVP(stance_swing_ratio));
-      a->Visit(MJ_NVP(invalid_ratio));
+      a->Visit(MJ_NVP(min_invalid_time_s));
       a->Visit(MJ_NVP(world_blend_ratio));
 
       a->Visit(MJ_NVP(max_swing_time_s));
@@ -227,6 +221,7 @@ struct QuadrupedConfig {
       a->Visit(MJ_NVP(max_twovleg_time_s));
       a->Visit(MJ_NVP(max_flight_time_s));
       a->Visit(MJ_NVP(travel_ratio));
+      a->Visit(MJ_NVP(onevleg_accel));
     }
   };
 

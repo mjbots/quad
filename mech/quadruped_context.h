@@ -176,12 +176,12 @@ struct QuadrupedContext : boost::noncopyable {
     return result_RB;
   }
 
-  void UpdateCommandedR() {
+  void UpdateCommandedR(double max_rate = 1.0) {
     const auto result_R = FilterCommand(
         {state->robot.desired_R.v, state->robot.desired_R.w},
         {command->v_R, command->w_R},
-        config.lr_acceleration,
-        config.lr_alpha_rad_s2,
+        max_rate * config.lr_acceleration,
+        max_rate * config.lr_alpha_rad_s2,
         config.period_s);
     state->robot.desired_R.v = result_R.v;
     state->robot.desired_R.w = result_R.w;
