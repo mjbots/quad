@@ -1068,9 +1068,11 @@ class MechRender {
     bool leg_actual = true;
     bool leg_command = true;
     bool leg_force = false;
-    bool attitude = true;
+    int frame = 0;
     bool ground = true;
-    bool support = true;
+    bool com = true;
+    bool support_actual = true;
+    bool support_command = true;
     bool target = true;
     bool terrain = false;
 
@@ -1080,9 +1082,11 @@ class MechRender {
       a->Visit(MJ_NVP(leg_actual));
       a->Visit(MJ_NVP(leg_command));
       a->Visit(MJ_NVP(leg_force));
-      a->Visit(MJ_NVP(attitude));
+      a->Visit(MJ_NVP(frame));
       a->Visit(MJ_NVP(ground));
-      a->Visit(MJ_NVP(support));
+      a->Visit(MJ_NVP(com));
+      a->Visit(MJ_NVP(support_actual));
+      a->Visit(MJ_NVP(support_command));
       a->Visit(MJ_NVP(target));
       a->Visit(MJ_NVP(terrain));
     }
@@ -1098,22 +1102,36 @@ class MechRender {
           return Eigen::Matrix4f::Identity();
         } else if (std::string(frame) == "M") {
           return parent_->tf_MB_.matrix().cast<float>();
+        } else if (std::string(frame) == "A") {
+          return parent_->tf_AB_.matrix().cast<float>();
         } else if (std::string(frame) == "T") {
-          return (parent_->tf_TM_.matrix() * parent_->tf_MB_.matrix()).cast<float>();
+          return (parent_->tf_TA_.matrix() * parent_->tf_AB_.matrix()).cast<float>();
         }
         mjlib::base::AssertNotReached();
       }();
 
+      const Eigen::Matrix4f tf_BX = tf_XB.inverse();
+
       const Eigen::Matrix4f tf_YX = [&]() -> Eigen::Matrix4f {
-        if (parent_->state_.attitude) {
-        // We want to render into the M frame instead of the B frame.
-          const Eigen::Matrix4f tf_MX = (
-              parent_->tf_MB_.matrix().cast<float>() * tf_XB.inverse());
-          return tf_MX;
-        } else {
-          const Eigen::Matrix4f tf_BX = tf_XB.inverse();
-          return tf_BX;
+        switch (parent_->state_.frame) {
+          case 0: { // A
+            return parent_->tf_AB_.matrix().cast<float>() * tf_BX;
+          }
+          case 1: {  // B
+            return tf_BX;
+          }
+          case 2: {  // M
+            return parent_->tf_MB_.matrix().cast<float>() * tf_BX;
+          }
+          case 3: { // T
+            return (parent_->tf_TA_ * parent_->tf_AB_)
+              .matrix().cast<float>() * tf_BX;
+          }
+          case 4: { // R
+            return parent_->tf_RB_.matrix().cast<float>() * tf_BX;
+          }
         }
+        return tf_BX;
       }();
 
       parent_->transform_ = tf_YX;
@@ -1167,18 +1185,46 @@ class MechRender {
     return attitude.matrix();
   }
 
+  template <typename Array>
+  void DrawSupport(const mech::QuadrupedControl::ControlLog& qc,
+                   const Array& array,
+                   const Eigen::Vector4f& color) {
+    std::vector<base::Point3D> points;
+    for (int i : {0, 1, 3, 2}) {
+      const auto& leg_B = qc.legs_B[i];
+      if (leg_B.stance != 0) {
+        points.push_back(array[i].position);
+      }
+    }
+    for (size_t i = 0; i < points.size(); i++) {
+      lines_.AddSegment(
+          points[i].cast<float>(),
+          points[(i + 1) % points.size()].cast<float>(),
+          color);
+    }
+    if (points.size() == 4) {
+      // Render putative "next" supports.
+      lines_.AddSegment(
+          points[0].cast<float>(), points[2].cast<float>(),
+          color);
+      lines_.AddSegment(
+          points[1].cast<float>(), points[3].cast<float>(),
+          color);
+    }
+  }
+
   void DrawMech(const mech::QuadrupedControl::Status& qs,
                 const mech::QuadrupedControl::ControlLog& qc,
                 const mech::AttitudeData& attitude) {
+    tf_RB_ = qs.state.robot.frame_RB.pose;
     tf_MB_ = qs.state.robot.frame_MB.pose;
-    tf_TM_ = qs.state.robot.tf_TM;
+    tf_AB_ = qs.state.robot.frame_AB.pose;
+    tf_TA_ = qs.state.robot.tf_TA;
 
     // We'll draw in the B frame.
     RenderFrame b(this, "B");
 
-    if (state_.ground) {
-      DrawGround(qs, attitude);
-    }
+    DrawGround(qs, attitude);
 
     if (state_.terrain) {
       DrawTerrain();
@@ -1244,28 +1290,12 @@ class MechRender {
       }
     }
 
-    if (state_.support && !qs.state.legs_B.empty() && !qc.legs_B.empty()) {
-      std::vector<base::Point3D> points;
-      for (int i : {0, 1, 3, 2}) {
-        const auto& leg_B = qc.legs_B[i];
-        if (leg_B.stance != 0) {
-          points.push_back(qs.state.legs_B[i].position);
-        }
+    if (!qs.state.legs_B.empty() && !qc.legs_B.empty()) {
+      if (state_.support_actual) {
+        DrawSupport(qc, qs.state.legs_B, Eigen::Vector4f(0, 1, 0, 1));
       }
-      for (size_t i = 0; i < points.size(); i++) {
-        lines_.AddSegment(
-            points[i].cast<float>(),
-            points[(i + 1) % points.size()].cast<float>(),
-            Eigen::Vector4f(1, 0, 0, 1));
-      }
-      if (points.size() == 4) {
-        // Render putative "next" supports.
-        lines_.AddSegment(
-            points[0].cast<float>(), points[2].cast<float>(),
-            Eigen::Vector4f(1, 0.2, 0, 1));
-        lines_.AddSegment(
-            points[1].cast<float>(), points[3].cast<float>(),
-            Eigen::Vector4f(1, 0, 0.2, 1));
+      if (state_.support_command) {
+        DrawSupport(qc, qc.legs_B, Eigen::Vector4f(0, 0, 1, 1));
       }
     }
   }
@@ -1295,12 +1325,16 @@ class MechRender {
     RenderFrame tf_M(this, "M");
 
     // Render our CoM projected onto the ground.
-    AddBall(Eigen::Vector3f(0, 0, max_z_M), 0.006, Eigen::Vector4f(1, 0, 0, 1));
+    if (state_.com) {
+      AddBall(Eigen::Vector3f(0, 0, max_z_M), 0.006, Eigen::Vector4f(1, 0, 0, 1));
+    }
 
-    DrawPlane(kGroundSize,
-              Eigen::Vector3f(0, 0, -1),
-              Eigen::Vector3f(0, 0, max_z_M),
-              Eigen::Vector4f(0.3, 0.3, 0.3, 1.0));
+    if (state_.ground) {
+      DrawPlane(kGroundSize,
+                Eigen::Vector3f(0, 0, -1),
+                Eigen::Vector3f(0, 0, max_z_M),
+                Eigen::Vector4f(0.3, 0.3, 0.3, 1.0));
+    }
   }
 
   void DrawPlane(double l, Eigen::Vector3f normal, Eigen::Vector3f offset,
@@ -1469,13 +1503,15 @@ class MechRender {
       camera_ = MakeOrthoCamera();
       trackball_ = MakeTrackballTop();
     }
+    ImGui::Combo("frame", &state_.frame, kFrameNames, IM_ARRAYSIZE(kFrameNames));
     ImGui::Checkbox("body", &state_.body);
     ImGui::Checkbox("actual", &state_.leg_actual);
     ImGui::Checkbox("command", &state_.leg_command);
     ImGui::Checkbox("force", &state_.leg_force);
-    ImGui::Checkbox("attitude", &state_.attitude);
     ImGui::Checkbox("ground", &state_.ground);
-    ImGui::Checkbox("support", &state_.support);
+    ImGui::Checkbox("com", &state_.com);
+    ImGui::Checkbox("support act", &state_.support_actual);
+    ImGui::Checkbox("support cmd", &state_.support_command);
     ImGui::Checkbox("target", &state_.target);
     ImGui::Checkbox("terrain", &state_.terrain);
 
@@ -1551,12 +1587,22 @@ class MechRender {
 
   State state_;
 
+  Sophus::SE3d tf_RB_;
   Sophus::SE3d tf_MB_;
-  Sophus::SE3d tf_TM_;
+  Sophus::SE3d tf_AB_;
+  Sophus::SE3d tf_TA_;
 
   const double kVelocityDrawScale = 0.1;
   const double kForceDrawScale = 0.002;
   const double kGroundSize = 0.500;
+
+  static inline constexpr const char* kFrameNames[] = {
+    "A",
+    "B",
+    "M",
+    "T",
+    "R",
+  };
 };
 
 constexpr const char* kIniFileName = "tplot2.ini";

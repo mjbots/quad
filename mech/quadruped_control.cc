@@ -521,18 +521,28 @@ class QuadrupedControl::Impl {
 
     // frame_RB isn't sensed, but is just a commanded value.
 
-    // Do the M frame (CoM frame)
-    auto& frame_MB = status_.state.robot.frame_MB;
+    // Do the A frame (Attitude)
+    auto& frame_AB = status_.state.robot.frame_AB;
     Sophus::SE3d CB{
       Sophus::SO3d(),
           -config_.center_of_mass_B};
-    Sophus::SE3d MC{
+    Sophus::SE3d AC{
       Sophus::SO3d(imu_data_.attitude.eigen()),
           Eigen::Vector3d(),
     };
 
+    frame_AB.pose = AC * CB;
+    frame_AB.w = (M_PI / 180.0) * imu_data_.rate_dps;
+
+    // Now the M frame (CoM)
+    auto& frame_MB = status_.state.robot.frame_MB;
+    auto axis_MC = imu_data_.attitude.euler_rad();
+    axis_MC.yaw = 0.0;
+    Sophus::SE3d MC{
+      Sophus::SO3d(base::Quaternion::FromEuler(axis_MC).eigen()),
+          Eigen::Vector3d(),
+    };
     frame_MB.pose = MC * CB;
-    frame_MB.w = (M_PI / 180.0) * imu_data_.rate_dps;
 
     // Do terrain.
     UpdateTerrain();
@@ -561,19 +571,19 @@ class QuadrupedControl::Impl {
   }
 
   void UpdateTerrain() {
-    const auto& tf_MB = status_.state.robot.frame_MB;
-    auto& tf_TM = status_.state.robot.tf_TM;
+    const auto& tf_AB = status_.state.robot.frame_AB.pose;
+    auto& tf_TA = status_.state.robot.tf_TA;
 
-    std::vector<base::Point3D> stance_M;
+    std::vector<base::Point3D> stance_A;
     for (const auto& leg_B : status_.state.legs_B) {
-      Eigen::Vector3d p_M = tf_MB.pose * leg_B.position;
+      Eigen::Vector3d p_A = tf_AB * leg_B.position;
       if (leg_B.stance != 1.0) {
         // Use the Z value from the current terrain.
-        Eigen::Vector3d p_T = tf_TM * p_M;
+        Eigen::Vector3d p_T = tf_TA * p_A;
         p_T.z() = 0;
-        stance_M.push_back(tf_TM.inverse() * p_T);
+        stance_A.push_back(tf_TA.inverse() * p_T);
       } else {
-        stance_M.push_back(p_M);
+        stance_A.push_back(p_A);
       }
     }
 
@@ -581,16 +591,16 @@ class QuadrupedControl::Impl {
 
     // Now update the attitude recursively.
     std::vector<base::Point3D> stance_T;
-    for (const auto& leg_M : stance_M) {
-      stance_T.push_back(tf_TM * leg_M);
+    for (const auto& leg_A : stance_A) {
+      stance_T.push_back(tf_TA * leg_A);
     }
 
     // Fit a plane to these four points to see how to update our
     // terrain transform.
-    const auto plane = base::FitPlane(stance_M);
+    const auto plane = base::FitPlane(stance_A);
 
     // We just always exactly set our translation.
-    robot.tf_TM.translation().z() = -plane.c;
+    robot.tf_TA.translation().z() = -plane.c;
 
     // We filter our X and Y slopes.
     const double alpha = (
@@ -600,7 +610,7 @@ class QuadrupedControl::Impl {
     robot.terrain_rad[1] = (
         alpha * robot.terrain_rad[1] + (1.0 - alpha) * std::atan(plane.b));
 
-    robot.tf_TM.so3() = Sophus::SO3d(
+    robot.tf_TA.so3() = Sophus::SO3d(
         (base::Quaternion::FromAxisAngle(
             robot.terrain_rad[0], 0, 1, 0) *
          base::Quaternion::FromAxisAngle(

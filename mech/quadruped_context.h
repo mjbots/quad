@@ -156,23 +156,24 @@ struct QuadrupedContext : boost::noncopyable {
     // Project the M(0, 0, 0) point down until it intersects the T
     // plane, getting the result in the M frame.
 
+    Sophus::SE3d tf_AM = robot.frame_AB.pose * robot.frame_MB.pose.inverse();
+
+    const Sophus::SE3d tf_MB = robot.frame_MB.pose;
+    Sophus::SE3d tf_MT = tf_AM.inverse() * robot.tf_TA.inverse();
+    const Sophus::SE3d tf_BM = tf_MB.inverse();
+
     const Eigen::Vector3d com_on_ground_M =
         FindVerticalLinePlaneIntersect(
-            robot.tf_TM.inverse(),
+            tf_MT,
             Eigen::Vector3d(0, 0, 0),
             Eigen::Vector3d(0, 0, 1),
             Eigen::Vector3d(0, 0, 0));
 
-    // Convert that into the B frame.
-    Eigen::Vector3d p_B = robot.frame_MB.pose.inverse() * com_on_ground_M;
-
-    // And then move it back up by our Z height from the terrain.
-    p_B.z() += robot.tf_TM.translation().z();
-
-    // And that is the negative of our desired RB transform.
-
+    // Project that back into the B frame to get our offset.
     base::KinematicRelation result_RB;
-    result_RB.pose.translation().head<2>() = -p_B.head<2>();
+    result_RB.pose.translation().head<2>() =
+        -(tf_BM * com_on_ground_M).head<2>();
+
     return result_RB;
   }
 

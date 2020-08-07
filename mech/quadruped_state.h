@@ -87,14 +87,15 @@ struct QuadrupedState {
     // Only v[0, 1] and w[2] will be non-zero.
     base::KinematicRelation desired_R;
 
-    // Mappings between the B (body) frame, and the R (robot), and M
-    // (CoM) frames.
+    // Mappings between the B (body) frame, and the R (robot), M
+    // (CoM), and A (attitude) frames.
     base::KinematicRelation frame_RB;
     base::KinematicRelation frame_MB;
+    base::KinematicRelation frame_AB;
 
     // Transform from the CoM frame to the terrain frame.
     std::array<double, 2> terrain_rad = {};
-    Sophus::SE3d tf_TM;
+    Sophus::SE3d tf_TA;
 
     double voltage = 0.0;
 
@@ -104,9 +105,10 @@ struct QuadrupedState {
 
       a->Visit(MJ_NVP(frame_RB));
       a->Visit(MJ_NVP(frame_MB));
+      a->Visit(MJ_NVP(frame_AB));
 
       a->Visit(MJ_NVP(terrain_rad));
-      a->Visit(MJ_NVP(tf_TM));
+      a->Visit(MJ_NVP(tf_TA));
       a->Visit(MJ_NVP(voltage));
     }
   };

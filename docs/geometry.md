@@ -35,7 +35,12 @@ body and fixed to the chassis.
 
 CoM Frame (M): This frame is fixed to the chassis at the center of
 mass as measured with the legs in idle position.  It is oriented to be
-level with the ground, so +Z is always down w.r.t. gravity.
+level with the ground, so +Z is always down w.r.t. gravity.  The frame
+has a yaw such that +X is pointed to same heading as Body +X.
+
+Attitude Frame (A): This frame is fixed to the chassis center of mass.
++Z is down w.r.t. gravity.  The rotation of +X/+Y is arbitrary at
+power up, and follows the rotation of the B/L transform.
 
 Robot Frame (R): This frame is offset from the Body Frame (B) and
 referenced in the same manner, but may be offset or rotated to apply
