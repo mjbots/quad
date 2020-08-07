@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-const CMD_MAX_RATE_X = 1.9;
+const CMD_MAX_RATE_X_FORWARD = 1.0;
+const CMD_MAX_RATE_X_REVERSE = 0.5;
 const CMD_MAX_RATE_Y = 0.2;
 const CMD_MAX_RATE_Z = Math.PI * 60 / 180.0;
 
@@ -65,6 +66,16 @@ function makeQuaternionAxisRotate(x, y, z, angle_rad) {
   return normalizeQuaternion([
     Math.cos(angle_rad / 2.0), x * factor, y * factor, z * factor])
 };
+
+function asymmetricScale(value, minval, maxval) {
+  if (value <= 0) { return value * minval; }
+  return value * maxval;
+}
+
+function asymmetricUnscale(value, minval, maxval) {
+  if (value <= 0) { return value / minval; }
+  return value / maxval;
+}
 
 class Joystick {
   static BUTTON_START = 9;
@@ -163,8 +174,8 @@ class Application {
     document.getElementById('chart_rot_max').innerHTML =
       (180.0 * CMD_MAX_RATE_Z / Math.PI).toFixed(0);
 
-    getElement('chart_x_min').innerHTML = (-CMD_MAX_RATE_X).toFixed(2);
-    getElement('chart_x_max').innerHTML = CMD_MAX_RATE_X.toFixed(2);
+    getElement('chart_x_min').innerHTML = (-CMD_MAX_RATE_X_REVERSE).toFixed(2);
+    getElement('chart_x_max').innerHTML = CMD_MAX_RATE_X_FORWARD.toFixed(2);
     getElement('chart_y_min').innerHTML = (-CMD_MAX_RATE_Y).toFixed(2);
     getElement('chart_y_max').innerHTML = CMD_MAX_RATE_Y.toFixed(2);
 
@@ -304,10 +315,10 @@ class Application {
     }
   }
 
-  _updateKey(oldValue, upKey, downKey, maxValue) {
+  _updateKey(oldValue, upKey, downKey, minValue, maxValue) {
     const updateValue = (() => {
       if (this._keys[upKey]) { return maxValue; }
-      if (this._keys[downKey]) { return -maxValue; }
+      if (this._keys[downKey]) { return minValue; }
       return 0.0;
     })();
     const alpha = 0.95;
@@ -323,9 +334,13 @@ class Application {
       return;
     }
 
-    this._kbd_v[0] = this._updateKey(this._kbd_v[0], 'w', 's', CMD_MAX_RATE_X);
-    this._kbd_v[1] = this._updateKey(this._kbd_v[1], 'd', 'a', CMD_MAX_RATE_Y);
-    this._kbd_w[0] = this._updateKey(this._kbd_w[0], 'e', 'q', CMD_MAX_RATE_Z);
+    this._kbd_v[0] = this._updateKey(this._kbd_v[0], 'w', 's',
+                                     -CMD_MAX_RATE_X_REVERSE,
+                                     CMD_MAX_RATE_X_FORWARD);
+    this._kbd_v[1] = this._updateKey(this._kbd_v[1], 'd', 'a',
+                                     -CMD_MAX_RATE_Y, CMD_MAX_RATE_Y);
+    this._kbd_w[0] = this._updateKey(this._kbd_w[0], 'e', 'q',
+                                     -CMD_MAX_RATE_Z, CMD_MAX_RATE_Z);
   }
 
   _sendCommand() {
@@ -367,7 +382,8 @@ class Application {
       } else {
         // Normal movement mode.
         const v_R = [
-          -this._joystick.axis(Joystick.AXES_LEFT_Y) * CMD_MAX_RATE_X,
+          asymmetricScale(-this._joystick.axis(Joystick.AXES_LEFT_Y),
+                          CMD_MAX_RATE_X_REVERSE, CMD_MAX_RATE_X_FORWARD),
           this._joystick.axis(Joystick.AXES_LEFT_X) * CMD_MAX_RATE_Y,
           0.0
         ];
@@ -389,7 +405,12 @@ class Application {
 
       const desired_trans_cmd = getElement('desired_trans_cmd');
       const scaled_x =
-            Math.max(-1.0, Math.min(1.0, v_R[0] / CMD_MAX_RATE_X));
+            Math.max(
+              -1.0,
+              Math.min(
+                1.0,
+                asymmetricUnscale(
+                  v_R[0], CMD_MAX_RATE_X_REVERSE, CMD_MAX_RATE_X_FORWARD)));
       const scaled_y =
             Math.max(-1.0, Math.min(1.0, v_R[1] / CMD_MAX_RATE_Y));
       desired_trans_cmd.setAttribute('x', `${scaled_y * 38 + 48}%`);
@@ -524,7 +545,10 @@ class Application {
 
       const desired_trans_act = getElement('desired_trans_act');
       const scaled_x =
-            Math.max(-1.0, Math.min(1.0, desired_R.v[0] / CMD_MAX_RATE_X));
+            Math.max(-1.0, Math.min(
+              1.0,
+              asymmetricUnscale(
+                desired_R.v[0], CMD_MAX_RATE_X_REVERSE, CMD_MAX_RATE_X_FORWARD)));
       const scaled_y =
             Math.max(-1.0, Math.min(1.0, desired_R.v[1] / CMD_MAX_RATE_Y));
       desired_trans_act.setAttribute('x', `${scaled_y * 38 + 49}%`);
