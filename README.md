@@ -12,14 +12,15 @@ Directory structure
 -------------------
 
 * **base/** - C++ source files common to many applications.
+* **ffmpeg/** - C++ ffmpeg wrappers.
+* **gl/** - C++ GL wrappers.
 * **mech/** - C++ source files specific to walking robots.
-* **python/** - Python bindings for various C++ classes.
-* **legtool/** - A python application for experimenting with static
-  walking gaits.
+* **simulator/** - C++ source files for a quadruped simulator.
 * **utils/** - Utilities for development and data analysis.
 * **video-ui/** - Client application for FPV and real-time control.
 * **configs/** - Configuration files for different robots and applications.
 * **hw/** - Hardware design files along with firmware.
+* **docs/** - Documentation.
 
 
 First Time Setup
@@ -31,9 +32,18 @@ The following should work on Ubuntu 18.04
 ./install-packages
 ```
 
-Building
---------
+Building for host
+-----------------
 
 ```
 tools/bazel test //...
 ```
+
+Running simulation
+------------------
+
+```
+./bazel-bin/simulator/simulator -c configs/quadruped.ini
+```
+
+Then point your web browser to `http://localhost:4778`
