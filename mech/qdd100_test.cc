@@ -717,7 +717,7 @@ class Application {
 
 }
 
-int do_main(int argc, char**argv) {
+int do_main(int argc, char** argv) {
   Options options;
 
   auto group = mjlib::base::ClippArchive().Accept(&options).group();

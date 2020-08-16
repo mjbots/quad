@@ -32,7 +32,7 @@ namespace mech {
 
 /// Provide an interface to the pi3hat.
 ///
-/// NOTE: This treates the AsioClient as the primary interface.  IMU
+/// NOTE: This treats the AsioClient as the primary interface.  IMU
 /// and RF requests will only be serviced when AsyncTransmit is
 /// called.
 class Pi3hatWrapper : public Pi3hatInterface {

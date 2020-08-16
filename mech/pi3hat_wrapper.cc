@@ -67,7 +67,7 @@ class Pi3hatWrapper::Impl {
                                       std::placeholders::_1));
     boost::asio::post(
         executor_,
-          std::bind(std::move(callback), mjlib::base::error_code()));
+        std::bind(std::move(callback), mjlib::base::error_code()));
   }
 
   void ReadImu(AttitudeData* data,
