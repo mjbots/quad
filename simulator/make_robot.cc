@@ -170,7 +170,7 @@ dd::SkeletonPtr MakeFloor() {
   auto floor = dd::Skeleton::create("floor");
   auto body = floor->createJointAndBodyNodePair<dd::WeldJoint>(nullptr).second;
 
-  double floor_width = 80.0;
+  double floor_width = 160.0;
   double floor_height = 0.01;
   auto box = std::make_shared<dd::BoxShape>(
       Eigen::Vector3d(floor_width, floor_width, floor_height));
