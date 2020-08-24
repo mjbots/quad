@@ -274,7 +274,7 @@ class WalkContext {
             smallest_invalid_s < config_.walk.min_invalid_time_s);
         const bool other_leg_invalid = (
             other_invalid_s <
-            (wc_.swing_time_s + config_.walk.min_invalid_time_s));
+            (ws_.trot.swing_time + config_.walk.min_invalid_time_s));
         if (individual_leg_invalid || other_leg_invalid) {
           // We're going to run out of travel before a full swing could
           // complete.  Thus pick up a leg no matter what the balance
@@ -282,7 +282,7 @@ class WalkContext {
           // will be invalid, then just let the normal leg selection
           // process work here.
           if (std::abs(ws_.vlegs[0].invalid_time_s -
-                       ws_.vlegs[1].invalid_time_s) < 0.75 * wc_.swing_time_s) {
+                       ws_.vlegs[1].invalid_time_s) < 0.75 * ws_.trot.swing_time) {
             return -1;
           }
           return smallest_vleg_idx;
@@ -395,7 +395,7 @@ class WalkContext {
           ws_.legs[leg_idx].target_R,
           wc_.lift_height,
           wc_.world_blend_ratio,
-          wc_.swing_time_s);
+          ws_.trot.swing_time);
     }
   }
 
@@ -436,7 +436,7 @@ class WalkContext {
           }
         }
       }
-      if (vleg.swing_elapsed_s > wc_.swing_time_s) {
+      if (vleg.swing_elapsed_s > ws_.trot.swing_time) {
         vleg.mode = VLeg::kStance;
         vleg.swing_elapsed_s = 0.0;
 

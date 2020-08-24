@@ -181,9 +181,6 @@ struct QuadrupedConfig {
   Jump jump;
 
   struct Walk {
-    // The length of a single leg swing.
-    double swing_time_s = 0.25;
-
     double lift_height = 0.025;
 
     // The maximum amount of time to spend in stance.
@@ -210,7 +207,6 @@ struct QuadrupedConfig {
 
     template <typename Archive>
     void Serialize(Archive* a) {
-      a->Visit(MJ_NVP(swing_time_s));
       a->Visit(MJ_NVP(lift_height));
       a->Visit(MJ_NVP(max_stance_s));
       a->Visit(MJ_NVP(min_invalid_time_s));
