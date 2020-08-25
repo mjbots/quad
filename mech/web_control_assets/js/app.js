@@ -353,7 +353,7 @@ class Application {
       return;
     }
 
-    const [v_R, w_R, pose_RB] = (() => {
+    const [v_R_strafe, w_R, pose_RB] = (() => {
       // Are we in keyboard mode?
       if (!this._joystick.present) {
         const v_R = [this._kbd_v[0], this._kbd_v[1], 0];
@@ -396,6 +396,9 @@ class Application {
       }
     })();
 
+
+    const disable_strafe = getElement("disable_strafe").checked;
+    const v_R = disable_strafe ? [v_R_strafe[0], 0, 0] : v_R_strafe;
 
     {
       const desired_rot_cmd = getElement('desired_rot_cmd');
