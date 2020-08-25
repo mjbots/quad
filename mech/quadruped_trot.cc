@@ -40,6 +40,10 @@ QuadrupedState::Walk::Trot CalculateTrot(
 
   QuadrupedState::Walk::Trot r;
 
+  const double max_speed =
+      max_travel_dist / (cw.min_swing_time_s - 2 * cw.max_flight_time_s);
+  r.max_speed = max_speed;
+
   if (speed < ((0.5 * max_travel_dist) /
                (cw.max_twovleg_time_s +
                 0.5 * cw.max_swing_time_s))) {
@@ -68,8 +72,6 @@ QuadrupedState::Walk::Trot CalculateTrot(
     return r;
   }
 
-  const double max_speed =
-      max_travel_dist / (cw.min_swing_time_s - 2 * cw.max_flight_time_s);
   if (speed < max_speed) {
     // Phase D
     r.flight_time = cw.max_flight_time_s;
@@ -129,6 +131,11 @@ class WalkContext {
       // We are allowed to accelerate when at least one vleg is down.
       context_->UpdateCommandedR(
           stance_vlegs == 2 ? 1.0 : config_.walk.onevleg_accel);
+      const auto max_speed = std::max(1.0, ws_.trot.max_speed);
+      if (state_->robot.desired_R.v.norm() > max_speed) {
+        state_->robot.desired_R.v =
+            state_->robot.desired_R.v.normalized() * max_speed;
+      }
     }
     if (all_stance()) {
       ws_.stance_elapsed_s += config_.period_s;

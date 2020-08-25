@@ -232,6 +232,7 @@ struct QuadrupedState {
       double twovleg_time = 0.0;
       double flight_time = 0.0;
       double speed = 0.0;
+      double max_speed = 0.0;
 
       template <typename Archive>
       void Serialize(Archive* a) {
@@ -240,6 +241,7 @@ struct QuadrupedState {
         a->Visit(MJ_NVP(twovleg_time));
         a->Visit(MJ_NVP(flight_time));
         a->Visit(MJ_NVP(speed));
+        a->Visit(MJ_NVP(max_speed));
       }
     };
 
