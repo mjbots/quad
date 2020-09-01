@@ -577,7 +577,11 @@ class QuadrupedControl::Impl {
     std::vector<base::Point3D> stance_A;
     for (const auto& leg_B : status_.state.legs_B) {
       Eigen::Vector3d p_A = tf_AB * leg_B.position;
-      if (leg_B.stance != 1.0) {
+      // If we are not in full stance, or if we are not pressing
+      // against the ground, then use our estimate.
+      if (leg_B.stance != 1.0 ||
+          (leg_B.force_N.z() <
+           ((1.0 / 8.0) * base::kGravity * config_.mass_kg))) {
         // Use the Z value from the current terrain.
         Eigen::Vector3d p_T = tf_TA * p_A;
         p_T.z() = 0;
