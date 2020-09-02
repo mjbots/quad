@@ -107,7 +107,7 @@ def main():
         print('Ubuntu release:', ubuntu_release)
 
     if ubuntu_release == b'focal':
-        PKGLIST += split('''python-is-python3''')
+        PKGLIST += split('''python-is-python3 libtinfo5''')
 
     if options.yes or call(
         "apt-get install --dry-run %s |"
