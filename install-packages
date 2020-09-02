@@ -97,7 +97,7 @@ def main():
     g_verbosity += options.verbose - options.quiet
 
     PKGLIST = split('''
-    bison flex libi2c-dev gcc g++ curl libc6-dev
+    bison flex gcc g++ curl libc6-dev
     ''')
 
     ubuntu_release = subprocess.check_output(["lsb_release", "-cs"]).strip()
@@ -106,7 +106,7 @@ def main():
         print('Ubuntu release:', ubuntu_release)
 
     if ubuntu_release == b'focal':
-        PGKLIST += split('''python-is-python3''')
+        PKGLIST += split('''python-is-python3''')
 
     if options.yes or call(
         "apt-get install --dry-run %s |"
