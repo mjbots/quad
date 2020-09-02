@@ -34,4 +34,5 @@ cc_binary(
         "@dart//:gui",
         "@org_llvm_libcxx//:libcxx",
     ],
+    linkstatic = False,
 )
