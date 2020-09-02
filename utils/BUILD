@@ -16,27 +16,6 @@
 
 package(default_visibility = ["//visibility:public"])
 
-genrule(
-    name = "tplot_uic",
-    srcs = [
-        "tplot_main_window.ui",
-    ],
-    outs = [
-        "ui_tplot_main_window.py",
-    ],
-    output_to_bindir = 1,
-    cmd = "pyside-uic $< > $@",
-)
-
-py_binary(
-    name = "tplot",
-    srcs = ["tplot.py"],
-    data = [":tplot_uic"],
-    deps = [
-        "@com_github_mjbots_mjlib//mjlib/telemetry:py_file_reader",
-    ],
-)
-
 py_binary(
     name = "video_aligner",
     srcs = ["video_aligner.py"],
