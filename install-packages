@@ -97,9 +97,7 @@ def main():
     g_verbosity += options.verbose - options.quiet
 
     PKGLIST = split('''
-    bison flex libi2c-dev gcc g++
-
-    python3-matplotlib python3-pyside pyside-tools
+    bison flex libi2c-dev gcc g++ curl libc6-dev
     ''')
 
     ubuntu_release = subprocess.check_output(["lsb_release", "-cs"]).strip()
@@ -107,16 +105,8 @@ def main():
     if options.verbose:
         print('Ubuntu release:', ubuntu_release)
 
-    if ubuntu_release != b'xenial':
-        PKGLIST += split('''
-        python3-snappy python3-ipython python3-qtconsole
-        ''')
-
-    if options.system:
-        PKGLIST += split('''
-        ifplugd iw wireless-tools wpasupplicant git lsof
-        htop strace ltrace build-essential dkms tcpdump
-''')
+    if ubuntu_release == b'focal':
+        PGKLIST += split('''python-is-python3''')
 
     if options.yes or call(
         "apt-get install --dry-run %s |"
