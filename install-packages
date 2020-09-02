@@ -97,7 +97,8 @@ def main():
     g_verbosity += options.verbose - options.quiet
 
     PKGLIST = split('''
-    bison flex gcc g++ curl libc6-dev
+    bison flex gcc g++ curl libc6-dev mesa-common-dev libxcursor-dev
+    libxrandr-dev libxinerama-dev libxi-dev libglu1-mesa-dev
     ''')
 
     ubuntu_release = subprocess.check_output(["lsb_release", "-cs"]).strip()
