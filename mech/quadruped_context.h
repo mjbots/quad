@@ -143,6 +143,10 @@ struct QuadrupedContext : boost::noncopyable {
     mjlib::base::AssertNotReached();
   }
 
+  QuadrupedState::Leg GetLegState_R(int id) const {
+    return state->robot.frame_RB.pose * GetLegState_B(id);
+  }
+
   const QuadrupedState::Joint& GetJointState(int id) const {
     for (const auto& joint : state->joints) {
       if (joint.id == id) { return joint; }

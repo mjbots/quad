@@ -197,11 +197,15 @@ struct QuadrupedState {
       // can be achieved at the current command.
       double travel_distance = 0.0;
 
+      // Is this leg currently locked into contact with the ground?
+      bool latched = false;
+
       template <typename Archive>
       void Serialize(Archive* a) {
         a->Visit(MJ_NVP(target_R));
         a->Visit(MJ_NVP(invalid_time_s));
         a->Visit(MJ_NVP(travel_distance));
+        a->Visit(MJ_NVP(latched));
       }
     };
 

@@ -202,8 +202,29 @@ struct QuadrupedConfig {
     double max_flight_time_s = 0.02;
     double travel_ratio = 0.8;
 
+    double initial_stance = 0.5;
+    double stance_restore = 40.0;
+
     // How much acceleration to allow when only one vleg is down.
     double onevleg_accel = 0.6;
+
+    // Damping controls for the landing and initial stance phase.
+    double swing_damp_start_phase = 0.8;
+    double swing_damp_kp = 0.4;
+    double swing_damp_kd = 0.4;
+    double swing_damp_kp_restore = 40.0;
+    double swing_damp_kd_restore = 40.0;
+
+    // Restore the Z position over this much of the stance phase.
+    double stance_restore_fraction = 0.7;
+
+    // And exponentially decrease the Z velocity to this value at the
+    // end of the stroke.
+    double stance_restore_scale = 0.1;
+
+    // We need to see a Z load of this much of 1/4 of the total mass
+    // before considering a leg to have contacted the ground.
+    double contact_detect_load = 0.75;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -217,7 +238,22 @@ struct QuadrupedConfig {
       a->Visit(MJ_NVP(max_twovleg_time_s));
       a->Visit(MJ_NVP(max_flight_time_s));
       a->Visit(MJ_NVP(travel_ratio));
+
+      a->Visit(MJ_NVP(initial_stance));
+      a->Visit(MJ_NVP(stance_restore));
+
       a->Visit(MJ_NVP(onevleg_accel));
+
+      a->Visit(MJ_NVP(swing_damp_start_phase));
+      a->Visit(MJ_NVP(swing_damp_kp));
+      a->Visit(MJ_NVP(swing_damp_kd));
+      a->Visit(MJ_NVP(swing_damp_kp_restore));
+      a->Visit(MJ_NVP(swing_damp_kd_restore));
+
+      a->Visit(MJ_NVP(stance_restore_fraction));
+      a->Visit(MJ_NVP(stance_restore_scale));
+
+      a->Visit(MJ_NVP(contact_detect_load));
     }
   };
 
