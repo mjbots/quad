@@ -2105,13 +2105,21 @@ class QuadrupedControl::Impl {
         for (size_t i = 0; i < values.size(); i++) {
           switch (i) {
             case 0: {
-              values[i] = moteus::WritePwm(
-                  joint.kp_scale.value_or(1.0), moteus::kFloat);
+              double kp = joint.kp_scale.value_or(1.0);
+              if (kp < 0.0) {
+                kp = 0.0;
+                log_.warn("negative joint kp!");
+              }
+              values[i] = moteus::WritePwm(kp, moteus::kFloat);
               break;
             }
             case 1: {
-              values[i] = moteus::WritePwm(
-                  joint.kd_scale.value_or(1.0), moteus::kFloat);
+              double kd = joint.kd_scale.value_or(1.0);
+              if (kd < 0.0) {
+                kd = 0.0;
+                log_.warn("negative joint kd!");
+              }
+              values[i] = moteus::WritePwm(kd, moteus::kFloat);
               break;
             }
           }
