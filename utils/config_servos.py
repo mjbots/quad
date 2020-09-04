@@ -43,6 +43,7 @@ CONFIG = {
         ('3,6,9,12', '200'),
     ],
     'servo.pid_position.kd' : '9',
+    'servo.pid_dq.ki' : '150.0',
     'motor.unwrapped_position_scale' : [
         ('1,3,4,6,7,9,10,12', '0.16666667'),
         ('2,5,8,11', '0.093750'),
