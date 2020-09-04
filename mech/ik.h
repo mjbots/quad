@@ -82,8 +82,8 @@ class IkSolver : boost::noncopyable {
   virtual ~IkSolver() {}
 
   /// If @p current is present, then it will be used to calculate the
-  /// individual joints required torque to achieve the given force
-  /// request.
+  /// individual joints' required velocity and torque to achieve the
+  /// given velocity and force request.
   virtual InverseResult Inverse(
       const Effector& effector_G,
       const std::optional<JointAngles>& current) const = 0;
