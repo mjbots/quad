@@ -49,6 +49,7 @@ class QuadrupedControl : boost::noncopyable {
     std::string log_filename_base = "mjbots-quada1.log";
 
     bool enable_imu = true;
+    bool servo_debug = false;
 
     double command_timeout_s = 1.0;
 
@@ -58,6 +59,7 @@ class QuadrupedControl : boost::noncopyable {
       a->Visit(MJ_NVP(config));
       a->Visit(MJ_NVP(log_filename_base));
       a->Visit(MJ_NVP(enable_imu));
+      a->Visit(MJ_NVP(servo_debug));
       a->Visit(MJ_NVP(command_timeout_s));
     }
   };

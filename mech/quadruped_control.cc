@@ -245,6 +245,10 @@ class QuadrupedControl::Impl {
       // Read mode, position, velocity, and torque.
       current.request.ReadMultiple(moteus::Register::kMode, 4, 1);
       current.request.ReadMultiple(moteus::Register::kVoltage, 3, 0);
+
+      if (parameters_.servo_debug) {
+        current.request.ReadMultiple(moteus::Register::kPositionKp, 5, 1);
+      }
     }
 
     config_status_request_ = {};
@@ -431,6 +435,26 @@ class QuadrupedControl::Impl {
         }
         case moteus::kFault: {
           out_joint.fault = moteus::ReadInt(value);
+          break;
+        }
+        case moteus::kPositionKp: {
+          out_joint.kp_Nm = sign * moteus::ReadTorque(value);
+          break;
+        }
+        case moteus::kPositionKi: {
+          out_joint.ki_Nm = sign * moteus::ReadTorque(value);
+          break;
+        }
+        case moteus::kPositionKd: {
+          out_joint.kd_Nm = sign * moteus::ReadTorque(value);
+          break;
+        }
+        case moteus::kPositionFeedforward: {
+          out_joint.feedforward_Nm = sign * moteus::ReadTorque(value);
+          break;
+        }
+        case moteus::kPositionCommand: {
+          out_joint.command_Nm = sign * moteus::ReadTorque(value);
           break;
         }
         default: {

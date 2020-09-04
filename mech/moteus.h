@@ -64,6 +64,12 @@ enum Register : uint32_t {
   kCommandStopPosition = 0x026,
   kCommandTimeout = 0x027,
 
+  kPositionKp = 0x030,
+  kPositionKi = 0x031,
+  kPositionKd = 0x032,
+  kPositionFeedforward = 0x033,
+  kPositionCommand = 0x034,
+
   kRegisterMapVersion = 0x102,
   kSerialNumber = 0x120,
   kSerialNumber1 = 0x120,

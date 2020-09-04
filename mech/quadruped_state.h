@@ -45,6 +45,12 @@ struct QuadrupedState {
     int32_t mode = 0;
     int32_t fault = 0;
 
+    double kp_Nm = 0.0;
+    double ki_Nm = 0.0;
+    double kd_Nm = 0.0;
+    double feedforward_Nm = 0.0;
+    double command_Nm = 0.0;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(id));
@@ -55,6 +61,11 @@ struct QuadrupedState {
       a->Visit(MJ_NVP(voltage));
       a->Visit(MJ_NVP(mode));
       a->Visit(MJ_NVP(fault));
+      a->Visit(MJ_NVP(kp_Nm));
+      a->Visit(MJ_NVP(ki_Nm));
+      a->Visit(MJ_NVP(kd_Nm));
+      a->Visit(MJ_NVP(feedforward_Nm));
+      a->Visit(MJ_NVP(command_Nm));
     }
   };
 
