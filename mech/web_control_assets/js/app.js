@@ -26,6 +26,15 @@ const ROTATION_EPSILON = Math.PI * 7.0 / 180.0;
 const getElement = (v) => document.getElementById(v);
 const iota = (v) => Array.from((new Array(v)).keys());
 
+const PERSIST_ELEMENTS = [
+  "jump_acceleration",
+  "max_forward_speed",
+  "jump_repeat",
+  "always_step",
+  "disable_strafe",
+  "record_data",
+];
+
 function _isUndefined(v) {
   return typeof v === "undefined";
 }
@@ -182,13 +191,16 @@ class Application {
 
     // Initialize any state from persistent storage.
     const cookies = readCookies();
-    if ('max_forward_speed' in cookies) {
-      getElement('max_forward_speed').value = cookies['max_forward_speed'];
+    for (const key of PERSIST_ELEMENTS) {
+      if (key in cookies) {
+        const element = getElement(key);
+        if ('checked' in element) {
+          element.checked = cookies[key];
+        } else {
+          element.value = cookies[key];
+        }
+      }
     }
-    if ('jump_acceleration' in cookies) {
-      getElement('jump_acceleration').value = cookies['jump_acceleration'];
-    }
-
 
     // Fill in our constant values.
     document.getElementById('chart_rot_min').innerHTML =
@@ -222,13 +234,11 @@ class Application {
       this._powerOff();
     });
 
-    getElement("jump_acceleration").addEventListener('change', () => {
-      this.updateConfig();
-    });
-
-    getElement("max_forward_speed").addEventListener('change', () => {
-      this.updateConfig();
-    });
+    for (const key of PERSIST_ELEMENTS) {
+      getElement(key).addEventListener('change', () => {
+        this.updateConfig();
+      });
+    }
 
     this._keys = {};
     this._kbd_v = [ 0, 0 ];
@@ -246,10 +256,14 @@ class Application {
     getElement('chart_x_max').innerHTML = this.getMaxForwardSpeed().toFixed(2);
 
     // Save our state in the cookies.
-    document.cookie =
-      `max_forward_speed=${getElement('max_forward_speed').value};max-age=31536000`;
-    document.cookie =
-      `jump_acceleration=${getElement('jump_acceleration').value};max-age=31536000`;
+    for (const key of PERSIST_ELEMENTS) {
+      const element = getElement(key);
+      if ('checked' in element) {
+        document.cookie = `${key}=${element.checked};max-age=31536000`;
+      } else {
+        document.cookie = `${key}=${element.value};max-age=31536000`;
+      }
+    }
   }
 
   getMaxForwardSpeed() {
