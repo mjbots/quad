@@ -185,6 +185,9 @@ class Application {
     if ('max_forward_speed' in cookies) {
       getElement('max_forward_speed').value = cookies['max_forward_speed'];
     }
+    if ('jump_acceleration' in cookies) {
+      getElement('jump_acceleration').value = cookies['jump_acceleration'];
+    }
 
 
     // Fill in our constant values.
@@ -219,6 +222,10 @@ class Application {
       this._powerOff();
     });
 
+    getElement("jump_acceleration").addEventListener('change', () => {
+      this.updateConfig();
+    });
+
     getElement("max_forward_speed").addEventListener('change', () => {
       this.updateConfig();
     });
@@ -240,11 +247,17 @@ class Application {
 
     // Save our state in the cookies.
     document.cookie =
-      `max_forward_speed=${this.getMaxForwardSpeed()};max-age=31536000`;
+      `max_forward_speed=${getElement('max_forward_speed').value};max-age=31536000`;
+    document.cookie =
+      `jump_acceleration=${getElement('jump_acceleration').value};max-age=31536000`;
   }
 
   getMaxForwardSpeed() {
     return Number(getElement('max_forward_speed').value);
+  }
+
+  getJumpAcceleration() {
+    return Number(getElement('jump_acceleration').value);
   }
 
   start() {
@@ -499,7 +512,7 @@ class Application {
 
     if (command["command"]["mode"] == "jump") {
       command["command"]["jump"] = {
-        "acceleration" : Number(getElement("jump_acceleration").value),
+        "acceleration" : this.getJumpAcceleration(),
         "repeat" : getElement("jump_repeat").checked,
       };
     }
