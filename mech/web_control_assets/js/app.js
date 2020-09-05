@@ -30,6 +30,19 @@ function _isUndefined(v) {
   return typeof v === "undefined";
 }
 
+function readCookies() {
+  return document.cookie
+    .split(';')
+    .reduce((res, c) => {
+      const [key, val] = c.trim().split('=').map(decodeURIComponent)
+      try {
+        return Object.assign(res, { [key]: JSON.parse(val) });
+      } catch (e) {
+        return Object.assign(res, { [key]: val});
+      }
+    }, {});
+}
+
 function normalizeQuaternion(q) {
   const norm = Math.sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
   return [
@@ -166,7 +179,13 @@ class Application {
     this._mode = "";
     this._state = null;
     this._joystick = new Joystick();
-    this._max_forward_speed = Number(getElement('max_speed').value);
+
+    // Initialize any state from persistent storage.
+    const cookies = readCookies();
+    if ('max_forward_speed' in cookies) {
+      getElement('max_forward_speed').value = cookies['max_forward_speed'];
+    }
+
 
     // Fill in our constant values.
     document.getElementById('chart_rot_min').innerHTML =
@@ -175,7 +194,7 @@ class Application {
       (180.0 * CMD_MAX_RATE_Z / Math.PI).toFixed(0);
 
     getElement('chart_x_min').innerHTML = (-CMD_MAX_RATE_X_REVERSE).toFixed(2);
-    getElement('chart_x_max').innerHTML = this._max_forward_speed.toFixed(2);
+    getElement('chart_x_max').innerHTML = this.getMaxForwardSpeed();
     getElement('chart_y_min').innerHTML = (-CMD_MAX_RATE_Y).toFixed(2);
     getElement('chart_y_max').innerHTML = CMD_MAX_RATE_Y.toFixed(2);
 
@@ -200,9 +219,8 @@ class Application {
       this._powerOff();
     });
 
-    getElement("max_speed").addEventListener('change', () => {
-      this._max_forward_speed = Number(getElement("max_speed").value);
-      getElement('chart_x_max').innerHTML = this._max_forward_speed.toFixed(2);
+    getElement("max_forward_speed").addEventListener('change', () => {
+      this.updateConfig();
     });
 
     this._keys = {};
@@ -213,6 +231,20 @@ class Application {
       'keydown', (e) => { this._keydown(e); });
     window.addEventListener(
       'keyup', (e) => { this._keyup(e); });
+
+    this.updateConfig();
+  }
+
+  updateConfig() {
+    getElement('chart_x_max').innerHTML = this.getMaxForwardSpeed().toFixed(2);
+
+    // Save our state in the cookies.
+    document.cookie =
+      `max_forward_speed=${this.getMaxForwardSpeed()};max-age=31536000`;
+  }
+
+  getMaxForwardSpeed() {
+    return Number(getElement('max_forward_speed').value);
   }
 
   start() {
@@ -341,7 +373,7 @@ class Application {
 
     this._kbd_v[0] = this._updateKey(this._kbd_v[0], 'w', 's',
                                      -CMD_MAX_RATE_X_REVERSE,
-                                     this._max_forward_speed);
+                                     this.getMaxForwardSpeed());
     this._kbd_v[1] = this._updateKey(this._kbd_v[1], 'd', 'a',
                                      -CMD_MAX_RATE_Y, CMD_MAX_RATE_Y);
     this._kbd_w[0] = this._updateKey(this._kbd_w[0], 'e', 'q',
@@ -388,7 +420,7 @@ class Application {
         // Normal movement mode.
         const v_R = [
           asymmetricScale(-this._joystick.axis(Joystick.AXES_LEFT_Y),
-                          CMD_MAX_RATE_X_REVERSE, this._max_forward_speed),
+                          CMD_MAX_RATE_X_REVERSE, this.getMaxForwardSpeed()),
           this._joystick.axis(Joystick.AXES_LEFT_X) * CMD_MAX_RATE_Y,
           0.0
         ];
@@ -418,7 +450,7 @@ class Application {
               Math.min(
                 1.0,
                 asymmetricUnscale(
-                  v_R[0], CMD_MAX_RATE_X_REVERSE, this._max_forward_speed)));
+                  v_R[0], CMD_MAX_RATE_X_REVERSE, this.getMaxForwardSpeed())));
       const scaled_y =
             Math.max(-1.0, Math.min(1.0, v_R[1] / CMD_MAX_RATE_Y));
       desired_trans_cmd.setAttribute('x', `${scaled_y * 38 + 48}%`);
@@ -556,7 +588,8 @@ class Application {
             Math.max(-1.0, Math.min(
               1.0,
               asymmetricUnscale(
-                desired_R.v[0], CMD_MAX_RATE_X_REVERSE, this._max_forward_speed)));
+                desired_R.v[0], CMD_MAX_RATE_X_REVERSE,
+                this.getMaxForwardSpeed())));
       const scaled_y =
             Math.max(-1.0, Math.min(1.0, desired_R.v[1] / CMD_MAX_RATE_Y));
       desired_trans_act.setAttribute('x', `${scaled_y * 38 + 49}%`);
