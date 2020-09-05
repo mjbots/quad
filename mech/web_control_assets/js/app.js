@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-const CMD_MAX_RATE_X_FORWARD = 1.0;
 const CMD_MAX_RATE_X_REVERSE = 0.5;
 const CMD_MAX_RATE_Y = 0.2;
 const CMD_MAX_RATE_Z = Math.PI * 60 / 180.0;
@@ -167,6 +166,7 @@ class Application {
     this._mode = "";
     this._state = null;
     this._joystick = new Joystick();
+    this._max_forward_speed = Number(getElement('max_speed').value);
 
     // Fill in our constant values.
     document.getElementById('chart_rot_min').innerHTML =
@@ -175,7 +175,7 @@ class Application {
       (180.0 * CMD_MAX_RATE_Z / Math.PI).toFixed(0);
 
     getElement('chart_x_min').innerHTML = (-CMD_MAX_RATE_X_REVERSE).toFixed(2);
-    getElement('chart_x_max').innerHTML = CMD_MAX_RATE_X_FORWARD.toFixed(2);
+    getElement('chart_x_max').innerHTML = this._max_forward_speed.toFixed(2);
     getElement('chart_y_min').innerHTML = (-CMD_MAX_RATE_Y).toFixed(2);
     getElement('chart_y_max').innerHTML = CMD_MAX_RATE_Y.toFixed(2);
 
@@ -198,6 +198,11 @@ class Application {
 
     getElement("power_off").addEventListener('click', () => {
       this._powerOff();
+    });
+
+    getElement("max_speed").addEventListener('change', () => {
+      this._max_forward_speed = Number(getElement("max_speed").value);
+      getElement('chart_x_max').innerHTML = this._max_forward_speed.toFixed(2);
     });
 
     this._keys = {};
@@ -336,7 +341,7 @@ class Application {
 
     this._kbd_v[0] = this._updateKey(this._kbd_v[0], 'w', 's',
                                      -CMD_MAX_RATE_X_REVERSE,
-                                     CMD_MAX_RATE_X_FORWARD);
+                                     this._max_forward_speed);
     this._kbd_v[1] = this._updateKey(this._kbd_v[1], 'd', 'a',
                                      -CMD_MAX_RATE_Y, CMD_MAX_RATE_Y);
     this._kbd_w[0] = this._updateKey(this._kbd_w[0], 'e', 'q',
@@ -383,7 +388,7 @@ class Application {
         // Normal movement mode.
         const v_R = [
           asymmetricScale(-this._joystick.axis(Joystick.AXES_LEFT_Y),
-                          CMD_MAX_RATE_X_REVERSE, CMD_MAX_RATE_X_FORWARD),
+                          CMD_MAX_RATE_X_REVERSE, this._max_forward_speed),
           this._joystick.axis(Joystick.AXES_LEFT_X) * CMD_MAX_RATE_Y,
           0.0
         ];
@@ -413,7 +418,7 @@ class Application {
               Math.min(
                 1.0,
                 asymmetricUnscale(
-                  v_R[0], CMD_MAX_RATE_X_REVERSE, CMD_MAX_RATE_X_FORWARD)));
+                  v_R[0], CMD_MAX_RATE_X_REVERSE, this._max_forward_speed)));
       const scaled_y =
             Math.max(-1.0, Math.min(1.0, v_R[1] / CMD_MAX_RATE_Y));
       desired_trans_cmd.setAttribute('x', `${scaled_y * 38 + 48}%`);
@@ -551,7 +556,7 @@ class Application {
             Math.max(-1.0, Math.min(
               1.0,
               asymmetricUnscale(
-                desired_R.v[0], CMD_MAX_RATE_X_REVERSE, CMD_MAX_RATE_X_FORWARD)));
+                desired_R.v[0], CMD_MAX_RATE_X_REVERSE, this._max_forward_speed)));
       const scaled_y =
             Math.max(-1.0, Math.min(1.0, desired_R.v[1] / CMD_MAX_RATE_Y));
       desired_trans_act.setAttribute('x', `${scaled_y * 38 + 49}%`);
