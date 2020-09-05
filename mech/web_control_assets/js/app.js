@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-const CMD_MAX_RATE_X_REVERSE = 0.5;
 const CMD_MAX_RATE_Y = 0.2;
 const CMD_MAX_RATE_Z = Math.PI * 60 / 180.0;
 
@@ -89,13 +88,13 @@ function makeQuaternionAxisRotate(x, y, z, angle_rad) {
 };
 
 function asymmetricScale(value, minval, maxval) {
-  if (value <= 0) { return value * minval; }
-  return value * maxval;
+  if (value <= 0) { return value * Math.abs(minval); }
+  return value * Math.abs(maxval);
 }
 
 function asymmetricUnscale(value, minval, maxval) {
-  if (value <= 0) { return value / minval; }
-  return value / maxval;
+  if (value <= 0) { return value / Math.abs(minval); }
+  return value / Math.abs(maxval);
 }
 
 class Joystick {
@@ -208,8 +207,8 @@ class Application {
     document.getElementById('chart_rot_max').innerHTML =
       (180.0 * CMD_MAX_RATE_Z / Math.PI).toFixed(0);
 
-    getElement('chart_x_min').innerHTML = (-CMD_MAX_RATE_X_REVERSE).toFixed(2);
-    getElement('chart_x_max').innerHTML = this.getMaxForwardSpeed();
+    getElement('chart_x_min').innerHTML = this.getMaxReverseSpeed().toFixed(2);
+    getElement('chart_x_max').innerHTML = this.getMaxForwardSpeed().toFixed(2);
     getElement('chart_y_min').innerHTML = (-CMD_MAX_RATE_Y).toFixed(2);
     getElement('chart_y_max').innerHTML = CMD_MAX_RATE_Y.toFixed(2);
 
@@ -236,7 +235,7 @@ class Application {
 
     for (const key of PERSIST_ELEMENTS) {
       getElement(key).addEventListener('change', () => {
-        this.updateConfig();
+        this._updateConfig();
       });
     }
 
@@ -249,11 +248,12 @@ class Application {
     window.addEventListener(
       'keyup', (e) => { this._keyup(e); });
 
-    this.updateConfig();
+    this._updateConfig();
   }
 
-  updateConfig() {
+  _updateConfig() {
     getElement('chart_x_max').innerHTML = this.getMaxForwardSpeed().toFixed(2);
+    getElement('chart_x_min').innerHTML = this.getMaxReverseSpeed().toFixed(2);
 
     // Save our state in the cookies.
     for (const key of PERSIST_ELEMENTS) {
@@ -267,7 +267,19 @@ class Application {
   }
 
   getMaxForwardSpeed() {
-    return Number(getElement('max_forward_speed').value);
+    if (this._mode == "pronk") {
+      return 0.3;
+    } else {
+      return Number(getElement('max_forward_speed').value);
+    }
+  }
+
+  getMaxReverseSpeed() {
+    if (this._mode == "pronk") {
+      return -0.1;
+    } else {
+      return -0.5;
+    }
   }
 
   getJumpAcceleration() {
@@ -289,6 +301,7 @@ class Application {
     })();
 
     getElement('mode_text').innerHTML = this._mode;
+    this._updateConfig();
   }
 
   _powerOff() {
@@ -399,7 +412,7 @@ class Application {
     }
 
     this._kbd_v[0] = this._updateKey(this._kbd_v[0], 'w', 's',
-                                     -CMD_MAX_RATE_X_REVERSE,
+                                     this.getMaxReverseSpeed(),
                                      this.getMaxForwardSpeed());
     this._kbd_v[1] = this._updateKey(this._kbd_v[1], 'd', 'a',
                                      -CMD_MAX_RATE_Y, CMD_MAX_RATE_Y);
@@ -447,7 +460,7 @@ class Application {
         // Normal movement mode.
         const v_R = [
           asymmetricScale(-this._joystick.axis(Joystick.AXES_LEFT_Y),
-                          CMD_MAX_RATE_X_REVERSE, this.getMaxForwardSpeed()),
+                          this.getMaxReverseSpeed(), this.getMaxForwardSpeed()),
           this._joystick.axis(Joystick.AXES_LEFT_X) * CMD_MAX_RATE_Y,
           0.0
         ];
@@ -477,7 +490,7 @@ class Application {
               Math.min(
                 1.0,
                 asymmetricUnscale(
-                  v_R[0], CMD_MAX_RATE_X_REVERSE, this.getMaxForwardSpeed())));
+                  v_R[0], this.getMaxReverseSpeed(), this.getMaxForwardSpeed())));
       const scaled_y =
             Math.max(-1.0, Math.min(1.0, v_R[1] / CMD_MAX_RATE_Y));
       desired_trans_cmd.setAttribute('x', `${scaled_y * 38 + 48}%`);
@@ -615,7 +628,8 @@ class Application {
             Math.max(-1.0, Math.min(
               1.0,
               asymmetricUnscale(
-                desired_R.v[0], CMD_MAX_RATE_X_REVERSE,
+                desired_R.v[0],
+                this.getMaxReverseSpeed(),
                 this.getMaxForwardSpeed())));
       const scaled_y =
             Math.max(-1.0, Math.min(1.0, desired_R.v[1] / CMD_MAX_RATE_Y));
