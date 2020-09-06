@@ -398,10 +398,14 @@ class WalkContext {
       // latched when in swing, but it is good for consistency.
       ws_.legs[leg_idx].latched = false;
 
+      const double lift_height =
+          wc_.lift_height *
+          context_->command->walk.value_or(QuadrupedCommand::Walk()).step_height;
+
       context_->swing_trajectory[leg_idx] = SwingTrajectory(
           leg_R.position, leg_R.velocity,
           ws_.legs[leg_idx].target_R,
-          wc_.lift_height,
+          lift_height,
           wc_.world_blend_ratio,
           ws_.trot.swing_time);
     }

@@ -193,8 +193,12 @@ struct QuadrupedCommand {
   std::optional<Jump> jump;
 
   struct Walk {
+    // Scale the step height by this amount.
+    double step_height = 1.0;
+
     template <typename Archive>
     void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(step_height));
     }
   };
 

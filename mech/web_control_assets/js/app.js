@@ -28,6 +28,7 @@ const iota = (v) => Array.from((new Array(v)).keys());
 const PERSIST_ELEMENTS = [
   "jump_acceleration",
   "max_forward_speed",
+  "height_scale",
   "jump_repeat",
   "always_step",
   "disable_strafe",
@@ -541,6 +542,15 @@ class Application {
       command["command"]["jump"] = {
         "acceleration" : this.getJumpAcceleration(),
         "repeat" : getElement("jump_repeat").checked,
+      };
+    } else if (command["command"]["mode"] == "walk") {
+      const height_engaged = (
+        this._joystick.down(Joystick.BUTTON_SHOULDER_RB) ||
+          this._keys['h']);
+
+      command["command"]["walk"] = {
+        "step_height" : height_engaged ?
+          Number(getElement("height_scale").value) : 1.0,
       };
     }
 
