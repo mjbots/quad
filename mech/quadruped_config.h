@@ -218,10 +218,6 @@ struct QuadrupedConfig {
     // Restore the Z position over this much of the stance phase.
     double stance_restore_fraction = 0.7;
 
-    // And exponentially decrease the Z velocity to this value at the
-    // end of the stroke.
-    double stance_restore_scale = 0.1;
-
     // We need to see a Z load of this much of 1/4 of the total mass
     // before considering a leg to have contacted the ground.
     double contact_detect_load = 0.75;
@@ -251,7 +247,6 @@ struct QuadrupedConfig {
       a->Visit(MJ_NVP(swing_damp_kd_restore));
 
       a->Visit(MJ_NVP(stance_restore_fraction));
-      a->Visit(MJ_NVP(stance_restore_scale));
 
       a->Visit(MJ_NVP(contact_detect_load));
     }

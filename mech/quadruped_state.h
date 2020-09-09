@@ -197,6 +197,10 @@ struct QuadrupedState {
       // can be achieved at the current command.
       double travel_distance = 0.0;
 
+      // What velocity is needed to restore to a neutral standing
+      // position.
+      double restore_velocity = 0.0;
+
       // Is this leg currently locked into contact with the ground?
       bool latched = false;
 
@@ -205,6 +209,7 @@ struct QuadrupedState {
         a->Visit(MJ_NVP(target_R));
         a->Visit(MJ_NVP(invalid_time_s));
         a->Visit(MJ_NVP(travel_distance));
+        a->Visit(MJ_NVP(restore_velocity));
         a->Visit(MJ_NVP(latched));
       }
     };

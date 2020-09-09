@@ -438,7 +438,7 @@ class WalkContext {
       const double downtime = ws_.trot.onevleg_time + ws_.trot.twovleg_time;
       const double delta = config_.stand_height - leg_R.position.z();
       const double restore_time = wc_.stance_restore_fraction * downtime;
-      leg_R.velocity.z() = delta / restore_time;
+      ws_.legs[leg_idx].restore_velocity = delta / restore_time;
     }
 
     leg_R.stance =
@@ -448,21 +448,15 @@ class WalkContext {
     leg_R.position = result_R.position;
     const double old_z_vel = leg_R.velocity.z();
     leg_R.velocity = result_R.velocity;
-    leg_R.velocity.z() = old_z_vel;
 
-    const double downtime = ws_.trot.onevleg_time + ws_.trot.twovleg_time;
-
-    if (leg_R.velocity.z() != 0.0) {
-      const double scale = std::pow(wc_.stance_restore_scale,
-                                    config_.period_s / downtime);
-      leg_R.velocity.z() *= scale;
-      leg_R.position.z() += leg_R.velocity.z() * config_.period_s;
-      const double delta = config_.stand_height - leg_R.position.z();
-      if (leg_R.velocity.z() * delta < 0.0) {
-        // We're done.
-        leg_R.velocity.z() = 0.0;
-        leg_R.position.z() = config_.stand_height;
-      }
+    leg_R.velocity.z() = ws_.legs[leg_idx].restore_velocity;
+    leg_R.position.z() += leg_R.velocity.z() * config_.period_s;
+    const double delta = config_.stand_height - leg_R.position.z();
+    if (leg_R.velocity.z() * delta < 0.0) {
+      // We're done.
+      leg_R.velocity.z() = 0.0;
+      ws_.legs[leg_idx].restore_velocity = 0.0;
+      leg_R.position.z() = config_.stand_height;
     }
 
     // TODO: We should keep track of our current desired body
@@ -555,6 +549,7 @@ class WalkContext {
 
         for (int leg_idx : kVlegMapping[vleg_idx]) {
           ws_.legs[leg_idx].latched = false;
+          ws_.legs[leg_idx].restore_velocity = 0.0;
           auto& leg_R = GetLeg_R(legs_R, leg_idx);
           leg_R.stance = wc_.initial_stance;
           leg_R.velocity.z() = 0.0;
