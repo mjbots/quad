@@ -31,6 +31,7 @@ constexpr int kVlegMapping[][2] = {
 
 QuadrupedState::Walk::Trot CalculateTrot(
     const QuadrupedConfig& config,
+    bool maximize_flight,
     double max_travel_dist, double speed) {
   MJ_ASSERT(speed >= 0.0);
   MJ_ASSERT(max_travel_dist >= 0.0);
@@ -44,7 +45,8 @@ QuadrupedState::Walk::Trot CalculateTrot(
       max_travel_dist / (cw.min_swing_time_s - 2 * cw.max_flight_time_s);
   r.max_speed = max_speed;
 
-  if (speed < ((0.5 * max_travel_dist) /
+  if (!maximize_flight &&
+      speed < ((0.5 * max_travel_dist) /
                (cw.max_twovleg_time_s +
                 0.5 * cw.max_swing_time_s))) {
     // Phase A
@@ -54,7 +56,8 @@ QuadrupedState::Walk::Trot CalculateTrot(
     return r;
   }
 
-  if (speed < (max_travel_dist / cw.max_swing_time_s)) {
+  if (!maximize_flight &&
+      speed < (max_travel_dist / cw.max_swing_time_s)) {
     // Phase B
     r.swing_time = r.onevleg_time = cw.max_swing_time_s;
     r.twovleg_time = 0.5 * max_travel_dist / speed - 0.5 * cw.max_swing_time_s;
@@ -62,7 +65,8 @@ QuadrupedState::Walk::Trot CalculateTrot(
     return r;
   }
 
-  if (speed < (max_travel_dist / (cw.max_swing_time_s - 2 * cw.max_flight_time_s))) {
+  if (!maximize_flight &&
+      speed < (max_travel_dist / (cw.max_swing_time_s - 2 * cw.max_flight_time_s))) {
     // Phase C
     r.swing_time = cw.max_swing_time_s;
     r.twovleg_time = 0.0;
@@ -76,7 +80,9 @@ QuadrupedState::Walk::Trot CalculateTrot(
     // Phase D
     r.flight_time = cw.max_flight_time_s;
     r.twovleg_time = 0.0;
-    r.swing_time = max_travel_dist / speed + 2 * r.flight_time;
+    r.swing_time =
+        speed == 0.0 ? cw.max_swing_time_s :
+        std::min(cw.max_swing_time_s, max_travel_dist / speed + 2 * r.flight_time);
     r.onevleg_time = r.swing_time - 2 * r.flight_time;
     r.speed = speed;
     return r;
@@ -232,8 +238,12 @@ class WalkContext {
   }
 
   void UpdateTrot() {
+    const bool maximize_flight =
+        context_->command->walk.value_or(QuadrupedCommand::Walk()).maximize_flight;
+
     ws_.trot = CalculateTrot(
         config_,
+        maximize_flight,
         config_.walk.travel_ratio * ws_.travel_distance,
         state_->robot.desired_R.v.norm());
   }
@@ -411,14 +421,86 @@ class WalkContext {
     }
   }
 
+  void PropagateStance(const PropagateLeg& propagator,
+                       int leg_idx,
+                       QC::Leg& leg_R,
+                       const QuadrupedState::Leg& status_R) {
+    const double kContactDetection_N =
+        wc_.contact_detect_load * config_.mass_kg * base::kGravity / 4;
+
+    if (!ws_.legs[leg_idx].latched &&
+        status_R.force_N.z() > kContactDetection_N) {
+      // We've now made contact with the ground.  Latch this
+      // position, gradually returning to the one we want to
+      // be in.
+      ws_.legs[leg_idx].latched = true;
+      leg_R.position = status_R.position;
+      const double downtime = ws_.trot.onevleg_time + ws_.trot.twovleg_time;
+      const double delta = config_.stand_height - leg_R.position.z();
+      const double restore_time = wc_.stance_restore_fraction * downtime;
+      leg_R.velocity.z() = delta / restore_time;
+    }
+
+    leg_R.stance =
+        std::min(1.0, leg_R.stance + wc_.stance_restore * config_.period_s);
+
+    const auto result_R = propagator(leg_R.position);
+    leg_R.position = result_R.position;
+    const double old_z_vel = leg_R.velocity.z();
+    leg_R.velocity = result_R.velocity;
+    leg_R.velocity.z() = old_z_vel;
+
+    const double downtime = ws_.trot.onevleg_time + ws_.trot.twovleg_time;
+
+    if (leg_R.velocity.z() != 0.0) {
+      const double scale = std::pow(wc_.stance_restore_scale,
+                                    config_.period_s / downtime);
+      leg_R.velocity.z() *= scale;
+      leg_R.position.z() += leg_R.velocity.z() * config_.period_s;
+      const double delta = config_.stand_height - leg_R.position.z();
+      if (leg_R.velocity.z() * delta < 0.0) {
+        // We're done.
+        leg_R.velocity.z() = 0.0;
+        leg_R.position.z() = config_.stand_height;
+      }
+    }
+
+    // TODO: We should keep track of our current desired body
+    // acceleration and feed it in here.
+    leg_R.acceleration = base::Point3D();
+
+    // Restore our kp and kd scales.
+    if (!!leg_R.kp_scale) {
+      double kp = leg_R.kp_scale->x();
+
+      kp += wc_.swing_damp_kp_restore * config_.period_s;
+
+      if (kp < 1.0) {
+        leg_R.kp_scale = {kp, kp, kp};
+      } else {
+        leg_R.kp_scale = {};
+      }
+    }
+
+    if (!!leg_R.kd_scale) {
+      double kd = leg_R.kd_scale->x();
+
+      kd += wc_.swing_damp_kd_restore * config_.period_s;
+
+      if (kd < 1.0) {
+        leg_R.kd_scale = {kd, kd, kd};
+      } else {
+        leg_R.kd_scale = {};
+      }
+    }
+  }
+
   void PropagateLegs(std::vector<QC::Leg>* legs_R) {
     // Update our current leg positions.
     PropagateLeg propagator(
         state_->robot.desired_R.v,
         state_->robot.desired_R.w,
         config_.period_s);
-    const double kContactDetection_N =
-        wc_.contact_detect_load * config_.mass_kg * base::kGravity / 4;
 
     for (int vleg_idx = 0; vleg_idx < 2; vleg_idx++) {
       auto& vleg = ws_.vlegs[vleg_idx];
@@ -432,72 +514,8 @@ class WalkContext {
           case VLeg::Mode::kStance: {
             auto& leg_R = GetLeg_R(legs_R, leg_idx);
             const auto& status_R = context_->GetLegState_R(leg_idx);
+            PropagateStance(propagator, leg_idx, leg_R, status_R);
 
-            if (!ws_.legs[leg_idx].latched &&
-                status_R.force_N.z() > kContactDetection_N) {
-              // We've now made contact with the ground.  Latch this
-              // position, gradually returning to the one we want to
-              // be in.
-              ws_.legs[leg_idx].latched = true;
-              leg_R.position = status_R.position;
-              const double downtime = ws_.trot.onevleg_time + ws_.trot.twovleg_time;
-              const double delta = config_.stand_height - leg_R.position.z();
-              const double restore_time = wc_.stance_restore_fraction * downtime;
-              leg_R.velocity.z() = delta / restore_time;
-            }
-
-            leg_R.stance =
-                std::min(1.0, leg_R.stance + wc_.stance_restore * config_.period_s);
-
-            const auto result_R = propagator(leg_R.position);
-            leg_R.position = result_R.position;
-            const double old_z_vel = leg_R.velocity.z();
-            leg_R.velocity = result_R.velocity;
-            leg_R.velocity.z() = old_z_vel;
-
-            const double downtime = ws_.trot.onevleg_time + ws_.trot.twovleg_time;
-
-            if (leg_R.velocity.z() != 0.0) {
-              const double scale = std::pow(wc_.stance_restore_scale,
-                                            config_.period_s / downtime);
-              leg_R.velocity.z() *= scale;
-              leg_R.position.z() += leg_R.velocity.z() * config_.period_s;
-              const double delta = config_.stand_height - leg_R.position.z();
-              if (leg_R.velocity.z() * delta < 0.0) {
-                // We're done.
-                leg_R.velocity.z() = 0.0;
-                leg_R.position.z() = config_.stand_height;
-              }
-            }
-
-            // TODO: We should keep track of our current desired body
-            // acceleration and feed it in here.
-            leg_R.acceleration = base::Point3D();
-
-            // Restore our kp and kd scales.
-            if (!!leg_R.kp_scale) {
-              double kp = leg_R.kp_scale->x();
-
-              kp += wc_.swing_damp_kp_restore * config_.period_s;
-
-              if (kp < 1.0) {
-                leg_R.kp_scale = {kp, kp, kp};
-              } else {
-                leg_R.kp_scale = {};
-              }
-            }
-
-            if (!!leg_R.kd_scale) {
-              double kd = leg_R.kd_scale->x();
-
-              kd += wc_.swing_damp_kd_restore * config_.period_s;
-
-              if (kd < 1.0) {
-                leg_R.kd_scale = {kd, kd, kd};
-              } else {
-                leg_R.kd_scale = {};
-              }
-            }
             break;
           }
           case VLeg::Mode::kSwing: {

@@ -32,6 +32,7 @@ const PERSIST_ELEMENTS = [
   "jump_repeat",
   "always_step",
   "disable_strafe",
+  "maximize_flight",
   "record_data",
 ];
 
@@ -547,10 +548,12 @@ class Application {
       const height_engaged = (
         this._joystick.down(Joystick.BUTTON_SHOULDER_RB) ||
           this._keys['h']);
+      const maximize_flight = getElement("maximize_flight").checked;
 
       command["command"]["walk"] = {
         "step_height" : height_engaged ?
           Number(getElement("height_scale").value) : 1.0,
+        "maximize_flight" : maximize_flight,
       };
     }
 

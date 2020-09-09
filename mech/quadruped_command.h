@@ -196,9 +196,12 @@ struct QuadrupedCommand {
     // Scale the step height by this amount.
     double step_height = 1.0;
 
+    bool maximize_flight = false;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(step_height));
+      a->Visit(MJ_NVP(maximize_flight));
     }
   };
 
