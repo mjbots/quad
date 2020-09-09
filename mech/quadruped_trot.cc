@@ -425,20 +425,23 @@ class WalkContext {
                        int leg_idx,
                        QC::Leg& leg_R,
                        const QuadrupedState::Leg& status_R) {
+    auto& sleg = ws_.legs[leg_idx];
+
     const double kContactDetection_N =
         wc_.contact_detect_load * config_.mass_kg * base::kGravity / 4;
 
-    if (!ws_.legs[leg_idx].latched &&
+    if (!sleg.latched &&
         status_R.force_N.z() > kContactDetection_N) {
       // We've now made contact with the ground.  Latch this
       // position, gradually returning to the one we want to
       // be in.
-      ws_.legs[leg_idx].latched = true;
+      sleg.latched = true;
       leg_R.position = status_R.position;
       const double downtime = ws_.trot.onevleg_time + ws_.trot.twovleg_time;
       const double delta = config_.stand_height - leg_R.position.z();
       const double restore_time = wc_.stance_restore_fraction * downtime;
-      ws_.legs[leg_idx].restore_velocity = delta / restore_time;
+      sleg.restore_velocity = delta / restore_time;
+      sleg.restore_remaining = delta;
     }
 
     leg_R.stance =
@@ -446,18 +449,19 @@ class WalkContext {
 
     const auto result_R = propagator(leg_R.position);
     leg_R.position = result_R.position;
-    const double old_z_vel = leg_R.velocity.z();
-    leg_R.velocity = result_R.velocity;
+    leg_R.velocity = result_R.velocity;  // we will overwrite Z below
 
-    leg_R.velocity.z() = ws_.legs[leg_idx].restore_velocity;
-    leg_R.position.z() += leg_R.velocity.z() * config_.period_s;
-    const double delta = config_.stand_height - leg_R.position.z();
-    if (leg_R.velocity.z() * delta < 0.0) {
-      // We're done.
-      leg_R.velocity.z() = 0.0;
-      ws_.legs[leg_idx].restore_velocity = 0.0;
-      leg_R.position.z() = config_.stand_height;
+    if (sleg.restore_remaining != 0.0) {
+      sleg.restore_remaining -= config_.period_s * sleg.restore_velocity;
+      if (sleg.restore_velocity * sleg.restore_remaining < 0.0) {
+        // We are done restoring.
+        sleg.restore_velocity = 0.0;
+      }
     }
+
+    leg_R.velocity.z() = sleg.restore_velocity;
+
+    leg_R.position.z() += leg_R.velocity.z() * config_.period_s;
 
     // TODO: We should keep track of our current desired body
     // acceleration and feed it in here.
