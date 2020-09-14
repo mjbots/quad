@@ -36,6 +36,7 @@ CONFIG = {
         ('1,2,4,5,7,8,10,11', '.70'),
         ('3,6,9,12', '.25'),
     ],
+    'servo.pwm_min' : '0.006',
     'servo.flux_brake_min_voltage' : '20.5',
     'servo.flux_brake_resistance_ohm' : '0.05',
     'servo.pid_position.kp' : [
@@ -47,7 +48,12 @@ CONFIG = {
     'motor.unwrapped_position_scale' : [
         ('1,3,4,6,7,9,10,12', '0.16666667'),
         ('2,5,8,11', '0.093750'),
-    ]
+    ],
+    'drv8323_conf.idrivep_hs_ma' : '370',
+    'drv8323_conf.idriven_hs_ma' : '740',
+    'drv8323_conf.idrivep_ls_ma' : '370',
+    'drv8323_conf.idriven_ls_ma' : '740',
+    'drv8323_conf.dead_time_ns' : '50',
 }
 
 
