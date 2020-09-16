@@ -615,6 +615,10 @@ class QuadrupedControl::Impl {
       }
     }
 
+    // We can't update if we have no legs in stance or if we aren't
+    // controlling legs.
+    if (stance_A.empty() || old_control_log_->legs_R.empty()) { return; }
+
     auto& robot = status_.state.robot;
 
     // Now update the attitude recursively.
