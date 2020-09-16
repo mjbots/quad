@@ -211,11 +211,13 @@ class WalkContext {
       const base::Point3D p_B = state_->robot.frame_RB.pose.inverse() * p_R;
       const base::Point3D p_G = config_leg.pose_BG.inverse() * p_B;
       auto find_time = [&](double sign) {
-        const base::Point3D v =
+        const base::Point3D maybe_v =
             sign * state_->robot.desired_R.v +
             // TODO: Do I need to apply sign to the cross product too?  Or
             // to where it is used down below?
             p_R.cross(state_->robot.desired_R.w);
+        const base::Point3D v = (
+            (maybe_v.norm() == 0.0) ? base::Point3D(0.1, 0, 0) : maybe_v);
         constexpr double kBothSides = 2.0;
         return kBothSides * std::abs(
             v.norm() * context_->valid_regions[id].TimeToLeave_G(
