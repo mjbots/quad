@@ -414,6 +414,7 @@ class WalkContext {
       const double lift_height =
           wc_.lift_height *
           context_->command->walk.value_or(QuadrupedCommand::Walk()).step_height;
+      leg_R.force_N = base::Point3D();
 
       context_->swing_trajectory[leg_idx] = SwingTrajectory(
           leg_R.position, leg_R.velocity,
