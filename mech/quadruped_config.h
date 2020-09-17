@@ -222,6 +222,8 @@ struct QuadrupedConfig {
     // before considering a leg to have contacted the ground.
     double contact_detect_load = 0.75;
 
+    double extra_target_time_s = 0.0;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(lift_height));
@@ -249,6 +251,7 @@ struct QuadrupedConfig {
       a->Visit(MJ_NVP(stance_restore_fraction));
 
       a->Visit(MJ_NVP(contact_detect_load));
+      a->Visit(MJ_NVP(extra_target_time_s));
     }
   };
 

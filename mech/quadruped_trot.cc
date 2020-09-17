@@ -377,9 +377,10 @@ class WalkContext {
     // leg about to lift.
 
     const double target_time_s =
-        (ws_.trot.flight_time <= 0.0) ?
-        (0.5 * ws_.trot.swing_time + ws_.trot.twovleg_time) :
-        (0.5 * ws_.trot.onevleg_time);
+        ((ws_.trot.flight_time <= 0.0) ?
+         (0.5 * ws_.trot.swing_time + ws_.trot.twovleg_time) :
+         (0.5 * ws_.trot.onevleg_time)) +
+        wc_.extra_target_time_s;
 
     const double filter_time_s = 0.6 * ws_.trot.swing_time;
 
