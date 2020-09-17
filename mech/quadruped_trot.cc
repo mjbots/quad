@@ -423,6 +423,9 @@ class WalkContext {
           wc_.world_blend_ratio,
           ws_.trot.swing_time);
     }
+
+    const int alternate_vleg_idx = (vleg_idx + 1) % 2;
+    ws_.vlegs[alternate_vleg_idx].stance_elapsed_s = 0.0;
   }
 
   void PropagateStance(const PropagateLeg& propagator,
@@ -508,6 +511,12 @@ class WalkContext {
       auto& vleg = ws_.vlegs[vleg_idx];
       if (vleg.mode == VLeg::kSwing) {
         vleg.swing_elapsed_s += config_.period_s;
+        vleg.stance_elapsed_s = 0.0;
+        vleg.phase_s = vleg.swing_elapsed_s;
+      } else if (vleg.mode == VLeg::kStance) {
+        vleg.stance_elapsed_s += config_.period_s;
+        vleg.swing_elapsed_s = 0.0;
+        vleg.phase_s = ws_.trot.swing_time + vleg.stance_elapsed_s;
       }
       for (int leg_idx : kVlegMapping[vleg_idx]) {
         auto& leg_R = GetLeg_R(legs_R, leg_idx);

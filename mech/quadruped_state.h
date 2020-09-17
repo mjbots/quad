@@ -227,6 +227,8 @@ struct QuadrupedState {
       };
       Mode mode = kStance;
       double swing_elapsed_s = 0.0;
+      double stance_elapsed_s = 0.0;
+      double phase_s = 0.0;
       double target_time_s = 0.0;
       Eigen::Vector3d predicted_next_v;
 
@@ -236,6 +238,8 @@ struct QuadrupedState {
         a->Visit(MJ_NVP(invalid_time_s));
         a->Visit(MJ_NVP(mode));
         a->Visit(MJ_NVP(swing_elapsed_s));
+        a->Visit(MJ_NVP(stance_elapsed_s));
+        a->Visit(MJ_NVP(phase_s));
         a->Visit(MJ_NVP(target_time_s));
         a->Visit(MJ_NVP(predicted_next_v));
       }
