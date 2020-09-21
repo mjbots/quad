@@ -324,28 +324,26 @@ class WalkContext {
           return -1;
         }
       } else {
-        // Nominally, when a stance leg is 1/2 of one_leg time away
-        // from the balance point, then it gets lifted.  We add a
-        // corrective term to keep the two vlegs in the correct phase.
-        // If they are in the correct phase, then the alternating vleg
-        // should be in flight and have flight_time_s remaining in its
-        // swing.
+        // When there is a flight period, we add a corrective term to
+        // keep the two vlegs in the correct phase.  If they are
+        // correctly phased, then we should lift off when the
+        // alternating leg is one flight time away from the end of a
+        // swing_time.
         for (int vleg_idx = 0; vleg_idx < 2; vleg_idx++) {
           const auto& vleg = ws_.vlegs[vleg_idx];
           if (vleg.mode != VLeg::Mode::kStance) { continue; }
 
-          const auto alternate_leg_swing_remaining = [&]() {
-            const int alternate_vleg_idx = (vleg_idx + 1) % 2;
-            const auto& alternate_vleg = ws_.vlegs[alternate_vleg_idx];
-            if (alternate_vleg.mode == VLeg::Mode::kStance) { return 0.0; }
-            return ws_.trot.swing_time - alternate_vleg.swing_elapsed_s;
-          }();
+          const int alternate_vleg_idx = (vleg_idx + 1) % 2;
+          const auto& alternate_vleg = ws_.vlegs[alternate_vleg_idx];
+          const auto alternate_vleg_swing_remaining = (
+              ws_.trot.swing_time - alternate_vleg.phase_s);
+          const auto expected_remaining = ws_.trot.flight_time;
 
-          const auto desired_remaining = (
-              (-0.5 * ws_.trot.onevleg_time) -
-              0.5 * alternate_leg_swing_remaining);
+          const double kCorrectionPTerm = -0.5;
+          const auto correction = kCorrectionPTerm * (
+              alternate_vleg_swing_remaining - expected_remaining);
 
-          if (vleg.remaining_s <= desired_remaining) {
+          if ((vleg.stance_elapsed_s + correction) >= ws_.trot.onevleg_time) {
             return vleg_idx;
           }
         }
