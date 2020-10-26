@@ -1638,7 +1638,7 @@ class Tplot2 {
       : options_(Parse(argc, argv)) {
     ImGui::GetIO().ConfigFlags |=
         ImGuiConfigFlags_DockingEnable;
-
+    ImGui::GetIO().ConfigWindowsMoveFromTitleBarOnly = true;
   }
 
   void Run() {
