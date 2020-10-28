@@ -21,9 +21,9 @@
 
 #include "mjlib/base/fail.h"
 #include "mjlib/base/system_error.h"
+#include "mjlib/imgui/gl.h"
 
 #include "base/named_type.h"
-#include "gl/gl.h"
 #include "gl/shader.h"
 
 namespace mjmech {
@@ -51,7 +51,7 @@ class Program {
       mjlib::base::Fail("Error linking program: " +
                         std::string(log.data(), log_length));
     }
-    TRACE_GL_ERROR();
+    MJ_TRACE_GL_ERROR();
   }
 
   ~Program() {
@@ -125,7 +125,7 @@ class Program {
  private:
   GLint VerifyNonNegative(GLint value) {
     if (value < 0) {
-      TRACE_GL_ERROR();
+      MJ_TRACE_GL_ERROR();
       throw mjlib::base::system_error::einval(
           "Invalid uniform or attribute name");
     }

@@ -31,33 +31,33 @@ load("//tools/workspace/rules_pkg:repository.bzl", "rules_pkg_repository")
 load("//tools/workspace/sophus:repository.bzl", "sophus_repository")
 
 def add_default_repositories(excludes = []):
-    if "bazel_deps" not in excludes:
+    if not native.existing_rule("com_github_mjbots_bazel_deps"):
         bazel_deps_repository(name = "com_github_mjbots_bazel_deps")
-    if "gl3w" not in excludes:
+    if not native.existing_rule("gl3w"):
         gl3w_repository(name = "gl3w")
-    if "glfw" not in excludes:
+    if not native.existing_rule("glfw"):
         glfw_repository(name = "glfw")
-    if "gst-rpicamsrc" not in excludes:
+    if not native.existing_rule("gst-rpicamsrc"):
         gst_rpicamsrc_repository(name = "gst-rpicamsrc")
-    if "i2c-tools" not in excludes:
+    if not native.existing_rule("i2c-tools"):
         i2c_tools_repository(name = "i2c-tools")
-    if "imgui" not in excludes:
+    if not native.existing_rule("imgui"):
         imgui_repository(name = "imgui")
-    if "implot" not in excludes:
+    if not native.existing_rule("implot"):
         implot_repository(name = "implot")
-    if "mjlib" not in excludes:
+    if not native.existing_rule("com_github_mjbots_mjlib"):
         mjlib_repository(name = "com_github_mjbots_mjlib")
-    if "moteus" not in excludes:
+    if not native.existing_rule("moteus"):
         moteus_repository(name = "moteus")
-    if "pi3hat" not in excludes:
+    if not native.existing_rule("pi3hat"):
         pi3hat_repository(name = "pi3hat")
-    if "raspicam" not in excludes:
+    if not native.existing_rule("raspicam"):
         raspicam_repository(name = "raspicam")
-    if "raspberrypi-firmware" not in excludes:
+    if not native.existing_rule("raspberrypi-firmware"):
         raspberrypi_firmware_repository(name = "raspberrypi-firmware")
-    if "rpi_bazel" not in excludes:
+    if not native.existing_rule("rpi_bazel"):
         rpi_bazel_repository(name = "rpi_bazel")
-    if "rules_pkg" not in excludes:
+    if not native.existing_rule("rules_pkg"):
         rules_pkg_repository(name = "rules_pkg")
-    if "sophus" not in excludes:
+    if not native.existing_rule("sophus"):
         sophus_repository(name = "sophus")

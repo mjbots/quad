@@ -17,7 +17,7 @@
 #include <string_view>
 #include <vector>
 
-#include "gl/gl.h"
+#include "mjlib/imgui/gl.h"
 
 #include "mjlib/base/fail.h"
 
@@ -29,7 +29,7 @@ class Shader {
  public:
   Shader(std::string_view source, GLenum type)
       : shader_(glCreateShader(type)) {
-    TRACE_GL_ERROR();
+    MJ_TRACE_GL_ERROR();
     const char* data  = source.data();
     GLint length = source.size();
     glShaderSource(shader_, 1, static_cast<GLchar const**>(&data), &length);
@@ -46,7 +46,7 @@ class Shader {
       mjlib::base::Fail("Error compiling shader: " +
                         std::string(log.data(), log_length));
     }
-    TRACE_GL_ERROR();
+    MJ_TRACE_GL_ERROR();
   }
 
   ~Shader() {

@@ -259,6 +259,7 @@ cc_binary(
         "//ffmpeg",
         "//gl",
         "@com_github_mjbots_mjlib//mjlib/base:clipp",
+        "@com_github_mjbots_mjlib//mjlib/imgui",
         "@org_llvm_libcxx//:libcxx",
     ],
     data = [

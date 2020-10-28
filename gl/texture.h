@@ -16,7 +16,7 @@
 
 #include <Eigen/Core>
 
-#include "gl/gl.h"
+#include "mjlib/imgui/gl.h"
 
 namespace mjmech {
 namespace gl {

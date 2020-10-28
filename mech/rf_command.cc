@@ -12,9 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <GL/gl3w.h>
+
 #include <boost/asio/io_context.hpp>
 
 #include <sophus/se2.hpp>
+
+#include <imgui.h>
+
+// We must have included GL somehow (like through imgui) before we
+// include GLFW.
+#include <GLFW/glfw3.h>
 
 #include "mjlib/base/buffer_stream.h"
 #include "mjlib/base/clipp.h"
@@ -23,6 +31,7 @@
 #include "mjlib/io/now.h"
 #include "mjlib/io/stream_factory.h"
 #include "mjlib/telemetry/format.h"
+#include "mjlib/imgui/imgui_application.h"
 
 #include "base/aspect_ratio.h"
 #include "base/interpolate.h"
@@ -37,14 +46,12 @@
 #include "ffmpeg/swscale.h"
 
 #include "gl/flat_rgb_texture.h"
-#include "gl/gl_imgui.h"
 #include "gl/image_texture.h"
 #include "gl/program.h"
 #include "gl/shader.h"
 #include "gl/simple_texture_render_list.h"
 #include "gl/vertex_array_object.h"
 #include "gl/vertex_buffer_object.h"
-#include "gl/window.h"
 
 #include "mech/expo_map.h"
 #include "mech/nrfusb_client.h"
@@ -729,12 +736,15 @@ int do_main(int argc, char** argv) {
       slot_command = std::make_unique<SlotCommand>(shared_stream.get());
     });
 
-  gl::Window window(1280, 720, "quad RF command");
-  gl::GlImGui imgui(window, []() {
-      gl::GlImGui::Options options;
+  mjlib::imgui::ImguiApplication app{
+    [&]() {
+      mjlib::imgui::ImguiApplication::Options options;
       options.persist_settings = false;
+      options.width = 1280;
+      options.height = 720;
+      options.title = "quad RF command";
       return options;
-    }());
+    }()};
 
   std::optional<VideoRender> video_render;
   try {
@@ -798,9 +808,9 @@ int do_main(int argc, char** argv) {
 
   double zoom = 1.0;
 
-  while (!window.should_close()) {
+  while (!app.should_close()) {
     context.poll(); context.reset();
-    window.PollEvents();
+    app.PollEvents();
     GLFWgamepadstate gamepad;
     glfwGetGamepadState(GLFW_JOYSTICK_1, &gamepad);
 
@@ -834,21 +844,21 @@ int do_main(int argc, char** argv) {
       zoom = alpha * desired_zoom + (1.0 - alpha) * zoom;
     }
 
-    imgui.NewFrame();
+    app.NewFrame();
 
     if (video_render) {
-      video_render->SetViewport(window.framebuffer_size());
+      video_render->SetViewport(app.framebuffer_size());
     }
     glClearColor(0.45f, 0.55f, 0.60f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    TRACE_GL_ERROR();
+    MJ_TRACE_GL_ERROR();
 
     if (video_render) {
       video_render->Update(zoom, Eigen::Vector3f(reticle_x, reticle_y, 0.f));
     }
 
-    TRACE_GL_ERROR();
+    MJ_TRACE_GL_ERROR();
 
     if (reticle) {
       reticle->Render();
@@ -966,8 +976,8 @@ int do_main(int argc, char** argv) {
           turret_laser, turret_fire_sequence);
     }
 
-    imgui.Render();
-    window.SwapBuffers();
+    app.Render();
+    app.SwapBuffers();
   }
   return 0;
 }

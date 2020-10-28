@@ -22,12 +22,16 @@
 
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 
+#include <imgui.h>
+
 #include "mjlib/base/buffer_stream.h"
+#include "mjlib/base/fail.h"
 #include "mjlib/micro/serializable_handler.h"
 #include "mjlib/telemetry/file_reader.h"
 
-#include "gl/gl_imgui.h"
 #include "utils/imgui_tree_archive.h"
+
+#include "gl/gl_imgui.h"
 
 namespace mjmech {
 namespace utils {

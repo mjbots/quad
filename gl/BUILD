@@ -22,7 +22,6 @@ cc_library(
         "camera.h",
         "flat_rgb_texture.h",
         "framebuffer.h",
-        "gl.h",
         "gl_imgui.h",
         "image_texture.h",
         "orthographic_camera.h",
@@ -36,7 +35,6 @@ cc_library(
         "trackball.h",
         "vertex_array_object.h",
         "vertex_buffer_object.h",
-        "window.h",
     ],
     srcs = [
         "simple_line_render_list.cc",
@@ -44,6 +42,7 @@ cc_library(
     ],
     deps = [
         "//base",
+        "@com_github_mjbots_mjlib//mjlib/imgui:gl",
         "@eigen",
         "@fmt",
         "@gl3w",
@@ -61,8 +60,6 @@ cc_test(
     srcs = ["test/" + x for x in [
         "flat_rgb_texture_test.cc",
         "framebuffer_test.cc",
-        "gl_imgui_test.cc",
-        "gl_test.cc",
         "perspective_camera_test.cc",
         "program_test.cc",
         "shader_test.cc",
@@ -70,7 +67,6 @@ cc_test(
         "texture_test.cc",
         "vertex_array_object_test.cc",
         "vertex_buffer_object_test.cc",
-        "window_test.cc",
     ]],
     deps = [
         ":gl",

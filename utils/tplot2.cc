@@ -58,6 +58,7 @@
 #include "mjlib/base/tokenizer.h"
 #include "mjlib/telemetry/file_reader.h"
 #include "mjlib/telemetry/mapped_binary_reader.h"
+#include "mjlib/imgui/imgui_application.h"
 
 #include "ffmpeg/codec.h"
 #include "ffmpeg/file.h"
@@ -68,7 +69,6 @@
 
 #include "gl/flat_rgb_texture.h"
 #include "gl/framebuffer.h"
-#include "gl/gl_imgui.h"
 #include "gl/orthographic_camera.h"
 #include "gl/perspective_camera.h"
 #include "gl/program.h"
@@ -1423,8 +1423,8 @@ class MechRender {
 
     {
       gl::Framebuffer::Bind binder(framebuffer_);
-      glViewport(0, 0, size_.x(), size_.y());
       glEnable(GL_DEPTH_TEST);
+      glViewport(0, 0, size_.x(), size_.y());
       glClearColor(0.45f, 0.55f, 0.60f, 1.0f);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -1642,11 +1642,11 @@ class Tplot2 {
   }
 
   void Run() {
-    while (!window_.should_close()) {
+    while (!app_.should_close()) {
       CheckSave();
 
-      window_.PollEvents();
-      imgui_.NewFrame();
+      app_.PollEvents();
+      app_.NewFrame();
 
       glClearColor(0.45f, 0.55f, 0.60f, 1.0f);
       glClear(GL_COLOR_BUFFER_BIT);
@@ -1662,8 +1662,8 @@ class Tplot2 {
         mech_render_->Update();
       }
 
-      imgui_.Render();
-      window_.SwapBuffers();
+      app_.Render();
+      app_.SwapBuffers();
     }
 
     CheckSave(true);
@@ -1680,8 +1680,8 @@ class Tplot2 {
 
     State to_save = initial_save_;
     to_save.imgui = std::string(imgui_ini, imgui_ini_size);
-    to_save.window.size = window_.size();
-    to_save.window.pos = window_.pos();
+    to_save.window.size = app_.size();
+    to_save.window.pos = app_.pos();
     to_save.plot = plot_view_.state();
     if (mech_) {
       to_save.mech = mech_render_->state();
@@ -1738,20 +1738,21 @@ class Tplot2 {
       []() { ffmpeg::Ffmpeg::Register(); return true; }();
   mjlib::telemetry::FileReader file_reader_{options_.log_filename};
   const bool mech_ = (file_reader_.record("qc_status") != nullptr);
-  gl::Window window_{
-    initial_save_.window.size.x(), initial_save_.window.size.y(),
-        "tplot2"};
+  mjlib::imgui::ImguiApplication app_{
+    [&]() {
+      mjlib::imgui::ImguiApplication::Options options;
+      options.persist_settings = false;
+      options.width = initial_save_.window.size.x();
+      options.height = initial_save_.window.size.y();
+      options.title = "tplot2";
+      return options;
+    }()};
   const bool setpos_ = [&]() {
     if (initial_save_.window.pos != Eigen::Vector2i(-1, -1)) {
-      window_.set_pos(initial_save_.window.pos);
+      app_.set_pos(initial_save_.window.pos);
     }
     return true;
   }();
-  gl::GlImGui imgui_{window_,  []() {
-      gl::GlImGui::Options options;
-      options.persist_settings = false;
-      return options;
-    }()};
 
   const bool load_imgui_ = [&]() {
     if (initial_save_.imgui.empty()) { return false; }

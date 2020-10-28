@@ -18,10 +18,10 @@
 
 #include <fmt/format.h>
 
+#include <imgui.h>
+
 #include "mjlib/base/visitor.h"
 #include "mjlib/base/visit_archive.h"
-
-#include "gl/gl_imgui.h"
 
 namespace mjmech {
 namespace utils {

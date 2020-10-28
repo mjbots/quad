@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "gl/gl.h"
+#include "mjlib/imgui/gl.h"
 
 namespace mjmech {
 namespace gl {

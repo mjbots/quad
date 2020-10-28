@@ -20,54 +20,9 @@
 #pragma once
 
 #include <imgui.h>
-#include <examples/imgui_impl_glfw.h>
-#include <examples/imgui_impl_opengl3.h>
-
-#include "gl/window.h"
 
 namespace mjmech {
 namespace gl {
-
-class GlImGui {
- public:
-  struct Options {
-    bool persist_settings = true;
-
-    Options() {}
-  };
-  GlImGui(const Window& window, const Options& options = {}) {
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO();
-
-    // We don't want to persist settings.
-    if (!options.persist_settings) {
-      io.IniFilename = nullptr;
-    }
-
-    ImGui::StyleColorsDark();
-
-    ImGui_ImplGlfw_InitForOpenGL(window.window(), true);
-    ImGui_ImplOpenGL3_Init(kGlslVersion);
-  }
-
-  ~GlImGui() {
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext();
-  }
-
-  void NewFrame() {
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
-  }
-
-  void Render() {
-    ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-  }
-};
 
 class ImGuiWindow {
  public:

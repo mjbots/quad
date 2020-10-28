@@ -20,10 +20,11 @@
 
 #include "tools/cpp/runfiles/runfiles.h"
 
+#include "mjlib/imgui/gl.h"
+
 #include "base/runfiles.h"
 
 #include "gl/flat_rgb_texture.h"
-#include "gl/gl.h"
 
 namespace mjmech {
 namespace gl {
@@ -37,7 +38,7 @@ class ImageTexture {
         texture_(EigenSize(image_.size()),
                  image_.channels() == 3 ? GL_RGB : GL_RGBA) {
     texture_.Store(image_.data);
-    TRACE_GL_ERROR();
+    MJ_TRACE_GL_ERROR();
   }
 
   void bind() {
