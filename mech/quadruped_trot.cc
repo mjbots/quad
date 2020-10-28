@@ -427,23 +427,35 @@ class WalkContext {
   }
 
   void PropagateStance(const PropagateLeg& propagator,
+                       int vleg_idx,
                        int leg_idx,
                        QC::Leg& leg_R,
                        const QuadrupedState::Leg& status_R) {
+    auto& vleg = ws_.vlegs[vleg_idx];
     auto& sleg = ws_.legs[leg_idx];
 
-    const double kContactDetection_N =
-        wc_.contact_detect_load * config_.mass_kg * base::kGravity / 4;
+    const int vlegs_in_stance = count_stance();
+    MJ_ASSERT(vlegs_in_stance > 0);
+    const double contact_detection_N =
+        wc_.contact_detect_load * config_.mass_kg * base::kGravity /
+        (vlegs_in_stance * 2);
+    const double takeoff_velocity =
+        base::kGravity * 0.5 * ws_.trot.flight_time * wc_.jump_velocity_scale;
+    const double jump_acceleration = takeoff_velocity / ws_.trot.onevleg_time;
 
     if (!sleg.latched &&
-        status_R.force_N.z() > kContactDetection_N) {
+        status_R.force_N.z() > contact_detection_N) {
       // We've now made contact with the ground.  Latch this
       // position, gradually returning to the one we want to
       // be in.
       sleg.latched = true;
       leg_R.position = status_R.position;
       const double downtime = ws_.trot.onevleg_time + ws_.trot.twovleg_time;
-      const double delta = config_.stand_height - leg_R.position.z();
+      const double jump_movement = 0.5 * jump_acceleration *
+                                   std::pow(ws_.trot.onevleg_time, 2.0);
+      const double delta = (config_.stand_height -
+                            wc_.jump_offset_scale * jump_movement) -
+                           leg_R.position.z();
       const double restore_time = wc_.stance_restore_fraction * downtime;
       sleg.restore_velocity = delta / restore_time;
       sleg.restore_remaining = delta;
@@ -464,13 +476,38 @@ class WalkContext {
       }
     }
 
-    leg_R.velocity.z() = sleg.restore_velocity;
+    const bool vleg_latched = [&]() {
+      for (int leg_idx : kVlegMapping[vleg_idx]) {
+        if (!ws_.legs[leg_idx].latched) { return false; }
+      }
+      return true;
+    }();
+
+    // Figure out how much jumping velocity and acceleration we need
+    // to get the desired flight time.
+    const auto [jump_z_velocity, jump_z_acceleration, jump_z_force] = [&]() {
+      if (!vleg_latched ||
+          ws_.trot.onevleg_time == 0.0 ||
+          ws_.trot.flight_time == 0.0 ||
+          all_stance()) {
+        return std::make_tuple(0.0, 0.0, 0.0);
+      }
+
+      const double time = vleg.stance_elapsed_s;
+      return std::make_tuple(
+          time * jump_acceleration,
+          jump_acceleration,
+          jump_acceleration * base::kGravity * config_.mass_kg * 0.25);
+    }();
+
+    leg_R.velocity.z() = sleg.restore_velocity + jump_z_velocity;
 
     leg_R.position.z() += leg_R.velocity.z() * config_.period_s;
 
     // TODO: We should keep track of our current desired body
     // acceleration and feed it in here.
-    leg_R.acceleration = base::Point3D();
+    leg_R.acceleration = base::Point3D(0., 0, jump_z_acceleration);
+    leg_R.force_N = base::Point3D(0., 0., jump_z_force);
 
     // Restore our kp and kd scales.
     if (!!leg_R.kp_scale) {
@@ -523,7 +560,7 @@ class WalkContext {
           case VLeg::Mode::kStance: {
             auto& leg_R = GetLeg_R(legs_R, leg_idx);
             const auto& status_R = context_->GetLegState_R(leg_idx);
-            PropagateStance(propagator, leg_idx, leg_R, status_R);
+            PropagateStance(propagator, vleg_idx, leg_idx, leg_R, status_R);
 
             break;
           }

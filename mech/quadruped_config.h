@@ -224,6 +224,14 @@ struct QuadrupedConfig {
 
     double extra_target_time_s = 0.0;
 
+    // Bigger means that when in flight periods, the robot will enter
+    // the flight phase lower to the ground.  1.0 means it enters the
+    // flight phase at exactly the standing height, 0, means that it
+    // starts the stance phase at exactly the standing height.
+    double jump_offset_scale = 0.75;
+
+    double jump_velocity_scale = 0.5;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(lift_height));
@@ -252,6 +260,8 @@ struct QuadrupedConfig {
 
       a->Visit(MJ_NVP(contact_detect_load));
       a->Visit(MJ_NVP(extra_target_time_s));
+      a->Visit(MJ_NVP(jump_offset_scale));
+      a->Visit(MJ_NVP(jump_velocity_scale));
     }
   };
 
