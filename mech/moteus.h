@@ -106,9 +106,13 @@ Value ScaleSaturate(double value, double scale) {
 
   const double scaled = value / scale;
   const auto max = std::numeric_limits<T>::max();
+  const double double_max = static_cast<T>(max);
+
   // We purposefully limit to +- max, rather than to min.  The minimum
   // value for our two's complement types is reserved for NaN.
-  return mjlib::base::Limit<T>(static_cast<T>(scaled), -max, max);
+  if (scaled < -double_max) { return -max; }
+  if (scaled > double_max) { return max; }
+  return static_cast<T>(scaled);
 }
 
 enum RegisterTypes {
