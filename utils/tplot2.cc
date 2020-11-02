@@ -1261,7 +1261,6 @@ class MechRender {
     if (state_.leg_command) {
       for (size_t i = 0; i < qc.legs_B.size(); i++) {
         const auto& leg_B = qc.legs_B[i];
-        const auto& pds_B = qc.leg_pds[i];
 
         AddBall(leg_B.position.cast<float>(),
                 0.008, Eigen::Vector4f(0, 0, 1, 1));
@@ -1271,7 +1270,8 @@ class MechRender {
               (leg_B.position +
                kVelocityDrawScale * leg_B.velocity).cast<float>(),
               Eigen::Vector4f(0, 0, 1, 1));
-        } else {
+        } else if (i < qc.leg_pds.size()) {
+          const auto& pds_B = qc.leg_pds[i];
           lines_.AddSegment(
               leg_B.position.cast<float>(),
               (leg_B.position +
