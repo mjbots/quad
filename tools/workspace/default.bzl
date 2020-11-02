@@ -15,11 +15,8 @@
 # limitations under the License.
 
 load("//tools/workspace/bazel_deps:repository.bzl", "bazel_deps_repository")
-load("//tools/workspace/gl3w:repository.bzl", "gl3w_repository")
-load("//tools/workspace/glfw:repository.bzl", "glfw_repository")
 load("//tools/workspace/gst-rpicamsrc:repository.bzl", "gst_rpicamsrc_repository")
 load("//tools/workspace/i2c-tools:repository.bzl", "i2c_tools_repository")
-load("//tools/workspace/imgui:repository.bzl", "imgui_repository")
 load("//tools/workspace/implot:repository.bzl", "implot_repository")
 load("//tools/workspace/mjlib:repository.bzl", "mjlib_repository")
 load("//tools/workspace/moteus:repository.bzl", "moteus_repository")
@@ -33,16 +30,10 @@ load("//tools/workspace/sophus:repository.bzl", "sophus_repository")
 def add_default_repositories(excludes = []):
     if not native.existing_rule("com_github_mjbots_bazel_deps"):
         bazel_deps_repository(name = "com_github_mjbots_bazel_deps")
-    if not native.existing_rule("gl3w"):
-        gl3w_repository(name = "gl3w")
-    if not native.existing_rule("glfw"):
-        glfw_repository(name = "glfw")
     if not native.existing_rule("gst-rpicamsrc"):
         gst_rpicamsrc_repository(name = "gst-rpicamsrc")
     if not native.existing_rule("i2c-tools"):
         i2c_tools_repository(name = "i2c-tools")
-    if not native.existing_rule("imgui"):
-        imgui_repository(name = "imgui")
     if not native.existing_rule("implot"):
         implot_repository(name = "implot")
     if not native.existing_rule("com_github_mjbots_mjlib"):
