@@ -93,9 +93,11 @@ void StartWebsocket(WebServer::WebsocketHandler handler,
   using Stream = websocket::stream<beast::tcp_stream>;
   Stream websocket(std::move(socket));
 
-  websocket.set_option(
-      websocket::stream_base::timeout::suggested(
-          beast::role_type::server));
+  websocket::stream_base::timeout timeout_opt;
+  timeout_opt.handshake_timeout = std::chrono::seconds(10);
+  timeout_opt.idle_timeout = std::chrono::seconds(10);
+
+  websocket.set_option(timeout_opt);
   websocket.set_option(
       websocket::stream_base::decorator(
           [](websocket::response_type& response) {
