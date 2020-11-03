@@ -194,11 +194,19 @@ class Application {
     const cookies = readCookies();
     for (const key of PERSIST_ELEMENTS) {
       if (key in cookies) {
+        const restored_value = cookies[key];
         const element = getElement(key);
         if ('checked' in element) {
-          element.checked = cookies[key];
+          element.checked = restored_value;
+        } else if ('options' in element) {
+          for (const item of element.options) {
+            if (JSON.parse(item.value) == restored_value) {
+              element.value = item.value;
+              break;
+            }
+          }
         } else {
-          element.value = cookies[key];
+          element.value = restored_value;
         }
       }
     }
