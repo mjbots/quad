@@ -56,7 +56,4 @@ exports_files([
     "quad_screen.conf",
     "quad.cmd",
     "start-robot.sh",
-    "turret-start.sh",
-    "turret_screen.conf",
-    "turret.cmd",
 ])

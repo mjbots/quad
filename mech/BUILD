@@ -26,9 +26,6 @@ filegroup(
         "web_control_assets/index.html",
         "web_control_assets/styles.css",
         "web_control_assets/js/app.js",
-        "turret_assets/index.html",
-        "turret_assets/styles.css",
-        "turret_assets/js/app.js",
     ],
 )
 
@@ -46,12 +43,6 @@ cc_library(
         "rf_control.cc",
         "system_info.cc",
         "swing_trajectory.cc",
-        "target_tracker.cc",
-        "telepresence.cc",
-        "telepresence_control.cc",
-        "turret.cc",
-        "turret_control.cc",
-        "turret_rf_control.cc",
         "trajectory.cc",
         "trajectory_line_intersect.cc",
         "web_server.cc",
@@ -150,20 +141,6 @@ module_main(
     deps = [":mech"],
 )
 
-module_main(
-    name = "turret",
-    cname = "mjmech::mech::Turret",
-    prefix = "mech",
-    deps = [":mech"],
-)
-
-module_main(
-    name = "telepresence",
-    cname = "mjmech::mech::Telepresence",
-    prefix = "mech",
-    deps = [":mech"],
-)
-
 cc_binary(
     name = "multiplex_tool",
     srcs = ["multiplex_tool_main.cc"],
@@ -211,30 +188,6 @@ pkg_tar(
     },
 )
 
-pkg_tar(
-    name = "turret_deploy",
-    extension = "tar",
-    include_runfiles = True,
-    package_dir = "mech",
-    srcs = [
-        ":moteus_tool",
-        ":multiplex_tool",
-        ":telepresence",
-        ":turret",
-    ],
-    files = {
-        "//configs:telepresence.ini": "configs/telepresence.ini",
-        "//configs:turret.ini": "configs/turret.ini",
-        "//utils:performance_governor.sh": "performance_governor.sh",
-        "//utils:turret-start.sh": "turret_start.sh",
-        "//utils:turret_screen.conf": "turret_screen.conf",
-        "//utils:turret.cmd": "turret.cmd",
-        "turret_assets/index.html" : "turret_assets/index.html",
-        "turret_assets/styles.css" : "turret_assets/styles.css",
-        "turret_assets/js/app.js" : "turret_assets/js/app.js",
-    },
-)
-
 cc_binary(
     name = "imgui_test",
     srcs = ["imgui_test.cc"],
@@ -248,21 +201,5 @@ cc_binary(
     ],
     copts = [
         "-Wno-deprecated-declarations",
-    ],
-)
-
-cc_binary(
-    name = "rf_command",
-    srcs = ["rf_command.cc"],
-    deps = [
-        ":mech",
-        "//ffmpeg",
-        "//gl",
-        "@com_github_mjbots_mjlib//mjlib/base:clipp",
-        "@com_github_mjbots_mjlib//mjlib/imgui",
-        "@org_llvm_libcxx//:libcxx",
-    ],
-    data = [
-        "reticle.png",
     ],
 )
