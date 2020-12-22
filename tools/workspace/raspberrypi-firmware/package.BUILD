@@ -17,6 +17,20 @@
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
+    name = "bcm_host",
+    hdrs = [
+        "hardfp/opt/vc/include/bcm_host.h",
+    ] + glob([
+        "hardfp/opt/vc/include/interface/**/*.h",
+        "hardfp/opt/vc/include/vcinclude/**/*.h",
+    ]),
+    srcs = ["hardfp/opt/vc/lib/libbcm_host.so"],
+    includes = [
+        "hardfp/opt/vc/include",
+    ],
+)
+
+cc_library(
     name = "raspberrypi-firmware",
     hdrs = glob(["hardfp/opt/vc/include/**/*.h"]),
     srcs = glob(["hardfp/opt/vc/lib/*.so"]),
