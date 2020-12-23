@@ -1,33 +1,23 @@
 build --crosstool_top=@rpi_bazel//tools/cc_toolchain:toolchain
-test --crosstool_top=@rpi_bazel//tools/cc_toolchain:toolchain
-
 build --define CLANG=true
-test --define CLANG=true
 
 # Sadly, Eigen/C++ still hasn't figured out how to reliably get
 # alignment correct.  Lets just disable it for now.
 build --copt -DEIGEN_DONT_ALIGN_STATICALLY
-test --copt -DEIGEN_DONT_ALIGN_STATICALLY
 
 build:pi --cpu=armeabihf
-test:pi --cpu=armeabihf
-
 build:pi --define COM_GITHUB_MJBOTS_RASPBERRYPI=1
-test:pi --define COM_GITHUB_MJBOTS_RASPBERRYPI=1
 
 build --strip=never
-test --strip=never
-
 build --compiler=clang
-test --compiler=clang
 
 build -c opt
-test -c opt
+build --copt -D_FILE_OFFSET_BITS=64
+build --copt -D_LARGEFILE_SOURCE
+build --copt -D_LARGEFILE64_SOURCE
 
 test --test_output=errors
 
 build --workspace_status_command=tools/workspace_status.sh
-test --workspace_status_command=tools/workspace_status.sh
 
 build --stamp
-test --stamp
