@@ -93,32 +93,26 @@ sudo screen -r
    3      4
 ```
 
-6. Determine which servos are associated with that leg:
+6. Rezero the leg, using the leg number from above.
 
 ```
-Leg 1: 1-3
-Leg 2: 4-6
-Leg 3: 7-9
-Leg 4: 10-12
+./zero_leg.py -l 1
 ```
 
-7. Rezero the leg, using the servo numbers from above.
+This will report the current position of each three leg servos.  Press
+<enter> when the leg is in position to zero that leg.
 
-```
-./moteus_tool -t1-3 --zero-offset
-```
+7. If more legs need to be rezeroed, the fixture can be moved between
+   legs and the step 6 command run more as necessary.
 
-8. If more legs need to be rezeroed, the fixture can be moved between
-   legs and the step 7 command run more as necessary.
-
-9. Shutdown the computer, wait 15s, then turn off the power switch.
+8. Shutdown the computer, wait 15s, then turn off the power switch.
 
 ```
 shutdown -h now
 ```
 
-10. At this point the quad A1 can be set in the "turn-on" position and
-    started up as normal.
+9. At this point the quad A1 can be set in the "turn-on" position and
+   started up as normal.
 
 ## Change ssh key ##
 
