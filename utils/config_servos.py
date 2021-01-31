@@ -24,7 +24,10 @@ import tempfile
 
 
 SCRIPT_PATH = os.path.dirname(__file__)
-MOTEUS_TOOL = os.path.join(SCRIPT_PATH, 'moteus_tool')
+MOTEUS_TOOL = [os.path.join(SCRIPT_PATH, 'moteus_tool'),
+               '--pi3hat-cfg',
+               '1=1,2,3;2=4,5,6;3=7,8,9;4=10,11,12',
+               ]
 
 
 CONFIG = {
@@ -43,6 +46,7 @@ CONFIG = {
         ('1,2,4,5,7,8,10,11', '50'),
         ('3,6,9,12', '200'),
     ],
+    'servo.feedforward_scale' : '0.5',
     'servo.pid_position.kd' : '9',
     'servo.pid_dq.ki' : '150.0',
     'motor.unwrapped_position_scale' : [
@@ -68,29 +72,29 @@ def main():
 
     for key, data_or_value in CONFIG.items():
         if type(data_or_value) == str:
-            with tempfile.NamedTemporaryFile() as config:
+            with tempfile.NamedTemporaryFile(delete=False) as config:
                 value = data_or_value
 
                 config.write(
                     'conf set {} {}\n'.format(key, value).encode('utf8'))
                 config.flush()
 
-                run([MOTEUS_TOOL, '-t1-12', '--write-config', config.name])
+                run(MOTEUS_TOOL + ['-t1-12', '--write-config', config.name])
         else:
             data = data_or_value
             for servo_selector, value in data:
-                with tempfile.NamedTemporaryFile() as config:
+                with tempfile.NamedTemporaryFile(delete=False) as config:
                     config.write(
                         'conf set {} {}\n'.format(key, value).encode('utf8'))
                     config.flush()
-                    run([MOTEUS_TOOL, '-t{}'.format(servo_selector),
+                    run(MOTEUS_TOOL + ['-t{}'.format(servo_selector),
                          '--write-config', config.name])
 
     # Now store them all persistently.
-    with tempfile.NamedTemporaryFile() as config:
+    with tempfile.NamedTemporaryFile(delete=False) as config:
         config.write(b'conf write\n')
         config.flush()
-        run([MOTEUS_TOOL, '-t1-12', '--write-config', config.name])
+        run(MOTEUS_TOOL + ['-t1-12', '--write-config', config.name])
 
 
 if __name__ == '__main__':
