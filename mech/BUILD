@@ -181,6 +181,7 @@ pkg_tar(
         "//utils:quad_screen.conf" : "quad_screen.conf",
         "//utils:quad-start.sh" : "quad-start.sh",
         "//utils:start-robot.sh": "start-robot.sh",
+        "//utils:zero_leg.py": "zero_leg.py",
         "web_control_assets/mjbots.png" : "web_control_assets/mjbots.png",
         "web_control_assets/index.html" : "web_control_assets/index.html",
         "web_control_assets/styles.css" : "web_control_assets/styles.css",

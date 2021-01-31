@@ -56,4 +56,5 @@ exports_files([
     "quad_screen.conf",
     "quad.cmd",
     "start-robot.sh",
+    "zero_leg.py",
 ])
