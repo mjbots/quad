@@ -46,8 +46,8 @@ CONFIG = {
         ('1,2,4,5,7,8,10,11', '50'),
         ('3,6,9,12', '200'),
     ],
-    'servo.feedforward_scale' : '0.5',
-    'servo.pid_position.kd' : '9',
+    'servo.feedforward_scale' : '0.0',
+    'servo.pid_position.kd' : '6',
     'servo.pid_dq.ki' : '150.0',
     'motor.unwrapped_position_scale' : [
         ('1,3,4,6,7,9,10,12', '0.16666667'),
