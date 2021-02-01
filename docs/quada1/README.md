@@ -58,8 +58,6 @@ be used to adjust that tension.  As the belts stretch with age, it
 will likely be necessary to use a longer bolt than the M3x12 initially
 installed.  M3x14 is the longest suitable bolt.
 
-When tensioned properly,
-
 ## Rezeroing leg ##
 
 If the leg is disassembled or re-assembled, or the belt skips, then that leg will need to be re-zeroed.  This can be accomplished as follows:
