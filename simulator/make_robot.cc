@@ -156,12 +156,17 @@ dd::SkeletonPtr MakeRobot(const mech::QuadrupedConfig& config) {
   inertia.setMoment(4 * box->computeInertia(kBodyMassKg));
   body->setInertia(inertia);
 
-  result->getDof("Joint_pos_z")->setPosition(0.5);
+  result->getDof("Joint_pos_z")->setPosition(0.2);
 
   auto leg0 = MakeLeg(result, body, config.legs.at(0), "leg0");
   auto leg1 = MakeLeg(result, body, config.legs.at(1), "leg1");
   auto leg2 = MakeLeg(result, body, config.legs.at(2), "leg2");
   auto leg3 = MakeLeg(result, body, config.legs.at(3), "leg3");
+
+  leg0->getChildJoint(0)->getDof(0)->setPosition(0.5 * M_PI);
+  leg1->getChildJoint(0)->getDof(0)->setPosition(0.5 * M_PI);
+  leg2->getChildJoint(0)->getDof(0)->setPosition(0.5 * M_PI);
+  leg3->getChildJoint(0)->getDof(0)->setPosition(0.5 * M_PI);
 
   return result;
 }
