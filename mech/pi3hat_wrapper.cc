@@ -35,6 +35,8 @@
 #include "base/logging.h"
 #include "base/saturate.h"
 
+#include "mech/moteus.h"
+
 namespace mjmech {
 namespace mech {
 
@@ -150,6 +152,8 @@ class Pi3hatWrapper::Impl {
     return std::make_shared<Tunnel>(this, id, channel, options);
   }
 
+  PowerSignal* power_signal() { return &power_signal_; }
+
  private:
   void HandlePowerPoll(const mjlib::base::error_code& ec) {
     if (ec == boost::asio::error::operation_aborted) {
@@ -174,6 +178,14 @@ class Pi3hatWrapper::Impl {
 
     void async_read_some(mjlib::io::MutableBufferSequence buffers,
                          mjlib::io::ReadHandler handler) override {
+      if (boost::asio::buffer_size(buffers) == 0) {
+        // Post immediately.
+        boost::asio::post(
+            parent_->executor_,
+            std::bind(std::move(handler), mjlib::base::error_code(), 0));
+        return;
+      }
+
       boost::asio::post(
           parent_->child_context_,
           [self=shared_from_this(), buffers,
@@ -257,6 +269,15 @@ class Pi3hatWrapper::Impl {
         c.mounting_deg.roll = options_.mounting.roll_deg;
         c.attitude_rate_hz = options_.imu_rate_hz;
         c.rf_id = options_.rf_id;
+
+        if (options_.power_dist_rev >= 0x0400) {
+          // The current power_dist boards use 1/5Mbps CAN-FD
+          c.can[4].slow_bitrate = 1000000;
+          c.can[4].fast_bitrate = 5000000;
+          c.can[4].fdcan_frame = true;
+          c.can[4].bitrate_switch = true;
+        }
+
         return c;
       }());
 
@@ -312,11 +333,30 @@ class Pi3hatWrapper::Impl {
     if (power_poll) {
       d.tx_can.push_back({});
       auto& dst = d.tx_can.back();
-      dst.bus = 5;  // The slow auxiliary CAN bus
-      dst.id = 0x00010005;
-      dst.size = 2;
-      dst.data[0] = 0;
-      dst.data[1] = base::Saturate<uint8_t>(options_.shutdown_timeout_s / 0.1);
+      dst.bus = 5;  // The auxiliary CAN bus
+
+      if (options_.power_dist_rev >= 0x0400) {
+        dst.id = 0x8020;
+
+        dst.size = 9;
+        dst.data[0] = 0x01;  // write 1 int8 register
+        dst.data[1] = 0x03;  // register 3 = Lock Time
+        dst.data[2] = base::Saturate<int8_t>(options_.shutdown_timeout_s / 0.1);
+        dst.data[3] = 0x17;  // read 3 int16 registers
+        dst.data[4] = 0x10;  // 0x010=voltage, 0x011=current, 0x012=temp
+
+        dst.data[5] = 0x19;  // read 1 int32 register
+        dst.data[6] = 0x13;  // 0x013 = energy
+        dst.data[7] = 0x11;  // read 1 int8 register
+        dst.data[8] = 0x02;  // 0x002=switch
+
+        dst.expect_reply = true;
+      } else {
+        dst.id = 0x00010005;
+        dst.size = 2;
+        dst.data[0] = 0;
+        dst.data[1] = base::Saturate<uint8_t>(options_.shutdown_timeout_s / 0.1);
+      }
 
       input->force_can_check |= (1 << 5);
     }
@@ -524,24 +564,29 @@ class Pi3hatWrapper::Impl {
         std::bind(std::move(callback), mjlib::base::error_code(), size));
   }
 
+  void Shutdown() {
+    // The power switch is off.  Shut everything down!
+    log_.warn("Shutting down!");
+    mjlib::base::system_error::throw_if(
+        ::system("shutdown -h now") < 0,
+        "error trying to shutdown, at least we'll exit the app");
+    // Quit the application to make the shutdown process go
+    // faster.
+    std::exit(0);
+  }
+
   void FinishCAN(Reply* reply) {
     // First CAN.
     for (size_t i = 0; i < pi3data_.result.rx_can_size; i++) {
       const auto& src = pi3data_.rx_can[i];
 
       if (src.id == 0x10004) {
-        // This came from the power_dist board.
+        // This came from a power_dist r3.x board.
         const bool power_switch = src.data[0] != 0;
         if (!power_switch) {
-          // The power switch is off.  Shut everything down!
-          log_.warn("Shutting down!");
-          mjlib::base::system_error::throw_if(
-              ::system("shutdown -h now") < 0,
-              "error trying to shutdown, at least we'll exit the app");
-          // Quit the application to make the shutdown process go
-          // faster.
-          std::exit(0);
+          Shutdown();
         }
+
         continue;
       }
 
@@ -550,6 +595,56 @@ class Pi3hatWrapper::Impl {
         {reinterpret_cast<const char*>(&src.data[0]),
               pi3data_.rx_can[i].size}};
       mjlib::multiplex::ParseRegisterReply(payload_stream, &parsed_data_);
+
+      if ((src.id & 0xff00) == 0x2000) {
+        // This came from a power_dist r4.x board.
+
+        Power power;
+
+        for (const auto& pair : parsed_data_) {
+          const auto* maybe_value =
+              std::get_if<moteus::Value>(&pair.second);
+          if (!maybe_value) { continue; }
+          const auto& value = *maybe_value;
+
+          if (pair.first == 0x010) {
+            power.output_V = moteus::ReadVoltage(value);
+          } else if (pair.first == 0x011) {
+            power.output_A = moteus::ReadCurrent(value);
+          } else if (pair.first == 0x012) {
+            power.temp_C = moteus::ReadTemperature(value);
+          } else if (pair.first == 0x013) {
+            power.energy_Whr = moteus::ReadEnergy(value);
+          } else if (pair.first == 0x002) {
+            if (moteus::ReadInt(value) == 0) {
+              Shutdown();
+            }
+          }
+        }
+
+        const auto now = mjlib::io::Now(executor_.context());
+        power.timestamp = now;
+
+        power.power_W = power.output_V * power.output_A;
+
+        const double delta_hr =
+            last_power_status_.is_not_a_date_time() ? 10.0 :
+            base::ConvertDurationToSeconds(
+                now - last_power_status_) / 3600.0;
+        if (std::abs(delta_hr) > 1e-6) {
+          // about 4ms
+          if (!last_power_status_.is_not_a_date_time()) {
+            power.avg_power_W =
+                (power.energy_Whr - last_energy_Whr_) / delta_hr;
+          }
+          last_power_status_ = now;
+          last_energy_Whr_ = power.energy_Whr;
+        }
+
+        power_signal_(&power);
+        continue;
+      }
+
       for (const auto& pair : parsed_data_) {
         reply->push_back({static_cast<uint8_t>((src.id >> 8) & 0xff),
                 pair.first, pair.second});
@@ -697,6 +792,10 @@ class Pi3hatWrapper::Impl {
   Pi3Data pi3data_;
 
   std::atomic<bool> power_poll_{false};
+
+  double last_energy_Whr_ = 0.0;
+  boost::posix_time::ptime last_power_status_;
+  PowerSignal power_signal_;
 };
 #else
 
@@ -715,6 +814,9 @@ class Pi3hatWrapper::Impl {
   mjlib::io::SharedStream MakeTunnel(uint8_t, uint32_t, const TunnelOptions&) {
     return {};
   }
+  PowerSignal* power_signal() { return &power_signal_; }
+
+  PowerSignal power_signal_;
 };
 #endif
 
@@ -774,6 +876,10 @@ void Pi3hatWrapper::Cycle(AttitudeData* attitude,
                           Reply* reply,
                           mjlib::io::ErrorCallback callback) {
   impl_->Cycle(attitude, request, reply, std::move(callback));
+}
+
+Pi3hatWrapper::PowerSignal* Pi3hatWrapper::power_signal() {
+  return impl_->power_signal();
 }
 
 }

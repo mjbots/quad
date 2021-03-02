@@ -18,6 +18,7 @@
 #include <string>
 
 #include <boost/asio/any_io_executor.hpp>
+#include <boost/signals2.hpp>
 
 #include "mjlib/base/visitor.h"
 #include "mjlib/io/async_types.h"
@@ -73,6 +74,8 @@ class Pi3hatWrapper : public Pi3hatInterface {
     bool attitude_detail = false;
     int force_bus = -1;
 
+    int power_dist_rev = 0x0403;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(cpu_affinity));
@@ -85,6 +88,7 @@ class Pi3hatWrapper : public Pi3hatInterface {
       a->Visit(MJ_NVP(imu_rate_hz));
       a->Visit(MJ_NVP(attitude_detail));
       a->Visit(MJ_NVP(force_bus));
+      a->Visit(MJ_NVP(power_dist_rev));
     }
   };
 
@@ -106,6 +110,30 @@ class Pi3hatWrapper : public Pi3hatInterface {
       uint8_t id,
       uint32_t channel,
       const TunnelOptions& options) override;
+
+  struct Power {
+    boost::posix_time::ptime timestamp;
+
+    double output_V = 0.0;
+    double output_A = 0.0;
+    double power_W = 0.0;
+    double avg_power_W = 0.0;
+    double temp_C = 0.0;
+    double energy_Whr = 0.0;
+
+    template <typename Archive>
+    void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(timestamp));
+      a->Visit(MJ_NVP(output_V));
+      a->Visit(MJ_NVP(output_A));
+      a->Visit(MJ_NVP(power_W));
+      a->Visit(MJ_NVP(avg_power_W));
+      a->Visit(MJ_NVP(temp_C));
+      a->Visit(MJ_NVP(energy_Whr));
+    }
+  };
+  using PowerSignal = boost::signals2::signal<void (const Power*)>;
+  PowerSignal* power_signal();
 
   struct Stats {
     template <typename Archive>

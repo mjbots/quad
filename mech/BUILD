@@ -67,7 +67,7 @@ cc_library(
         "//conditions:default" : [],
         "//:raspberrypi" : [
             "@raspicam",
-            "@pi3hat//mjbots/pi3hat:libpi3hat",
+            "@pi3hat//lib/cpp/mjbots/pi3hat:libpi3hat",
         ],
     }),
     copts = [

@@ -241,6 +241,14 @@ inline int ReadInt(Value value) {
   return std::visit([](auto v) { return static_cast<int>(v); }, value);
 }
 
+inline double ReadEnergy(Value value) {
+  return ReadScale(value, 1.0, 0.01, 0.000001);
+}
+
+inline double ReadCurrent(Value value) {
+  return ReadScale(value, 1.0, 0.1, 0.001);
+}
+
 }
 }
 }
