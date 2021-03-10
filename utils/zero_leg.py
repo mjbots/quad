@@ -53,7 +53,7 @@ async def async_readline(fd):
         this_char = await fd.read(1)
         if this_char == b'\n' or this_char == b'\r':
             return result
-        result += this_car
+        result += this_char
 
 
 async def main():
