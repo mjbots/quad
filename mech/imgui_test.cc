@@ -526,4 +526,5 @@ int main(int, char**) {
 
   glfwDestroyWindow(window);
   glfwTerminate();
+  return 0;
 }
