@@ -98,7 +98,7 @@ def main():
 
     PKGLIST = split('''
     bison flex gcc g++ curl libc6-dev mesa-common-dev libglu1-mesa-dev
-    libtinfo5 libxrender-dev libxi-dev
+    libtinfo5 libxrender-dev libxi-dev libx11-xcb-dev
     ''')
 
     ubuntu_release = subprocess.check_output(["lsb_release", "-cs"]).strip()
