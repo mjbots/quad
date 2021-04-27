@@ -25,6 +25,9 @@ direction, they should be interpreted as:
 
 Leg Frame (G): The leg frame is located at the center of the shoulder
 joint, with +x facing forward, +y facing right, and +z facing down.
+In this case, "forward" is oriented away from the center of the robot
+in the longitudinal direction, and "right" is measured relative to
+that.
 
 Body Frame (B): This frame is oriented at the center of the quadruped
 body and fixed to the chassis.
