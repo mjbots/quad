@@ -23,10 +23,6 @@ direction, they should be interpreted as:
 
 ## Common frames ##
 
-Joint Frame (J): Each joint has a frame located at the center of
-rotation of the shoulder, with +x facing outward, +y facing right, +z
-facing down.
-
 Leg Frame (G): The leg frame is located at the center of the shoulder
 joint, with +x facing forward, +y facing right, and +z facing down.
 
