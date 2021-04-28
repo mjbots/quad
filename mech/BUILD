@@ -151,23 +151,12 @@ cc_binary(
     ],
 )
 
-cc_binary(
-    name = "moteus_tool",
-    srcs = ["moteus_tool_main.cc"],
-    deps = [
-        ":mech",
-        "@moteus//moteus/tool:moteus_tool_lib",
-        "@org_llvm_libcxx//:libcxx",
-    ],
-)
-
 pkg_tar(
     name = "quad_deploy",
     extension = "tar",
     include_runfiles = True,
     package_dir = "mech",
     srcs = [
-        ":moteus_tool",
         ":multiplex_tool",
         ":quadruped",
     ],
