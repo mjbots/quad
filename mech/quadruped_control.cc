@@ -327,13 +327,19 @@ class QuadrupedControl::Impl {
       if (status_.state.joints.size() != kNumServos) {
         // We have to get at least one full set before we can start
         // updating.
-        std::set<int> required_servos = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
-        for (const auto& joint : status_.state.joints) {
-          required_servos.erase(joint.id);
+        std::string missing;
+        for (int i = 1; i <= kNumServos; i++) {
+          if ((servo_bitmask & (1 << i)) == 0) {
+            if (!missing.empty()) { missing += ","; }
+            missing += fmt::format("{}", i);
+          }
         }
-        BOOST_ASSERT(required_servos.size());
-        log_.warn(fmt::format("Missing at least servo: {}",
-                              *required_servos.begin()));
+        const std::string message =
+            fmt::format("Could not find one or more of "
+                        "the following servos: {}", missing);
+        log_.warn(message);
+        status_.fault = message;
+
         outstanding_ = false;
         return;
       }
