@@ -53,11 +53,6 @@ CONFIG = {
         ('1,3,4,6,7,9,10,12', '0.16666667'),
         ('2,5,8,11', '0.093750'),
     ],
-    'drv8323_conf.idrivep_hs_ma' : '370',
-    'drv8323_conf.idriven_hs_ma' : '740',
-    'drv8323_conf.idrivep_ls_ma' : '370',
-    'drv8323_conf.idriven_ls_ma' : '740',
-    'drv8323_conf.dead_time_ns' : '50',
 }
 
 
