@@ -20,6 +20,6 @@ def pi3hat_repository(name):
     github_archive(
         name = name,
         repo = "mjbots/pi3hat",
-        commit = "d1e8aa529fe9aa62e6c0df19f10b83bd0e743273",
-        sha256 = "98f95aa57449bc1c352fcdc61617f783a7a2be4b9dd6b7b763e19ab12b168b48",
+        commit = "2bcae9d7746410063a0e5c5529af472f317106ef",
+        sha256 = "b83f222fcffb28cd36693203254da3c7a4d649d5328242c85e0337fad5e1af7c",
     )
