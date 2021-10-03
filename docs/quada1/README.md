@@ -25,7 +25,7 @@ hazards.
 
 5. After ~30s, the robot's wifi access point will become available.  Connect to it.
 
-6. Point your web browser to http://192.168.16.47:4778
+6. Using Chrome, the only currently supported browser, navigate to http://192.168.16.47:4778
 
 ## Joystick ##
 
