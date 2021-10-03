@@ -25,7 +25,7 @@ hazards.
 
 5. After ~30s, the robot's wifi access point will become available.  Connect to it.
 
-6. Point your web browser to http://192.168.16.47:4778
+6. Point your web browser (tested on Google Chrome) to http://192.168.16.47:4778
 
 ## Joystick ##
 
@@ -90,6 +90,7 @@ sudo screen -r
 
    3      4
 ```
+FRONT side is the one with the power switch. 
 
 6. Rezero the leg, using the leg number from above.
 
