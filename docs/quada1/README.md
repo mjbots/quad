@@ -78,8 +78,9 @@ sudo screen -r
 ```
 
 5. Determine the leg number of the leg to be rezeroed.  When looking
-   from the top, the legs are numbered as follows (note the robot is
-   upside down now, so this will be mirrored):
+   from the top, the legs are numbered as follows.  The "front" side
+   is the one with the power switch. (note the robot is upside down
+   now, so this will be mirrored):
 
 ```
    1      2
