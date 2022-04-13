@@ -270,6 +270,12 @@ class Pi3hatWrapper::Impl {
         c.attitude_rate_hz = options_.imu_rate_hz;
         c.rf_id = options_.rf_id;
 
+        for (auto& can : c.can) {
+          can.automatic_retransmission = true;
+          can.restricted_mode = false;
+          can.bus_monitor = false;
+        }
+
         if (options_.power_dist_rev >= 0x0400) {
           // The current power_dist boards use 1/5Mbps CAN-FD
           c.can[4].slow_bitrate = 1000000;
