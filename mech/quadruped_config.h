@@ -67,7 +67,7 @@ struct QuadrupedConfig {
 
   struct Bounds {
     double min_z_B = 0.0;
-    double max_z_B = 0.3;
+    double max_z_B = 0.30;
     double max_acceleration = 100;
 
     template <typename Archive>
@@ -88,7 +88,7 @@ struct QuadrupedConfig {
     // This pose is referenced to the leg in the front right and the
     // x/y positions should all be positive.  All other positions will
     // be symmetric about the x/y axes.
-    base::Point3D pose_R = {0.151, 0.219, 0.049};
+    base::Point3D pose_R = {0.151, 0.240, 0.049};
     double velocity_dps = 60.0;
     double velocity = 0.150;
     double shoulder_clearance_deg = 52.0;
@@ -140,6 +140,8 @@ struct QuadrupedConfig {
   double lr_alpha_rad_s2 = 1.0;
   double terrain_filter_s = 0.5;
   double voltage_filter_s = 1.0;
+
+  double zero_velocity_kd_scale = 1.5;
 
   struct Jump {
     double lower_velocity = 0.100;
@@ -315,6 +317,8 @@ struct QuadrupedConfig {
     a->Visit(MJ_NVP(lr_acceleration));
     a->Visit(MJ_NVP(lr_alpha_rad_s2));
     a->Visit(MJ_NVP(terrain_filter_s));
+    a->Visit(MJ_NVP(voltage_filter_s));
+    a->Visit(MJ_NVP(zero_velocity_kd_scale));
     a->Visit(MJ_NVP(jump));
     a->Visit(MJ_NVP(walk));
     a->Visit(MJ_NVP(backflip));

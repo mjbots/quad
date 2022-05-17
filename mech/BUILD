@@ -162,8 +162,10 @@ pkg_tar(
     ],
     files = {
         "//configs:quadruped.ini": "configs/quadruped.ini",
+        "//configs:quadruped_a2.ini": "configs/quadruped_a2.ini",
         "//configs:quada0.cfg": "configs/quada0.cfg",
         "//configs:quada1.cfg": "configs/quada1.cfg",
+        "//configs:quada2.cfg": "configs/quada2.cfg",
         "//utils:config_servos.py": "config_servos.py",
         "//utils:performance_governor.sh": "performance_governor.sh",
         "//utils:quad.cmd" : "quad.cmd",

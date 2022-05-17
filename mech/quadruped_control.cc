@@ -1021,6 +1021,9 @@ class QuadrupedControl::Impl {
       out_joint.id = joint.id;
       out_joint.power = true;
       out_joint.zero_velocity = true;
+      if (config_.zero_velocity_kd_scale != 1.0) {
+        out_joint.kd_scale = config_.zero_velocity_kd_scale;
+      }
       out_joints.push_back(out_joint);
     }
 
@@ -2082,7 +2085,8 @@ class QuadrupedControl::Impl {
       auto& values = values_cache_;
       values.resize(0);
 
-      if (mode == moteus::Mode::kPosition) {
+      if (mode == moteus::Mode::kPosition ||
+          mode == moteus::Mode::kZeroVelocity) {
         const auto maybe_sign = MaybeGetSign(joint.id);
         if (!maybe_sign) {
           log_.warn(fmt::format("Unknown servo {}", joint.id));

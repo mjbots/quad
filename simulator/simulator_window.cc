@@ -276,7 +276,7 @@ class Servo : public mjlib::multiplex::MicroServer::Server,
   void RunZeroVelocity(double dt_s) {
     mjlib::base::PID::ApplyOptions apply_options;
     apply_options.kp_scale = 0.0;
-    apply_options.kd_scale = 1.0;
+    apply_options.kd_scale = command_.kd_scale;
 
     RunPositionCommon(dt_s, apply_options);
   }
