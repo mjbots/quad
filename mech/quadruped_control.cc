@@ -354,6 +354,13 @@ class QuadrupedControl::Impl {
 
     timing_.finish_status();
 
+    if (std::abs(imu_data_.euler_deg.roll) > 45 ||
+        std::abs(imu_data_.euler_deg.pitch) > 45) {
+      if (status_.mode != QM::kFault) {
+        Fault("Tipping over");
+      }
+    }
+
     // Now run our control loop and generate our command.
     std::swap(control_log_, old_control_log_);
     *control_log_ = {};
