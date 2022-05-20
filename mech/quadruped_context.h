@@ -164,7 +164,6 @@ struct QuadrupedContext : boost::noncopyable {
 
     const Sophus::SE3d tf_MB = robot.frame_MB.pose;
     Sophus::SE3d tf_MT = tf_AM.inverse() * robot.tf_TA.inverse();
-    const Sophus::SE3d tf_BM = tf_MB.inverse();
 
     const Eigen::Vector3d com_on_ground_M =
         FindVerticalLinePlaneIntersect(
@@ -176,7 +175,7 @@ struct QuadrupedContext : boost::noncopyable {
     // Project that back into the B frame to get our offset.
     base::KinematicRelation result_RB;
     result_RB.pose.translation().head<2>() =
-        -(tf_BM * com_on_ground_M).head<2>();
+        -(com_on_ground_M - (tf_MT * Eigen::Vector3d(0, 0, 0))).head<2>();
 
     return result_RB;
   }
