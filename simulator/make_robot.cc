@@ -195,7 +195,7 @@ dd::SkeletonPtr MakeRamp(double peak_height) {
   auto ramp = dd::Skeleton::create("ramp");
 
   double ramp_length = 1.0;
-  double ramp_width = 0.8;
+  double ramp_width = 1.8;
   double ramp_height = 0.01;
 
   {
