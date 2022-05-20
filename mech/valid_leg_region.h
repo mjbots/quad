@@ -38,20 +38,21 @@ class ValidLegRegion {
 
   ValidLegRegion(const IkSolver& ik,
                  const base::Point3D& idle_G,
-                 double lift_height) {
+                 double lift_height,
+                 const Polygon& exclude_region_G) {
     // Our strategy is to move in small increments forward and
     // backward in X.  At each X value, we scan +-Y to find the
     // bounds.  These bounds are used to trace out a rough polygon.
     // This is repeated at the idle_R.z (the stand up height), and
-    // again at the walking height.  After that, we try to find a
-    // maximal aligned bounding box that fits within.
+    // again at the walking height.  This is used to build up a
+    // polygon describing a contiguous region the foot can be used in.
 
     std::vector<Polygon> poly_G;
 
     for (double z : { 0.0, lift_height }) {
       base::Point3D p_G = idle_G;
       p_G.z() = idle_G.z() - z;
-      poly_G.push_back(SearchPlane(ik, p_G));
+      poly_G.push_back(SearchPlane(ik, p_G, exclude_region_G));
     }
 
     std::vector<Polygon> merged_G;
@@ -112,14 +113,15 @@ class ValidLegRegion {
 
  private:
 
-  Polygon SearchPlane(const IkSolver& ik, const base::Point3D& start_G) const {
+  Polygon SearchPlane(const IkSolver& ik, const base::Point3D& start_G,
+                      const Polygon& exclude_region_G) const {
     Plane plane;
 
     for (double xdir : {-1.0, 1.0}) {
       base::Point3D cur_G = start_G;
       while (true) {
         cur_G.x() += kXStep * xdir;
-        auto maybe_slice = FindSlice(ik, cur_G);
+        auto maybe_slice = FindSlice(ik, cur_G, exclude_region_G);
         if (!maybe_slice) {
           break;
         }
@@ -133,14 +135,14 @@ class ValidLegRegion {
               });
 
     Polygon result;
-    // We generate the polygon by walking up the right side, then down
+    // We generate the polygon by walking down the right side, then up
     // the left side.
     for (const auto& slice : plane) {
       Point p{slice.second.x(), slice.second.y()};
       boost::geometry::append(result, p);
     }
 
-    // Then back down the right side.
+    // Then back up the left side.
     for (auto it = plane.rbegin(); it != plane.rend(); ++it) {
       Point p{it->first.x(), it->first.y()};
       boost::geometry::append(result, p);
@@ -150,11 +152,17 @@ class ValidLegRegion {
   }
 
   std::optional<Slice> FindSlice(
-      const IkSolver& ik, const base::Point3D& start_G) const {
+      const IkSolver& ik, const base::Point3D& start_G,
+      const Polygon& exclude_region_G) const {
     auto scan_y_G = [&](double ydir) {
       base::Point3D cur_G = start_G;
       std::optional<base::Point3D> old_G;
+
       while (true) {
+        if (boost::geometry::within(
+                Point(cur_G.x(), cur_G.y()), exclude_region_G)) {
+          return old_G;
+        }
         IkSolver::Effector effector_G;
         effector_G.pose = cur_G;
         const auto maybe_result = ik.Inverse(effector_G, {});

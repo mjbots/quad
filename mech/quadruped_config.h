@@ -234,6 +234,8 @@ struct QuadrupedConfig {
 
     double jump_velocity_scale = 0.5;
 
+    double center_exclude = 0.05;
+
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(lift_height));
@@ -264,6 +266,7 @@ struct QuadrupedConfig {
       a->Visit(MJ_NVP(extra_target_time_s));
       a->Visit(MJ_NVP(jump_offset_scale));
       a->Visit(MJ_NVP(jump_velocity_scale));
+      a->Visit(MJ_NVP(center_exclude));
     }
   };
 
