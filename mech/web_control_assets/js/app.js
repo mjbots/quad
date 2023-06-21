@@ -1,4 +1,4 @@
-// Copyright 2019-2020 Josh Pieper, jjp@pobox.com.  All rights reserved.
+// Copyright 2019-2022 Josh Pieper, jjp@pobox.com.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ const CMD_MAX_RATE_Z = Math.PI * 60 / 180.0;
 
 const CMD_MAX_POSE_YAW = Math.PI * 20 / 180.0;
 const CMD_MAX_POSE_PITCH = Math.PI * 11 / 180.0;
+const CMD_MAX_POSE_X = 0.05;
+const CMD_MAX_POSE_Y = 0.02;
 
 const TRANSLATION_EPSILON = 0.025;
 const ROTATION_EPSILON = Math.PI * 7.0 / 180.0;
@@ -462,7 +464,11 @@ class Application {
             makeQuaternionAxisRotate(0, 1, 0, pitch)),
           makeQuaternionAxisRotate(0, 0, 1, yaw));
         const pose_RB = {
-          translation : [ 0, 0, 0],
+          translation : [
+            -this._joystick.axis(Joystick.AXES_LEFT_Y) * CMD_MAX_POSE_X,
+            this._joystick.axis(Joystick.AXES_LEFT_X) * CMD_MAX_POSE_Y,
+            0
+          ],
           so3 : quaternionJs(pose_RB_so3),
         };
         return [v_R, w_R, pose_RB];

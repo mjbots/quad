@@ -927,7 +927,7 @@ class QuadrupedControl::Impl {
     // All of them must have been rezerod and have the current
     // register map.
     for (const auto& servo : reported_servo_config_.servos) {
-      if (servo.rezero_state == 0) {
+      if (servo.rezero_state <= 1) {
         status_.fault = fmt::format("servo {} not rezerod", servo.id);
         return false;
       }
@@ -975,7 +975,7 @@ class QuadrupedControl::Impl {
     const int need_rezero_count = [&]() {
       int total = 0;
       for (const auto& servo : reported_servo_config_.servos) {
-        if (servo.rezero_state == 0) { total++; }
+        if (servo.rezero_state <= 1) { total++; }
       }
       return total;
     }();

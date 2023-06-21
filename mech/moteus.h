@@ -20,7 +20,7 @@ namespace mech {
 namespace moteus {
 
 enum {
-  kCurrentRegisterMapVersion = 4,
+  kCurrentRegisterMapVersion = 5,
 };
 
 enum Ids : uint8_t {
