@@ -133,7 +133,7 @@ class Servo : public mjlib::multiplex::MicroServer::Server,
         return mech::moteus::WriteTemperature(20.0, type);
       }
       case mech::moteus::kRezeroState: {
-        return mech::moteus::WriteInt(1, type);
+        return mech::moteus::WriteInt(2, type);
       }
       case mech::moteus::kFault: {
         return mech::moteus::WriteInt(0, type);
