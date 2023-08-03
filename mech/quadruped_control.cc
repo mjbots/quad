@@ -1911,8 +1911,6 @@ class QuadrupedControl::Impl {
           std::min(config_.bounds.max_z_B, leg_B.position.z()));
     }
 
-    std::vector<QC::Joint> out_joints;
-
     const std::vector<IkSolver::Joint> current_joints = [&]() {
       std::vector<IkSolver::Joint> result;
       for (const auto& joint : status_.state.joints) {
@@ -1937,6 +1935,16 @@ class QuadrupedControl::Impl {
       }
       return std::max(1.0, result);
     }();
+
+    std::vector<QC::Joint> out_joints = MapIk(total_stance, current_joints);
+
+    ControlJoints(std::move(out_joints));
+  }
+
+  std::vector<QC::Joint> MapIk(
+      double total_stance,
+      const std::vector<IkSolver::Joint>& current_joints) {
+    std::vector<QC::Joint> out_joints;
 
     const base::Point3D g_M = base::Point3D(0., 0., 1.);
     const base::Point3D g_B = status_.state.robot.frame_MB.pose.inverse() * g_M;
@@ -2041,7 +2049,7 @@ class QuadrupedControl::Impl {
       }
     }
 
-    ControlJoints(std::move(out_joints));
+    return out_joints;
   }
 
   void ControlJoints(std::vector<QC::Joint> joints) {
