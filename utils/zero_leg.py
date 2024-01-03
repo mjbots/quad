@@ -33,13 +33,10 @@ class Servo:
 
     async def read_position(self):
         servo_stats = await self.stream.read_data("servo_stats")
-        return servo_stats.unwrapped_position
+        return servo_stats.position
 
     async def zero_offset(self):
-        servo_stats = await self.stream.read_data("servo_stats")
-        position_raw = servo_stats.position_raw
-        await self.stream.command(
-            f"conf set motor.position_offset {-position_raw:d}".encode('latin1'))
+        await self.stream.command("d cfg-set-output 0".encode('latin1'))
         await self.stream.command("conf write".encode('latin1'))
         await self.stream.command("d rezero".encode('latin1'))
 
