@@ -43,17 +43,16 @@ CONFIG_A1 = {
         ('1,2,4,5,7,8,10,11', '.70'),
         ('3,6,9,12', '.25'),
     ],
-    'servo.pwm_min' : '0.006',
     'servo.flux_brake_min_voltage' : '20.5',
     'servo.flux_brake_resistance_ohm' : '0.05',
     'servo.pid_position.kp' : [
         ('1,2,4,5,7,8,10,11', '50'),
         ('3,6,9,12', '200'),
     ],
-    'servo.feedforward_scale' : '0.0',
+    'servo.velocity_threshold' : '0.0',
     'servo.pid_position.kd' : '6',
     'servo.pid_dq.ki' : '150.0',
-    'motor.unwrapped_position_scale' : [
+    'motor_position.rotor_to_output_ratio' : [
         ('1,3,4,6,7,9,10,12', '0.16666667'),
         ('2,5,8,11', '0.093750'),
     ],
@@ -78,9 +77,7 @@ CONFIG_A2 = {
     'servo.pid_position.kd' : '9',
     'servo.pid_dq.kp' : '0.026',
     'servo.pid_dq.ki' : '56',
-    'servo.encoder_filter.kp' : '2513',
-    'servo.encoder_filter.ki' : '1579136',
-    'motor.unwrapped_position_scale' : [
+    'motor_position.rotor_to_output_ratio' : [
         ('1,3,4,6,7,9,10,12', '0.16666667'),
         ('2,5,8,11', '0.1071428'),
     ],
@@ -99,17 +96,21 @@ async def config_servo(args, transport, servo_id):
     CONFIG = CONFIG_A1 if args.a1 else CONFIG_A2
 
     for key, data_or_value in CONFIG.items():
-        if type(data_or_value) == str:
-            value = data_or_value
-            await s.command(
-                "conf set {} {}".format(key, value).encode('utf8'))
-        else:
-            for servo_selector, value in data_or_value:
-                ids = set([int(x) for x in servo_selector.split(',')])
-                if not servo_id in ids:
-                    continue
+        try:
+            if type(data_or_value) == str:
+                value = data_or_value
                 await s.command(
                     "conf set {} {}".format(key, value).encode('utf8'))
+            else:
+                for servo_selector, value in data_or_value:
+                    ids = set([int(x) for x in servo_selector.split(',')])
+                    if not servo_id in ids:
+                        continue
+                    await s.command(
+                        "conf set {} {}".format(key, value).encode('utf8'))
+        except:
+            print(f"While setting {key} / {data_or_value}")
+            raise
 
     await s.command(b'conf write')
 
