@@ -49,13 +49,15 @@ CONFIG_A1 = {
         ('1,2,4,5,7,8,10,11', '50'),
         ('3,6,9,12', '200'),
     ],
-    'servo.velocity_threshold' : '0.0',
+    'servo.velocity_threshold' : '0.01',
     'servo.pid_position.kd' : '6',
-    'servo.pid_dq.ki' : '150.0',
+    'servo.pid_dq.kp' : '0.026',
+    'servo.pid_dq.ki' : '56',
     'motor_position.rotor_to_output_ratio' : [
         ('1,3,4,6,7,9,10,12', '0.16666667'),
         ('2,5,8,11', '0.093750'),
     ],
+    'motor_position.sources.0.pll_filter_hz' : '200.0',
 }
 
 CONFIG_A2 = {
@@ -81,6 +83,7 @@ CONFIG_A2 = {
         ('1,3,4,6,7,9,10,12', '0.16666667'),
         ('2,5,8,11', '0.1071428'),
     ],
+    'motor_position.sources.0.pll_filter_hz' : '200.0',
 }
 
 
