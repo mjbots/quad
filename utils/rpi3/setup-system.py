@@ -35,6 +35,12 @@ import time
 
 ORIG_SUFFIX = time.strftime(".orig-%Y%m%d-%H%M%S")
 
+CONFIG_PATH = '/boot/config.txt'
+CMDLINE_PATH = '/boot/cmdline.txt'
+
+if os.path.exists('/boot/firmware/config.txt'):
+    CONFIG_PATH = '/boot/firmware/config.txt'
+    CMDLINE_PATH = '/boot/firmware/cmdline.txt'
 
 def run(*args, **kwargs):
     print('run: ' + args[0])
@@ -112,7 +118,8 @@ def ensure_contents(filename, contents, mode=None):
 
 def set_config_var(name, value):
     '''Set the given variable in /boot/config.txt'''
-    contents = open('/boot/config.txt', encoding='utf-8').readlines()
+
+    contents = open(CONFIG_PATH, encoding='utf-8').readlines()
 
     new_value = '{}={}'.format(name, value)
 
@@ -126,11 +133,11 @@ def set_config_var(name, value):
         if not x.startswith('{}='.format(name))] +
         [new_value + '\n'])
 
-    shutil.copy('/boot/config.txt', '/boot/config.txt' + ORIG_SUFFIX)
+    shutil.copy(CONFIG_PATH, CONFIG_PATH + ORIG_SUFFIX)
 
     print('set_config_var({})={}'.format(name, value))
 
-    open('/boot/config.txt', 'w', encoding='utf-8').write(
+    open(CONFIG_PATH, 'w', encoding='utf-8').write(
         ''.join([x for x in new_contents]))
 
 
@@ -173,9 +180,9 @@ BACKSPACE="guess"
 
     # Switch to use the PL011 UART
     #  https://www.raspberrypi.org/documentation/configuration/uart.md
-    ensure_present('/boot/config.txt', 'dtoverlay=pi3-disable-bt')
+    ensure_present(CONFIG_PATH, 'dtoverlay=pi3-disable-bt')
 
-    ensure_keyword_present('/boot/cmdline.txt', 'isolcpus', '1,2,3')
+    ensure_keyword_present(CMDLINE_PATH, 'isolcpus', '1,2,3')
 
     ensure_contents('/etc/network/interfaces',
                     '''
@@ -261,7 +268,8 @@ interface=wlan0
 dhcp-range=192.168.16.100,192.168.16.150,255.255.255.0,24h
 ''')
 
-    ensure_present('/etc/dhcpcd.conf', 'denyinterfaces wlan0')
+    if os.path.exists('/etc/dhcpcd.conf'):
+        ensure_present('/etc/dhcpcd.conf', 'denyinterfaces wlan0')
 
     run("rfkill unblock all")
 
