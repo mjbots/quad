@@ -26,11 +26,13 @@ Directory structure
 First Time Setup
 ----------------
 
-The following should work on Ubuntu 20.04
+The following should work on Ubuntu 20.04 or 22.04.
 
 ```
 ./install-packages
 ```
+
+For Ubuntu 24.04, you will also need to manually download and install an appropriate libtinfo5 package from 22.04.  https://packages.ubuntu.com/jammy/amd64/libtinfo5/download
 
 Building for host
 -----------------
