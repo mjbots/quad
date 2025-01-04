@@ -79,6 +79,9 @@ CONFIG_A2 = {
     'servo.pid_position.kd' : '9',
     'servo.pid_dq.kp' : '0.026',
     'servo.pid_dq.ki' : '56',
+    'servo.bemf_feedforward' : '1.0',
+    'servo.bemf_feedforward_override' : '1',
+    'servo.max_power_W' : '1000.0',
     'motor_position.rotor_to_output_ratio' : [
         ('1,3,4,6,7,9,10,12', '0.16666667'),
         ('2,5,8,11', '0.1071428'),
