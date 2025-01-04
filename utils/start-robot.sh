@@ -15,7 +15,7 @@ mach=$(uname -m)
 
 cd $(dirname $(dirname $(readlink -f $0)))
 
-if [[ "$mach" == "armv7l" ]]; then
+if [[ "$mach" == "armv7l" || "$mach" == "aarch64" ]]; then
     CONFIG="-c configs/quadruped_a2.ini --quadruped_control.log_filename_base /home/pi/mjbots-quad-a2.log"
     set -x
     cd /home/pi/mech/
