@@ -65,6 +65,13 @@ class Servo : public mjlib::multiplex::MicroServer::Server,
 
   ~Servo() override {}
 
+  void StartFrame() override {
+  }
+
+  Action CompleteFrame() override {
+    return kAccept;
+  }
+
   uint32_t Write(mjlib::multiplex::MicroServer::Register reg,
                  const mjlib::multiplex::MicroServer::Value& value) override {
     switch (static_cast<mech::moteus::Register>(reg)) {
@@ -175,6 +182,7 @@ class Servo : public mjlib::multiplex::MicroServer::Server,
 
   void AsyncWrite(const Header& header,
                   const std::string_view& write_buffer,
+                  const Header&,
                   const mjlib::micro::SizeCallback& write_callback) override {
     BOOST_ASSERT(!write_header_);
 
