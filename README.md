@@ -7,7 +7,7 @@ them.
 
 * GitHub https://github.com/mjbots/mjmech
 * Most files are free hardware and software: Apache 2.0 License
-* Overall F360 assembly: https://a360.co/2Xot0VJ
+* Overall F360 assembly: https://a360.co/4bPBs6g
 
 Directory structure
 -------------------
