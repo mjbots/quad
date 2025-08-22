@@ -184,6 +184,16 @@ BACKSPACE="guess"
 
     ensure_keyword_present(CMDLINE_PATH, 'isolcpus', '1,2,3')
 
+    # If we are on debian 12 or have NetworkManager installed, switch
+    # away from it.
+    nonifupdown = (
+        subprocess.run('systemctl is-active NetworkManager', shell=True).returncode == 0 or
+        subprocess.run('systemctl is-active systemd-networkd', shell=True).returncode == 0)
+
+    if nonifupdown:
+        run('apt install ifupdown')
+        run('systemctl disable --now NetworkManager systemd-networkd || true')
+
     ensure_contents('/etc/network/interfaces',
                     '''
  # interfaces(5) file used by ifup(8) and ifdown(8)
