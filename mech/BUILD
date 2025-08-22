@@ -32,7 +32,6 @@ filegroup(
 cc_library(
     name = "mech",
     srcs = [
-        "camera_driver.cc",
         "mammal_ik.cc",
         "mime_type.cc",
         "nrfusb_client.cc",
@@ -58,15 +57,10 @@ cc_library(
         "@com_github_mjbots_mjlib//mjlib/multiplex:asio_client",
         "@com_github_mjbots_mjlib//mjlib/multiplex:frame",
         "@com_github_mjbots_mjlib//mjlib/multiplex:register",
-        "@opencv//:core",
-        "@opencv//:aruco",
-        "@opencv//:imgcodecs",
-        "@opencv//:videoio",
         "@sophus",
     ] + select({
         "//conditions:default" : [],
         "//:raspberrypi" : [
-            "@raspicam",
             "@pi3hat//lib/cpp/mjbots/pi3hat:libpi3hat",
         ],
     }),

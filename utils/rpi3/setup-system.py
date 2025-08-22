@@ -146,7 +146,7 @@ def main():
         raise RuntimeError('must be run as root')
 
     # Some useful utilities
-    run('apt install --yes socat setserial screen libraspberrypi-dev libopenblas-dev')
+    run('apt install --yes socat setserial screen libopenblas-dev')
 
     # Things necessary to be an AP
     run('apt install --yes hostapd dnsmasq')
