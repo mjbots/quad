@@ -72,56 +72,56 @@ class Servo : public mjlib::multiplex::MicroServer::Server,
     return kAccept;
   }
 
-  uint32_t Write(mjlib::multiplex::MicroServer::Register reg,
-                 const mjlib::multiplex::MicroServer::Value& value) override {
+  WriteAction Write(mjlib::multiplex::MicroServer::Register reg,
+                    const mjlib::multiplex::MicroServer::Value& value) override {
     switch (static_cast<mech::moteus::Register>(reg)) {
       case mech::moteus::kMode: {
         const auto new_mode_int = mech::moteus::ReadInt(value);
         if (new_mode_int >= static_cast<int>(mech::moteus::Mode::kNumModes)) {
-          return 3;
+          return kNotWriteable;
         }
         staged_command_valid_ = true;
         staged_command_ = {};
         staged_command_.mode = static_cast<mech::moteus::Mode>(new_mode_int);
-        return 0;
+        return kSuccess;
       }
       case mech::moteus::kCommandPosition: {
         staged_command_.position = sign_ * mech::moteus::ReadPosition(value) / 360.0;
-        return 0;
+        return kSuccess;
       }
       case mech::moteus::kCommandVelocity: {
         staged_command_.velocity = sign_ * mech::moteus::ReadVelocity(value) / 360.0;
-        return 0;
+        return kSuccess;
       }
       case mech::moteus::kCommandPositionMaxTorque: {
         staged_command_.max_torque_Nm = mech::moteus::ReadTorque(value);
-        return 0;
+        return kSuccess;
       }
       case mech::moteus::kCommandStopPosition: {
         staged_command_.stop_position = sign_ * mech::moteus::ReadPosition(value) / 360.0;
-        return 0;
+        return kSuccess;
       }
       case mech::moteus::kCommandTimeout: {
         staged_command_.timeout_s = mech::moteus::ReadTime(value);
-        return 0;
+        return kSuccess;
       }
       case mech::moteus::kCommandFeedforwardTorque: {
         staged_command_.feedforward_Nm = sign_ * mech::moteus::ReadTorque(value);
-        return 0;
+        return kSuccess;
       }
       case mech::moteus::kCommandKpScale: {
         staged_command_.kp_scale = mech::moteus::ReadPwm(value);
-        return 0;
+        return kSuccess;
       }
       case mech::moteus::kCommandKdScale: {
         staged_command_.kd_scale = mech::moteus::ReadPwm(value);
-        return 0;
+        return kSuccess;
       }
       default: {
         break;
       }
     }
-    return 0;
+    return kSuccess;
   }
 
   mjlib::multiplex::MicroServer::ReadResult Read(
