@@ -184,6 +184,8 @@ BACKSPACE="guess"
 
     ensure_keyword_present(CMDLINE_PATH, 'isolcpus', '1,2,3')
 
+    ensure_present('/etc/sysctl.conf', 'kernel.sched_rt_runtime_us = -1')
+
     # If we are on debian 12 or have NetworkManager installed, switch
     # away from it.
     nonifupdown = (
