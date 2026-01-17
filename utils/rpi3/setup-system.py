@@ -184,7 +184,15 @@ BACKSPACE="guess"
 
     ensure_keyword_present(CMDLINE_PATH, 'isolcpus', '1,2,3')
 
-    ensure_present('/etc/sysctl.conf', 'kernel.sched_rt_runtime_us = -1')
+    if os.path.exists('/etc/sysctl.d'):
+        MJBOTS_SYSCTL = '/etc/sysctl.d/90-mjbots.conf'
+        if not os.path.exists(MJBOTS_SYSCTL):
+            with open(MJBOTS_SYSCTL, "w") as f:
+                f.write('\n')
+                pass
+        ensure_present(MJBOTS_SYSCTL, 'kernel.sched_rt_runtime_us = -1')
+    elif os.path.exists('/etc/sysctl.conf'):
+        ensure_present('/etc/sysctl.conf', 'kernel.sched_rt_runtime_us = -1')
 
     # If we are on debian 12 or have NetworkManager installed, switch
     # away from it.
