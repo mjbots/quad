@@ -24,8 +24,16 @@ load("//tools/workspace:default.bzl", "add_default_repositories")
 add_default_repositories()
 
 load("@rpi_bazel//tools/workspace:default.bzl",
-     rpi_bazel_add = "add_default_repositories")
+     rpi_bazel_add = "add_default_repositories",
+     rpi_bazel_register = "add_default_toolchains")
 rpi_bazel_add()
+
+# Register rpi_bazel's toolchains for Bazel's platform-based toolchain
+# resolution.  register_host = True so the default (host) build uses
+# rpi_bazel's clang+libc++ k8 toolchain, matching the previous
+# --crosstool_top behavior; the Pi cross toolchain is selected via
+# --config=pi (--platforms=@rpi_bazel//:armeabihf).
+rpi_bazel_register(register_host = True)
 
 load("@com_github_mjbots_bazel_deps//tools/workspace:default.bzl",
      bazel_deps_add = "add_default_repositories")

@@ -1,18 +1,23 @@
 common --noenable_bzlmod
-build --noincompatible_enable_cc_toolchain_resolution
+build --incompatible_enable_cc_toolchain_resolution
 
-build --crosstool_top=@rpi_bazel//tools/cc_toolchain:toolchain
 build --define CLANG=true
 
 # Sadly, Eigen/C++ still hasn't figured out how to reliably get
 # alignment correct.  Lets just disable it for now.
 build --copt -DEIGEN_DONT_ALIGN_STATICALLY
 
+# The default (host) build and the --config=pi cross build both select
+# rpi_bazel's clang toolchains via Bazel's platform-based toolchain
+# resolution (the host k8 toolchain is registered with
+# register_host = True in WORKSPACE).  --cpu is retained for --config=pi
+# so the //:raspberrypi config_setting (cpu=armeabihf) keeps matching
+# and so the bazel-out directory stays distinct from the host build.
+build:pi --platforms=@rpi_bazel//:armeabihf
 build:pi --cpu=armeabihf
 build:pi --define COM_GITHUB_MJBOTS_RASPBERRYPI=1
 
 build --strip=never
-build --compiler=clang
 
 build -c opt
 build --copt -D_FILE_OFFSET_BITS=64
